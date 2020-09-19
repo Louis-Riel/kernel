@@ -1,0 +1,5 @@
+.pioenvs
+.piolibdeps
+build
+.vscode
+*.kml
