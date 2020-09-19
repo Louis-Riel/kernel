@@ -175,6 +175,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
       lastCourse.deg());
   } else {
     int wb = uart_write_bytes(UART_NUM_2, (const char*) update_0_2_secs, 16);
+    ESP_LOGD(__FUNCTION__,"Sent freq scaledown command (%d bytes), ret %d bytes",16,wb);
     //const uint8_t* inits[7] = {VTG_Off,GSA_Off,GSV_Off,GLL_Off,GGA_On,ZDA_Off,update_0_2_secs};
     //for (int idx=0; idx < 7; idx++){
     //  wb = uart_write_bytes(UART_NUM_2, (const char*) inits[idx], 16);
@@ -204,12 +205,10 @@ void TinyGPSPlus::processEncoded(void)
 
     struct timeval now = { .tv_sec=mktime(&tm),
                            .tv_usec=0 };
-    struct tm timeinfo;
     time_t cutDt;
 
     ::time(&cutDt);
     struct timeval tv2;
-    struct timezone tz;
     gettimeofday(&tv2,NULL);
 
     if ((tm.tm_mon >= 2) && (tm.tm_mon <= 11)){
