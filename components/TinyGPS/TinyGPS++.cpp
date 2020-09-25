@@ -63,6 +63,7 @@ uint32_t TinyGPSPlus::getSleepTime(){
 
 
 void TinyGPSPlus::gotoSleep(void* param) {
+  vTaskDelete(NULL);
   TinyGPSPlus* gps = (TinyGPSPlus*)param;
   if (gps->curFreqIdx>=1)
   {
@@ -117,12 +118,12 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
 
   ESP_LOGD(__FUNCTION__, "Initializing GPS");
 
-  if (!woke) {
+  //if (!woke) {
     ESP_LOGD(__FUNCTION__, "Initializing GPS Pins");
     ESP_ERROR_CHECK(gpio_hold_dis(enpin));
     ESP_ERROR_CHECK(gpio_reset_pin(enpin));
     ESP_ERROR_CHECK(gpio_set_direction(enpin, GPIO_MODE_OUTPUT));
-  }
+  //}
 
   ESP_LOGD(__FUNCTION__, "Turning on enable pin");
   ESP_ERROR_CHECK(gpio_set_level(enpin,1));
@@ -211,22 +212,25 @@ void TinyGPSPlus::processEncoded(void)
     struct timeval tv2;
     gettimeofday(&tv2,NULL);
 
-    if ((tm.tm_mon >= 2) && (tm.tm_mon <= 11)){
-      tv2.tv_sec+=(4*60*60);
-    } else {
-      tv2.tv_sec+=(5*60*60);
-    }
+    //if (tv2.tv_sec < 20000){
+    //  if ((tm.tm_mon >= 2) && (tm.tm_mon <= 11)){
+    //    tv2.tv_sec+=(4*60*60);
+    //  } else {
+    //    tv2.tv_sec+=(5*60*60);
+    //  }
+    //}
 
     if (abs(tv2.tv_sec-now.tv_sec)>2){
-      ESP_LOGD(__FUNCTION__,"Time diff:%li gps:%li cur:%li",abs(tv2.tv_sec-now.tv_sec),tv2.tv_sec,now.tv_sec);
       timezone tz;
       tz.tz_dsttime=0;
       tz.tz_minuteswest=0;
       if (cutDt < 10000){
-        setenv("TZ", "EST5EDT,M3.2.0/2,M11.1.0", 1);
-        tzset();
+        ESP_LOGD(__FUNCTION__,"%d-%d-%d (%d:%d:%d)",date.year(),date.month(),date.day(),time.hour(),time.minute(),time.second());
+        //setenv("TZ", "EST5EDT,M3.2.0/2,M11.1.0", 1);
+        //tzset();
         settimeofday(&now, &tz);
       } else {
+        ESP_LOGD(__FUNCTION__,"Time diff::%li gps:%li cur:%li curDt:%li",abs(tv2.tv_sec-now.tv_sec),tv2.tv_sec,now.tv_sec,cutDt);
         adjtime(NULL,&now);
       }
       esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::systimeChanged,NULL,0,portMAX_DELAY);

@@ -1,5 +1,6 @@
 //#define CONFIG_TCPIP_LWIP 1 copy to sdkconfig
 #include "../build/config/sdkconfig.h"
+#include "utils.h"
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -8,7 +9,6 @@
 #include "esp_system.h"
 #include "esp_log.h"
 #include "driver/uart.h"
-#include "TinyGPS++.h"
 #include <time.h>
 #include <sys/time.h>
 #include <esp_pm.h>
@@ -25,56 +25,35 @@
 #include "driver/rtc_io.h"
 #include <stdlib.h>
 
+
 #define BLINK_GPIO GPIO_NUM_5
 #define GPS_EN_PIN GPIO_NUM_13
+#define NUM_VOLT_CYCLE 20
 
 #define TRIP_BLOCK_SIZE 255
 
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+#define GPS_TIMEOUT 300
 
 static const uint8_t LED_BUILTIN = 5;
 #define BUILTIN_LED LED_BUILTIN  // backward compatibility
 static const uint8_t _VBAT = 35; // battery voltage
 
 #define SS TF_CS
-#define PIN_NUM_MISO 19
-#define PIN_NUM_MOSI 23
-#define PIN_NUM_CLK 18
-#define PIN_NUM_CS 4
+#define PIN_NUM_MISO (gpio_num_t)19
+#define PIN_NUM_MOSI (gpio_num_t)23
+#define PIN_NUM_CLK (gpio_num_t)18
+#define PIN_NUM_CS (gpio_num_t)4
 #endif /* Pins_Arduino_h */
 
-char* getErrorMsg(FRESULT errCode){
-  switch (errCode)
-  {
-    case FR_OK: return "(0) Succeeded"; break;
-    case FR_DISK_ERR: return "(1) A hard error occurred in the low level disk I/O layer"; break;
-    case FR_INT_ERR: return "(2) Assertion failed"; break;
-    case FR_NOT_READY: return "(3) The physical drive cannot work"; break;
-    case FR_NO_FILE: return "(4) Could not find the file"; break;
-    case FR_NO_PATH: return "(5) Could not find the path"; break;
-    case FR_INVALID_NAME: return "(6) The path name format is invalid"; break;
-    case FR_DENIED: return "(7) Access denied due to prohibited access or directory full"; break;
-    case FR_EXIST: return "(8) Access denied due to prohibited access"; break;
-    case FR_INVALID_OBJECT: return "(9) The file/directory object is invalid"; break;
-    case FR_WRITE_PROTECTED: return "(10) The physical drive is write protected"; break;
-    case FR_INVALID_DRIVE: return "(11) The logical drive number is invalid"; break;
-    case FR_NOT_ENABLED: return "(12) The volume has no work area"; break;
-    case FR_NO_FILESYSTEM: return "(13) There is no valid FAT volume"; break;
-    case FR_MKFS_ABORTED: return "(14) The f_mkfs() aborted due to any problem"; break;
-    case FR_TIMEOUT: return "(15) Could not get a grant to access the volume within defined period"; break;
-    case FR_LOCKED: return "(16) The operation is rejected according to the file sharing policy"; break;
-    case FR_NOT_ENOUGH_CORE: return "(17) LFN working buffer could not be allocated"; break;
-    case FR_TOO_MANY_OPEN_FILES: return "(18) Number of open files > FF_FS_LOCK"; break;
-    case FR_INVALID_PARAMETER: return "(19) Given parameter is invalid"; break;
-    default:
-      break;
-  }
-  return "Invalid error code";
-}
+//#define TFT_CS (gpio_num_t)14
+//#define TFT_RST (gpio_num_t)33
+//#define TFT_DC (gpio_num_t)27
 
 static xQueueHandle gpio_evt_queue = NULL;
+time_t now = 0;
 time_t lastMovement = 0;
 RTC_DATA_ATTR uint32_t bumpCnt = 0;
 RTC_DATA_ATTR bool isStopped = true;
@@ -87,8 +66,8 @@ RTC_DATA_ATTR bool lastLngNeg;
 RTC_DATA_ATTR uint32_t lastCourse;
 RTC_DATA_ATTR uint32_t lastSpeed;
 RTC_DATA_ATTR uint32_t lastAltitude;
-const uint8_t numWakePins = 6;
-const gpio_num_t wakePins[] = {GPIO_NUM_25, GPIO_NUM_26, GPIO_NUM_27, GPIO_NUM_32, GPIO_NUM_33, GPIO_NUM_34};
+const uint8_t numWakePins = 3;
+const gpio_num_t wakePins[] = {GPIO_NUM_25, GPIO_NUM_26, GPIO_NUM_34};
 RTC_DATA_ATTR uint8_t wakePinState = 0;
 RTC_DATA_ATTR uint8_t curRate = 0;
 RTC_DATA_ATTR uint8_t lastRate = 0;
@@ -100,6 +79,10 @@ bool gpsto = false;
 bool buto = false;
 bool sito = false;
 bool boto = false;
+uint32_t batLvls[NUM_VOLT_CYCLE];
+uint8_t batSmplCnt=NUM_VOLT_CYCLE+1;
+bool balFullSet = false;
+sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 
 static const char* pmpt1 = "    <Placemark>\n\
       <styleUrl>#SpeedPlacemark</styleUrl>\n\
@@ -119,8 +102,8 @@ extern const uint8_t trip_kml_end[] asm("_binary_trip_kml_end");
 
 TinyGPSPlus *gps;
 esp_adc_cal_characteristics_t characteristics;
-uint16_t timeout = 300;
-uint32_t timeoutMicro = 300 * 1000000;
+uint16_t timeout = GPS_TIMEOUT;
+uint32_t timeoutMicro = GPS_TIMEOUT * 1000000;
 
 esp_vfs_fat_sdmmc_mount_config_t mount_config = {
     .format_if_mount_failed = true,
@@ -128,6 +111,7 @@ esp_vfs_fat_sdmmc_mount_config_t mount_config = {
     .allocation_unit_size = 16 * 1024};
 sdmmc_card_t *card = NULL;
 const char mount_point[] = "/sdcard";
+TaskHandle_t wifiTask = NULL;
 
 extern "C"
 {
@@ -156,12 +140,34 @@ struct trip
   uint32_t lastExportedTs = 0;
 };
 
-uint32_t getBatteryVoltage()
+uint16_t getBatteryVoltage();
+
+void sampleBatteryVoltage()
 {
-  //uint32_t voltage;
-  //esp_adc_cal_get_voltage(ADC_CHANNEL_7, &characteristics, &voltage);
-  //return voltage * 1.5;
-  return adc1_get_raw(ADC1_CHANNEL_7) / 4096.0 * 7445;
+  if (batSmplCnt>=NUM_VOLT_CYCLE){
+    balFullSet=batSmplCnt==NUM_VOLT_CYCLE;
+    batSmplCnt=0;
+    ESP_LOGD(__FUNCTION__,"Voltage:%d",getBatteryVoltage());
+  }
+
+  uint32_t voltage;
+  esp_adc_cal_get_voltage(ADC_CHANNEL_7, &characteristics, &voltage);
+  batLvls[batSmplCnt++] = voltage * 2.15;
+}
+
+uint16_t getBatteryVoltage()
+{
+  if (batSmplCnt>=NUM_VOLT_CYCLE){
+    sampleBatteryVoltage();
+  }
+
+  uint32_t voltage=0;
+  uint8_t uloop=balFullSet?NUM_VOLT_CYCLE:batSmplCnt;
+
+  for (uint8_t idx=0; idx < uloop; idx++) {
+    voltage+=batLvls[idx];
+  }
+  return uloop>0?voltage/uloop:0;
 }
 
 trip curTrip;
@@ -204,16 +210,11 @@ void createTrip()
   addTripBlock();
 }
 
-bool initSDCard()
-{
-  ESP_LOGD(__FUNCTION__, "Using SPI peripheral");
-
-  sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-  sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
-  slot_config.gpio_miso = (gpio_num_t)PIN_NUM_MISO;
-  slot_config.gpio_mosi = (gpio_num_t)PIN_NUM_MOSI;
-  slot_config.gpio_sck = (gpio_num_t)PIN_NUM_CLK;
-  slot_config.gpio_cs = (gpio_num_t)PIN_NUM_CS;
+bool initSDMMCSDCard(){
+  ESP_LOGI(__FUNCTION__, "Using SDMMC peripheral");
+  sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+  sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+  slot_config.gpio_cd=SDMMC_SLOT_NO_CD;
 
   esp_vfs_fat_sdmmc_mount_config_t mount_config = {
       .format_if_mount_failed = false,
@@ -221,6 +222,59 @@ bool initSDCard()
       .allocation_unit_size = 16 * 1024};
   sdmmc_card_t *card;
   esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
+  if (ret != ESP_OK)
+  {
+    if (ret == ESP_FAIL)
+    {
+      ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
+                             "If you want the card to be formatted, set format_if_mount_failed = true.");
+    }
+    else
+    {
+      ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
+                             "Make sure SD card lines have pull-up resistors in place.",
+               esp_err_to_name(ret));
+    }
+    return false;
+  }
+
+  ESP_LOGD(__FUNCTION__, "SD card mounted %d", (int)card);
+  if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
+    sdmmc_card_print_info(stdout, card);
+
+  f_mkdir("/converted");
+  f_mkdir("/kml");
+  f_mkdir("/sent");
+
+  return true;
+}
+
+bool initSPISDCard()
+{
+  ESP_LOGD(__FUNCTION__, "Using SPI peripheral");
+  esp_err_t ret=0;
+
+  spi_bus_config_t bus_cfg = {
+      .mosi_io_num = PIN_NUM_MOSI,
+      .miso_io_num = PIN_NUM_MISO,
+      .sclk_io_num = PIN_NUM_CLK,
+      .quadwp_io_num = -1,
+      .quadhd_io_num = -1,
+      .max_transfer_sz = 4000,
+      .flags = 0,
+      .intr_flags = 0
+  };
+
+  //if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) {
+  spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, 1);
+  //}
+
+  sdspi_device_config_t device_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    device_config.gpio_cs = PIN_NUM_CS;
+    device_config.host_id = (spi_host_device_t)host.slot;
+
+
+  ret=esp_vfs_fat_sdspi_mount(mount_point, &host, &device_config, &mount_config, &card);
 
   if (ret != ESP_OK)
   {
@@ -337,7 +391,6 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
       return false;
     }
     uint8_t chr = 0;
-    uint8_t lnBuff[515];
     uint8_t *bkeyPos = NULL;
     uint8_t *bvalPos = NULL;
     uint8_t *evalPos = NULL;
@@ -546,7 +599,7 @@ static bool moveFile(char* src, char* dest){
 
 static void commitTripToDisk(void *kml)
 {
-  if (initSDCard())
+  if (initSPISDCard())
   {
     char *kFName = (char *)malloc(350);
     char *cFName = (char *)malloc(350);
@@ -647,6 +700,8 @@ static void commitTripToDisk(void *kml)
     } else {
       ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
     }
+
+    spi_bus_free((spi_host_device_t)host.slot);
     free(kFName);
     free(cFName);
     free(csvs);
@@ -696,6 +751,10 @@ static void flash(void *pvParameters)
 void Hibernate()
 {
   commitTripToDisk((void *)true);
+  if (wifiTask != NULL) {
+    ESP_LOGD(__FUNCTION__,"Not Hybernating whilst wifying");
+    return;
+  }
   ESP_LOGI(__FUNCTION__, "Deep Sleeping %d = %d", bumpCnt, gps->numRunners);
   uint64_t ext_wakeup_pin_mask = 0;
   int curLvl = 0;
@@ -705,7 +764,7 @@ void Hibernate()
     ESP_LOGD(__FUNCTION__, "Pin %d is %d", wakePins[idx], curLvl);
     if (curLvl == 0)
     {
-      ESP_ERROR_CHECK(rtc_gpio_pulldown_en(wakePins[idx]));
+      //ESP_ERROR_CHECK(rtc_gpio_pulldown_en(wakePins[idx]));
       ext_wakeup_pin_mask |= (1ULL << wakePins[idx]);
     }
   }
@@ -736,21 +795,26 @@ void Hibernate()
   curTrip.nodesAllocated = 0;
   curTrip.numNodes = 0;
   hibernate = true;
+
+  //xTaskCreate(flash, "flashy", 2048, (void *)10, tskIDLE_PRIORITY, NULL);
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
-  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-
+  esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
+  esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
+  adc_power_off();
+  //vTaskDelay(1000/portTICK_PERIOD_MS);
   esp_deep_sleep_start();
 }
 
 static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
 {
-  time_t now;
+  ESP_LOGD(__FUNCTION__,"GPS Event e:%d ei:%d ed:%li",(int)base,id,(long int)event_data);
+  time(&now);
+  sampleBatteryVoltage();
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:
     ESP_LOGI(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters());
-    time(&now);
     lastLocTs = now;
     if (gps->gpspingTask == NULL)
     {
@@ -804,8 +868,9 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
       else
       {
         ESP_LOGV(__FUNCTION__, "Mr sandman, give me a dream of %d seconds", (int)curRate);
-        xTaskCreate(gps->gotoSleep, "gotosleep", 2048, gps, tskIDLE_PRIORITY, &gps->gpspingTask);
-        //gps->gotoSleep(gps);
+        if (wifiTask == NULL){
+          xTaskCreate(gps->gotoSleep, "gotosleep", 2048, gps, tskIDLE_PRIORITY, &gps->gpspingTask);
+        }
       }
     }
     else
@@ -816,7 +881,6 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   case TinyGPSPlus::gpsEvent::systimeChanged:
     char strftime_buf[64];
     struct tm timeinfo;
-    time(&now);
 
     localtime_r(&now, &timeinfo);
     strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
@@ -843,7 +907,6 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     //xTaskCreate(flash, "flashy", 2048, (void *)curRate, tskIDLE_PRIORITY, NULL);
     break;
   case TinyGPSPlus::gpsEvent::msg:
-    time(&now);
     boto = (esp_timer_get_time() > timeoutMicro);
     if ((lastLocTs > 0) && (now - lastLocTs > timeout))
     {
@@ -1004,7 +1067,7 @@ void print_wakeup_reason()
     ESP_LOGI(__FUNCTION__, "Wakeup caused by ULP program");
     break;
   default:
-    ESP_LOGI(__FUNCTION__, "Wakeup was not caused by deep sleep");
+    ESP_LOGI(__FUNCTION__, "Wakeup was not caused by deep sleep %d",wakeup_reason);
     break;
   }
   switch (wakeup_reason)
@@ -1037,6 +1100,8 @@ void print_wakeup_reason()
 
 void app_main(void)
 {
+  ESP_ERROR_CHECK(esp_event_loop_create_default());
+
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED)
   {
     lastLatDeg = 0;
@@ -1049,9 +1114,9 @@ void app_main(void)
     lastRate = 0;
     bumpCnt = 0;
     commitTripToDisk((void *)1);
-  } else {
-    setenv("TZ", "EST5EDT,M3.2.0/2,M11.1.0", 1);
-    tzset();
+  //} else {
+  //  setenv("TZ", "EST5EDT,M3.2.0/2,M11.1.0", 1);
+  //  tzset();
   }
   print_wakeup_reason();
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER)
@@ -1080,7 +1145,10 @@ void app_main(void)
   gpio_set_level(BLINK_GPIO, 1);
   adc1_config_width(ADC_WIDTH_12Bit);
   adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_11db);
-  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1163, &characteristics);
+  gpio_set_direction(GPIO_NUM_25, GPIO_MODE_OUTPUT);
+  //1adc2_vref_to_gpio(GPIO_NUM_35);
+  uint32_t defvref=1100;
+  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, defvref, &characteristics);
 
   ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::msg, gpsEvent, &gps));
   ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::go, gpsEvent, &gps));
@@ -1094,5 +1162,14 @@ void app_main(void)
   ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantDistanceChange, gpsEvent, &gps));
   ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantSpeedChange, gpsEvent, &gps));
   configureMotionDetector();
+  xTaskCreate(wifiSallyForth, "wifiSallyForth", 4096, NULL , tskIDLE_PRIORITY, &wifiTask);
+
   //ESP_ERROR_CHECK(xTaskCreate(commitTripToDisk,"commitTripToDisk",4096,(void*)1,tskIDLE_PRIORITY,NULL));
+
+  //esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
+  //esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
+  //esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
+  //esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
+  //esp_deep_sleep_start();
+
 }
