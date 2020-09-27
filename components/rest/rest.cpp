@@ -15,8 +15,11 @@
 #include "esp32/rom/md5_hash.h"
 #include "rest.h"
 #include "../wifi/station.h"
+#include "../microtar/src/microtar.h"
+#include "../../main/utils.h"
 
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+#define F_BUF_SIZE 2048
 
 static httpd_handle_t server = NULL;
 static uint8_t* img=NULL;
@@ -24,6 +27,8 @@ static uint32_t totLen=0;
 
 static char* jsonbuf= (char*)malloc(8192);
 static wifi_config* cfg;
+
+static char mounts[3][6] = {"/kml","/sent","/"};
 
 void flashTheThing(void* param){
     esp_ota_handle_t update_handle = 0 ;
@@ -452,13 +457,14 @@ static esp_err_t config_update(httpd_req_t *req)
 
 static esp_err_t config_get_handler(httpd_req_t *req)
 {
+    FF_DIR theFolder;
     uint32_t len=sprintf(jsonbuf,"{\"wifi\":\
                                     {\"type\":%d,\
                                     \"name\":\"%s\",\
                                     \"password\":\"%s\",\
                                     \"workperiod\":%d,\
                                     \"scanperiod\":%d},\
-                                ]}",
+                                   ",
                                 cfg->wifi_mode,
                                 cfg->wname,
                                 cfg->wpdw,
@@ -466,7 +472,65 @@ static esp_err_t config_get_handler(httpd_req_t *req)
                                 cfg->scanPeriod
                                 );
 
-    httpd_resp_send(req, jsonbuf, len);
+    httpd_resp_send_chunk(req, jsonbuf, len);
+    if (initSPISDCard() && (f_opendir(&theFolder, "/") == FR_OK))
+    {
+        uint32_t len=sprintf(jsonbuf,"\"files\":[\n");
+        httpd_resp_send_chunk(req, jsonbuf, len);
+        FF_DIR theFolder;
+        for (int idx=0; idx < 3; idx++) {
+            ESP_LOGD(__FUNCTION__, "reading sdcard files in %s", mounts[idx]);
+            FILINFO fi;
+            uint32_t fileCount=0;
+            uint32_t dirCount=0;
+
+            if (f_opendir(&theFolder, mounts[idx]) == FR_OK)
+            {
+                while (f_readdir(&theFolder, &fi) == FR_OK)
+                {
+                    if (strlen(fi.fname) == 0)
+                    {
+                        break;
+                    }
+                    ESP_LOGV(__FUNCTION__, "%s - %d", fi.fname, fi.fsize);
+                    if (fi.fattrib & AM_DIR)
+                        dirCount++;
+                    else
+                        fileCount++;
+                }
+                f_closedir(&theFolder);
+                uint32_t len=sprintf(jsonbuf,"{\"path\":\"%s\",\
+                                    \"fileCount\":%d,\
+                                    \"folderCount\":\"%d\"}%s",
+                                mounts[idx],
+                                fileCount,
+                                dirCount,
+                                idx == 2 ? "":","
+                                );
+                httpd_resp_send_chunk(req, jsonbuf, len);
+            } else {
+                ESP_LOGE(__FUNCTION__,"Cannot open %s",mounts[idx]);
+            }
+        }
+
+        len=sprintf(jsonbuf,"]\n");
+        httpd_resp_send_chunk(req, jsonbuf, len);
+
+        if (esp_vfs_fat_sdmmc_unmount() == ESP_OK)
+        {
+            ESP_LOGD(__FUNCTION__, "Unmounted SD Card");
+        } else {
+            ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
+        }
+
+        spi_bus_free((spi_host_device_t)getSDHost()->slot);
+    } else {
+        ESP_LOGD(__FUNCTION__,"Cannot mount the fucking sd card");
+    }
+    httpd_resp_send_chunk(req, "}", 2);
+    httpd_resp_send_chunk(req, NULL, 0);
+    httpd_resp_set_status(req,HTTPD_200);
+
     return ESP_OK;
 }
 
@@ -480,20 +544,132 @@ static esp_err_t status_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t config_handler(httpd_req_t *req)
+static esp_err_t uploadTripTar(httpd_req_t *req)
 {
-    //extern const unsigned char config_html_start[] asm("_binary_config_html_start");
-    //extern const unsigned char config_html_end[]   asm("_binary_config_html_end");
-    //const size_t config_html_size = (config_html_end - config_html_start);
-    //httpd_resp_set_type(req, "text/html");
-    //    httpd_resp_send(req, (const char *) config_html_start, config_html_size);
+    FILE *fd = NULL;
+    struct stat file_stat;
+
+    const char *filename = "/sdcard/temp.tar";
+
+    fd = fopen(filename, "r");
+
+    if (stat(filename, &file_stat) == -1) {
+        ESP_LOGE(__FUNCTION__, "Failed to stat file : %s", filename);
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File does not exist");
+        return ESP_FAIL;
+    }
+
+    if (!fd) {
+        ESP_LOGE(__FUNCTION__, "Failed to read existing file : %s", filename);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read existing file");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGD(__FUNCTION__, "Sending file : %s (%ld bytes)...", filename, file_stat.st_size);
+    httpd_resp_set_type(req, "application/x-tar");
+
+    char *chunk = (char*)malloc(4096);
+    size_t chunksize;
+    size_t sentBytes=0;
+    do {
+        chunksize = fread(chunk, 1, 4096, fd);
+        sentBytes+=chunksize;
+        if (chunksize > 0) {
+            if (httpd_resp_send_chunk(req, chunk, chunksize) != ESP_OK) {
+                fclose(fd);
+                ESP_LOGE(__FUNCTION__, "File sending failed!");
+                httpd_resp_sendstr_chunk(req, NULL);
+                httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to send file");
+                free(chunk);
+                return ESP_FAIL;
+           }
+        }
+    } while (chunksize != 0);
+    free(chunk);
+    fclose(fd);
+    ESP_LOGD(__FUNCTION__, "File sending complete %ud",sentBytes);
+
+    httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
 }
 
+static esp_err_t trips_handler(httpd_req_t *req)
+{
+    mtar_t tar;
+
+    if (initSPISDCard())
+    {
+        if (mtar_open(&tar, "/sdcard/temp.tar", "w") == MTAR_ESUCCESS) {
+            FF_DIR theFolder;
+            FILE* theFile;
+            uint32_t len=0;
+            char fName[270];
+            void* buf = malloc(F_BUF_SIZE);
+            ESP_LOGD(__FUNCTION__, "Open %s", "/kml");
+            FILINFO fi;
+            uint32_t fileCount=0;
+
+            if (f_opendir(&theFolder, "/kml") == FR_OK)
+            {
+                ESP_LOGD(__FUNCTION__, "reading sdcard files in %s", "/kml");
+                while (f_readdir(&theFolder, &fi) == FR_OK)
+                {
+                    fileCount++;
+                    if (strlen(fi.fname) == 0)
+                    {
+                        break;
+                    }
+                    if (!(fi.fattrib & AM_DIR)){
+                        ESP_LOGD(__FUNCTION__, "%s - %d", fi.fname, fi.fsize);
+                        mtar_write_file_header(&tar, fi.fname, fi.fsize);
+                        sprintf(fName,"/sdcard/kml/%s",fi.fname);
+                        if ((theFile=fopen(fName,"r"))!=NULL){
+                            ESP_LOGV(__FUNCTION__, "%s opened", fName);
+                            while (!feof(theFile)){
+                                if ((len=fread(buf,1,F_BUF_SIZE,theFile))>0) {
+                                    ESP_LOGV(__FUNCTION__, "%d written", len);
+                                    mtar_write_data(&tar, buf, len);
+                                }
+                            }
+                            fclose(theFile);
+                        } else {
+                            ESP_LOGE(__FUNCTION__,"Cannot read %s",fName);
+                        }
+                    }
+                }
+                f_closedir(&theFolder);
+                mtar_finalize(&tar);
+                mtar_close(&tar);
+                uploadTripTar(req);
+            } else {
+                ESP_LOGE(__FUNCTION__,"Cannot open %s","/kml");
+            }
+            free(buf);
+        } else {
+            ESP_LOGE(__FUNCTION__,"Cannot create tar file");
+        }
+
+        if (esp_vfs_fat_sdmmc_unmount() == ESP_OK)
+        {
+            ESP_LOGD(__FUNCTION__, "Unmounted SD Card");
+        } else {
+            ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
+        }
+
+        spi_bus_free((spi_host_device_t)getSDHost()->slot);
+        return ESP_OK;
+    } else {
+        ESP_LOGD(__FUNCTION__,"Cannot mount the fucking sd card");
+    }
+    httpd_resp_send(req, "No Buono", 9);
+
+    return ESP_FAIL;
+}
+
 static const httpd_uri_t configUri = {
-    .uri       = "/config",
+    .uri       = "/trips",
     .method    = HTTP_GET,
-    .handler   = config_handler,
+    .handler   = trips_handler,
     .user_ctx  = NULL
 };
 

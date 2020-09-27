@@ -24,7 +24,9 @@
 #include "esp_sleep.h"
 #include "driver/rtc_io.h"
 #include <stdlib.h>
+#include "TinyGPS++.h"
 
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 #define BLINK_GPIO GPIO_NUM_5
 #define GPS_EN_PIN GPIO_NUM_13
@@ -34,18 +36,12 @@
 
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define GPS_TIMEOUT 300
 
 static const uint8_t LED_BUILTIN = 5;
 #define BUILTIN_LED LED_BUILTIN  // backward compatibility
 static const uint8_t _VBAT = 35; // battery voltage
 
-#define SS TF_CS
-#define PIN_NUM_MISO (gpio_num_t)19
-#define PIN_NUM_MOSI (gpio_num_t)23
-#define PIN_NUM_CLK (gpio_num_t)18
-#define PIN_NUM_CS (gpio_num_t)4
 #endif /* Pins_Arduino_h */
 
 //#define TFT_CS (gpio_num_t)14
@@ -82,7 +78,6 @@ bool boto = false;
 uint32_t batLvls[NUM_VOLT_CYCLE];
 uint8_t batSmplCnt=NUM_VOLT_CYCLE+1;
 bool balFullSet = false;
-sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 
 static const char* pmpt1 = "    <Placemark>\n\
       <styleUrl>#SpeedPlacemark</styleUrl>\n\
@@ -105,12 +100,6 @@ esp_adc_cal_characteristics_t characteristics;
 uint16_t timeout = GPS_TIMEOUT;
 uint32_t timeoutMicro = GPS_TIMEOUT * 1000000;
 
-esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-    .format_if_mount_failed = true,
-    .max_files = 5,
-    .allocation_unit_size = 16 * 1024};
-sdmmc_card_t *card = NULL;
-const char mount_point[] = "/sdcard";
 TaskHandle_t wifiTask = NULL;
 
 extern "C"
@@ -208,99 +197,6 @@ void createTrip()
     strcpy(curTrip.fname, tripFName);
   curTrip.lastExportedTs = 0;
   addTripBlock();
-}
-
-bool initSDMMCSDCard(){
-  ESP_LOGI(__FUNCTION__, "Using SDMMC peripheral");
-  sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-  sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-  slot_config.gpio_cd=SDMMC_SLOT_NO_CD;
-
-  esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-      .format_if_mount_failed = false,
-      .max_files = 5,
-      .allocation_unit_size = 16 * 1024};
-  sdmmc_card_t *card;
-  esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
-  if (ret != ESP_OK)
-  {
-    if (ret == ESP_FAIL)
-    {
-      ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
-                             "If you want the card to be formatted, set format_if_mount_failed = true.");
-    }
-    else
-    {
-      ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
-                             "Make sure SD card lines have pull-up resistors in place.",
-               esp_err_to_name(ret));
-    }
-    return false;
-  }
-
-  ESP_LOGD(__FUNCTION__, "SD card mounted %d", (int)card);
-  if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
-    sdmmc_card_print_info(stdout, card);
-
-  f_mkdir("/converted");
-  f_mkdir("/kml");
-  f_mkdir("/sent");
-
-  return true;
-}
-
-bool initSPISDCard()
-{
-  ESP_LOGD(__FUNCTION__, "Using SPI peripheral");
-  esp_err_t ret=0;
-
-  spi_bus_config_t bus_cfg = {
-      .mosi_io_num = PIN_NUM_MOSI,
-      .miso_io_num = PIN_NUM_MISO,
-      .sclk_io_num = PIN_NUM_CLK,
-      .quadwp_io_num = -1,
-      .quadhd_io_num = -1,
-      .max_transfer_sz = 4000,
-      .flags = 0,
-      .intr_flags = 0
-  };
-
-  //if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) {
-  spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, 1);
-  //}
-
-  sdspi_device_config_t device_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    device_config.gpio_cs = PIN_NUM_CS;
-    device_config.host_id = (spi_host_device_t)host.slot;
-
-
-  ret=esp_vfs_fat_sdspi_mount(mount_point, &host, &device_config, &mount_config, &card);
-
-  if (ret != ESP_OK)
-  {
-    if (ret == ESP_FAIL)
-    {
-      ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
-                             "If you want the card to be formatted, set format_if_mount_failed = true.");
-    }
-    else
-    {
-      ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
-                             "Make sure SD card lines have pull-up resistors in place.",
-               esp_err_to_name(ret));
-    }
-    return false;
-  }
-
-  ESP_LOGD(__FUNCTION__, "SD card mounted %d", (int)card);
-  if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
-    sdmmc_card_print_info(stdout, card);
-
-  f_mkdir("/converted");
-  f_mkdir("/kml");
-  f_mkdir("/sent");
-
-  return true;
 }
 
 bool commitTrip(trip *trip)
@@ -445,7 +341,6 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
                     pos = 0;
                     uint8_t fldNo = 1;
                     fseek(trp, firstLinePos, SEEK_SET);
-                    uint8_t sidx=0;
                     while ((fc = fgetc(trp)) != EOF)
                     {
                       if ((fc == 10) || (fc == 13))
@@ -454,7 +349,6 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
                         {
                           lineCount++;
                           fldNo = 1;
-                          sidx=0;
                         }
                       }
                       if ((fldNo >= 2) && (fldNo <=8))
@@ -570,33 +464,6 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
   return false;
 }
 
-static bool moveFile(char* src, char* dest){
-  FRESULT res;
-  FILE* srcF = fopen(src,"r");
-  if (srcF != 0) {
-    FILE* destF = fopen(dest,"w");
-    if (destF != NULL) {
-      int ch=0;
-      while ((ch=fgetc(srcF))!=EOF){
-        fputc(ch,destF);
-      }
-      fclose(destF);
-      fclose(srcF);
-      if ((res=f_unlink(&src[8]))==0){
-        ESP_LOGD(__FUNCTION__,"moved %s to %s",src,dest);
-        return true;
-      } else {
-        ESP_LOGE(__FUNCTION__,"failed in deleting %s %s",src,getErrorMsg(res));
-      }
-    } else {
-      ESP_LOGE(__FUNCTION__,"Cannot open dest %s",dest);
-    }
-  } else {
-    ESP_LOGE(__FUNCTION__,"Cannot open source %s",src);
-  }
-  return false;
-}
-
 static void commitTripToDisk(void *kml)
 {
   if (initSPISDCard())
@@ -701,7 +568,7 @@ static void commitTripToDisk(void *kml)
       ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
     }
 
-    spi_bus_free((spi_host_device_t)host.slot);
+    spi_bus_free((spi_host_device_t)getSDHost()->slot);
     free(kFName);
     free(cFName);
     free(csvs);
@@ -750,11 +617,11 @@ static void flash(void *pvParameters)
 
 void Hibernate()
 {
-  commitTripToDisk((void *)true);
   if (wifiTask != NULL) {
     ESP_LOGD(__FUNCTION__,"Not Hybernating whilst wifying");
     return;
   }
+  commitTripToDisk((void *)true);
   ESP_LOGI(__FUNCTION__, "Deep Sleeping %d = %d", bumpCnt, gps->numRunners);
   uint64_t ext_wakeup_pin_mask = 0;
   int curLvl = 0;
@@ -808,20 +675,18 @@ void Hibernate()
 
 static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
 {
-  ESP_LOGD(__FUNCTION__,"GPS Event e:%d ei:%d ed:%li",(int)base,id,(long int)event_data);
   time(&now);
   sampleBatteryVoltage();
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:
-    ESP_LOGI(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters());
+    ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters());
     lastLocTs = now;
     if (gps->gpspingTask == NULL)
     {
       bool allDone = false;
       //xTaskCreate(flash, "flashy", 2048, (void *)curRate, tskIDLE_PRIORITY+5, NULL);
       uint8_t newRunners = gps->numRunners;
-      esp_event_loop_run(gps->loop_handle, 50 / portTICK_PERIOD_MS);
       ESP_LOGV(__FUNCTION__, "Waiting for runners %d", gps->numRunners);
       while ((gps->numRunners > 0) && !allDone && xSemaphoreTake(gps->runnerSemaphore, 1000 / portTICK_PERIOD_MS))
       {
@@ -868,9 +733,10 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
       else
       {
         ESP_LOGV(__FUNCTION__, "Mr sandman, give me a dream of %d seconds", (int)curRate);
-        if (wifiTask == NULL){
-          xTaskCreate(gps->gotoSleep, "gotosleep", 2048, gps, tskIDLE_PRIORITY, &gps->gpspingTask);
-        }
+        TinyGPSPlus::sleepCallParam_t* sp = (TinyGPSPlus::sleepCallParam_t*) malloc(sizeof(sleepTimes));
+        sp->gps=gps;
+        sp->lightSleep=wifiTask == NULL;
+        xTaskCreate(gps->gotoSleep, "gotosleep", 2048, sp, tskIDLE_PRIORITY, &gps->gpspingTask);
       }
     }
     else
@@ -976,6 +842,8 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     break;
   case TinyGPSPlus::gpsEvent::wakingup:
     ESP_LOGD(__FUNCTION__, "Waking");
+    break;
+  default:
     break;
   }
 }
@@ -1113,7 +981,7 @@ void app_main(void)
     lastSpeed = 0;
     lastRate = 0;
     bumpCnt = 0;
-    commitTripToDisk((void *)1);
+    commitTripToDisk((void *)true);
   //} else {
   //  setenv("TZ", "EST5EDT,M3.2.0/2,M11.1.0", 1);
   //  tzset();
@@ -1150,19 +1018,21 @@ void app_main(void)
   uint32_t defvref=1100;
   esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, defvref, &characteristics);
 
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::msg, gpsEvent, &gps));
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::go, gpsEvent, &gps));
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::stop, gpsEvent, &gps));
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, gpsEvent, &gps));
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, gpsEvent, &gps));
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::rateChanged, gpsEvent, &gps));
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::systimeChanged, gpsEvent, &gps));
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::locationChanged, gpsEvent, &gps));
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantCourseChange, gpsEvent, &gps));
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantDistanceChange, gpsEvent, &gps));
-  ESP_ERROR_CHECK(esp_event_handler_register_with(gps->loop_handle, gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantSpeedChange, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::msg, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::go, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::stop, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::rateChanged, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::systimeChanged, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::locationChanged, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantCourseChange, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantDistanceChange, gpsEvent, &gps));
+  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantSpeedChange, gpsEvent, &gps));
   configureMotionDetector();
-  xTaskCreate(wifiSallyForth, "wifiSallyForth", 4096, NULL , tskIDLE_PRIORITY, &wifiTask);
+  xTaskCreate(wifiSallyForth, "wifiSallyForth", 4096, gps , tskIDLE_PRIORITY, &wifiTask);
+  vTaskDelay(1000/portTICK_PERIOD_MS);
+  esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::atSyncPoint,NULL,0,portMAX_DELAY);
 
   //ESP_ERROR_CHECK(xTaskCreate(commitTripToDisk,"commitTripToDisk",4096,(void*)1,tskIDLE_PRIORITY,NULL));
 

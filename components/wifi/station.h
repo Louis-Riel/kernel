@@ -1,5 +1,5 @@
-//#ifndef __station_h
-//#define __station_h
+#ifndef __station_h
+#define __station_h
 
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
@@ -14,6 +14,7 @@
 
 #define DEFAULT_SCAN_LIST_SIZE 10
 
+bool isWifiying();
 typedef	struct {
                 uint32_t                        workPeriod;
                 uint32_t                        scanPeriod;
@@ -28,5 +29,6 @@ typedef	struct {
 	} wifi_config;
 
 void wifiSallyForth(void *pvParameter);
-
-//#endif
+void wifiStart(void *pvParameter);
+void wifiStop(void *pvParameter);
+#endif

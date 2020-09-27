@@ -292,7 +292,13 @@ public:
   uint32_t failedChecksum()   const { return failedChecksumCount; }
   uint32_t passedChecksum()   const { return passedChecksumCount; }
 
-  esp_event_loop_handle_t loop_handle;
+  typedef struct
+  {
+     TinyGPSPlus* gps;
+     bool lightSleep;
+  } sleepCallParam_t;
+
+
   ESP_EVENT_DEFINE_BASE(GPSPLUS_EVENTS);
   static void gotoSleep(void* param);
   struct timeval lastMsgTs;
@@ -309,7 +315,9 @@ public:
      sleeping,
      wakingup,
      stop,
-     go
+     go,
+     atSyncPoint,
+     outSyncPoint
   };
   void gpsResume();
   void gpsPause();

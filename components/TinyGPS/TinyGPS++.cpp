@@ -37,6 +37,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <sys/time.h>
 #include "freertos/timers.h"
 #include "esp_sleep.h"
+#include "station.h"
 
 #define _GPRMCterm   "GPRMC"
 #define _GPGGAterm   "GPGGA"
@@ -63,25 +64,39 @@ uint32_t TinyGPSPlus::getSleepTime(){
 
 
 void TinyGPSPlus::gotoSleep(void* param) {
-  vTaskDelete(NULL);
   TinyGPSPlus* gps = (TinyGPSPlus*)param;
   if (gps->curFreqIdx>=1)
   {
-    ESP_LOGV(__FUNCTION__,"posting sleeping msg");
-    esp_event_post_to(gps->loop_handle,gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::sleeping,NULL,0,portMAX_DELAY);
-    //ESP_ERROR_CHECK(esp_sleep_enable_uart_wakeup(2));
     gps->gpsPause();
 
-    ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(sleepTimes[gps->curFreqIdx]*1000000));
-    ESP_LOGD(__FUNCTION__,"Napping for %d", sleepTimes[gps->curFreqIdx]);
-    ESP_ERROR_CHECK(esp_light_sleep_start());
-    esp_event_post_to(gps->loop_handle,gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::wakingup,NULL,0,portMAX_DELAY);
+    if (isWifiying()) {
+      ESP_LOGD(__FUNCTION__,"Waiting for %d", sleepTimes[gps->curFreqIdx]);
+      vTaskDelay((sleepTimes[gps->curFreqIdx]*1000)/portTICK_PERIOD_MS);
+    } else {
+      ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(sleepTimes[gps->curFreqIdx]*1000000));
+      ESP_LOGV(__FUNCTION__,"posting sleeping msg");
+      esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::sleeping,NULL,0,portMAX_DELAY);
+      ESP_LOGD(__FUNCTION__,"Napping for %d", sleepTimes[gps->curFreqIdx]);
+      ESP_ERROR_CHECK(esp_light_sleep_start());
+      esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::wakingup,NULL,0,portMAX_DELAY);
+    }
     gps->gpsResume();
   } else {
     ESP_LOGD(__FUNCTION__,"No sleep till Brookland, cause curfreq is less than zero");
   }
 
   gps->gpspingTask=NULL;
+  vTaskDelete(NULL);
+}
+
+void testing123(void* param){
+  TinyGPSPlus* gps = (TinyGPSPlus*) param;
+  vTaskDelay(5000/portTICK_PERIOD_MS);
+  ESP_LOGD(__FUNCTION__,"Posting sync");
+  esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::atSyncPoint,NULL,0,portMAX_DELAY);
+  vTaskDelay(10000/portTICK_PERIOD_MS);
+  ESP_LOGD(__FUNCTION__,"Posting unsync");
+  esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::outSyncPoint,NULL,0,portMAX_DELAY);
   vTaskDelete(NULL);
 }
 
@@ -100,8 +115,6 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
   ,  failedChecksumCount(0)
   ,  passedChecksumCount(0)
 {
-  esp_log_level_set("uart_event_task",ESP_LOG_VERBOSE);
-
   lastLocation.rawLatData=llat;
   lastLocation.rawLngData=llng;
   lastCourse.val=course;
@@ -136,8 +149,6 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
       .task_core_id = tskNO_AFFINITY
   };
   memset(runners,0,sizeof(runners));
-
-  ESP_ERROR_CHECK(esp_event_loop_create(&loop_args, &loop_handle));
 
   ESP_LOGD(__FUNCTION__, "Initializing UART");
 
@@ -187,6 +198,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
   }
 
   ESP_LOGD(__FUNCTION__, "GPS Initialized");
+  //xTaskCreate(&testing123,"testing",2048,this,tskIDLE_PRIORITY,NULL);
 
 }
 
@@ -230,10 +242,11 @@ void TinyGPSPlus::processEncoded(void)
         //tzset();
         settimeofday(&now, &tz);
       } else {
-        ESP_LOGD(__FUNCTION__,"Time diff::%li gps:%li cur:%li curDt:%li",abs(tv2.tv_sec-now.tv_sec),tv2.tv_sec,now.tv_sec,cutDt);
-        adjtime(NULL,&now);
+        ESP_LOGD(__FUNCTION__,"Time diff::%li gettimeofday:%li gps:%li curDt:%li",abs(tv2.tv_sec-now.tv_sec),tv2.tv_sec,now.tv_sec,cutDt);
+        //adjtime(NULL,&now);
+        settimeofday(&now, &tz);
       }
-      esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::systimeChanged,NULL,0,portMAX_DELAY);
+      esp_event_post(GPSPLUS_EVENTS,gpsEvent::systimeChanged,NULL,0,portMAX_DELAY);
     }
 
     gettimeofday(&lastMsgTs, NULL);
@@ -314,7 +327,7 @@ void TinyGPSPlus::uart_event_task(void *pvParameters)
 
                           for (int idx=1; idx < msgLen; idx++) {
                             if (gps->encode(dtmp[idx])){
-                              esp_event_post_to(gps->loop_handle,gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::msg,dtmp+1,msgLen,portMAX_DELAY);
+                              esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::msg,dtmp+1,msgLen,portMAX_DELAY);
                               gps->processEncoded();
                             }
                           }
@@ -444,37 +457,37 @@ bool TinyGPSPlus::isSignificant()
       if (speed.kmph() > 4.0){
         lastSpeed=speed;
         isc= true;
-        esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::go,&val,sizeof(val),portMAX_DELAY);
-        esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::significantSpeedChange,&val,sizeof(val),portMAX_DELAY);
+        esp_event_post(GPSPLUS_EVENTS,gpsEvent::go,&val,sizeof(val),portMAX_DELAY);
+        esp_event_post(GPSPLUS_EVENTS,gpsEvent::significantSpeedChange,&val,sizeof(val),portMAX_DELAY);
       }
     } else {
       if (speed.kmph() < 4.0){
         if (lastSpeed.val != 0){
           if (lastSpeed.kmph() > 4.0){
             isc= true;
-            esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::stop,&lastSpeed.val,sizeof(lastSpeed.val),portMAX_DELAY);
-            esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::significantSpeedChange,&val,sizeof(val),portMAX_DELAY);
+            esp_event_post(GPSPLUS_EVENTS,gpsEvent::stop,&lastSpeed.val,sizeof(lastSpeed.val),portMAX_DELAY);
+            esp_event_post(GPSPLUS_EVENTS,gpsEvent::significantSpeedChange,&val,sizeof(val),portMAX_DELAY);
           }
           lastSpeed.val = 0;
         }
       } else if (val > fmax(1.0,fmin(5.0,speed.kmph()/20.0))) {
         lastSpeed=speed;
         isc= true;
-        esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::significantSpeedChange,&val,sizeof(val),portMAX_DELAY);
+        esp_event_post(GPSPLUS_EVENTS,gpsEvent::significantSpeedChange,&val,sizeof(val),portMAX_DELAY);
       }
     }
   }
 
   val=abs(course.deg() - lastCourse.deg());
   if ((speed.kmph() > 5) && (course.deg() != 0.0) && (val > 5)) {
-    esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::significantCourseChange,&val,sizeof(val),portMAX_DELAY);
+    esp_event_post(GPSPLUS_EVENTS,gpsEvent::significantCourseChange,&val,sizeof(val),portMAX_DELAY);
     lastCourse=course;
     isc= true;
   }
 
   //val=abs(altitude.meters() - lastAltitude.meters() );
   //if (val > 5) {
-  //  esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::significantAltitudeChange,&val,sizeof(val),portMAX_DELAY);
+  //  esp_event_post(GPSPLUS_EVENTS,gpsEvent::significantAltitudeChange,&val,sizeof(val),portMAX_DELAY);
   //  lastAltitude=altitude;
   //  isc= true;
   //}
@@ -485,7 +498,7 @@ bool TinyGPSPlus::isSignificant()
 
   val=distanceTo(lastLocation);
   if (val>fmax(250,speed.kmph()*50)) {
-    esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::significantDistanceChange,&val,sizeof(val),portMAX_DELAY);
+    esp_event_post(GPSPLUS_EVENTS,gpsEvent::significantDistanceChange,&val,sizeof(val),portMAX_DELAY);
     lastLocation=location;
   }
 
@@ -529,7 +542,7 @@ void TinyGPSPlus::adjustRate(){
       break;
     }
     curFreqIdx=toBeFreqIdx;
-    esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::rateChanged,(void*)&sleepTimes[curFreqIdx],sizeof(curFreqIdx),portMAX_DELAY);
+    esp_event_post(GPSPLUS_EVENTS,gpsEvent::rateChanged,(void*)&sleepTimes[curFreqIdx],sizeof(curFreqIdx),portMAX_DELAY);
 }
 // Processes a just-completed term
 // Returns true if new sentence has just passed checksum test and is validated
@@ -585,7 +598,7 @@ bool TinyGPSPlus::endOfTermHandler()
           }
         }
         adjustRate();
-        esp_event_post_to(loop_handle,GPSPLUS_EVENTS,gpsEvent::locationChanged,NULL,0,portMAX_DELAY);
+        esp_event_post(GPSPLUS_EVENTS,gpsEvent::locationChanged,NULL,0,portMAX_DELAY);
       }
       return true;
     }
@@ -772,7 +785,7 @@ void TinyGPSDate::commit()
 {
    date = newDate;
    lastCommitTime = millis();
-   valid = updated = (year()>2000);
+   valid = updated = (year()>2000) && (year()<2036);
 }
 
 void TinyGPSTime::commit()
