@@ -8,16 +8,15 @@
 #include "esp_wifi.h"
 
 #define WIFI_CONNECTED_BIT BIT0
-#define WIFI_SCAN_READY_BIT BIT2
-#define WIFI_SCANING_BIT BIT4
+#define WIFI_SCAN_READY_BIT BIT1
+#define WIFI_SCANING_BIT BIT2
 #define WIFI_UP_BIT BIT3
+#define WIFI_DOWN_BIT BIT4
+#define WIFI_CLIENT_DONE BIT5
 
 #define DEFAULT_SCAN_LIST_SIZE 10
 
-bool isWifiying();
 typedef	struct {
-                uint32_t                        workPeriod;
-                uint32_t                        scanPeriod;
                 uint32_t                        disconnectWaitTime;
                 uint32_t                        poolWaitTime;
                 EventGroupHandle_t              s_wifi_eg;
@@ -26,9 +25,10 @@ typedef	struct {
                 wifi_mode_t                     wifi_mode;
                 char                            wname[40];
                 char                            wpdw[40];
-	} wifi_config;
+	} the_wifi_config;
 
 void wifiSallyForth(void *pvParameter);
 void wifiStart(void *pvParameter);
 void wifiStop(void *pvParameter);
+the_wifi_config*  getWifiConfig();
 #endif

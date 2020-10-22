@@ -33,6 +33,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_event.h"
+#include "freertos/event_groups.h"
+#include "../../main/logs.h"
 
 #define _GPS_VERSION "1.0.2" // software version of this library
 #define _GPS_MPH_PER_KNOT 1.15077945
@@ -48,6 +50,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define BUF_SIZE (1024)
 #define RD_BUF_SIZE (BUF_SIZE)
 #define BLINK_GPIO GPIO_NUM_5
+#define GPS_TIMEOUT 300
 
 const uint8_t update_1_secs[] =  {0xB5,0x62,0x06,0x08,0x06,0x00,0xE8,0x03,0x01,0x00,0x01,0x00,0x01,0x39};
 const uint8_t update_3_secs[] =  {0xB5,0x62,0x06,0x08,0x06,0x00,0x88,0x13,0x01,0x00,0x01,0x00,0xB1,0x49,0xB5,0x62,0x06,0x08,0x00,0x00,0x0E,0x30};
@@ -55,17 +58,50 @@ const uint8_t update_5_secs[] =  {0xB5,0x62,0x06,0x08,0x06,0x00,0xB8,0x0B,0x01,0
 const uint8_t update_10_secs[] = {0xB5,0x62,0x06,0x08,0x06,0x00,0x10,0x27,0x01,0x00,0x01,0x00,0x4D,0xDD,0xB5,0x62,0x06,0x08,0x00,0x00,0x0E,0x30};
 const uint8_t update_20_secs[] = {0xB5,0x62,0x06,0x08,0x06,0x00,0x20,0x4E,0x01,0x00,0x01,0x00,0x84,0x00,0xB5,0x62,0x06,0x08,0x00,0x00,0x0E,0x30};
 const uint8_t update_0_2_secs[]= {0xB5,0x62,0x06,0x08,0x06,0x00,0x64,0x00,0x01,0x00,0x01,0x00,0x7A,0x12,0xB5,0x62,0x06,0x08,0x00,0x00,0x0E,0x30};
-const uint8_t active_tracking[] =         {0xB5,0x62,0x06,0x04,0x04,0x00,0x00,0x00,0x02,0x00,0x10,0x68};
-const uint8_t silent_tracking[] =    {0xB5,0x62,0x06,0x04,0x04,0x00,0x00,0x00,0x08,0x00,0x16,0x74};
-const uint8_t RMC_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X04, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X03, 0X3F};
-const uint8_t VTG_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X05, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X04, 0X46};
-const uint8_t GSA_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X02, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X01, 0X31};
-const uint8_t GSV_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X03, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X02, 0X38};
-const uint8_t GLL_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X01, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X2A};
-const uint8_t GGA_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0XFF, 0X23};
-const uint8_t GGA_On[] =  { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X00, 0X00, 0X01, 0X01, 0X00, 0X00, 0X00, 0X01, 0X2C};
-const uint8_t ZDA_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X08, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X07, 0X5B};
-const uint8_t sleepTimes[] =     {1,3,5,10,20};
+const uint8_t active_tracking[]= {0xB5,0x62,0x06,0x04,0x04,0x00,0x00,0x00,0x02,0x00,0x10,0x68};
+const uint8_t silent_tracking[]= {0xB5,0x62,0x06,0x04,0x04,0x00,0x00,0x00,0x08,0x00,0x16,0x74};
+const uint8_t gps_off[]=         {0xB5, 0x62, 0x02, 0x41, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x4D, 0x3B};
+const uint8_t gps_power_save[] = {0xB5, 0x62, 0x06, 0x11, 0x02, 0x00, 0x08, 0x01, 0x22, 0x92};
+
+const uint8_t GPS_ON_OFF[] =     { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0XFF, 0X00, 0XFF, 0X00, 0X00, 0X00, 0X00, 0XFF, 0XFF};
+
+const uint8_t sleepTimes[] =     {10,20,60,120,240};
+
+typedef enum {
+   GPS_GGA = 0X00,
+   GPS_GLL = 0X01,
+   GPS_GSA = 0X02,
+   GPS_GSV = 0X03,
+   GPS_RMC = 0X04,
+   GPS_VTG = 0X05,
+   GPS_GRS = 0x06,
+   GPS_GST = 0x07,
+   GPS_ZDA = 0X08
+} gps_protocol_t;
+
+static const char* gps_protocol_name[] = {
+   "GPS_GGA",
+   "GPS_GLL",
+   "GPS_GSA",
+   "GPS_GSV",
+   "GPS_RMC",
+   "GPS_VTG",
+   "GPS_GRS",
+   "GPS_GST",
+   "GPS_ZDA"};
+
+
+//const uint8_t GGA_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0XFF, 0X23};
+//const uint8_t GLL_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X01, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X2A};
+//const uint8_t GSA_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X02, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X01, 0X31};
+//const uint8_t GSV_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X03, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X02, 0X38};
+//const uint8_t RMC_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X04, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X03, 0X3F};
+//const uint8_t VTG_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X05, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X04, 0X46};
+//const uint8_t GRS_off[] = { 0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x4D};
+//const uint8_t GST_Off[] = { 0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 0xF0, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x54};
+//const uint8_t ZDA_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X08, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X07, 0X5B};
+//const uint8_t GGA_On[] =  { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X00, 0X00, 0X01, 0X01, 0X00, 0X00, 0X00, 0X01, 0X2C};
+
 
 unsigned long IRAM_ATTR millis();
 
@@ -251,11 +287,17 @@ private:
    TinyGPSCustom *next;
 };
 
+enum poiState_t {
+   unknown = BIT0,
+   in = BIT1,
+   out = BIT2
+};
+
 class TinyGPSPlus
 {
 public:
   TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin,uint8_t lastSleepIdx,
-              RawDegrees llat, RawDegrees llng, uint32_t course, uint32_t speed, uint32_t altitude);
+              RawDegrees llat, RawDegrees llng, uint32_t course, uint32_t speed, uint32_t altitude,EventGroupHandle_t app_eg);
   bool encode(char c); // process one character received from GPS
   TinyGPSPlus &operator << (char c) {encode(c); return *this;}
 
@@ -274,6 +316,8 @@ public:
   gpio_num_t enpin;
   uint8_t curFreqIdx;
   QueueHandle_t runnerSemaphore = xSemaphoreCreateCounting(10,0);
+  EventGroupHandle_t app_eg;
+  EventGroupHandle_t eg;
 
   static const char *libraryVersion() { return _GPS_VERSION; }
   void processEncoded(void);
@@ -300,52 +344,59 @@ public:
 
 
   ESP_EVENT_DEFINE_BASE(GPSPLUS_EVENTS);
-  static void gotoSleep(void* param);
+  static void theLoop(void* param);
   struct timeval lastMsgTs;
   struct timeval lastMsgTsSent;
   enum gpsEvent {
-     locationChanged,
-     systimeChanged,
-     significantDistanceChange,
-     significantSpeedChange,
-     significantCourseChange,
-     significantAltitudeChange,
-     rateChanged,
-     msg,
-     sleeping,
-     wakingup,
-     stop,
-     go,
-     atSyncPoint,
-     outSyncPoint
+     locationChanged=BIT0,
+     systimeChanged=BIT1,
+     significantDistanceChange=BIT2,
+     significantSpeedChange=BIT3,
+     significantCourseChange=BIT4,
+     significantAltitudeChange=BIT5,
+     rateChanged=BIT6,
+     msg=BIT7,
+     sleeping=BIT8,
+     wakingup=BIT9,
+     stop=BIT10,
+     go=BIT11,
+     atSyncPoint=BIT12,
+     outSyncPoint=BIT13,
+     gpsPaused=BIT14,
+     gpsResumed=BIT15,
+     gpsRunning=BIT16,
+     gpsStopped=BIT17
   };
   void gpsResume();
   void gpsPause();
-  TaskHandle_t gpspingTask;
   TaskHandle_t runners[255];
   uint8_t numRunners;
   uint8_t stackTask();
   void unStackTask(uint8_t taskHandle);
   uint32_t getSleepTime();
+  poiState_t poiState;
+  void flagProtocol(gps_protocol_t protocol, bool state);
+  esp_err_t gps_esp_event_post(esp_event_base_t event_base,
+                            int32_t event_id,
+                            void* event_data,
+                            size_t event_data_size,
+                            TickType_t ticks_to_wait);
 
+   TinyGPSCustom* gpTxt;
 private:
   enum {GPS_SENTENCE_GPGGA, GPS_SENTENCE_GPRMC, GPS_SENTENCE_OTHER};
   static QueueHandle_t uart0_queue;
-  static void flash(void *pvParameters);
   static void uart_event_task(void *pvParameters);
   esp_timer_handle_t periodic_timer;
+  uint8_t gpsWarmTime;
   uint8_t toBeFreqIdx;
+  double poiLng;
+  double poiLat;
   void adjustRate();
+  void CalcChecksum(uint8_t *Message, uint8_t Length);
+  static bool waitOnStop(TinyGPSPlus* gps);
 
   QueueHandle_t uart_queue;
-
-  static inline IRAM_ATTR BaseType_t myTaskCreate(
-			TaskFunction_t pvTaskCode,
-			const char * const pcName,
-			const uint32_t usStackDepth,
-			void * const pvParameters,
-			UBaseType_t uxPriority,
-			TaskHandle_t * const pvCreatedTask);
 
   // parsing state variables
   uint8_t parity;
