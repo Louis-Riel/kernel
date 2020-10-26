@@ -3,8 +3,6 @@
 
 //#define IS_TRACKER
 
-#define LOG_BUF_SIZE 1024000
-
 #include "../build/config/sdkconfig.h"
 #include <stdio.h>
 #include <string.h>
@@ -41,8 +39,6 @@ struct poiConfig_t {
   uint16_t minDistance;
   uint16_t statusBits;
 };
-
-
 
 struct app_config_t {
   struct sdcard_config_t {

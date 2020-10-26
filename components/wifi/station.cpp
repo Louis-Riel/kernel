@@ -217,6 +217,7 @@ void ProcessScannedAPs(){
                 ESP_LOGD(__FUNCTION__, "Channel \t\t%d\n", ap_info[i].primary);
             }
             if (isSidManaged((const char*)ap_info[i].ssid)){
+
                 if (esp_wifi_scan_stop() != ESP_OK) {
                     ESP_LOGW(__FUNCTION__,"Cannot stop scan");
                 }
@@ -378,6 +379,7 @@ esp_err_t initWifi(){
     ESP_LOGD(__FUNCTION__,"Initializing netif");
     ESP_ERROR_CHECK(esp_netif_init());
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_LOGD(__FUNCTION__,"Initialized netif");
 
     if (config->wifi_mode == WIFI_MODE_AP) {
         if (sta_netif==NULL)
@@ -386,16 +388,21 @@ esp_err_t initWifi(){
         ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL, NULL));
         ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL, NULL));
         ESP_ERROR_CHECK(esp_netif_dhcps_start(sta_netif));
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP) );
         ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config) );
         ESP_ERROR_CHECK(esp_wifi_start() );
     } else {
-        if (sta_netif==NULL)
+        if (sta_netif==NULL){
+            ESP_LOGD(__FUNCTION__,"creating netif");
             sta_netif=esp_netif_create_default_wifi_sta();
+            ESP_LOGD(__FUNCTION__,"created netif");
+        }
         ESP_LOGD(__FUNCTION__,"Creating netif %li",(long int)sta_netif);
         ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL, NULL));
         ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL, NULL));
         ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
         wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
         ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );

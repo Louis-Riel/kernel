@@ -1,5 +1,7 @@
 #include "rest.h"
 #include "route.h"
+#include <cstdio>
+#include <cstring>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -7,8 +9,8 @@ static httpd_handle_t server = NULL;
 static uint8_t* img=NULL;
 static uint32_t totLen=0;
 FILE* downloadedFile=NULL;
-static char* jsonbuf=NULL;
-static char* kmlFiles=NULL;
+//static char* jsonbuf=NULL;
+//static char* kmlFiles=NULL;
 static uint32_t kmlFilesPos=0;
 char* tarfname=(char*)malloc(255);
 
@@ -47,11 +49,12 @@ esp_err_t kmllist_event_handler(esp_http_client_event_t *evt)
         break;
     case HTTP_EVENT_ON_DATA:
         if (xEventGroupGetBits(eventGroup) & GETTING_TRIP_LIST) {
-            if (kmlFilesPos+evt->data_len<KML_BUFFER_SIZE ){
+            if (evt->data_len<KML_BUFFER_SIZE ){
+                assert(evt->user_data);
+                char* kmlFiles=(char*)evt->user_data;
                 ESP_LOGV(__FUNCTION__, "kmllist data len:%d", evt->data_len);
-                memcpy(kmlFiles+kmlFilesPos,evt->data,evt->data_len);
-                kmlFiles[kmlFilesPos+evt->data_len]=0;
-                kmlFilesPos+=evt->data_len;
+                memcpy(kmlFiles,evt->data,evt->data_len);
+                kmlFiles[evt->data_len]=0;
                 ESP_LOGV(__FUNCTION__,"%s",kmlFiles);
             }
         } else {
@@ -93,6 +96,75 @@ esp_err_t kmldownload_event_handler(esp_http_client_event_t *evt)
             downloadedFile = fopen(evt->header_value,"w",true);
             if (downloadedFile == NULL) {
                 ESP_LOGE(__FUNCTION__,"Error whiilst opening %s",evt->header_value);
+                return ESP_FAIL;
+            }
+            xEventGroupSetBits(eventGroup,DOWNLOAD_STARTED);
+        }
+        break;
+    case HTTP_EVENT_ON_DATA:
+        if (downloadedFile != NULL) {
+            fwrite(evt->data,1,evt->data_len,downloadedFile);
+        } else {
+            ESP_LOGW(__FUNCTION__,"Data with no dest file %d bytes",evt->data_len);
+            if (evt->data_len < 200) {
+                ESP_LOGW(__FUNCTION__,"%s",(char*)evt->data);
+            }
+            return ESP_FAIL;
+        }
+        break;
+    case HTTP_EVENT_ON_FINISH:
+        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_FINISH ");
+        if (downloadedFile != NULL) {
+            fclose(downloadedFile);
+        } else {
+            ESP_LOGW(__FUNCTION__,"Close file with no dest file %d bytes",evt->data_len);
+        }
+        xEventGroupSetBits(eventGroup,DOWNLOAD_FINISHED);
+        break;
+    case HTTP_EVENT_DISCONNECTED:
+        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_DISCONNECTED\n");
+        break;
+    }
+    return ESP_OK;
+}
+
+esp_err_t logdownload_event_handler(esp_http_client_event_t *evt)
+{
+    switch (evt->event_id)
+    {
+    case HTTP_EVENT_ERROR:
+        ESP_LOGE(__FUNCTION__, "HTTP_EVENT_ERROR");
+        break;
+    case HTTP_EVENT_ON_CONNECTED:
+        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_CONNECTED");
+        xEventGroupClearBits(eventGroup,DOWNLOAD_STARTED);
+        xEventGroupClearBits(eventGroup,DOWNLOAD_FINISHED);
+        break;
+    case HTTP_EVENT_HEADER_SENT:
+        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_HEADER_SENT");
+        break;
+    case HTTP_EVENT_ON_HEADER:
+        ESP_LOGD(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+        if (strcmp(evt->header_key,"filename") == 0) {
+            char* fname = (char*) malloc(255);
+            memset(fname,0,255);
+            strcpy(fname, evt->header_value);
+            for (char* theChar = fname; *theChar != 0; theChar++) {
+                if (*theChar == '_') {
+                    *theChar='/';
+                    sprintf(theChar+1, "%s", strrchr(evt->header_value,'/')+1);
+                    break;
+                }
+                if (*theChar == '-') {
+                    *theChar='/';
+                }
+            }
+
+            ESP_LOGD(__FUNCTION__, "HTTP_EVENT_ON_HEADER updated to, key=%s, value=%s", evt->header_key, fname);
+            downloadedFile = fopen(fname,"w",true);
+            free(fname);
+            if (downloadedFile == NULL) {
+                ESP_LOGE(__FUNCTION__,"Error whiilst opening %s",fname);
                 return ESP_FAIL;
             }
             xEventGroupSetBits(eventGroup,DOWNLOAD_STARTED);
@@ -247,7 +319,7 @@ bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_
 void pullStation(void *pvParameter) {
     if (initSPISDCard()){
         esp_ip4_addr_t* ipInfo= (esp_ip4_addr_t*) pvParameter;
-        kmlFiles = (char*)malloc(KML_BUFFER_SIZE);
+        char* kmlFiles = (char*)malloc(KML_BUFFER_SIZE);
         memset(kmlFiles,0,KML_BUFFER_SIZE);
         esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
         memset(config,0,sizeof(esp_http_client_config_t));
@@ -259,6 +331,7 @@ void pullStation(void *pvParameter) {
         config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
         config->max_redirection_count=0;
         config->port=80;
+        config->user_data=kmlFiles;
         ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
         esp_http_client_handle_t client = esp_http_client_init(config);
         esp_err_t err;
@@ -453,6 +526,7 @@ void pullStation(void *pvParameter) {
         config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
         config->max_redirection_count=0;
         config->port=80;
+        config->user_data=kmlFiles;
         ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
         client = esp_http_client_init(config);
         kmlFilesPos=0;
@@ -500,7 +574,7 @@ void pullStation(void *pvParameter) {
                 config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
                 config->max_redirection_count=0;
                 config->port=80;
-                config->event_handler = kmldownload_event_handler;
+                config->event_handler = logdownload_event_handler;
                 client = esp_http_client_init(config);
                 esp_http_client_set_header(client,"movetosent","yes");
                 if ((err = esp_http_client_perform(client)) == ESP_OK){
@@ -556,10 +630,10 @@ void pullStation(void *pvParameter) {
         if ((ret = esp_http_client_open(client,strlen(postData))) == ESP_OK){
             if ((err = esp_http_client_write(client,postData,strlen(postData))) != ESP_ERR_HTTP_CONNECT)
             {
-                ESP_LOGD(__FUNCTION__, "\nTurn off wifi faile, but that is to be expected: %s", esp_err_to_name(err));
+                ESP_LOGD(__FUNCTION__, "Turn off wifi faile, but that is to be expected: %s", esp_err_to_name(err));
             }
         } else {
-            ESP_LOGE(__FUNCTION__, "\nKML GET request failed: %s", esp_err_to_name(err));
+            ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(ret));
         }
         esp_http_client_cleanup(client);
         free((void*)config->url);

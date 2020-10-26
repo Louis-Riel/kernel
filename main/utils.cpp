@@ -164,9 +164,10 @@ bool initSPISDCard()
       f_mkdir("/kml");
       f_mkdir("/logs");
       f_mkdir("/sent");
+    } else if (ret == ESP_ERR_INVALID_STATE) {
+      ESP_LOGW(__FUNCTION__,"Error initing SPI bus %s",esp_err_to_name(ret));
     } else {
       ESP_LOGE(__FUNCTION__,"Error initing SPI bus %s",esp_err_to_name(ret));
-      spi_bus_free((spi_host_device_t)host.slot);
       return false;
     }
   }

@@ -65,3 +65,7 @@ void initLog() {
     logBufPos=0;
     esp_log_set_vprintf(loggit);
 }
+
+EventGroupHandle_t* getAppEG() {
+  return &app_eg;
+}

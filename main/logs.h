@@ -12,6 +12,16 @@
 #include <string.h>
 #include "esp_log.h"
 
+static EventGroupHandle_t app_eg = xEventGroupCreate();
+EventGroupHandle_t* getAppEG();
+
+typedef enum {
+ BUMP_BIT = BIT0,
+ COMMITTING_TRIPS = BIT1,
+ TRIPS_COMMITTED = BIT2,
+ TRIPS_SYNCED = BIT3
+} app_bits_t;
+
 void initLog();
 void dumpLogs();
 char* getLogFName();

@@ -5,7 +5,7 @@ idf_component_register(
     PRIV_REQUIRES "microtar"
     EMBED_FILES "../../res/favicon.ico"
     EMBED_TXTFILES "../../res/index.html" "../../res/file_table.html" "../../res/settings.html"
-    SRCS "rest.cpp" "handlers.cpp"
+    SRCS "rest.cpp" "../../main/log.cpp" "handlers.cpp"
 )
 
 

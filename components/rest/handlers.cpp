@@ -1,6 +1,7 @@
 #include "rest.h"
 #include "route.h"
 #include "math.h"
+#include "../../main/logs.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -584,7 +585,10 @@ esp_err_t rest_handler(httpd_req_t *req)
                     if (jsonItem && (strcmp(jsonItem->valuestring,"no")==0)) {
                         if (appcfg->pois->minDistance > 0){
                             xEventGroupSetBits(wcfg->s_wifi_eg,WIFI_CLIENT_DONE);
-                            ESP_LOGD(__FUNCTION__,"All done wif wifi");
+                            xEventGroupSetBits(*getAppEG(),app_bits_t::TRIPS_SYNCED);
+                            ESP_LOGD(__FUNCTION__,"All done wif wifi %d",xEventGroupGetBits(wcfg->s_wifi_eg));
+                            httpd_resp_send(req,"OK",2);
+                            vTaskDelay(pdMS_TO_TICKS(500));
                             wifiStop(NULL);
                         }
                     }
@@ -863,15 +867,17 @@ esp_err_t renderApp(httpd_req_t *req){
             memset(jsonbuf,0,JSON_BUFFER_SIZE);
             uint32_t pidx=0;
             char* spts = jsonbuf;
+            spts+=sprintf(spts,"<ul>");
             while ((pc->minDistance < 2000) && (pc->minDistance > 0)) {
-                spts+=sprintf(spts,"<label>\
+                spts+=sprintf(spts,"<li><label>\
                     Point %d\
                     <input type=""number"" name=""syncpoints[%d].lat"">\
                     <input type=""number"" name=""syncpoints[%d].lng"">\
-                </label>\n",pidx+1,pidx,pidx);
+                </label></li>\n",pidx+1,pidx,pidx);
                 pidx++;
                 pc+=sizeof(poiConfig_t);
             }
+            spts+=sprintf(spts,"</ul>");
             pidx=strlen(jsonbuf);
             if (pidx>0){
                 httpd_resp_send_chunk(req, jsonbuf, strlen(jsonbuf));

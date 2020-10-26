@@ -117,54 +117,61 @@ void print_the_wakeup_reason()
   }
 }
 
-bool TinyGPSPlus::waitOnStop(TinyGPSPlus* gps){
-  if (!(xEventGroupGetBits(gps->eg)&gpsEvent::atSyncPoint) && (xEventGroupGetBits(gps->eg)&gpsEvent::stop)) {
-    ESP_LOGD(__FUNCTION__, "We are stopped, checking bumps");
-    xEventGroupClearBits(gps->app_eg,BIT0);
-    if (xEventGroupWaitBits(gps->app_eg,BIT0,pdTRUE,pdTRUE,5000/portTICK_PERIOD_MS)&BIT0){
-      ESP_LOGD(__FUNCTION__, "We are not so stopped, not using bump bumps");
-    } else {
-      ESP_LOGD(__FUNCTION__, "We are stopped, waiting on bumps");
+void TinyGPSPlus::waitOnStop(void* param){
+  TinyGPSPlus* gps = (TinyGPSPlus*)param;
+  ESP_LOGD(__FUNCTION__, "We are stopped, checking bumps");
+  xEventGroupClearBits(*getAppEG(),BIT0);
+  if (xEventGroupWaitBits(*getAppEG(),BIT0,pdTRUE,pdTRUE,5000/portTICK_PERIOD_MS)&BIT0){
+    ESP_LOGD(__FUNCTION__, "We are not so stopped, not using bump bumps");
+  } else {
+    gps->gpsPause();
 
-      gps->gpsPause();
-
-      uint64_t ext_wakeup_pin_mask = 0;
-      int curLvl = 0;
-      for (int idx = 0; idx < numWakePins; idx++)
+    uint64_t ext_wakeup_pin_mask = 0;
+    int curLvl = 0;
+    for (int idx = 0; idx < numWakePins; idx++)
+    {
+      curLvl = gpio_get_level(wakePins[idx]);
+      ESP_LOGD(__FUNCTION__, "Pin %d is %d", wakePins[idx], curLvl);
+      if (curLvl == 0)
       {
-        curLvl = gpio_get_level(wakePins[idx]);
-        ESP_LOGD(__FUNCTION__, "Pin %d is %d", wakePins[idx], curLvl);
-        if (curLvl == 0)
-        {
-          ext_wakeup_pin_mask |= (1ULL << wakePins[idx]);
-        }
+        ext_wakeup_pin_mask |= (1ULL << wakePins[idx]);
       }
-      ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(GPS_TIMEOUT*1000000));
-      if (ext_wakeup_pin_mask != 0)
-      {
-        ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
-      }
-      else
-      {
-        ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[numWakePins - 1], curLvl == 0 ? 1 : 0));
-      }
-      if (gps->poiState == poiState_t::in) {
-        int32_t timeToGo = sleepTimes[gps->curFreqIdx]*1000;
-        while ((timeToGo > 0) && !(xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdFALSE,pdTRUE,500/portTICK_PERIOD_MS)&gpsEvent::outSyncPoint)){
-          gpio_set_level(BLINK_GPIO,0);
-          xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdTRUE,pdTRUE,300/portTICK_PERIOD_MS);
-          gpio_set_level(BLINK_GPIO,1);
-          timeToGo-=804;
-        }
-        gpio_set_level(BLINK_GPIO,0);
-      } else {
-        esp_light_sleep_start();
-        print_the_wakeup_reason();
-      }
-      return true;
     }
+    ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(GPS_TIMEOUT*1000000));
+    if (ext_wakeup_pin_mask != 0)
+    {
+      ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
+    }
+    else
+    {
+      ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[numWakePins - 1], curLvl == 0 ? 1 : 0));
+    }
+    ESP_LOGD(__FUNCTION__, "We are stopped, waiting on bumps");
+    if ((gps->poiState == poiState_t::in) && !(xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCED )) {
+      int32_t timeToGo = sleepTimes[gps->curFreqIdx]*1000;
+      while ((timeToGo > 0) && !(xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdFALSE,pdTRUE,500/portTICK_PERIOD_MS)&gpsEvent::outSyncPoint)){
+        gpio_set_level(BLINK_GPIO,0);
+        xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdFALSE,pdTRUE,300/portTICK_PERIOD_MS);
+        gpio_set_level(BLINK_GPIO,1);
+        timeToGo-=804;
+      }
+      ESP_LOGD(__FUNCTION__, "In POI so not really");
+      gpio_set_level(BLINK_GPIO,1);
+    } else {
+      gpio_set_level(BLINK_GPIO,1);
+      if (xEventGroupGetBits(*getAppEG())&app_bits_t::COMMITTING_TRIPS){
+        ESP_LOGD(__FUNCTION__,"Waiting for trip commit");
+        xEventGroupWaitBits(*getAppEG(),app_bits_t::TRIPS_COMMITTED,pdFALSE,pdTRUE,portMAX_DELAY);
+      }
+      esp_light_sleep_start();
+      gpio_set_level(BLINK_GPIO,0);
+      print_the_wakeup_reason();
+    }
+    gps->toBeFreqIdx=0;
+    gps->adjustRate();
+    gps->gpsResume();
   }
-  return false;
+  vTaskDelete(NULL);
 }
 
 void TinyGPSPlus::theLoop(void* param) {
@@ -176,93 +183,68 @@ void TinyGPSPlus::theLoop(void* param) {
   bool allDone=false;
 
   while (xEventGroupGetBits(gps->eg)&gpsEvent::gpsRunning){
-    if (TinyGPSPlus::waitOnStop(gps)){
-      gps->toBeFreqIdx=0;
-      gps->adjustRate();
-    }
-    while (!(xEventGroupWaitBits(gps->eg,gpsEvent::locationChanged,pdTRUE,pdTRUE,200/portTICK_PERIOD_MS)&gpsEvent::locationChanged)){
+    while (!(xEventGroupWaitBits(gps->eg,gpsEvent::locationChanged,pdFALSE,pdTRUE,200/portTICK_PERIOD_MS)&gpsEvent::locationChanged)){
       gpio_set_level(BLINK_GPIO,0);
-      xEventGroupWaitBits(gps->eg,gpsEvent::locationChanged,pdTRUE,pdTRUE,20/portTICK_PERIOD_MS);
+      xEventGroupWaitBits(gps->eg,gpsEvent::locationChanged,pdFALSE,pdTRUE,20/portTICK_PERIOD_MS);
       gpio_set_level(BLINK_GPIO,1);
     }
-    gpio_set_level(BLINK_GPIO,0);
-
-    if (!gps->isSignificant()){
-      if (gps->toBeFreqIdx<((sizeof(sleepTimes)/sizeof(uint8_t))-1)){
-        if (gps->speed.kmph()<80){
-          if (sleepTimes[gps->toBeFreqIdx] < 60)
-            gps->toBeFreqIdx++;
-        } else{
-          gps->toBeFreqIdx++;
-        }
-      }
-    }
-    gps->adjustRate();
-    gps->gpsPause();
-
-    ESP_LOGV(__FUNCTION__,"GPS IS PAUSED****");
-
-    if (gps->poiState == poiState_t::in) {
-      ESP_LOGD(__FUNCTION__,"Waiting for %d", sleepTimes[gps->curFreqIdx]);
-      //gpio_set_level(BLINK_GPIO,0);
-      int32_t timeToGo = sleepTimes[gps->curFreqIdx]*1000;
-      while ((timeToGo > 0) && !(xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdFALSE,pdTRUE,500/portTICK_PERIOD_MS)&gpsEvent::outSyncPoint)){
-        gpio_set_level(BLINK_GPIO,0);
-        xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdTRUE,pdTRUE,300/portTICK_PERIOD_MS);
-        gpio_set_level(BLINK_GPIO,1);
-        timeToGo-=804;
-      }
-      gpio_set_level(BLINK_GPIO,0);
-      gps->gpsResume();
-      xEventGroupClearBits(gps->eg,gpsEvent::locationChanged);
-      xEventGroupWaitBits(gps->eg,gpsEvent::locationChanged,pdTRUE,pdTRUE,portMAX_DELAY);
-    } else {
-      ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(sleepTimes[gps->curFreqIdx]*1000000));
-      ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::sleeping,NULL,0,portMAX_DELAY));
-      ESP_LOGD(__FUNCTION__,"Napping for %d", sleepTimes[gps->curFreqIdx]);
-      gpio_set_level(BLINK_GPIO,1);
-      ESP_ERROR_CHECK(esp_light_sleep_start());
-      gpio_set_level(BLINK_GPIO,0);
-      //print_the_wakeup_reason();
-      ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::wakingup,NULL,0,portMAX_DELAY));
-      gps->gpsResume();
-      ::time(&sleepStart);
-
-      while (!(xEventGroupWaitBits(gps->eg,gpsEvent::locationChanged,pdTRUE,pdTRUE,500/portTICK_PERIOD_MS)&gpsEvent::locationChanged)){
-        gpio_set_level(BLINK_GPIO,0);
-        xEventGroupWaitBits(gps->eg,gpsEvent::locationChanged,pdTRUE,pdTRUE,20/portTICK_PERIOD_MS);
-        gpio_set_level(BLINK_GPIO,1);
-      }
-      gpio_set_level(BLINK_GPIO,0);
-
-      actualWarmTime=::time(NULL)-sleepStart;
-      timeDiff=actualWarmTime-gps->gpsWarmTime;
-      ESP_LOGV(__FUNCTION__,"Got a loc after %d",actualWarmTime);
-      if (timeDiff <= 2) {
-        if (gps->gpsWarmTime > 0){
-          if (gps->gpsWarmTime > 3)
-            gps->gpsWarmTime-=3;
-          else
-            gps->gpsWarmTime=0;
-
-          ESP_LOGV(__FUNCTION__,"warm time down adjusted from %d to %d",(gps->gpsWarmTime+1),gps->gpsWarmTime);
-        }
-      } else {
-        ESP_LOGV(__FUNCTION__,"time down adjusted from %d to %d",gps->gpsWarmTime,actualWarmTime);
-        gps->gpsWarmTime=actualWarmTime;
-      }
-    }
+    gpio_set_level(BLINK_GPIO,1);
   }
   xEventGroupSetBits(gps->eg,gpsEvent::gpsStopped);
   vTaskDelete(NULL);
 }
 
-static void gpsEventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
+void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
 {
-  ESP_LOGD(__FUNCTION__,"Event id:%d",id);
   TinyGPSPlus* gps = (TinyGPSPlus*)handler_args;
   switch (id) {
+    case TinyGPSPlus::gpsEvent::go:
+      xEventGroupSetBits(*getAppEG(),BIT0);
+      break;
+    case TinyGPSPlus::gpsEvent::stop:
+      xTaskCreate(TinyGPSPlus::waitOnStop,"waitonstop",4096,handler_args,tskIDLE_PRIORITY,NULL);
+      break;
     case TinyGPSPlus::gpsEvent::locationChanged:
+      if (!gps->isSignificant()){
+        if (gps->toBeFreqIdx<((sizeof(sleepTimes)/sizeof(uint8_t))-1)){
+          if (gps->speed.kmph()<80){
+            if (sleepTimes[gps->toBeFreqIdx] < 60)
+              gps->toBeFreqIdx++;
+          } else{
+            gps->toBeFreqIdx++;
+          }
+        }
+      }
+      gps->adjustRate();
+//      if (gps->poiState == poiState_t::in) {
+//        ESP_LOGD(__FUNCTION__,"Waiting for %d", sleepTimes[gps->curFreqIdx]);
+//        //gpio_set_level(BLINK_GPIO,0);
+//        int32_t timeToGo = sleepTimes[gps->curFreqIdx]*1000;
+//        while ((timeToGo > 0) && !(xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdFALSE,pdTRUE,500/portTICK_PERIOD_MS)&gpsEvent::outSyncPoint)){
+//          gpio_set_level(BLINK_GPIO,0);
+//          xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdFALSE,pdTRUE,300/portTICK_PERIOD_MS);
+//          gpio_set_level(BLINK_GPIO,1);
+//          timeToGo-=804;
+//        }
+//        gpio_set_level(BLINK_GPIO,0);
+//        gps->gpsResume();
+//      } else {
+      if ((gps->poiState == poiState_t::out) || (xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCED)) {
+        gps->gpsPause();
+        ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(sleepTimes[gps->curFreqIdx]*1000000));
+        ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::sleeping,NULL,0,portMAX_DELAY));
+        ESP_LOGD(__FUNCTION__,"Napping for %d", sleepTimes[gps->curFreqIdx]);
+        gpio_set_level(BLINK_GPIO,1);
+        if (xEventGroupGetBits(*getAppEG())&app_bits_t::COMMITTING_TRIPS){
+          ESP_LOGD(__FUNCTION__,"Waiting for trip commit");
+          xEventGroupWaitBits(*getAppEG(),app_bits_t::TRIPS_COMMITTED,pdFALSE,pdTRUE,portMAX_DELAY);
+        }
+        ESP_ERROR_CHECK(esp_light_sleep_start());
+        gpio_set_level(BLINK_GPIO,0);
+        //print_the_wakeup_reason();
+        ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::wakingup,(void*)&sleepTimes[gps->curFreqIdx],sizeof(uint8_t),portMAX_DELAY));
+        gps->gpsResume();
+      }
       break;
     case TinyGPSPlus::gpsEvent::gpsStopped:
       xEventGroupClearBits(gps->eg,TinyGPSPlus::gpsEvent::gpsRunning);
@@ -362,7 +344,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
       lastCourse.deg());
   } else {
     xEventGroupClearBits(eg,gpsEvent::msg);
-    if (xEventGroupWaitBits(eg,gpsEvent::msg,pdTRUE,pdTRUE,1000/portTICK_RATE_MS)){
+    if (xEventGroupWaitBits(eg,gpsEvent::msg,pdFALSE,pdTRUE,1000/portTICK_RATE_MS)){
       flagProtocol(gps_protocol_t::GPS_GGA,pdTRUE);
       flagProtocol(gps_protocol_t::GPS_RMC,pdTRUE);
 
@@ -746,6 +728,7 @@ bool TinyGPSPlus::isSignificant()
 }
 
 void TinyGPSPlus::gpsResume(){
+  xEventGroupClearBits(eg,gpsEvent::locationChanged);
   int bw = uart_write_bytes(UART_NUM_2, (const char*) active_tracking, sizeof(active_tracking));
   ESP_ERROR_CHECK(uart_flush(UART_NUM_2));
   ESP_LOGD(__FUNCTION__,"Resumed GPS Output(%d)",bw);
@@ -754,6 +737,7 @@ void TinyGPSPlus::gpsResume(){
 
 void TinyGPSPlus::gpsPause(){
   xEventGroupClearBits(eg,gpsEvent::gpsPaused);
+  xEventGroupClearBits(eg,gpsEvent::locationChanged);
   int bw = uart_write_bytes(UART_NUM_2, (const char*) silent_tracking, sizeof(silent_tracking)/sizeof(uint8_t));
   ESP_ERROR_CHECK(uart_flush(UART_NUM_2));
   ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::gpsPaused,NULL,0,portMAX_DELAY));

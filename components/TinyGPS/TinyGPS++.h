@@ -384,6 +384,7 @@ public:
 
    TinyGPSCustom* gpTxt;
 private:
+  static void gpsEventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
   enum {GPS_SENTENCE_GPGGA, GPS_SENTENCE_GPRMC, GPS_SENTENCE_OTHER};
   static QueueHandle_t uart0_queue;
   static void uart_event_task(void *pvParameters);
@@ -394,7 +395,7 @@ private:
   double poiLat;
   void adjustRate();
   void CalcChecksum(uint8_t *Message, uint8_t Length);
-  static bool waitOnStop(TinyGPSPlus* gps);
+  static void waitOnStop(void* gps);
 
   QueueHandle_t uart_queue;
 

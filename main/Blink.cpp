@@ -37,8 +37,6 @@
 
 #define TRIP_BLOCK_SIZE 255
 
-#define  BUMP_BIT BIT0
-
 static xQueueHandle gpio_evt_queue = NULL;
 static trip curTrip;
 time_t now = 0;
@@ -71,10 +69,7 @@ bool boto = false;
 float batLvls[NUM_VOLT_CYCLE];
 uint8_t batSmplCnt=NUM_VOLT_CYCLE+1;
 bool balFullSet = false;
-int64_t sleepTime = 0;
-int64_t sleepStartTime = 0;
-EventGroupHandle_t app_eg = xEventGroupCreate();
-
+uint64_t sleepTime=0;
 
 static const char* pmpt1 = "    <Placemark>\n\
       <styleUrl>#SpeedPlacemark</styleUrl>\n\
@@ -224,16 +219,6 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
 {
   if (strlen(cvsFileName) > 1)
   {
-    ESP_LOGD(__FUNCTION__,"Parsing Folders:");
-    for (char* theChar = kmlFileName; *theChar != 0; theChar++) {
-      if (*theChar == '_') {
-        *theChar='/';
-        break;
-      }
-      if (*theChar == '-') {
-        *theChar='/';
-      }
-    }
     ESP_LOGD(__FUNCTION__, "Getting Facts from %s for %s", cvsFileName, kmlFileName);
     FILE *trp = fopen(cvsFileName, "r");
     if (trp == NULL) {
@@ -479,18 +464,32 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
 
 void commitTripToDisk(void* param)
 {
+  xEventGroupSetBits(app_eg,app_bits_t::COMMITTING_TRIPS);
+  xEventGroupClearBits(app_eg,app_bits_t::TRIPS_COMMITTED);
+  uint32_t theBits = (uint32_t)param;
   if (initSPISDCard())
   {
     char *kFName = (char *)malloc(350);
     char *cFName = (char *)malloc(350);
     char *csvs = (char *)malloc(300 * 10);
-    uint32_t theBits = (uint32_t)param;
 
     if (commitTrip(&curTrip))
     {
       if (theBits&BIT1)
       {
         sprintf(kFName, "/sdcard/kml/%s.kml", &curTrip.fname[8]);
+        char* theChar;
+        for (theChar = kFName; *theChar != 0; theChar++) {
+          if (*theChar == '_') {
+            *theChar='/';
+            break;
+          }
+          if (*theChar == '-') {
+            *theChar='/';
+          }
+        }
+        sprintf(theChar+1, "%s.kml", &curTrip.fname[8]);
+        
         if (bakeKml(curTrip.fname, kFName))
         {
           sprintf(kFName, "/sdcard/converted/%s", &curTrip.fname[8]);
@@ -553,6 +552,17 @@ void commitTripToDisk(void* param)
             {
               sprintf(cFName, "/sdcard/%s", curCsv);
               sprintf(kFName, "/sdcard/kml/%s.kml", curCsv);
+              char* theChar;
+              for (theChar = kFName; *theChar != 0; theChar++) {
+                if (*theChar == '_') {
+                  *theChar='/';
+                  break;
+                }
+                if (*theChar == '-') {
+                  *theChar='/';
+                }
+              }
+              sprintf(theChar+1, "%s.kml", curCsv);
               if (bakeKml(cFName, kFName))
               {
                 sprintf(kFName, "/sdcard/converted/%s", curCsv);
@@ -579,9 +589,11 @@ void commitTripToDisk(void* param)
     free(kFName);
     free(cFName);
     free(csvs);
-    if (theBits&BIT3)
-      vTaskDelete(NULL);
   }
+  xEventGroupClearBits(app_eg,app_bits_t::COMMITTING_TRIPS);
+  xEventGroupSetBits(app_eg,app_bits_t::TRIPS_COMMITTED);
+  if (theBits&BIT3)
+    vTaskDelete(NULL);
 }
 
 void addDataPoint()
@@ -606,6 +618,8 @@ void addDataPoint()
 
   if (curTrip.numNodes % 10 == 0) { 
     if (gps != NULL){
+      xEventGroupSetBits(app_eg,app_bits_t::COMMITTING_TRIPS);
+      xEventGroupClearBits(app_eg,app_bits_t::TRIPS_COMMITTED);
       xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)(BIT3), tskIDLE_PRIORITY, NULL);
     }
   }
@@ -733,7 +747,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     //xTaskCreate(flash, "flashy", 2048, (void *)1, tskIDLE_PRIORITY, NULL);
     break;
   case TinyGPSPlus::gpsEvent::significantSpeedChange:
-    addDataPoint();
+    //addDataPoint();
     ESP_LOGI(__FUNCTION__, "Speed Diff: %f %f", gps->speed.kmph(), *((double *)event_data));
     //xTaskCreate(flash, "flashy", 2048, (void *)2, tskIDLE_PRIORITY, NULL);
     break;
@@ -804,9 +818,9 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
 
     //ESP_LOGV(__FUNCTION__, "msg: %s", (char *)event_data);
     break;
-  case TinyGPSPlus::gpsEvent::sleeping:
-    ESP_LOGD(__FUNCTION__, "Sleeping");
-    sleepStartTime=esp_timer_get_time();
+  case TinyGPSPlus::gpsEvent::wakingup:
+    sleepTime+=((uint64_t)event_data)*1000000;
+    ESP_LOGD(__FUNCTION__,"Sleep at %lu", (time_t)getSleepTime());
     break;
   case TinyGPSPlus::gpsEvent::go:
     addDataPoint();
@@ -818,11 +832,6 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     ESP_LOGI(__FUNCTION__, "Stop");
     isStopped = true;
     break;
-  case TinyGPSPlus::gpsEvent::wakingup:
-    if (sleepStartTime>0)
-      sleepTime+=esp_timer_get_time()-sleepStartTime;
-    ESP_LOGD(__FUNCTION__, "Waking");
-    break;
   case TinyGPSPlus::gpsEvent::gpsPaused:
     getAppState()->gps=(item_state_t)(item_state_t::ACTIVE|item_state_t::PAUSED);
     break;
@@ -832,9 +841,12 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   case TinyGPSPlus::gpsEvent::atSyncPoint:
     ESP_LOGD(__FUNCTION__, "Synching");
     if (gps != NULL){
+      xEventGroupSetBits(app_eg,app_bits_t::COMMITTING_TRIPS);
+      xEventGroupClearBits(app_eg,app_bits_t::TRIPS_COMMITTED);
+      xEventGroupClearBits(app_eg,app_bits_t::TRIPS_SYNCED);
       xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)(BIT3), tskIDLE_PRIORITY, NULL);
     }
-    xTaskCreatePinnedToCore(wifiSallyForth, "wifiSallyForth", 8192, gps , tskIDLE_PRIORITY, NULL, 1);
+    xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps , tskIDLE_PRIORITY, NULL);
     //xTaskCreate(wifiStart, "wifiStart", 4096, NULL , tskIDLE_PRIORITY, NULL);
     //wifiStart(NULL);
     break;
@@ -976,6 +988,9 @@ void app_main(void)
   ESP_ERROR_CHECK(esp_event_loop_create_default());
   app_config_t* appcfg=initConfig();
   initLog();
+  gpio_reset_pin(BLINK_GPIO);
+  gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
+  gpio_set_level(BLINK_GPIO,1);
 
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED)
   {
@@ -1018,9 +1033,6 @@ void app_main(void)
       if (xEventGroupWaitBits(gps->eg,TinyGPSPlus::gpsEvent::gpsRunning,pdFALSE,pdTRUE,1500/portTICK_RATE_MS)){
         gps->poiState=lastPoiState;
         createTrip();
-        gpio_reset_pin(BLINK_GPIO);
-        gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
-        gpio_set_level(BLINK_GPIO,0);
         adc1_config_width(ADC_WIDTH_12Bit);
         adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_11db);
         //gpio_set_direction(GPIO_NUM_25, GPIO_MODE_OUTPUT);
