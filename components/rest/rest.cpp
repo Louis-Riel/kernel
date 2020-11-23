@@ -53,12 +53,11 @@ esp_err_t kmllist_event_handler(esp_http_client_event_t *evt)
                 assert(evt->user_data);
                 char* kmlFiles=(char*)evt->user_data;
                 ESP_LOGV(__FUNCTION__, "kmllist data len:%d", evt->data_len);
-                memcpy(kmlFiles,evt->data,evt->data_len);
-                kmlFiles[evt->data_len]=0;
+                memcpy(kmlFiles+strlen(kmlFiles),evt->data,evt->data_len);
                 ESP_LOGV(__FUNCTION__,"%s",kmlFiles);
             }
         } else {
-            ESP_LOGW(__FUNCTION__,"Got data with no dest tarnull:%s strlen(tarfname):%d",downloadedFile == NULL?"NULL":"NOT NULL",strlen(tarfname));
+            ESP_LOGV(__FUNCTION__,"Got data with no dest:%s strlen(tarfname):%d",downloadedFile == NULL?"NULL":"NOT NULL",strlen(tarfname));
         }
         break;
     case HTTP_EVENT_ON_FINISH:
@@ -318,7 +317,7 @@ bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_
 
 void pullStation(void *pvParameter) {
     if (initSPISDCard()){
-        esp_ip4_addr_t* ipInfo= (esp_ip4_addr_t*) pvParameter;
+        ip4_addr_t* ipInfo= (ip4_addr_t*) pvParameter;
         char* kmlFiles = (char*)malloc(KML_BUFFER_SIZE);
         memset(kmlFiles,0,KML_BUFFER_SIZE);
         esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
@@ -332,6 +331,7 @@ void pullStation(void *pvParameter) {
         config->max_redirection_count=0;
         config->port=80;
         config->user_data=kmlFiles;
+        config->timeout_ms=3000;
         ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
         esp_http_client_handle_t client = esp_http_client_init(config);
         esp_err_t err;
@@ -343,47 +343,46 @@ void pullStation(void *pvParameter) {
             ESP_LOGD(__FUNCTION__, "HTTP GET listtrip failed: %s", esp_err_to_name(err));
             vTaskDelay(500/portTICK_RATE_MS);
         }
-        esp_http_client_cleanup(client);
 
         if (err != ESP_OK) {
-            ESP_LOGD(__FUNCTION__,"Cannot get triplist. Probably not a tracker but a lurker");
+            ESP_LOGD(__FUNCTION__,"Cannot get triplist. Probably not a tracker but a lurker. %s. len:%d", esp_err_to_name(err),kmlFilesPos);
+            esp_http_client_cleanup(client);
             free((void*)config->url);
             free((void*)config);
             free(kmlFiles);
             deinitSPISDCard();
+            xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)((BIT1)|(BIT2)|(BIT3)), tskIDLE_PRIORITY, NULL);
             vTaskDelete(NULL);
         }
         the_wifi_config* wc = getWifiConfig();
 
-        if ((err == ESP_OK) && (strlen(kmlFiles) > 0)) {
-            xEventGroupWaitBits(eventGroup,GETTING_TRIPS,pdFALSE,pdTRUE,portMAX_DELAY);
-            ESP_LOGD(__FUNCTION__,"Parsing %d bytes of trips",kmlFilesPos);
-            ESP_LOGV(__FUNCTION__,"%s",kmlFiles);
-            char* bpos=kmlFiles;
-            char* epos=strchr(bpos,10);
-            char fname[255];
-            if (epos == NULL) {
-                if (strlen(bpos) > 0) {
-                    epos=bpos+strlen(bpos);
-                } else {
-                    ESP_LOGW(__FUNCTION__,"Got weird or empty output from kml list:%s",kmlFiles);
-                }
-            }
-            while (epos > bpos) {
-                *epos=0;
-                ESP_LOGI(__FUNCTION__,"Getting file %s",bpos);
-                free((void*)config->url);
-                memset(config,0,sizeof(esp_http_client_config_t));
-                config->url=(char*)malloc(255);
-                memset((void*)config->url,0,255);
-                sprintf((char*)config->url,"http://" IPSTR "%s",IP2STR(ipInfo),bpos);
-                config->method=HTTP_METHOD_GET;
-                config->timeout_ms = 9000;
-                config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
-                config->max_redirection_count=0;
-                config->port=80;
-                config->event_handler = kmldownload_event_handler;
-                client = esp_http_client_init(config);
+        xEventGroupWaitBits(eventGroup,GETTING_TRIPS,pdFALSE,pdTRUE,portMAX_DELAY);
+        esp_http_client_cleanup(client);
+        ESP_LOGD(__FUNCTION__,"Parsing %d bytes of trips",strlen(kmlFiles));
+        ESP_LOGV(__FUNCTION__,"%s",kmlFiles);
+        char* bpos=kmlFiles+2;
+        char* epos=strchr(bpos,'"');
+        char fname[255];
+        if ((epos == NULL) || (bpos == NULL) || (*bpos != '/')) {
+            ESP_LOGW(__FUNCTION__,"Got weird or empty output from kml list:%s",kmlFiles);
+            xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)((BIT1)|(BIT2)|(BIT3)), tskIDLE_PRIORITY, NULL);
+        }
+        while ((epos > bpos) && (*bpos == '/')) {
+            *epos=0;
+            ESP_LOGI(__FUNCTION__,"Getting file %s",bpos);
+            free((void*)config->url);
+            memset(config,0,sizeof(esp_http_client_config_t));
+            config->url=(char*)malloc(255);
+            memset((void*)config->url,0,255);
+            sprintf((char*)config->url,"http://" IPSTR "%s",IP2STR(ipInfo),bpos);
+            config->method=HTTP_METHOD_GET;
+            config->timeout_ms = 9000;
+            config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
+            config->max_redirection_count=0;
+            config->port=80;
+            config->event_handler = kmldownload_event_handler;
+            client = esp_http_client_init(config);
+            if (client != NULL){
                 esp_http_client_set_header(client,"movetosent","yes");
                 if ((err = esp_http_client_perform(client)) == ESP_OK){
                     ESP_LOGD(__FUNCTION__,"Waiting on download");
@@ -398,26 +397,26 @@ void pullStation(void *pvParameter) {
                     } else {
                         ESP_LOGE(__FUNCTION__,"Timeout in waiting for return");
                     }
-                } else {
-                    ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(err));
                 }
-
-                esp_http_client_cleanup(client);
-                memset(config,0,sizeof(esp_http_client_config_t));
-
-                bpos=epos+1;
-                if (*bpos != 0){
-                    epos=strchr(bpos,10);
-                    if ((epos == NULL) && (*bpos != 0)) { // last entry if not line fead
-                        epos = bpos+strlen(bpos);
-                    }
-                } else {
-                    bpos=NULL;
-                    epos=NULL;
-                }
+            } else {
+                ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(err));
             }
 
+            esp_http_client_cleanup(client);
+            memset(config,0,sizeof(esp_http_client_config_t));
+
+            bpos=epos+3;
+            if (*bpos != 0){
+                epos=strchr(bpos,'"');
+                if ((epos == NULL) && (*bpos != 0)) { // last entry if not line fead
+                    epos = bpos+strlen(bpos);
+                }
+            } else {
+                bpos=NULL;
+                epos=NULL;
+            }
         }
+        xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)((BIT1)|(BIT2)|(BIT3)), tskIDLE_PRIORITY, NULL);
 
         free((void*)config->url);
         memset(config,0,sizeof(esp_http_client_config_t));
@@ -428,6 +427,7 @@ void pullStation(void *pvParameter) {
         config->timeout_ms = 9000;
         config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
         config->max_redirection_count=0;
+        config->timeout_ms=3000;
         config->port=80;
         client = esp_http_client_init(config);
         char dmd5[37];
@@ -437,8 +437,19 @@ void pullStation(void *pvParameter) {
             uint32_t len=0;
             if ((len=esp_http_client_read(client,dmd5,36)) >= 0) {
                 ESP_LOGD(__FUNCTION__,"ot back %d char of md5",len);
+                char ch;
+                bool isValid;
+                for (int idx=0; idx < 32; idx++){
+                    ch = *(dmd5+idx);
+                    isValid = (((ch >= 'a') && ( ch <= 'z' )) ||
+                        ((ch >= '0') && ( ch <= '9' )));
+                    if (!isValid) {
+                        ESP_LOGD(__FUNCTION__,"Invalid char for %s at pos %d(%c)",dmd5,idx,ch);
+                        break;
+                    }
+                }
                 FILE* fw = NULL;
-                if ((fw = fopen("/sdcard/firmware/current.bin.md5","r",true)) != NULL) {
+                if (isValid && (fw = fopen("/sdcard/firmware/current.bin.md5","r",true)) != NULL) {
                     char ccmd5[37];
                     if ((len=fread((void*)ccmd5,1,36,fw)) >= 0) {
                         ccmd5[36]=0;
@@ -473,7 +484,7 @@ void pullStation(void *pvParameter) {
                                             if ((len = esp_http_client_get_status_code(client)) != 200) {
                                                 ESP_LOGE(__FUNCTION__,"Status code:%d",len);
                                             } else {
-                                                if ((len=esp_http_client_read(client,dmd5,37)) > 0) {
+                                                if ((len=esp_http_client_read(client,dmd5,36)) > 0) {
                                                     if (strcmp(dmd5,"Flashing")==0) {
                                                         ESP_LOGI(__FUNCTION__,"Station will be updated:%s",dmd5);
                                                     } else {
@@ -509,7 +520,7 @@ void pullStation(void *pvParameter) {
                 ESP_LOGE(__FUNCTION__,"Unexpected output from get md5 len:%d",len);
             }
         } else {
-            ESP_LOGE(__FUNCTION__, "\nKML GET request failed: %s", esp_err_to_name(err));
+            ESP_LOGE(__FUNCTION__, "Version chack request failed: %s", esp_err_to_name(err));
         }
         esp_http_client_cleanup(client);
         memset(config,0,sizeof(esp_http_client_config_t));
@@ -525,13 +536,14 @@ void pullStation(void *pvParameter) {
         config->event_handler = kmllist_event_handler;
         config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
         config->max_redirection_count=0;
+        config->timeout_ms=3000;
         config->port=80;
         config->user_data=kmlFiles;
         ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
         client = esp_http_client_init(config);
         kmlFilesPos=0;
         xEventGroupSetBits(eventGroup,GETTING_TRIP_LIST);
-        while (((err = esp_http_client_perform(client)) == ESP_ERR_HTTP_CONNECT) && (retryCnt++<10))
+        while (((err = esp_http_client_perform(client)) == ESP_ERR_HTTP_CONNECT) && (retryCnt++<10) && (kmlFilesPos == 0))
         {
             ESP_LOGD(__FUNCTION__, "HTTP GET listtrip failed: %s", esp_err_to_name(err));
             vTaskDelay(500/portTICK_RATE_MS);
@@ -547,68 +559,57 @@ void pullStation(void *pvParameter) {
             vTaskDelete(NULL);
         }
 
-        if ((err == ESP_OK) && (strlen(kmlFiles) > 0)) {
-            xEventGroupWaitBits(eventGroup,GETTING_TRIPS,pdFALSE,pdTRUE,portMAX_DELAY);
-            ESP_LOGD(__FUNCTION__,"Parsing %d bytes of trips",kmlFilesPos);
-            ESP_LOGV(__FUNCTION__,"%s",kmlFiles);
-            char* bpos=kmlFiles;
-            char* epos=strchr(bpos,10);
-            char fname[255];
-            if (epos == NULL) {
-                if (strlen(bpos) > 0) {
-                    epos=bpos+strlen(bpos);
-                } else {
-                    ESP_LOGW(__FUNCTION__,"Got weird or empty output from kml list:%s",kmlFiles);
-                }
-            }
-            while (epos > bpos) {
-                *epos=0;
-                ESP_LOGI(__FUNCTION__,"Getting file %s",bpos);
-                free((void*)config->url);
-                memset(config,0,sizeof(esp_http_client_config_t));
-                config->url=(char*)malloc(255);
-                memset((void*)config->url,0,255);
-                sprintf((char*)config->url,"http://" IPSTR "%s",IP2STR(ipInfo),bpos);
-                config->method=HTTP_METHOD_GET;
-                config->timeout_ms = 9000;
-                config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
-                config->max_redirection_count=0;
-                config->port=80;
-                config->event_handler = logdownload_event_handler;
-                client = esp_http_client_init(config);
-                esp_http_client_set_header(client,"movetosent","yes");
-                if ((err = esp_http_client_perform(client)) == ESP_OK){
-                    ESP_LOGD(__FUNCTION__,"Waiting on download");
-                    if (xEventGroupWaitBits(eventGroup,DOWNLOAD_FINISHED,pdFALSE,pdTRUE,2000/portTICK_RATE_MS)){
-                        if (downloadedFile!=NULL){
-                            ESP_LOGD(__FUNCTION__,"%s downloaded",bpos);
-                        } else {
-                            ESP_LOGE(__FUNCTION__,"Download failed %s",bpos);
-                            err=ESP_FAIL;
-                        }
-                        downloadedFile=NULL;
+        xEventGroupWaitBits(eventGroup,GETTING_TRIPS,pdFALSE,pdTRUE,portMAX_DELAY);
+        ESP_LOGD(__FUNCTION__,"Parsing %d bytes of trips",strlen(kmlFiles));
+        ESP_LOGV(__FUNCTION__,"%s",kmlFiles);
+        bpos=kmlFiles+2;
+        epos=strchr(bpos,'"');
+        if ((epos == NULL) || (bpos == NULL) || (*bpos != '/')) {
+            ESP_LOGW(__FUNCTION__,"Got weird or empty output from kml list:%s",kmlFiles);
+        }
+        while ((epos > bpos) && (*bpos == '/')) {
+            *epos=0;
+            ESP_LOGI(__FUNCTION__,"Getting file %s",bpos);
+            free((void*)config->url);
+            memset(config,0,sizeof(esp_http_client_config_t));
+            config->url=(char*)malloc(255);
+            memset((void*)config->url,0,255);
+            sprintf((char*)config->url,"http://" IPSTR "%s",IP2STR(ipInfo),bpos);
+            config->method=HTTP_METHOD_GET;
+            config->timeout_ms = 9000;
+            config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
+            config->max_redirection_count=0;
+            config->port=80;
+            config->event_handler = logdownload_event_handler;
+            client = esp_http_client_init(config);
+            esp_http_client_set_header(client,"movetosent","yes");
+            if ((err = esp_http_client_perform(client)) == ESP_OK){
+                ESP_LOGD(__FUNCTION__,"Waiting on download");
+                if (xEventGroupWaitBits(eventGroup,DOWNLOAD_FINISHED,pdFALSE,pdTRUE,2000/portTICK_RATE_MS)){
+                    if (downloadedFile!=NULL){
+                        ESP_LOGD(__FUNCTION__,"%s downloaded",bpos);
                     } else {
-                        ESP_LOGE(__FUNCTION__,"Timeout in waiting for return");
+                        ESP_LOGE(__FUNCTION__,"Download failed %s",bpos);
+                        err=ESP_FAIL;
                     }
+                    downloadedFile=NULL;
                 } else {
-                    ESP_LOGE(__FUNCTION__, "LOG GET request failed: %s", esp_err_to_name(err));
+                    ESP_LOGE(__FUNCTION__,"Timeout in waiting for return");
                 }
-
-                esp_http_client_cleanup(client);
-                memset(config,0,sizeof(esp_http_client_config_t));
-
-                bpos=epos+1;
-                if (*bpos != 0){
-                    epos=strchr(bpos,10);
-                    if ((epos == NULL) && (*bpos != 0)) { // last entry if not line fead
-                        epos = bpos+strlen(bpos);
-                    }
-                } else {
-                    bpos=NULL;
-                    epos=NULL;
-                }
+            } else {
+                ESP_LOGE(__FUNCTION__, "LOG GET request failed: %s", esp_err_to_name(err));
             }
 
+            esp_http_client_cleanup(client);
+            memset(config,0,sizeof(esp_http_client_config_t));
+
+            bpos=epos+3;
+            if (*bpos == '/'){
+                epos=strchr(bpos,'"');
+            } else {
+                bpos=NULL;
+                epos=NULL;
+            }
         }
         if (kmlFiles){
             free(kmlFiles);

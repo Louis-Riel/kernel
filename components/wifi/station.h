@@ -6,6 +6,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
 #include "esp_wifi.h"
+#include "cJSON.h"
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_SCAN_READY_BIT BIT1
@@ -15,6 +16,7 @@
 #define WIFI_CLIENT_DONE BIT5
 
 #define DEFAULT_SCAN_LIST_SIZE 10
+#define MAX_NUM_CLIENTS 20
 
 typedef	struct {
                 uint32_t                        disconnectWaitTime;
@@ -27,6 +29,34 @@ typedef	struct {
                 char                            wpdw[40];
 	} the_wifi_config;
 
+class Aper
+{
+public:
+    uint8_t mac[6];
+    ip4_addr_t ip;
+    struct tm timeinfo;
+    time_t connectTime = 0;
+    time_t disconnectTime = 0;
+    time_t connectionTime = 0;
+
+    Aper(uint8_t station[6]);
+    ~Aper();
+
+    void Associate();
+    void Dissassociate();
+
+    void Update(ip4_addr_t* station);
+    void Update(uint8_t station[6]);
+
+    bool isSameDevice(Aper* other);
+    bool isConnected();
+    cJSON* toJson();
+};
+
+static Aper* clients[MAX_NUM_CLIENTS];
+static tcpip_adapter_ip_info_t ipInfo; 
+
+uint32_t getClientsJson(char* buf);
 void wifiSallyForth(void *pvParameter);
 void wifiStart(void *pvParameter);
 void wifiStop(void *pvParameter);

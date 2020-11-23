@@ -216,19 +216,6 @@ void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, i
         }
       }
       gps->adjustRate();
-//      if (gps->poiState == poiState_t::in) {
-//        ESP_LOGD(__FUNCTION__,"Waiting for %d", sleepTimes[gps->curFreqIdx]);
-//        //gpio_set_level(BLINK_GPIO,0);
-//        int32_t timeToGo = sleepTimes[gps->curFreqIdx]*1000;
-//        while ((timeToGo > 0) && !(xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdFALSE,pdTRUE,500/portTICK_PERIOD_MS)&gpsEvent::outSyncPoint)){
-//          gpio_set_level(BLINK_GPIO,0);
-//          xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdFALSE,pdTRUE,300/portTICK_PERIOD_MS);
-//          gpio_set_level(BLINK_GPIO,1);
-//          timeToGo-=804;
-//        }
-//        gpio_set_level(BLINK_GPIO,0);
-//        gps->gpsResume();
-//      } else {
       if ((gps->poiState == poiState_t::out) || (xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCED)) {
         gps->gpsPause();
         ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(sleepTimes[gps->curFreqIdx]*1000000));

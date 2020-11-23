@@ -109,7 +109,7 @@ void sampleBatteryVoltage()
   if (batSmplCnt>=NUM_VOLT_CYCLE){
     balFullSet=batSmplCnt==NUM_VOLT_CYCLE;
     batSmplCnt=0;
-    ESP_LOGD(__FUNCTION__,"Voltage:%f",getBatteryVoltage());
+    ESP_LOGV(__FUNCTION__,"Voltage:%f",getBatteryVoltage());
   }
 
   uint32_t voltage;
@@ -464,9 +464,20 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
 
 void commitTripToDisk(void* param)
 {
+  uint32_t theBits = (uint32_t)param;
+  if (xEventGroupGetBits(app_eg) & app_bits_t::COMMITTING_TRIPS) {
+    ESP_LOGD(__FUNCTION__,"Waiting for other trip baker");
+    if (xEventGroupWaitBits(app_eg,app_bits_t::TRIPS_COMMITTED,pdFALSE,pdTRUE,30000/portTICK_RATE_MS) != ESP_OK) {
+      ESP_LOGW(__FUNCTION__,"Timed out, giving up");
+      if (theBits&BIT3){
+        vTaskDelete(NULL);
+      }
+      return;
+    }
+    ESP_LOGD(__FUNCTION__,"Done waiting for other trip baker");
+  }
   xEventGroupSetBits(app_eg,app_bits_t::COMMITTING_TRIPS);
   xEventGroupClearBits(app_eg,app_bits_t::TRIPS_COMMITTED);
-  uint32_t theBits = (uint32_t)param;
   if (initSPISDCard())
   {
     char *kFName = (char *)malloc(350);
@@ -616,7 +627,7 @@ void addDataPoint()
     addTripBlock();
   }
 
-  if (curTrip.numNodes % 10 == 0) { 
+  if (curTrip.numNodes % 10 == 0) {
     if (gps != NULL){
       xEventGroupSetBits(app_eg,app_bits_t::COMMITTING_TRIPS);
       xEventGroupClearBits(app_eg,app_bits_t::TRIPS_COMMITTED);
@@ -1057,7 +1068,6 @@ void app_main(void)
         //commitTripToDisk((void*)(BIT1|BIT2));
         getAppState()->sdCard=item_state_t::ACTIVE;
         //ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::atSyncPoint,NULL,0,portMAX_DELAY));
-
       } else {
         ESP_LOGD(__FUNCTION__,"No GPS Connected");
         if (gps != NULL)

@@ -1,4 +1,4 @@
-set(COMPONENT_REQUIRES nvs_flash fatfs lwip )
+set(COMPONENT_REQUIRES nvs_flash fatfs lwip json )
 set(COMPONENT_PRIV_REQUIRES rest wifi )
 
 set(COMPONENT_ADD_INCLUDEDIRS "." "../rest")

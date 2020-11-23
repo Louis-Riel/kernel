@@ -91,7 +91,8 @@ bool initSDMMCSDCard(){
 }
 
 bool deinitSPISDCard(){
-  numSdCallers--;
+  if (numSdCallers > 0)
+    numSdCallers--;
   ESP_LOGD(__FUNCTION__, "SD callers %d", numSdCallers);
   if (numSdCallers == 0) {
     if (esp_vfs_fat_sdmmc_unmount() == ESP_OK)
@@ -105,7 +106,7 @@ bool deinitSPISDCard(){
     }
     getAppState()->sdCard = (item_state_t)(item_state_t::ACTIVE|item_state_t::PAUSED);
 
-    return spi_bus_free((spi_host_device_t)getSDHost()->slot) == ESP_OK;
+    return true;
   } else {
     ESP_LOGD(__FUNCTION__,"Postponing SD card umount");
     return ESP_OK;
@@ -130,16 +131,21 @@ bool initSPISDCard()
         .intr_flags = 0
     };
 
+    sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
+    slot_config.gpio_miso = cfg->sdcard_config.MisoPin;
+    slot_config.gpio_mosi = cfg->sdcard_config.MosiPin;
+    slot_config.gpio_sck  = cfg->sdcard_config.ClkPin;
+    slot_config.gpio_cs   = cfg->sdcard_config.Cspin;
 
-    sdspi_device_config_t device_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-      device_config.gpio_cs = cfg->sdcard_config.Cspin;
-      device_config.host_id = (spi_host_device_t)host.slot;
+    //sdspi_device_config_t device_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    //  device_config.gpio_cs = cfg->sdcard_config.Cspin;
+    //  device_config.host_id = (spi_host_device_t)host.slot;
 
 
-    if ((ret=spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, 1)) == ESP_OK) {
-      if ((ret=esp_vfs_fat_sdspi_mount(mount_point, &host, &device_config, &mount_config, &card)) != ESP_OK)
+    //if ((ret=spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, 1)) == ESP_OK) {
+      if ((ret=esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card)) != ESP_OK)
       {
-        spi_bus_free((spi_host_device_t)host.slot);
+        //spi_bus_free((spi_host_device_t)host.slot);
         getAppState()->sdCard = (item_state_t)(item_state_t::ACTIVE|item_state_t::ERROR);
         if (ret == ESP_FAIL)
         {
@@ -164,12 +170,12 @@ bool initSPISDCard()
       f_mkdir("/kml");
       f_mkdir("/logs");
       f_mkdir("/sent");
-    } else if (ret == ESP_ERR_INVALID_STATE) {
-      ESP_LOGW(__FUNCTION__,"Error initing SPI bus %s",esp_err_to_name(ret));
-    } else {
-      ESP_LOGE(__FUNCTION__,"Error initing SPI bus %s",esp_err_to_name(ret));
-      return false;
-    }
+    //} else if (ret == ESP_ERR_INVALID_STATE) {
+    //  ESP_LOGW(__FUNCTION__,"Error initing SPI bus %s",esp_err_to_name(ret));
+    //} else {
+    //  ESP_LOGE(__FUNCTION__,"Error initing SPI bus %s",esp_err_to_name(ret));
+    //  return false;
+    //}
   }
 
   numSdCallers++;
