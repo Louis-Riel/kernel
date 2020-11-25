@@ -6,6 +6,8 @@
 char* logBuff = NULL;
 char* logfname = NULL;
 uint32_t logBufPos;
+static vprintf_like_t callbacks[5];
+static uint8_t numCallbacks=0;
 
 char* getLogFName(){
     return logfname;
@@ -52,6 +54,12 @@ int loggit(const char *fmt, va_list args) {
     logBufPos+=vsprintf(logBuff+logBufPos,fmt,args);
     if (logBufPos >= LOG_BUF_ULIMIT) {
         dumpLogs();
+    }
+
+    if (numCallbacks>0) {
+        for (int idx=0; idx < numCallbacks; idx++){
+            callbacks[idx](fmt,args);
+        }
     }
 
     return vprintf(fmt, args);

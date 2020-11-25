@@ -28,6 +28,7 @@
 #include <esp_event.h>
 #include "mdctor/ulp.h"
 #include "../components/wifi/station.h"
+#include "../components/esp_littlefs/include/esp_littlefs.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -182,7 +183,7 @@ bool commitTrip(trip *trip)
   {
     printHeader = true;
     localtime_r((time_t *)&trip->nodes[0]->ts, &timeinfo);
-    strftime(trip->fname, sizeof(trip->fname), "/sdcard/%Y-%m-%d_%H-%M-%S.csv", &timeinfo);
+    strftime(trip->fname, sizeof(trip->fname), "/tfs/csv/%Y-%m-%d_%H-%M-%S.csv", &timeinfo);
   }
   ESP_LOGI(__FUNCTION__, "Saving trip with %d nodes to %s %s", trip->numNodes, trip->fname,curTrip.fname);
   FILE *f = fopen(trip->fname, "a");
@@ -994,11 +995,86 @@ void print_wakeup_reason()
   }
 }
 
+esp_err_t setupLittlefs(){
+  const esp_vfs_littlefs_conf_t conf = {
+      .base_path = "/lfs",
+      .partition_label = "storage",
+      .format_if_mount_failed = true
+  };
+  
+  esp_err_t ret=esp_vfs_littlefs_register(&conf);
+  if (ret != ESP_OK) {
+    ESP_LOGE(__FUNCTION__,"Failed in registering littlefs %s", esp_err_to_name(ret));
+    return ret;
+  }
+  ESP_LOGD(__FUNCTION__,"Spiff is spiffy");
+  size_t total_bytes; 
+  size_t used_bytes;
+
+  if ((ret = esp_littlefs_info("storage", &total_bytes, &used_bytes)) != ESP_OK) {
+    ESP_LOGE(__FUNCTION__,"Failed in getting info %s", esp_err_to_name(ret));
+    return ret;
+  }
+  ESP_LOGD(__FUNCTION__, "Space: %d/%d", used_bytes,total_bytes);
+  struct dirent* de;
+  bool hasCsv = false;
+  bool hasLogs = false;
+  bool hasFw = false;
+
+  DIR* root = opendir("/lfs");
+  if (root == NULL) {
+    ESP_LOGE(__FUNCTION__,"Cannot open lfs");
+    return ESP_FAIL;
+  }
+
+  while ((de = readdir(root))!= NULL) {
+    ESP_LOGD(__FUNCTION__,"%d %s",de->d_type, de->d_name);
+    if (strcmp(de->d_name,"csv")==0){
+      hasCsv=true;
+    }
+    if (strcmp(de->d_name,"logs")==0){
+      hasLogs=true;
+    }
+    if (strcmp(de->d_name,"firmware")==0){
+      hasFw=true;
+    }
+  }
+
+  if (!hasCsv){
+    if (mkdir("/lfs/csv",0750) != 0) {
+      ESP_LOGE(__FUNCTION__,"Failed in creating csv folder");
+      return ESP_FAIL;
+    }
+    ESP_LOGD(__FUNCTION__,"csv folder created");
+  }
+  if (!hasLogs){
+    if (mkdir("/lfs/logs",0750) != 0) {
+      ESP_LOGE(__FUNCTION__,"Failed in creating logs folder");
+      return ESP_FAIL;
+    }
+    ESP_LOGD(__FUNCTION__,"logs folder created");
+  }
+  if (!hasLogs){
+    if (mkdir("/lfs/firmware",0750) != 0) {
+      ESP_LOGE(__FUNCTION__,"Failed in creating firmware folder");
+      return ESP_FAIL;
+    }
+    ESP_LOGD(__FUNCTION__,"logs folder created");
+  }
+
+  if ((ret = closedir(root)) != ESP_OK) {
+    ESP_LOGE(__FUNCTION__,"failed to close root %s", esp_err_to_name(ret));
+    return ret;
+  }
+  return ESP_OK;
+}
+
 void app_main(void)
 {
   ESP_ERROR_CHECK(esp_event_loop_create_default());
   app_config_t* appcfg=initConfig();
   initLog();
+  setupLittlefs();
   gpio_reset_pin(BLINK_GPIO);
   gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
   gpio_set_level(BLINK_GPIO,1);

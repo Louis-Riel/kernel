@@ -35,8 +35,7 @@
 #define JSON_BUFFER_SIZE 8192
 #define KML_BUFFER_SIZE 204600
 
-static the_wifi_config* cfg;
-static EventGroupHandle_t eventGroup=NULL;
+static EventGroupHandle_t eventGroup=xEventGroupCreate();
 
 void restSallyForth(void *pvParameter);
 void pullStation(void *pvParameter);

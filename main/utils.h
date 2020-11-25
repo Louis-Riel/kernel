@@ -27,10 +27,10 @@ extern const unsigned char favicon_ico_start[] asm("_binary_favicon_ico_start");
 extern const unsigned char favicon_ico_end[]   asm("_binary_favicon_ico_end");
 extern const unsigned char index_html_start[] asm("_binary_index_html_start");
 extern const unsigned char index_html_end[]   asm("_binary_index_html_end");
-extern const unsigned char file_table_html_start[] asm("_binary_file_table_html_start");
-extern const unsigned char file_table_html_end[]   asm("_binary_file_table_html_end");
-extern const unsigned char settings_html_start[] asm("_binary_settings_html_start");
-extern const unsigned char settings_html_end[]   asm("_binary_settings_html_end");
+extern const unsigned char app_css_start[] asm("_binary_app_css_start");
+extern const unsigned char app_css_end[]   asm("_binary_app_css_end");
+extern const unsigned char app_js_start[] asm("_binary_app_js_start");
+extern const unsigned char app_js_end[]   asm("_binary_app_js_end");
 
 
 struct poiConfig_t {
