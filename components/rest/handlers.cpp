@@ -2,6 +2,8 @@
 #include "route.h"
 #include "math.h"
 #include "../../main/logs.h"
+#include "../../main/utils.h"
+#include "../esp_littlefs/include/esp_littlefs.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -33,9 +35,9 @@ void flashTheThing(void* param){
     ESP_LOGI(__FUNCTION__, "Running partition type %d subtype %d (offset 0x%08x)",
             running->type, running->subtype, running->address);
 
-    while (((update_partition = esp_ota_get_next_update_partition(update_partition))->address==0x00010000) || (update_partition->address == configured->address)){
+    while ((update_partition = esp_ota_get_next_update_partition(update_partition))->address == configured->address){
         assert(update_partition != NULL);
-        ESP_LOGD(__FUNCTION__, "Skipping partition subtype %d at offset 0x%x",
+        ESP_LOGV(__FUNCTION__, "Skipping partition subtype %d at offset 0x%x",
                 update_partition->subtype, update_partition->address);
     }
     assert(update_partition != NULL);
@@ -46,16 +48,16 @@ void flashTheThing(void* param){
         FILE* fw = NULL;
         if ((getAppConfig()->purpose == app_config_t::purpose_t::PULLER ) && (fw = fopen("/lfs/firmware/current.bin","w",true)) != NULL) {
             if (fwrite((void*)img,1,totLen,fw) == totLen) {
-                ESP_LOGI(__FUNCTION__,"Firmware Updated");
                 fclose(fw);
             } else {
-                ESP_LOGE(__FUNCTION__,"Firmware not backed-up");
+                ESP_LOGE(__FUNCTION__,"Firmware not backedup");
             }
         } else {
-            ESP_LOGE(__FUNCTION__,"Failed to open /firmware/current.bin");
+            if (getAppConfig()->purpose == app_config_t::purpose_t::PULLER ){
+                ESP_LOGE(__FUNCTION__,"Failed to open /tfs/firmware/current.bin");
+            }
         }
         if ((fw = fopen("/lfs/firmware/current.bin.md5","w",true)) != NULL) {
-            ESP_LOGI(__FUNCTION__,"Firmware written");
             uint8_t md5[16];
             MD5Context md5_context;
             MD5Init(&md5_context);
@@ -67,10 +69,10 @@ void flashTheThing(void* param){
             }
             fwrite((void*)ccmd5,1,sizeof(ccmd5),fw);
             fclose(fw);
+            ESP_LOGI(__FUNCTION__,"Firmware md5 written");
         } else {
             ESP_LOGE(__FUNCTION__,"Failed in opeing /firmware/current.bin.md5");
         }
-        deinitSPISDCard();
     } else {
         ESP_LOGE(__FUNCTION__,"Failed to mount the fucking sd card");
     }
@@ -86,6 +88,7 @@ void flashTheThing(void* param){
                 err = esp_ota_set_boot_partition(update_partition);
                 if (err == ESP_OK) {
                     ESP_LOGI(__FUNCTION__, "esp_ota_set_boot_partition succeeded");
+                    deinitSPISDCard();
                 } else {
                     ESP_LOGE(__FUNCTION__, "esp_ota_set_boot_partition failed (%s)!", esp_err_to_name(err));
                 }
@@ -103,6 +106,37 @@ void flashTheThing(void* param){
     esp_restart();
 }
 
+esp_err_t stat_handler(httpd_req_t *req){
+    char* fname = (char*)(req->uri + 5);
+    ESP_LOGV(__FUNCTION__,"Getting stats on %s",fname);
+    struct stat st;
+    uint8_t retryCnt=0;
+    int ret=0;
+    
+    while ((retryCnt++ < 5) && ((ret=stat(fname,&st)) != 0)) {
+        vTaskDelay(50/portTICK_PERIOD_MS);
+    }
+
+    if (ret == 0) {
+        char* res = (char*)malloc(JSON_BUFFER_SIZE);
+        char* path = (char*)malloc(255);
+        strcpy(path,fname);
+        char* fpos = strrchr(path,'/');
+        *fpos=0;
+        esp_err_t ret = httpd_resp_send(req, res, sprintf(res,"{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}",
+            path,
+            fpos+1,
+            "file",
+            (uint32_t)st.st_size
+        ));
+        free(path);
+        free(res);
+        return ret;
+
+    }
+    return httpd_resp_send_500(req);
+}
+
 esp_err_t ota_handler(httpd_req_t *req)
 {
     if (indexOf(req->uri,"/ota/flash")==req->uri){
@@ -115,7 +149,7 @@ esp_err_t ota_handler(httpd_req_t *req)
             buf = (char*)malloc(buf_len);
             /* Copy null terminated value string into buffer */
             if (httpd_req_get_hdr_value_str(req, "Host", buf, buf_len) == ESP_OK) {
-                ESP_LOGD(__FUNCTION__, "Found header => Host: %s", buf);
+                ESP_LOGV(__FUNCTION__, "Found header => Host: %s", buf);
             }
             free(buf);
         }
@@ -127,7 +161,7 @@ esp_err_t ota_handler(httpd_req_t *req)
         if (buf_len > 1) {
             buf = (char*)malloc(buf_len);
             if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
-                ESP_LOGD(__FUNCTION__, "Found URL query => %s", buf);
+                ESP_LOGV(__FUNCTION__, "Found URL query => %s", buf);
                 char param[33];
                 if (httpd_query_key_value(buf, "md5", param, sizeof(param)) == ESP_OK) {
                     strcpy(md5,param);
@@ -165,7 +199,7 @@ esp_err_t ota_handler(httpd_req_t *req)
                     curLen+=len;
                 }
             } while (len>0);
-            ESP_LOGD(__FUNCTION__,"Total: %d/%d",totLen,curLen);
+            ESP_LOGV(__FUNCTION__,"Total: %d/%d",totLen,curLen);
             MD5Final(cmd5, &md5_context);
 
             for (uint8_t i = 0; i < 16; ++i) {
@@ -179,10 +213,9 @@ esp_err_t ota_handler(httpd_req_t *req)
                 sprintf((char*)&ccmd5[i * 2], "%02x", (unsigned int)cmd5[i]);
             }
 
-            ESP_LOGD(__FUNCTION__,"md5:(%s)%dvs%d",ccmd5,totLen,curLen);
-            ESP_LOGI(__FUNCTION__, "RAM:%d", esp_get_free_heap_size());
-
             if (strcmp((char*)ccmd5,(char*)md5) == 0) {
+                ESP_LOGD(__FUNCTION__,"Flashing md5:(%s)%dvs%d",ccmd5,totLen,curLen);
+                ESP_LOGI(__FUNCTION__, "RAM:%d", esp_get_free_heap_size());
                 httpd_resp_send(req, "Flashing", 9);
                 vTaskDelay(pdMS_TO_TICKS(500));
                 xTaskCreate(&flashTheThing,"flashTheThing",4096, NULL, 5, NULL);
@@ -190,7 +223,8 @@ esp_err_t ota_handler(httpd_req_t *req)
                 esp_wifi_stop();
                 httpd_stop(&server);
             } else {
-                httpd_resp_send(req, "Bad Checksum", 12);
+                ESP_LOGD(__FUNCTION__,"md5:(%s)(%s)",ccmd5,md5);
+                httpd_resp_send(req, "Bad Checksum", 13);
             }
         } else {
             httpd_resp_send(req, "Not OK", 6);
@@ -203,9 +237,9 @@ esp_err_t ota_handler(httpd_req_t *req)
                 char ccmd5[36];
                 uint32_t len=0;
                 if ((len=fread((void*)ccmd5,1,36,fw)) == 36) {
-                    //ccmd5[0]='z';
                     httpd_resp_send(req,ccmd5,36);
                     fclose(fw);
+                    deinitSPISDCard();
                     return ESP_OK;
                 } else {
                     ESP_LOGE(__FUNCTION__,"Error with weird md5 len %d", len);
@@ -221,44 +255,45 @@ esp_err_t ota_handler(httpd_req_t *req)
     return ESP_FAIL;
 }
 
-esp_err_t findSdCardFiles(httpd_req_t *req,char* path,const char* ext,bool recursive, char* res, uint32_t resLen){
+esp_err_t findFiles(httpd_req_t *req,char* path,const char* ext,bool recursive, char* res, uint32_t resLen){
     if ((path == NULL) || (strlen(path)==0)) {
         return ESP_FAIL;
+    }
+    if ( strcmp(path,"/") == 0){
+        sprintf(res,"[{\"name\":\"sdcard\",\"ftype\":\"folder\",\"size\":0},{\"name\":\"lfs\",\"ftype\":\"folder\",\"size\":0}]");
+        return ESP_OK;
     }
     esp_err_t ret=ESP_OK;
     uint32_t sLen=strlen(res);
     ESP_LOGV(__FUNCTION__,"Parsing %s",path);
     char* theFolders = (char*)malloc(1024);
     memset(theFolders,0,1024);
+    char* theFName = (char*)malloc(1024);
+    memset(theFName,0,1024);
     uint32_t fpos=0;
     uint32_t fcnt=0;
     uint32_t dcnt=0;
+    struct stat st;
 
-    if (initSPISDCard()){
-        FF_DIR theFolder;
-        FILINFO* fi = (FILINFO*)malloc(sizeof(FILINFO));
-        if (f_opendir(&theFolder, path) == FR_OK){
-            while (f_readdir(&theFolder, fi) == FR_OK)
+    DIR* theFolder;
+    struct dirent* fi;
+    if ((theFolder = opendir(path)) != NULL){
+        while ((fi = readdir(theFolder)) != NULL)
+        {
+            if (strlen(fi->d_name) == 0)
             {
-                if (strlen(fi->fname) == 0)
-                {
-                    break;
-                }
-                if (recursive && (fi->fattrib & AM_DIR)){
+                break;
+            }
+            if (fi->d_type == DT_DIR){
+                if (recursive){
                     dcnt++;
-                    if (strcmp(path,"/")==0) {
-                        sprintf(kmlFileName,"/%s",fi->fname);
-                    } else {
-                        sprintf(kmlFileName,"%s/%s",path,fi->fname);
-                    }
+                    sprintf(kmlFileName,"%s/%s",path,fi->d_name);
                     fpos+=sprintf(theFolders+fpos,"%s",kmlFileName)+1;
-
                     ESP_LOGV(__FUNCTION__,"%s currently has %d files and %d folders subfolder len:%d. Adding dir %s", path,fcnt,dcnt,fpos,kmlFileName);
-                } else if (endsWith(fi->fname,ext)){
-                    fcnt++;
-                    ESP_LOGV(__FUNCTION__,"%s currently has %d files and %d folders subfolder len:%d. Adding file %s", path,fcnt,dcnt,fpos,fi->fname);
+                }
+                if ((ext == NULL) || (strlen(ext)==0)){
                     if (sLen > (resLen-100)){
-                        ESP_LOGD(__FUNCTION__,"Buffer Overflow, flushing");
+                        ESP_LOGV(__FUNCTION__,"Buffer Overflow, flushing");
                         if ((ret=httpd_resp_send_chunk(req,res,sLen)) != ESP_OK){
                             ESP_LOGE(__FUNCTION__,"Error sending chunk %s sLenL%d, actuallen:%d",esp_err_to_name(ret),sLen,strlen(res));
                             break;
@@ -266,34 +301,55 @@ esp_err_t findSdCardFiles(httpd_req_t *req,char* path,const char* ext,bool recur
                         memset(res,0,resLen);
                         sLen=0;
                     }
-
-                    if (strcmp(path,"/") == 0)
-                        sLen+=sprintf(res+sLen,"\"/%s\",",fi->fname);
-                    else
-                        sLen+=sprintf(res+sLen,"\"%s/%s\",",path,fi->fname);
+                    
+                    sLen+=sprintf(res+sLen,"{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d},",
+                        path,
+                        fi->d_name,
+                        fi->d_type == DT_DIR ? "folder":"file",
+                        0
+                    );
                 }
-            }
-            f_closedir(&theFolder);
-            ESP_LOGV(__FUNCTION__,"%s has %d files and %d folders subfolder len:%d", path,fcnt,dcnt,fpos);
-            uint32_t ctpos=0;
-            while (dcnt-->0) {
-                ESP_LOGV(__FUNCTION__,"%d-%s: Getting sub-folder(%d) %s",dcnt, path,ctpos,theFolders+ctpos);
-                if (findSdCardFiles(req, theFolders+ctpos,ext,recursive,res,resLen) != ESP_OK) {
-                    ESP_LOGW(__FUNCTION__,"Error invoking getSdFiles for %s", kmlFileName);
+            } else if ((ext == NULL) || (strlen(ext)==0) || endsWith(fi->d_name,ext)){
+                fcnt++;
+                ESP_LOGV(__FUNCTION__,"%s currently has %d files and %d folders subfolder len:%d. Adding file %s", path,fcnt,dcnt,fpos,fi->d_name);
+                if (sLen > (resLen-100)){
+                    ESP_LOGV(__FUNCTION__,"Buffer Overflow, flushing");
+                    if ((ret=httpd_resp_send_chunk(req,res,sLen)) != ESP_OK){
+                        ESP_LOGE(__FUNCTION__,"Error sending chunk %s sLenL%d, actuallen:%d",esp_err_to_name(ret),sLen,strlen(res));
+                        break;
+                    }
+                    memset(res,0,resLen);
+                    sLen=0;
                 }
-                ctpos+=strlen(theFolders)+1;
+                sprintf(theFName,"%s/%s",path,fi->d_name);
+                st.st_size=0;
+                //if ((fcnt > 30) || stat(theFName,&st) == 0){
+                    sLen+=sprintf(res+sLen,"{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d},",
+                        path,
+                        fi->d_name,
+                        fi->d_type == DT_DIR ? "folder":"file",
+                        (uint32_t)st.st_size
+                    );
+                //}
             }
-        } else {
-            ESP_LOGW(__FUNCTION__,"Error opening %s", path);
-            ret=ESP_FAIL;
         }
-        free(fi);
+        closedir(theFolder);
+        ESP_LOGV(__FUNCTION__,"%s has %d files and %d folders subfolder len:%d", path,fcnt,dcnt,fpos);
+        uint32_t ctpos=0;
+        while (dcnt-->0) {
+            ESP_LOGV(__FUNCTION__,"%d-%s: Getting sub-folder(%d) %s",dcnt, path,ctpos,theFolders+ctpos);
+            if (findFiles(req, theFolders+ctpos,ext,recursive,res,resLen) != ESP_OK) {
+                ESP_LOGW(__FUNCTION__,"Error invoking getSdFiles for %s", kmlFileName);
+            }
+            ctpos+=strlen(theFolders)+1;
+        }
     } else {
-        ESP_LOGE(__FUNCTION__,"Cannot mount the fucking sd card");
+        ESP_LOGW(__FUNCTION__,"Error opening %s", path);
         ret=ESP_FAIL;
     }
+
+    free(theFName);
     free(theFolders);
-    deinitSPISDCard();
     return ret;
 }
 
@@ -305,19 +361,20 @@ esp_err_t list_entity_handler(httpd_req_t *req)
     xEventGroupClearBits(getWifiConfig()->s_wifi_eg,WIFI_CLIENT_DONE);
     ESP_LOGD(__FUNCTION__,"Getting %s url:%s",req->uri+11,req->uri);
     if (endsWith(req->uri,"kml")){
-        if (findSdCardFiles(req,"/kml","kml",true,jsonbuf,JSON_BUFFER_SIZE-1) != ESP_OK){
+        if (findFiles(req,"/kml","kml",true,jsonbuf,JSON_BUFFER_SIZE-1) != ESP_OK){
             ESP_LOGE(__FUNCTION__,"Error wilst sending kml list");
             free(jsonbuf);
             return httpd_resp_send_500(req);
         }
     } else if (endsWith(req->uri,"csv")){
-        if (findSdCardFiles(req,"/lfs/csv","csv",false,jsonbuf,JSON_BUFFER_SIZE) != ESP_OK){
+        ESP_LOGD(__FUNCTION__,"Getting csv url:%s",req->uri);
+        if (findFiles(req,"/lfs/csv","csv",false,jsonbuf,JSON_BUFFER_SIZE) != ESP_OK){
             ESP_LOGE(__FUNCTION__,"Error wilst sending csv list");
             free(jsonbuf);
             return httpd_resp_send_500(req);
         }
     } else if (endsWith(req->uri,"log")){
-        if (findSdCardFiles(req,"/logs","log",false,jsonbuf,JSON_BUFFER_SIZE) != ESP_OK){
+        if (findFiles(req,"/sdcard/logs","log",false,jsonbuf,JSON_BUFFER_SIZE) != ESP_OK){
             ESP_LOGE(__FUNCTION__,"Error wilst sending log list");
             free(jsonbuf);
             return httpd_resp_send_500(req);
@@ -331,55 +388,33 @@ esp_err_t list_entity_handler(httpd_req_t *req)
     }
     
     httpd_resp_send_chunk(req,jsonbuf,strlen(jsonbuf));
-    ESP_LOGD(__FUNCTION__,"Sent final chunck of %d",strlen(jsonbuf));
+    ESP_LOGV(__FUNCTION__,"Sent final chunck of %d",strlen(jsonbuf));
     free(jsonbuf);
     return httpd_resp_send_chunk(req,NULL,0);
 }
 
-esp_err_t list_sdcard_handler(httpd_req_t *req)
+esp_err_t list_files_handler(httpd_req_t *req)
 {
-    FF_DIR theFolder;
     char* jsonbuf= (char*)malloc(JSON_BUFFER_SIZE);
-    if (initSPISDCard())
-    {
-        if (f_opendir(&theFolder, req->uri+12) == FR_OK) {
-            ESP_LOGD(__FUNCTION__,"Listing %s",req->uri+12);
-            uint32_t len=sprintf(jsonbuf,"[");
-            httpd_resp_set_type(req, "application/json");
-            FILINFO fi;
-            while (f_readdir(&theFolder, &fi) == FR_OK)
-            {
-                if (strlen(fi.fname) == 0)
-                {
-                    break;
-                }
-                len+=sprintf(jsonbuf+len,"{\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d},",
-                    fi.fname,
-                    fi.fattrib & AM_DIR ? "folder":"file",
-                    fi.fsize
-                );
-                if (len > (JSON_BUFFER_SIZE-200)) {
-                    httpd_resp_send_chunk(req, jsonbuf, len);
-                    len=0;
-                    *jsonbuf=0;
-                }
-            }
-            f_closedir(&theFolder);
-            if (len > 1){
-                *(jsonbuf+len-1)=']';
-                httpd_resp_send_chunk(req, jsonbuf, len);
-            }
-        } else {
-            ESP_LOGE(__FUNCTION__,"Cannot read %s",req->uri+12);
-        }
-        deinitSPISDCard();
-    } else {
-        ESP_LOGD(__FUNCTION__,"Cannot mount the fucking sd card");
+    memset(jsonbuf,0,JSON_BUFFER_SIZE);
+    *jsonbuf='[';
+    ESP_LOGV(__FUNCTION__,"Getting %s url:%s",req->uri+11,req->uri);
+    if (findFiles(req,(char*)(req->uri+11),NULL,false,jsonbuf,JSON_BUFFER_SIZE-1) != ESP_OK){
+        ESP_LOGE(__FUNCTION__,"Error wilst sending file list");
+        free(jsonbuf);
+        return httpd_resp_send_500(req);
     }
-    httpd_resp_send_chunk(req, NULL, 0);
+    if (strlen(jsonbuf) > 1 )
+        *(jsonbuf+strlen(jsonbuf)-1)=']';
+    else
+    {
+        sprintf(jsonbuf,"%s","[]");
+    }
+    
+    httpd_resp_send_chunk(req,jsonbuf,strlen(jsonbuf));
+    ESP_LOGV(__FUNCTION__,"Sent final chunck of %d",strlen(jsonbuf));
     free(jsonbuf);
-
-    return ESP_OK;
+    return httpd_resp_send_chunk(req,NULL,0);
 }
 
 esp_err_t config_handler(httpd_req_t *req)
@@ -421,46 +456,121 @@ esp_err_t config_handler(httpd_req_t *req)
     return ret;
 }
     
-    
-    
 esp_err_t status_handler(httpd_req_t *req)
 {
     esp_err_t ret = ESP_FAIL;
-    cJSON* json=NULL;
-    cJSON* jsonItem = NULL;
     app_config_t* appcfg=getAppConfig();
     app_state_t* appstate=getAppState();
     the_wifi_config* wcfg = getWifiConfig();
-    poiConfig_t* pc=NULL;
-    int64_t upTime=0;
-    int64_t sleepTime=0;
-    char* jsonbuf= (char*)malloc(JSON_BUFFER_SIZE);
-    memset(jsonbuf,0,JSON_BUFFER_SIZE);
-    httpd_resp_set_type(req, "application/json");
-    uint32_t jp,jp2,idx;
-    
-    if (strncmp(req->uri,"/rest/status/wifi",17)==0) {
-        switch (req->method) {
-            case HTTP_POST:
-                jp = sprintf(jsonbuf,"{\"type\":\"%s\",\"enabled\":\"%s\",\"connected\":\"%s\",\"scanning\":\"%s\",\"ip\":\"" IPSTR "\",\"clients\":",
-                                            appcfg->purpose == app_config_t::purpose_t::PULLER?"AP":"Station",
-                                            xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_UP_BIT?"yes":"no",
-                                            xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_CONNECTED_BIT?"yes":"no",
-                                            xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_SCANING_BIT?"yes":"no",
-                                            IP2STR(&ipInfo.ip)
-                                    );
-                jp2=getClientsJson(jsonbuf+jp);
-                sprintf(jsonbuf+jp+jp2,"}");
-                httpd_resp_set_type(req, "application/json");
-                ret=httpd_resp_send(req, jsonbuf, strlen(jsonbuf));
-                break;
-            case HTTP_PUT:
-                ret=httpd_req_recv(req,jsonbuf,JSON_BUFFER_SIZE);
-                ESP_LOGD(__FUNCTION__,"Got %s",jsonbuf);
-                json = cJSON_Parse(jsonbuf);
-                if (json != NULL) {
-                    jsonItem = cJSON_GetObjectItemCaseSensitive(json,"enabled");
-                    if (jsonItem && (strcmp(jsonItem->valuestring,"no")==0)) {
+
+
+    cJSON* jresponse=NULL;
+    cJSON* jitem=NULL;
+    cJSON* status=NULL;
+    cJSON* wifi=NULL;
+    cJSON* jclients=NULL;
+
+    Aper* client = NULL;
+    char* path = (char*)req->uri+7;
+    char* sjson = NULL;
+    char* buf = (char*)malloc(255);
+    char* postData = NULL;
+    uint32_t idx=0,jsonlen=0;
+    uint64_t upTime=0,sleepTime=0;
+    poiConfig_t* pc;
+
+    ESP_LOGV(__FUNCTION__,"uri:%s absolute: %s, method: %s",req->uri,path, req->method == HTTP_POST ? "POST" : "PUT" );
+
+    if (req->method==HTTP_POST){
+        httpd_resp_set_type(req, "application/json");
+        status=cJSON_CreateObject();
+        wifi=cJSON_CreateObject();
+        jclients = cJSON_CreateArray();
+        upTime=getUpTime();
+        sleepTime=getSleepTime();
+
+        sprintf(buf,"%02d:%02d:%02d",(uint32_t)floor(upTime/3600),(uint32_t)floor((upTime%3600)/60),(uint32_t)upTime%60);
+        cJSON_AddStringToObject(status, "uptime", buf);
+        sprintf(buf,"%02d:%02d:%02d",(uint32_t)floor(sleepTime/3600),(uint32_t)floor((sleepTime%3600)/60),(uint32_t)sleepTime%60);
+        cJSON_AddStringToObject(status, "sleeptime", buf);
+        cJSON_AddItemToObject(status, "freeram",  cJSON_CreateNumber(esp_get_free_heap_size()));
+        cJSON_AddItemToObject(status, "totalram", cJSON_CreateNumber(heap_caps_get_total_size(MALLOC_CAP_DEFAULT)));
+        cJSON_AddItemToObject(status, "battery",  cJSON_CreateNumber(getBatteryVoltage()));
+
+        cJSON_AddStringToObject(wifi, "type", appcfg->purpose == app_config_t::purpose_t::PULLER?"AP":"Station");
+        cJSON_AddStringToObject(wifi, "enabled", xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_UP_BIT?"yes":"no");
+        cJSON_AddStringToObject(wifi, "connected", xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_CONNECTED_BIT?"yes":"no");
+        cJSON_AddStringToObject(wifi, "scanning", xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_SCANING_BIT?"yes":"no");
+        tcpip_adapter_ip_info_t* ipInfo=GetIpInfo();
+
+        sprintf(buf,IPSTR, IP2STR(&ipInfo->ip));
+        cJSON_AddStringToObject(wifi, "ip", buf);
+
+        Aper** clients = GetClients();
+        for (Aper* client = clients[idx++];idx < MAX_NUM_CLIENTS; client = clients[idx++]){
+            ESP_LOGV(__FUNCTION__,"client(%d),%s",idx,client==NULL?"null":"not null");
+            if (client) {
+                cJSON_AddItemToArray(jclients,client->toJson());
+            }
+        }
+        cJSON_AddItemToObject(wifi,"clients",jclients);
+
+        cJSON_AddItemToObject(status,"wifi",wifi);
+        if (strcmp(path,"/")==0) {
+            sjson = cJSON_PrintUnformatted(status);
+            ret= httpd_resp_send(req, sjson, strlen(sjson));
+        }
+        if (strcmp(path,"/wifi")==0) {
+            sjson = cJSON_PrintUnformatted(wifi);
+            ret= httpd_resp_send(req, sjson, strlen(sjson));
+        }
+    }
+    if ((req->method==HTTP_PUT) || (startsWith(path,"/form") && (req->method==HTTP_POST))){
+        if (strcmp(path,"/form")==0) {
+            postData = (char*) malloc(JSON_BUFFER_SIZE);
+            httpd_req_recv(req,postData,JSON_BUFFER_SIZE);
+            char pval[100];
+            char pname[100];
+            appcfg = getAppConfig();
+            appcfg->sdcard_config.MisoPin=(gpio_num_t)atoi(getPostField("MisoPin",postData,pval));
+            appcfg->sdcard_config.MosiPin=(gpio_num_t)atoi(getPostField("MosiPin",postData,pval));
+            appcfg->sdcard_config.ClkPin=(gpio_num_t)atoi(getPostField("ClkPin",postData,pval));
+            appcfg->sdcard_config.Cspin=(gpio_num_t)atoi(getPostField("CsPin",postData,pval));
+
+            if (appcfg->purpose == app_config_t::purpose_t::TRACKER) {
+                appcfg->gps_config.enPin=(gpio_num_t)atoi(getPostField("enPin",postData,pval));
+                appcfg->gps_config.txPin=(gpio_num_t)atoi(getPostField("txPin",postData,pval));
+                appcfg->gps_config.rxPin=(gpio_num_t)atoi(getPostField("rxPin",postData,pval));
+                idx=0;
+                sprintf(pname,"syncpoints[%d].lat",idx);
+                pc = appcfg->pois;
+                while (getPostField(pname,postData,pval)) {
+                    pc->lat=atof(pval);
+                    sprintf(pname,"syncpoints[%d].lng",idx);
+                    getPostField(pname,postData,pval);
+                    pc->lng=atof(pval);
+                    pc+=sizeof(poiConfig_t);
+                    idx++;
+                }
+            }
+
+            httpd_req_get_hdr_value_str(req,"Referer",pval,100);
+            ESP_LOGV(__FUNCTION__,"Referer - %s",pval);
+            saveConfig();
+            ret=httpd_resp_send(req,"OK",2);
+        }
+        if (strcmp(path,"/wifi")==0) {
+            postData = (char*) malloc(JSON_BUFFER_SIZE);
+            int rlen=httpd_req_recv(req,postData,JSON_BUFFER_SIZE);
+            if (rlen == 0) {
+                httpd_resp_send_500(req);
+                ESP_LOGE(__FUNCTION__,"no body");
+            } else {
+                ESP_LOGV(__FUNCTION__,"Got %s",postData);
+                jresponse = cJSON_Parse(postData);
+                if (jresponse != NULL) {
+                    jitem = cJSON_GetObjectItemCaseSensitive(jresponse,"enabled");
+                    if (jitem && (strcmp(jitem->valuestring,"no")==0)) {
                         if (appcfg->pois->minDistance > 0){
                             xEventGroupSetBits(wcfg->s_wifi_eg,WIFI_CLIENT_DONE);
                             xEventGroupSetBits(*getAppEG(),app_bits_t::TRIPS_SYNCED);
@@ -472,78 +582,28 @@ esp_err_t status_handler(httpd_req_t *req)
                     }
                 } else {
                     ESP_LOGE(__FUNCTION__,"Error whilst parsing json");
-                    ret= httpd_resp_send_500(req);
                 }
-                cJSON_Delete(json);
-                break;
-            default:
-                ret= httpd_resp_send_500(req);
-                break;
+            }
         }
-    } else if (strncmp(req->uri,"/rest/status/system",17)==0) {
-        switch (req->method) {
-            case HTTP_POST:
-                httpd_resp_set_type(req, "application/json");
-                wcfg = getWifiConfig();
-                upTime=getUpTime()/1000000;
-                sleepTime=getSleepTime();
-                ret=httpd_resp_send(req, jsonbuf, sprintf(jsonbuf,"{\"wifi\":{\"type\":\"%s\",\"ip\":\"" IPSTR "\",\"enabled\":%s,\"connected\":%s,\"scanning\":%s},\"uptime\":\"%02d:%02d:%02d\",\"sleeptime\":\"%02d:%02d:%02d\",\"freeram\":%d,\"totalram\":%d}",
-                                            wcfg->wifi_mode == wifi_mode_t::WIFI_MODE_AP?"AP":"Station",
-                                            IP2STR(&ipInfo.ip),
-                                            xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_UP_BIT?"true":"false",
-                                            xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_CONNECTED_BIT?"true":"false",
-                                            xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_SCANING_BIT?"true":"false",
-                                            (uint32_t)floor(upTime/3600),
-                                            (uint32_t)floor((upTime%3600)/60),
-                                            (uint32_t)(upTime%60),
-                                            (uint32_t)floor(sleepTime/3600),
-                                            (uint32_t)floor((sleepTime%3600)/60),
-                                            (uint32_t)(sleepTime%60),
-                                            esp_get_free_heap_size(),
-                                            heap_caps_get_total_size(MALLOC_CAP_DEFAULT)
-                                    ));
-                break;
-            case HTTP_PUT:
-                httpd_req_recv(req,jsonbuf,JSON_BUFFER_SIZE);
-                char pval[100];
-                char pname[100];
-                appcfg = getAppConfig();
-                appcfg->sdcard_config.MisoPin=(gpio_num_t)atoi(getPostField("MisoPin",jsonbuf,pval));
-                appcfg->sdcard_config.MosiPin=(gpio_num_t)atoi(getPostField("MosiPin",jsonbuf,pval));
-                appcfg->sdcard_config.ClkPin=(gpio_num_t)atoi(getPostField("ClkPin",jsonbuf,pval));
-                appcfg->sdcard_config.Cspin=(gpio_num_t)atoi(getPostField("CsPin",jsonbuf,pval));
-
-                if (appcfg->purpose == app_config_t::purpose_t::TRACKER) {
-                    appcfg->gps_config.enPin=(gpio_num_t)atoi(getPostField("enPin",jsonbuf,pval));
-                    appcfg->gps_config.txPin=(gpio_num_t)atoi(getPostField("txPin",jsonbuf,pval));
-                    appcfg->gps_config.rxPin=(gpio_num_t)atoi(getPostField("rxPin",jsonbuf,pval));
-                    idx=0;
-                    sprintf(pname,"syncpoints[%d].lat",idx);
-                    pc = appcfg->pois;
-                    while (getPostField(pname,jsonbuf,pval)) {
-                        pc->lat=atof(pval);
-                        sprintf(pname,"syncpoints[%d].lng",idx);
-                        getPostField(pname,jsonbuf,pval);
-                        pc->lng=atof(pval);
-                        pc+=sizeof(poiConfig_t);
-                        idx++;
-                    }
-                }
-
-                httpd_req_get_hdr_value_str(req,"Referer",pval,100);
-                ESP_LOGD(__FUNCTION__,"%s - %s",jsonbuf,pval);
-                saveConfig();
-                httpd_resp_send(req,"OK",2);
-                break;
-            default:
-                ret= httpd_resp_send_500(req);
-                break;
-        }
-    } else {
-        ESP_LOGD(__FUNCTION__,"Cannot route %s",req->uri);
-        ret= httpd_resp_send_404(req);
     }
-    free(jsonbuf);
+
+    if (ret != ESP_OK){
+        httpd_resp_send_500(req);
+    }
+
+    if (status) {
+        cJSON_Delete(status);
+    }
+
+    if (jresponse) {
+        cJSON_Delete(jresponse);
+    }
+
+    if (postData) {
+        free(postData);
+    }
+    free(buf);
+
     return ret;
 }
 
@@ -567,7 +627,7 @@ void sendTar(void* param) {
         }
         if (xEventGroupGetBits(eventGroup) & TAR_BUILD_DONE) {
             ESP_ERROR_CHECK(httpd_resp_send_chunk(sp.req,NULL,0));
-            ESP_LOGD(__FUNCTION__,"Sent final");
+            ESP_LOGV(__FUNCTION__,"Sent final");
             xEventGroupSetBits(eventGroup,TAR_SEND_DONE);
             break;
         }
@@ -660,7 +720,7 @@ esp_err_t sendFile(httpd_req_t *req){
         httpd_resp_set_type(req, "application/octet-stream");
     char* path = (char*)malloc(530);
     memset(path,0,530);
-    sprintf(path,"/sdcard%s",req->uri);
+    sprintf(path,"%s",req->uri);
     ESP_LOGI(__FUNCTION__,"Sending %s",path);
     httpd_resp_set_hdr(req,"filename",path);
     FILE* theFile;
@@ -693,6 +753,7 @@ esp_err_t sendFile(httpd_req_t *req){
             httpd_resp_set_status(req,HTTPD_404);
         }
     }
+    ESP_LOGI(__FUNCTION__,"Sent %s",path);
     deinitSPISDCard();
     free(path);
     return ESP_OK;

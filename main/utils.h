@@ -96,6 +96,10 @@ struct trip
   uint32_t lastExportedTs = 0;
 };
 
+bool startsWith(const char* str,const char* key);
+uint8_t* loadImage(bool reset,uint32_t* iLen);
+void sampleBatteryVoltage();
+float getBatteryVoltage();
 bool moveFile(char* src, char* dest);
 static const char* getErrorMsg(uint32_t errCode);
 bool initSPISDCard();

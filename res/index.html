@@ -34,7 +34,7 @@
                 </div>
             </div>
             <div id="slide-2" class="system-config">
-                <form action="/rest/status/system" method="post">
+                <form action="/status/system" method="post">
                     <fieldset class="status">
                         <legend>System</legend>
                         <label>
@@ -52,6 +52,10 @@
                         <label>
                             RAM Usage
                             <input type="number" name="ramusage" >
+                        </label>
+                        <label>
+                            Battery
+                            <input type="number" name="battery" >
                         </label>
                     </fieldset>
                     <fieldset id="wificonfig" class="status">
@@ -71,7 +75,7 @@
                 </form>
             </div>
             <div id="slide-3" class="system-config">
-                <form action="/rest/status/system" method="put">
+                <form action="/status/form" method="post">
                     <fieldset class="sdcard">
                         <legend>SD Card</legend>
                         <label>

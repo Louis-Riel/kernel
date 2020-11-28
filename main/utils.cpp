@@ -2,8 +2,10 @@
 #include "esp_sleep.h"
 #include "driver/periph_ctrl.h"
 #include "esp_log.h"
+#include "../components/esp_littlefs/include/esp_littlefs.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+#define F_BUF_SIZE 8192
 
 sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -17,6 +19,25 @@ uint8_t numSdCallers=0;
 sdmmc_host_t* getSDHost(){
   return &host;
 }
+
+bool startsWith(const char* str,const char* key){
+    uint32_t sle =strlen(str);
+    uint32_t kle =strlen(key);
+
+    if ((sle == 0) || (kle==0) || (sle<kle)) {
+        ESP_LOGV(__FUNCTION__,"%s in %s rejected because of bad len",key,str);
+        return false;
+    }
+
+    for (int idx=0; idx < kle; idx++){
+        if (str[idx] != key[idx]){
+            ESP_LOGV(__FUNCTION__,"%s in %s rejected at idx %d",key,str,idx);
+            return false;
+        }
+    }
+    return true;
+}
+
 
 static const char* getErrorMsg(int32_t errCode){
   switch (errCode)
@@ -95,6 +116,11 @@ bool deinitSPISDCard(){
     numSdCallers--;
   ESP_LOGD(__FUNCTION__, "SD callers %d", numSdCallers);
   if (numSdCallers == 0) {
+    esp_err_t ret=esp_vfs_littlefs_unregister("storage");
+    if (ret != ESP_OK) {
+      ESP_LOGE(__FUNCTION__,"Failed in registering littlefs %s", esp_err_to_name(ret));
+    }
+    ESP_LOGV(__FUNCTION__, "Using SPI peripheral");    
     if (esp_vfs_fat_sdmmc_unmount() == ESP_OK)
     {
       getAppState()->sdCard = item_state_t::ACTIVE;
@@ -116,9 +142,15 @@ bool deinitSPISDCard(){
 bool initSPISDCard()
 {
   if (numSdCallers == 0) {
-    ESP_LOGD(__FUNCTION__, "Using SPI peripheral");
+    esp_err_t ret;
+    const esp_vfs_littlefs_conf_t conf = {
+        .base_path = "/lfs",
+        .partition_label = "storage",
+        .format_if_mount_failed = true
+    };
+    
+    ESP_LOGV(__FUNCTION__, "Using SPI peripheral");
     app_config_t* cfg = getAppConfig();
-    esp_err_t ret=0;
 
     spi_bus_config_t bus_cfg = {
         .mosi_io_num = cfg->sdcard_config.MosiPin,
@@ -137,11 +169,6 @@ bool initSPISDCard()
     slot_config.gpio_sck  = cfg->sdcard_config.ClkPin;
     slot_config.gpio_cs   = cfg->sdcard_config.Cspin;
 
-    //sdspi_device_config_t device_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    //  device_config.gpio_cs = cfg->sdcard_config.Cspin;
-    //  device_config.host_id = (spi_host_device_t)host.slot;
-
-
     //if ((ret=spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, 1)) == ESP_OK) {
       if ((ret=esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card)) != ESP_OK)
       {
@@ -158,6 +185,7 @@ bool initSPISDCard()
                                 "Make sure SD card lines have pull-up resistors in place.",
                   esp_err_to_name(ret));
         }
+        esp_vfs_fat_sdmmc_unmount();
         return false;
       }
       getAppState()->sdCard = (item_state_t)(item_state_t::ACTIVE);
@@ -170,6 +198,11 @@ bool initSPISDCard()
       f_mkdir("/kml");
       f_mkdir("/logs");
       f_mkdir("/sent");
+      ret=esp_vfs_littlefs_register(&conf);
+      if (ret != ESP_OK) {
+        ESP_LOGE(__FUNCTION__,"Failed in registering littlefs %s", esp_err_to_name(ret));
+        return ret;
+      }
     //} else if (ret == ESP_ERR_INVALID_STATE) {
     //  ESP_LOGW(__FUNCTION__,"Error initing SPI bus %s",esp_err_to_name(ret));
     //} else {
@@ -187,7 +220,7 @@ bool initSPISDCard()
 }
 
 bool moveFile(char* src, char* dest){
-  FRESULT res;
+  int res;
   FILE* srcF = fopen(src,"r");
   if (srcF != 0) {
     FILE* destF = fopen(dest,"w",true);
@@ -198,7 +231,7 @@ bool moveFile(char* src, char* dest){
       }
       fclose(destF);
       fclose(srcF);
-      if ((res=f_unlink(&src[8]))==0){
+      if ((res=unlink(src))==0){
         ESP_LOGD(__FUNCTION__,"moved %s to %s",src,dest);
         return true;
       } else {
@@ -279,52 +312,64 @@ char* indexOf(const char* str, const char* key){
   return NULL;
 }
 
-FILE * fopen (const char * _name, const char * _type,bool createDir){
-  if (createDir) {
-    ESP_LOGV(__FUNCTION__,"Validating %s folder",_name);
-    FF_DIR theFolder;
-    char* folderName = (char*)malloc(530);
-    strcpy(folderName,_name+7);
-    char* closingMark = strrchr(folderName,'/');
-    FRESULT res;
-    if (closingMark>folderName){
-      uint32_t folderNameLen = closingMark - folderName;
-      memset(closingMark,0,2);
-      ESP_LOGV(__FUNCTION__,"Folder is %s",folderName);
-      while (closingMark > folderName) {
-        if (f_opendir(&theFolder, folderName) != FR_OK) {
-          ESP_LOGV(__FUNCTION__,"Folder %s does not exist",folderName);
-          closingMark = strrchr(folderName,'/');
-          if (closingMark==NULL) {
-            break;
+static uint8_t* img = NULL;
+static uint32_t ilen=0; 
+
+uint8_t* loadImage(bool reset,uint32_t* iLen) {
+  if ((reset || (img == NULL)) && initSPISDCard()){
+    const char* fwf = "/lfs/firmware/current.bin";
+    FILE* fw;
+    if ((fw = fopen(fwf,"r",true)) != NULL) {
+      img = (uint8_t*)heap_caps_malloc(1500000,MALLOC_CAP_SPIRAM);
+      uint8_t* buf = (uint8_t*)malloc(F_BUF_SIZE);
+      uint32_t len=0;
+      *iLen = 0;//fread((void*)img,1,1500000,fw);
+      while (!feof(fw)){
+          if ((len=fread(buf,1,F_BUF_SIZE,fw))>0) {
+              memcpy(img+*iLen,buf,len);
+              *iLen+= len;
+              ESP_LOGV(__FUNCTION__,"firmware readin %d bytes",*iLen);
           }
-          *closingMark=0;
-        } else {
-          f_closedir(&theFolder);
-          if (strlen(folderName) == folderNameLen){
-            break;
-          }
-          ESP_LOGV(__FUNCTION__,"Folder %s is the starting point.",folderName);
-          *(closingMark)='/';
-          do {
-            if ((res=f_mkdir(folderName)) != FR_OK) {
-              if (res == 8) {
-                ESP_LOGW(__FUNCTION__,"Got an error creating %s - %s",folderName,getErrorMsg(res));
-              } else {
-                ESP_LOGE(__FUNCTION__,"Failed in creating %s - %s",folderName,getErrorMsg(res));
-                break;
-              }
-            }
-            ESP_LOGD(__FUNCTION__,"Created %s",folderName);
-            closingMark = folderName+strlen(folderName);
-            *closingMark = '/';
-            if (closingMark == NULL) {
-              break;
-            }
-          } while (*(closingMark+1) != 0);
-          break;
-        }
       }
+      ilen=*iLen;
+      ESP_LOGV(__FUNCTION__,"firmware read %d bytes",ilen);
+      deinitSPISDCard();
+    }
+  }
+  *iLen=ilen;
+  return img;
+}
+
+FILE * fopen (const char * _name, const char * _type,bool createDir){
+  if (createDir && (strlen(_name)>1)) {
+    ESP_LOGV(__FUNCTION__,"Validating %s's folder",_name);
+    DIR* theFolder;
+    char* folderName = (char*)malloc(530);
+    strcpy(folderName,_name);
+    char* closingMark = strrchr(folderName,'/');
+    int res;
+    if (closingMark>folderName){
+      *closingMark=0;
+      ESP_LOGV(__FUNCTION__,"Folder is %s",folderName);
+      uint32_t flen=strlen(folderName);
+      if ((theFolder = opendir(folderName)) == NULL) {
+        ESP_LOGV(__FUNCTION__,"Folder %s does not exist",folderName);
+        closingMark=strchr(folderName+1,'/');
+        while (strlen(folderName) <= flen){
+          if ((res=mkdir(folderName,0755)) != 0) {
+            if (res != EEXIST) {
+              ESP_LOGE(__FUNCTION__,"Folder %s can not be created",folderName);
+              return NULL;
+            }
+          }
+          ESP_LOGD(__FUNCTION__,"Folder %s created",folderName);
+          *(folderName+strlen(folderName))='/';
+        }
+      } else {
+        ESP_LOGV(__FUNCTION__,"Folder %s does exist",folderName);
+        closedir(theFolder);
+      }
+      closingMark = strrchr(folderName,'/');
     }
     free(folderName);
   }

@@ -2,6 +2,7 @@
 #include "route.h"
 #include <cstdio>
 #include <cstring>
+#include "../../main/utils.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -26,6 +27,7 @@ char* getPostField(const char* pname, const char* postData,char* dest) {
 
 bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_t match_upto){
     ESP_LOGV(__FUNCTION__,"routing ref:%s uri:%s",reference_uri,uri_to_match);
+    sampleBatteryVoltage();
     if ((strlen(reference_uri)==1) && (reference_uri[0]=='*'))
         return true;
 

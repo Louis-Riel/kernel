@@ -19,18 +19,27 @@
 #include <esp_pm.h>
 #include <lwip/sockets.h>
 
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 
 esp_event_loop_handle_t event_handle;
 wifi_config_t wifi_config;
 static the_wifi_config* config;
+static Aper* clients[MAX_NUM_CLIENTS];
+static tcpip_adapter_ip_info_t ipInfo; 
 
 uint8_t s_retry_num=0;
 esp_netif_t *sta_netif = NULL;
 wifi_event_ap_staconnected_t* station = (wifi_event_ap_staconnected_t*)malloc(sizeof(wifi_event_ap_staconnected_t));
 wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
 TaskHandle_t restHandle=NULL;
-TaskHandle_t tripUploadHandle=NULL;
+
+Aper** GetClients(){
+    return clients;
+}
+
+tcpip_adapter_ip_info_t* GetIpInfo(){
+    return &ipInfo;
+}
 
 the_wifi_config*  getWifiConfig(){
     assert(config);
@@ -44,24 +53,6 @@ void inferPassword(const char* sid, char* pwd) {
         pwd[4+idx]=sid[idx];
     }
     pwd[4+sidLen]=0;
-}
-
-bool startsWith(const char* str,const char* key){
-    uint32_t sle =strlen(str);
-    uint32_t kle =strlen(key);
-
-    if ((sle == 0) || (kle==0) || (sle<kle)) {
-        ESP_LOGV(__FUNCTION__,"%s in %s rejected because of bad len",key,str);
-        return false;
-    }
-
-    for (int idx=0; idx < kle; idx++){
-        if (str[idx] != key[idx]){
-            ESP_LOGV(__FUNCTION__,"%s in %s rejected at idx %d",key,str,idx);
-            return false;
-        }
-    }
-    return true;
 }
 
 bool isSidManaged (const char* sid) {
@@ -209,12 +200,14 @@ void ProcessScannedAPs(){
         for (int i = 0; (i < DEFAULT_SCAN_LIST_SIZE) && (i < ap_count); i++) {
             if (LOG_LOCAL_LEVEL == ESP_LOG_DEBUG){
                 ESP_LOGD(__FUNCTION__, "SSID \t\t%s", ap_info[i].ssid);
-                ESP_LOGD(__FUNCTION__, "RSSI \t\t%d", ap_info[i].rssi);
-                print_auth_mode(ap_info[i].authmode);
-                if (ap_info[i].authmode != WIFI_AUTH_WEP) {
-                    print_cipher_type(ap_info[i].pairwise_cipher, ap_info[i].group_cipher);
+                ESP_LOGV(__FUNCTION__, "RSSI \t\t%d", ap_info[i].rssi);
+                if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
+                    print_auth_mode(ap_info[i].authmode);
+                    if (ap_info[i].authmode != WIFI_AUTH_WEP) {
+                        print_cipher_type(ap_info[i].pairwise_cipher, ap_info[i].group_cipher);
+                    }
                 }
-                ESP_LOGD(__FUNCTION__, "Channel \t\t%d\n", ap_info[i].primary);
+                ESP_LOGV(__FUNCTION__, "Channel \t\t%d\n", ap_info[i].primary);
             }
             if (isSidManaged((const char*)ap_info[i].ssid)){
 
@@ -295,17 +288,20 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
                 if (station != NULL){
                     evt = (system_event_info_t*) event_data;
                     client = GetAper(station->mac);
-                    if ((evt != NULL) && (tripUploadHandle==NULL)){
+                    if (evt != NULL) {
                         if (client != NULL) {
                             client->Update((ip4_addr_t*)&evt->ap_staipassigned.ip);
+                        } else {
+                            ESP_LOGE(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x count not be created, AID=%d",
+                                                    MAC2STR(station->mac), station->aid);
                         }
                         ESP_LOGI(__FUNCTION__, "Served ip::" IPSTR, IP2STR(&client->ip));
                         vTaskDelay(500/portTICK_RATE_MS);
-                        xTaskCreate(pullStation, "pullStation", 4096, &client->ip , tskIDLE_PRIORITY, &tripUploadHandle);
+                        xTaskCreate(pullStation, "pullStation", 4096, &client->ip , tskIDLE_PRIORITY+5, NULL);
                     } else {
                         ESP_LOGD(__FUNCTION__,"No ip, reconnected, re-trigger on all");
                         if ((client != NULL) && (((uint32_t)client->ip.addr) != 0)) {
-                            xTaskCreate(pullStation, "pullStation", 4096, &client->ip , tskIDLE_PRIORITY, &tripUploadHandle);
+                            xTaskCreate(pullStation, "pullStation", 4096, &client->ip , tskIDLE_PRIORITY+5, NULL);
                         } else {
                             wifi_sta_list_t wifi_sta_list;
                             tcpip_adapter_sta_list_t tcp_sta_list;
@@ -317,7 +313,7 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
                                 {
                                     ESP_LOGD(__FUNCTION__,"Mac : %d , STA IP : %d\n",tcp_sta_list.sta[i].mac[0] ,tcp_sta_list.sta[i].ip.addr);
                                     ESP_LOGD(__FUNCTION__,"Num: %d , Mac : %d\n",wifi_sta_list.num,wifi_sta_list.sta[i].mac[0]);
-                                    xTaskCreate(pullStation, "pullStation", 4096, &tcp_sta_list.sta[i].ip , tskIDLE_PRIORITY, &tripUploadHandle);
+                                    xTaskCreate(pullStation, "pullStation", 4096, &tcp_sta_list.sta[i].ip , tskIDLE_PRIORITY+5, NULL);
                                     vTaskDelay(500/portTICK_RATE_MS);
                                 }
                             }
@@ -379,6 +375,9 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
                 client = GetAper(station->mac);
                 if (client != NULL) {
                     client->Associate();
+                } else {
+                    ESP_LOGE(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x count not be created, AID=%d",
+                                            MAC2STR(station->mac), station->aid);
                 }
                 initSPISDCard();
                 break;
@@ -390,10 +389,6 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
                     client->Dissassociate();
                 }
                 deinitSPISDCard();
-                if (tripUploadHandle != NULL) {
-                    //vTaskDelete(tripUploadHandle);
-                    tripUploadHandle=NULL;
-                }
                 break;
             case WIFI_EVENT_STA_CONNECTED:
                 wifi_ap_record_t ap_info;
@@ -458,27 +453,18 @@ esp_err_t initWifi(){
 }
 
 void wifiStop(void* pvParameter) {
-    //if (xEventGroupGetBits(config->s_wifi_eg) & WIFI_CONNECTED_BIT)
-        esp_wifi_disconnect();
-    //if (xEventGroupGetBits(config->s_wifi_eg) & WIFI_UP_BIT){
-        esp_wifi_stop();
-        esp_wifi_deinit();
-    //}
+    esp_wifi_disconnect();
+    esp_wifi_stop();
+    esp_wifi_deinit();
     esp_netif_deinit();
     sta_netif=NULL;
-    //vTaskDelete(NULL);
 }
 
 void wifiStart(void *pvParameter) {
     ESP_LOGD(__FUNCTION__,"Initing wifi");
-    //if (!nvs_flash_init()){
-        if (initWifi()) {
-            ESP_LOGE(__FUNCTION__, "Wifi init failed");
-        }
-    //} else {
-    //    ESP_LOGE(__FUNCTION__, "Cannot init nvs");
-    //}
-    //vTaskDelete( NULL );
+    if (initWifi()) {
+        ESP_LOGE(__FUNCTION__, "Wifi init failed");
+    }
 }
 
 void wifiSallyForth(void *pvParameter) {
@@ -536,7 +522,6 @@ Aper::~Aper()
 void Aper::Update(uint8_t station[6]){
     assert(station);
     memcpy(mac,station,sizeof(uint8_t)*6);
-    memset(&ip,0,sizeof(esp_ip4_addr_t));
     connectionTime=0;
     connectTime=0;
     disconnectTime=0;
@@ -608,32 +593,4 @@ cJSON* Aper::toJson(){
         cJSON_AddFalseToObject(j,"isConnected");
     free(tbuf);
     return j;
-}
-
-uint32_t getClientsJson(char* buf){
-    cJSON * j = NULL;
-    cJSON * prev = NULL;
-    cJSON* js[MAX_NUM_CLIENTS];
-    memset(&js,0,MAX_NUM_CLIENTS*sizeof(void*));
-
-    for (int idx=0;idx < MAX_NUM_CLIENTS; idx++){
-        Aper* client = clients[idx];
-        if (client) {
-            js[idx]=client->toJson();
-            if (j == NULL) {
-                j = cJSON_CreateArray();
-                j->child=js[idx];
-            } else {
-                prev->next=js[idx];
-                js[idx]->prev=prev;
-            }
-            prev=js[idx];
-        }
-    }
-    if (prev == NULL) {
-        return sprintf(buf,"%s","[]");
-    }
-    sprintf(buf,"%s",cJSON_PrintUnformatted(j));
-    cJSON_Delete(j);
-    return (strlen(buf));
 }

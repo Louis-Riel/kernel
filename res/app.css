@@ -99,11 +99,11 @@ table.greyGridTable tfoot td {
 }
 
 .system-config .invalid {
-    background-color: #ffe7e5;
+    background-color: #ffe7e561;
 }
 
 .system-config fieldset.invalid {
-    background-color: #ffe7e5;
+    background-color: #ffe7e561;
 }
 
 .system-config fieldset.inactive {

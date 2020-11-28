@@ -17,20 +17,20 @@ static app_config_t* resetAppConfig() {
   memset(_app_config,0,sizeof(app_config_t));
 #ifdef IS_TRACKER
   _app_config->purpose = (app_config_t::purpose_t)(app_config_t::purpose_t::TRACKER);
-  _app_config->sdcard_config.ClkPin=GPIO_NUM_18;
-  _app_config->sdcard_config.Cspin=GPIO_NUM_4;
   _app_config->sdcard_config.MisoPin=GPIO_NUM_19;
   _app_config->sdcard_config.MosiPin=GPIO_NUM_23;
+  _app_config->sdcard_config.ClkPin=GPIO_NUM_18;
+  _app_config->sdcard_config.Cspin=GPIO_NUM_4;
   _app_config->gps_config.enPin=GPIO_NUM_13;
   _app_config->gps_config.rxPin=GPIO_NUM_14;
   _app_config->gps_config.txPin=GPIO_NUM_27;
 #endif
 #ifndef IS_TRACKER
   _app_config->purpose = (app_config_t::purpose_t)(app_config_t::purpose_t::PULLER);
-  _app_config->sdcard_config.ClkPin=GPIO_NUM_14;
-  _app_config->sdcard_config.Cspin=GPIO_NUM_13;
   _app_config->sdcard_config.MisoPin=GPIO_NUM_2;
   _app_config->sdcard_config.MosiPin=GPIO_NUM_15;
+  _app_config->sdcard_config.ClkPin=GPIO_NUM_14;
+  _app_config->sdcard_config.Cspin=GPIO_NUM_13;
 #define PIN_NUM_MISO (gpio_num_t)2
 #define PIN_NUM_MOSI (gpio_num_t)15
 #define PIN_NUM_CLK (gpio_num_t)14

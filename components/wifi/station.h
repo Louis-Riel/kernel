@@ -53,10 +53,8 @@ public:
     cJSON* toJson();
 };
 
-static Aper* clients[MAX_NUM_CLIENTS];
-static tcpip_adapter_ip_info_t ipInfo; 
-
-uint32_t getClientsJson(char* buf);
+Aper** GetClients();
+tcpip_adapter_ip_info_t* GetIpInfo();
 void wifiSallyForth(void *pvParameter);
 void wifiStart(void *pvParameter);
 void wifiStop(void *pvParameter);

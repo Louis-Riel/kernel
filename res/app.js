@@ -2,6 +2,26 @@ function dirname(path) {
     return (path.match(/.*\//) + "").replace(/(.+)\/$/g, "$1");
 }
 
+function elementInViewport(el) {
+    var top = el.offsetTop;
+    var left = el.offsetLeft;
+    var width = el.offsetWidth;
+    var height = el.offsetHeight;
+
+    while (el.offsetParent) {
+        el = el.offsetParent;
+        top += el.offsetTop;
+        left += el.offsetLeft;
+    }
+
+    return (
+        top >= window.pageYOffset &&
+        left >= window.pageXOffset &&
+        (top + height) <= (window.pageYOffset + window.innerHeight) &&
+        (left + width) <= (window.pageXOffset + window.innerWidth)
+    );
+}
+
 function addTableRow(tbody, path, file) {
     var tr = document.createElement("tr");
     var td = document.createElement("td");
@@ -12,7 +32,7 @@ function addTableRow(tbody, path, file) {
         link.href = '#';
         link.onclick = (ctrl => {
             if (file.name != "..") {
-                renderFolder(`${path!="/"?path+"/":"/"}${file.name}`);
+                renderFolder(`${path!="/"?file.folder+"/":"/"}${file.name}`);
             } else {
                 renderFolder(path);
             }
@@ -24,15 +44,27 @@ function addTableRow(tbody, path, file) {
     td.appendChild(link);
     tr.appendChild(td);
     td = document.createElement("td");
-    td.textContent = file.size;
+    if (file.ftype == "file") {
+        td.textContent = file.size;
+    }
     tr.appendChild(td);
     tbody.appendChild(tr);
+    if ((file.ftype == 'file')) { //&& elementInViewport(tr)) {
+        fetch(`/stat${file.folder}/${file.name}`, {
+            method: 'post'
+        }).then(data => {
+            data.json().then(jdata => {
+                td = tr.children[1];
+                td.innerText = jdata.size;
+            });
+        });
+    }
 }
 
 function renderFolder(path) {
     var tbody = document.getElementsByClassName("file-table")[0].getElementsByTagName("tbody")[0];
     var caption = document.getElementsByClassName("file-table")[0].getElementsByTagName("caption")[0];
-    fetch('/rest/sdcard' + path, {
+    fetch('/rest/files' + path, {
         method: 'post'
     }).then(data => {
         data.json().then(jdata => {
@@ -66,7 +98,7 @@ function renderFolder(path) {
 }
 
 function refreshStatus() {
-    fetch('/rest/status/system', {
+    fetch('/status/', {
         method: 'post'
     }).then(data => {
         data.json().then(jdata => {
@@ -80,9 +112,10 @@ function refreshStatus() {
             document.getElementsByName("wifitype")[0].value = jdata.wifi.type;
             document.getElementsByName("ip")[0].value = jdata.wifi.ip;
             document.getElementsByName("freeram")[0].value = jdata.freeram;
+            document.getElementsByName("battery")[0].value = jdata.battery;
             document.getElementsByName("ramusage")[0].value = (jdata.freeram / jdata.totalram) * 100.0;
             if (jdata.wifi.type == "AP") {
-                fetch('/rest/status/wifi', {
+                fetch('/status/wifi', {
                         method: 'post'
                     })
                     .then(data => {
@@ -145,9 +178,37 @@ function refreshConfig() {
                 document.getElementsByName("txPin")[0].value = jdata.gps.txPin;
                 document.querySelector("fieldset.gps").classList.add(jdata.gps.state);
                 document.querySelector("fieldset.sdcard").classList.add(jdata.sdcard.state);
-                for (pos in jdata.gps.pois || []) {
-                    document.getElementsByName(`syncpoints[${pos}].lat`)[0].value = jdata.gps.pois[pos].lat;
-                    document.getElementsByName(`syncpoints[${pos}].lng`)[0].value = jdata.gps.pois[pos].lng;
+                for (posidx in jdata.gps.pois || []) {
+                    var syncpoints = document.querySelector("fieldset.syncpoints");
+                    var legend = document.createElement("legend");
+                    legend.innerText = `Syncpoint ${posidx}`;
+                    var pos = jdata.gps.pois[0];
+                    while (syncpoints.firstElementChild) {
+                        syncpoints.removeChild(syncpoints.firstElementChild);
+                    }
+                    syncpoints.appendChild(legend);
+                    Object.keys(pos).forEach(fld => {
+                        if (fld != "mac") {
+                            var ctrl = document.createElement("label");
+                            ctrl.textContent = fld;
+                            var ictrl = document.createElement("input");
+                            ictrl.value = pos[fld];
+                            ictrl.name = `syncpoints[${posidx}].${fld}`;
+                            if (fld.match(".*ime$")) {
+                                ictrl.type = "timespan";
+                            }
+                            if (ictrl.value == "true") {
+                                ictrl.type = "checkbox";
+                                ictrl.checked = true;
+                            }
+                            if (ictrl.value == "false") {
+                                ictrl.type = "checkbox";
+                                ictrl.checked = false;
+                            }
+                            ctrl.appendChild(ictrl);
+                            syncpoints.appendChild(ctrl);
+                        }
+                    });
                 }
             });
         }).catch(error => {

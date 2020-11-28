@@ -5,7 +5,6 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-FILE* downloadedFile=NULL;
 char* tarfname=(char*)malloc(255);
 
 esp_err_t kmllist_event_handler(esp_http_client_event_t *evt)
@@ -67,7 +66,7 @@ esp_err_t kmldownload_event_handler(esp_http_client_event_t *evt)
         ESP_LOGV(__FUNCTION__, "HTTP_EVENT_HEADER_SENT");
         break;
     case HTTP_EVENT_ON_HEADER:
-        ESP_LOGD(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
         if (strcmp(evt->header_key,"filename") == 0) {
             FILE* dfile = fopen(evt->header_value,"w",true);
             if (dfile == NULL) {
@@ -121,7 +120,7 @@ esp_err_t logdownload_event_handler(esp_http_client_event_t *evt)
         ESP_LOGV(__FUNCTION__, "HTTP_EVENT_HEADER_SENT");
         break;
     case HTTP_EVENT_ON_HEADER:
-        ESP_LOGD(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
         if (strcmp(evt->header_key,"filename") == 0) {
             char* fname = (char*) malloc(255);
             memset(fname,0,255);
@@ -137,19 +136,20 @@ esp_err_t logdownload_event_handler(esp_http_client_event_t *evt)
                 }
             }
 
-            ESP_LOGD(__FUNCTION__, "HTTP_EVENT_ON_HEADER updated to, key=%s, value=%s", evt->header_key, fname);
-            downloadedFile = fopen(fname,"w",true);
+            ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_HEADER updated to, key=%s, value=%s", evt->header_key, fname);
+            FILE* dfile = fopen(fname,"w",true);
             free(fname);
-            if (downloadedFile == NULL) {
+            if (dfile == NULL) {
                 ESP_LOGE(__FUNCTION__,"Error whiilst opening %s",fname);
                 return ESP_FAIL;
             }
             xEventGroupSetBits(eventGroup,DOWNLOAD_STARTED);
+            *(FILE**)evt->user_data = dfile;
         }
         break;
     case HTTP_EVENT_ON_DATA:
-        if (downloadedFile != NULL) {
-            fwrite(evt->data,1,evt->data_len,downloadedFile);
+        if (*(FILE**)evt->user_data != NULL) {
+            fwrite(evt->user_data,1,evt->data_len,*(FILE**)evt->user_data);
         } else {
             ESP_LOGW(__FUNCTION__,"Data with no dest file %d bytes",evt->data_len);
             if (evt->data_len < 200) {
@@ -160,8 +160,8 @@ esp_err_t logdownload_event_handler(esp_http_client_event_t *evt)
         break;
     case HTTP_EVENT_ON_FINISH:
         ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_FINISH ");
-        if (downloadedFile != NULL) {
-            fclose(downloadedFile);
+        if (*(FILE**)evt->user_data != NULL) {
+            fclose(*(FILE**)evt->user_data);
         } else {
             ESP_LOGW(__FUNCTION__,"Close file with no dest file %d bytes",evt->data_len);
         }
@@ -278,66 +278,57 @@ void pullStation(void *pvParameter) {
 
         xEventGroupWaitBits(eventGroup,GETTING_TRIPS,pdFALSE,pdTRUE,portMAX_DELAY);
         esp_http_client_cleanup(client);
-        ESP_LOGD(__FUNCTION__,"Parsing %d bytes of trips",strlen(kmlFiles));
         ESP_LOGV(__FUNCTION__,"%s",kmlFiles);
-        char* bpos=kmlFiles+2;
-        char* epos=strchr(bpos,'"');
-        char fname[255];
-        if ((epos == NULL) || (bpos == NULL) || (*bpos != '/')) {
-            ESP_LOGW(__FUNCTION__,"Got weird or empty output from kml list");
-            xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)((BIT1)|(BIT2)|(BIT3)), tskIDLE_PRIORITY, NULL);
-        }
-        while ((epos > bpos) && (*bpos == '/')) {
-            *epos=0;
-            ESP_LOGI(__FUNCTION__,"Getting file %s",bpos);
-            free((void*)config->url);
-            memset(config,0,sizeof(esp_http_client_config_t));
-            config->url=(char*)malloc(255);
-            memset((void*)config->url,0,255);
-            sprintf((char*)config->url,"http://" IPSTR "%s",IP2STR(ipInfo),bpos);
-            config->method=HTTP_METHOD_GET;
-            config->timeout_ms = 9000;
-            config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
-            config->max_redirection_count=0;
-            config->port=80;
-            FILE* kmlFile;
-            config->user_data = &kmlFile;
-            config->event_handler = kmldownload_event_handler;
-            client = esp_http_client_init(config);
-            if (client != NULL){
-                esp_http_client_set_header(client,"movetosent","yes");
-                if ((err = esp_http_client_perform(client)) == ESP_OK){
-                    ESP_LOGD(__FUNCTION__,"Waiting on download");
-                    if (xEventGroupWaitBits(eventGroup,DOWNLOAD_FINISHED,pdFALSE,pdTRUE,2000/portTICK_RATE_MS)){
-                        if (downloadedFile!=NULL){
-                            ESP_LOGD(__FUNCTION__,"%s downloaded",bpos);
-                        } else {
-                            ESP_LOGE(__FUNCTION__,"Download failed %s",bpos);
-                            err=ESP_FAIL;
-                        }
-                        downloadedFile=NULL;
-                    } else {
-                        ESP_LOGE(__FUNCTION__,"Timeout in waiting for return");
+        cJSON* json = cJSON_Parse(kmlFiles);
+        cJSON* jfile = NULL;
+        if (json != NULL) {
+            uint32_t alen = cJSON_GetArraySize(json);
+            ESP_LOGD(__FUNCTION__,"Parsing %d trips",alen);
+            for (uint32_t idx = 0; idx < alen; idx++){
+                jfile = cJSON_GetArrayItem(json,idx);
+                if (jfile != NULL) {
+                    cJSON* fname = cJSON_GetObjectItemCaseSensitive(jfile,"name");
+                    cJSON* folder = cJSON_GetObjectItemCaseSensitive(jfile,"folder");
+                    if ((fname == NULL) || (folder == NULL)){
+                        ESP_LOGW(__FUNCTION__, "Weirdness is afoot with this one:%s[%d]",kmlFiles,idx);
+                        continue;
                     }
-                }
-            } else {
-                ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(err));
-            }
+                    ESP_LOGI(__FUNCTION__,"Getting file %s", fname->valuestring);
+                    free((void*)config->url);
+                    memset(config,0,sizeof(esp_http_client_config_t));
+                    config->url=(char*)malloc(255);
+                    memset((void*)config->url,0,255);
+                    sprintf((char*)config->url,"http://" IPSTR "%s/%s",IP2STR(ipInfo),folder->valuestring,fname->valuestring);
+                    config->method=HTTP_METHOD_GET;
+                    config->timeout_ms = 9000;
+                    config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
+                    config->max_redirection_count=0;
+                    config->port=80;
+                    FILE* kmlFile;
+                    config->user_data = &kmlFile;
+                    config->event_handler = kmldownload_event_handler;
+                    client = esp_http_client_init(config);
+                    if (client != NULL){
+                        esp_http_client_set_header(client,"movetosent","yes");
+                        if ((err = esp_http_client_perform(client)) == ESP_OK){
+                            ESP_LOGD(__FUNCTION__,"Waiting on download");
+                            if (!xEventGroupWaitBits(eventGroup,DOWNLOAD_FINISHED,pdFALSE,pdTRUE,2000/portTICK_RATE_MS)){
+                                ESP_LOGE(__FUNCTION__,"Timeout in waiting for return");
+                            }
+                        }
+                    } else {
+                        ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(err));
+                    }
 
-            esp_http_client_cleanup(client);
-            memset(config,0,sizeof(esp_http_client_config_t));
-
-            bpos=epos+3;
-            if (*bpos != 0){
-                epos=strchr(bpos,'"');
-                if ((epos == NULL) && (*bpos != 0)) { // last entry if not line fead
-                    epos = bpos+strlen(bpos);
+                    esp_http_client_cleanup(client);
+                    memset(config,0,sizeof(esp_http_client_config_t));
                 }
-            } else {
-                bpos=NULL;
-                epos=NULL;
             }
+        } else {
+            ESP_LOGE(__FUNCTION__,"Error whilst parsing csv json");
         }
+        cJSON_Delete(json);
+
         xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)((BIT1)|(BIT2)|(BIT3)), tskIDLE_PRIORITY, NULL);
 
         free((void*)config->url);
@@ -358,20 +349,22 @@ void pullStation(void *pvParameter) {
         if ((ret = esp_http_client_perform(client)) == ESP_OK){
             uint32_t len=0;
             if ((len=esp_http_client_read(client,dmd5,36)) >= 0) {
-                ESP_LOGD(__FUNCTION__,"ot back %d char of md5",len);
+                ESP_LOGD(__FUNCTION__,"Got back (%s)%d char of md5",dmd5,len);
                 char ch;
-                bool isValid;
-                for (int idx=0; idx < 32; idx++){
-                    ch = *(dmd5+idx);
-                    isValid = (((ch >= 'a') && ( ch <= 'z' )) ||
-                        ((ch >= '0') && ( ch <= '9' )));
-                    if (!isValid) {
-                        ESP_LOGD(__FUNCTION__,"Invalid char for %s at pos %d(%c)",dmd5,idx,ch);
-                        break;
+                bool isValid = strcmp(dmd5,"BADMD5")==0;
+                if (!isValid){
+                    for (int idx=0; idx < 32; idx++){
+                        ch = *(dmd5+idx);
+                        isValid = (((ch >= 'a') && ( ch <= 'z' )) ||
+                            ((ch >= '0') && ( ch <= '9' )));
+                        if (!isValid) {
+                            ESP_LOGD(__FUNCTION__,"Invalid char for %s at pos %d(%c)",dmd5,idx,ch);
+                            break;
+                        }
                     }
                 }
                 FILE* fw = NULL;
-                if (isValid && (fw = fopen("/lfs/firmware/current.bin.md5","r",true)) != NULL) {
+                if (isValid && (fw = fopen("/lfs/firmware/current.bin.md5","r")) != NULL) {
                     char ccmd5[37];
                     if ((len=fread((void*)ccmd5,1,36,fw)) >= 0) {
                         ccmd5[36]=0;
@@ -383,52 +376,49 @@ void pullStation(void *pvParameter) {
                             esp_http_client_cleanup(client);
                             memset(config,0,sizeof(esp_http_client_config_t));
                             fclose(fw);
-                            if ((fw = fopen("/lfs/firmware/current.bin","r",true)) != NULL) {
-                                uint8_t* img = (uint8_t*)heap_caps_malloc(1500000,MALLOC_CAP_SPIRAM);
-                                uint32_t ilen = fread((void*)img,1,1500000,fw);
-                                if (ilen > 0){
-                                    free((void*)config->url);
-                                    memset(config,0,sizeof(esp_http_client_config_t));
-                                    config->url=(char*)malloc(255);
-                                    memset((void*)config->url,0,255);
-                                    sprintf((char*)config->url,"http://" IPSTR "/ota/flash?md5=%s&len=%d",IP2STR(ipInfo),ccmd5,ilen);
-                                    config->method=HTTP_METHOD_POST;
-                                    config->timeout_ms = 9000;
-                                    config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
-                                    config->max_redirection_count=0;
-                                    config->port=80;
-                                    client = esp_http_client_init(config);
-                                    char dmd5[37];
-                                    esp_err_t ret=ESP_OK;
-                                    if ((ret = esp_http_client_open(client,ilen)) == ESP_OK){
-                                        if (esp_http_client_write(client,(char*)img,ilen) == ilen){
-                                            esp_http_client_fetch_headers(client);
-                                            if ((len = esp_http_client_get_status_code(client)) != 200) {
-                                                ESP_LOGE(__FUNCTION__,"Status code:%d",len);
-                                            } else {
-                                                if ((len=esp_http_client_read(client,dmd5,36)) > 0) {
-                                                    if (strcmp(dmd5,"Flashing")==0) {
-                                                        ESP_LOGI(__FUNCTION__,"Station will be updated:%s",dmd5);
-                                                    } else {
-                                                        ESP_LOGE(__FUNCTION__,"Station will not be updated:%s",dmd5);
-                                                    }
-                                                    esp_http_client_close(client);
-                                                }else {
-                                                    ESP_LOGE(__FUNCTION__,"Got empty response on flash.");
-                                                }
-                                            }
+                            uint32_t ilen;
+                            uint8_t* img = loadImage(false,&ilen);
+                            if (ilen > 0){
+                                free((void*)config->url);
+                                memset(config,0,sizeof(esp_http_client_config_t));
+                                config->url=(char*)malloc(255);
+                                memset((void*)config->url,0,255);
+                                sprintf((char*)config->url,"http://" IPSTR "/ota/flash?md5=%s&len=%d",IP2STR(ipInfo),ccmd5,ilen);
+                                config->method=HTTP_METHOD_POST;
+                                config->timeout_ms = 9000;
+                                config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
+                                config->max_redirection_count=0;
+                                config->port=80;
+                                client = esp_http_client_init(config);
+                                char dmd5[37];
+                                esp_err_t ret=ESP_OK;
+                                if ((ret = esp_http_client_open(client,ilen)) == ESP_OK){
+                                    ESP_LOGD(__FUNCTION__,"Sending firmware %d bytes",ilen);
+                                    if (esp_http_client_write(client,(char*)img,ilen) == ilen){
+                                        ESP_LOGD(__FUNCTION__,"Sent firmware %d bytes",ilen);
+                                        esp_http_client_fetch_headers(client);
+                                        if ((len = esp_http_client_get_status_code(client)) != 200) {
+                                            ESP_LOGE(__FUNCTION__,"Status code:%d",len);
                                         } else {
-                                            ESP_LOGE(__FUNCTION__,"Failed in writing image");
+                                            if ((len=esp_http_client_read(client,dmd5,36)) > 0) {
+                                                if (strcmp(dmd5,"Flashing")==0) {
+                                                    ESP_LOGI(__FUNCTION__,"Station will be updated:%s",dmd5);
+                                                } else {
+                                                    ESP_LOGE(__FUNCTION__,"Station will not be updated:%s",dmd5);
+                                                }
+                                                esp_http_client_close(client);
+                                            }else {
+                                                ESP_LOGE(__FUNCTION__,"Got empty response on flash.");
+                                            }
                                         }
                                     } else {
-                                        ESP_LOGE(__FUNCTION__,"error whilst invoking %s",config->url);
+                                        ESP_LOGE(__FUNCTION__,"Failed in writing image");
                                     }
                                 } else {
-                                    ESP_LOGE(__FUNCTION__,"Get a empty image");
+                                    ESP_LOGE(__FUNCTION__,"error whilst invoking %s",config->url);
                                 }
-                                free(img);
                             } else {
-                                ESP_LOGE(__FUNCTION__,"Failed to read firmware");
+                                ESP_LOGE(__FUNCTION__,"Get a empty image");
                             }
                         }
                     } else {
@@ -467,7 +457,7 @@ void pullStation(void *pvParameter) {
         xEventGroupSetBits(eventGroup,GETTING_TRIP_LIST);
         while (((err = esp_http_client_perform(client)) == ESP_ERR_HTTP_CONNECT) && (retryCnt++<10) && (kmlFilesPos == 0))
         {
-            ESP_LOGD(__FUNCTION__, "HTTP GET listtrip failed: %s", esp_err_to_name(err));
+            ESP_LOGD(__FUNCTION__, "HTTP GET log failed: %s", esp_err_to_name(err));
             vTaskDelay(500/portTICK_RATE_MS);
         }
         esp_http_client_cleanup(client);
@@ -482,78 +472,76 @@ void pullStation(void *pvParameter) {
         }
 
         xEventGroupWaitBits(eventGroup,GETTING_TRIPS,pdFALSE,pdTRUE,portMAX_DELAY);
-        ESP_LOGD(__FUNCTION__,"Parsing %d bytes of trips",strlen(kmlFiles));
         ESP_LOGV(__FUNCTION__,"%s",kmlFiles);
-        bpos=kmlFiles+2;
-        epos=strchr(bpos,'"');
-        if ((epos == NULL) || (bpos == NULL) || (*bpos != '/')) {
-            ESP_LOGW(__FUNCTION__,"Got weird or empty output from kml list");
-        }
-        while ((epos > bpos) && (*bpos == '/')) {
-            *epos=0;
-            ESP_LOGI(__FUNCTION__,"Getting file %s",bpos);
-            free((void*)config->url);
-            memset(config,0,sizeof(esp_http_client_config_t));
-            config->url=(char*)malloc(255);
-            memset((void*)config->url,0,255);
-            sprintf((char*)config->url,"http://" IPSTR "%s",IP2STR(ipInfo),bpos);
-            config->method=HTTP_METHOD_GET;
-            config->timeout_ms = 9000;
-            config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
-            config->max_redirection_count=0;
-            config->port=80;
-            config->event_handler = logdownload_event_handler;
-            client = esp_http_client_init(config);
-            esp_http_client_set_header(client,"movetosent","yes");
-            if ((err = esp_http_client_perform(client)) == ESP_OK){
-                ESP_LOGD(__FUNCTION__,"Waiting on download");
-                if (xEventGroupWaitBits(eventGroup,DOWNLOAD_FINISHED,pdFALSE,pdTRUE,2000/portTICK_RATE_MS)){
-                    if (downloadedFile!=NULL){
-                        ESP_LOGD(__FUNCTION__,"%s downloaded",bpos);
-                    } else {
-                        ESP_LOGE(__FUNCTION__,"Download failed %s",bpos);
-                        err=ESP_FAIL;
+        json = cJSON_Parse(kmlFiles);
+        jfile = NULL;
+        if (json != NULL) {
+            uint32_t alen = cJSON_GetArraySize(json);
+            ESP_LOGD(__FUNCTION__,"Parsing %d logs",alen);
+            for (uint32_t idx = 0; idx < alen; idx++){
+                jfile = cJSON_GetArrayItem(json,idx);
+                if (jfile != NULL) {
+                    cJSON* fname = cJSON_GetObjectItemCaseSensitive(jfile,"name");
+                    cJSON* folder = cJSON_GetObjectItemCaseSensitive(jfile,"folder");
+                    if ((fname == NULL) || (folder == NULL)){
+                        ESP_LOGW(__FUNCTION__, "Weirdness is afoot with this one:%s[%d]",kmlFiles,idx);
+                        continue;
                     }
-                    downloadedFile=NULL;
-                } else {
-                    ESP_LOGE(__FUNCTION__,"Timeout in waiting for return");
+                    ESP_LOGI(__FUNCTION__,"Getting file %s", fname->valuestring);
+                    free((void*)config->url);
+                    memset(config,0,sizeof(esp_http_client_config_t));
+                    config->url=(char*)malloc(255);
+                    memset((void*)config->url,0,255);
+                    sprintf((char*)config->url,"http://" IPSTR "%s/%s",IP2STR(ipInfo),folder->valuestring,fname->valuestring);
+                    config->method=HTTP_METHOD_GET;
+                    config->timeout_ms = 9000;
+                    config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
+                    config->max_redirection_count=0;
+                    config->port=80;
+                    FILE* kmlFile;
+                    config->user_data = &kmlFile;
+                    config->event_handler = kmldownload_event_handler;
+                    client = esp_http_client_init(config);
+                    if (client != NULL){
+                        esp_http_client_set_header(client,"movetosent","yes");
+                        if ((err = esp_http_client_perform(client)) == ESP_OK){
+                            ESP_LOGD(__FUNCTION__,"Waiting on download");
+                            if (!xEventGroupWaitBits(eventGroup,DOWNLOAD_FINISHED,pdFALSE,pdTRUE,2000/portTICK_RATE_MS)){
+                                ESP_LOGE(__FUNCTION__,"Timeout in waiting for return");
+                            }
+                        }
+                    } else {
+                        ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(err));
+                    }
+
+                    esp_http_client_cleanup(client);
+                    memset(config,0,sizeof(esp_http_client_config_t));
                 }
-            } else {
-                ESP_LOGE(__FUNCTION__, "LOG GET request failed: %s", esp_err_to_name(err));
             }
-
-            esp_http_client_cleanup(client);
-            memset(config,0,sizeof(esp_http_client_config_t));
-
-            bpos=epos+3;
-            if (*bpos == '/'){
-                epos=strchr(bpos,'"');
-            } else {
-                bpos=NULL;
-                epos=NULL;
-            }
+        } else {
+            ESP_LOGE(__FUNCTION__,"Error whilst parsing log json");
         }
-        if (kmlFiles){
-            free(kmlFiles);
-            kmlFiles=NULL;
-        }
+        cJSON_Delete(json);
 
         free((void*)config->url);
         memset(config,0,sizeof(esp_http_client_config_t));
         config->url=(char*)malloc(255);
         memset((void*)config->url,0,255);
-        sprintf((char*)config->url,"http://" IPSTR "/rest/status/wifi",IP2STR(ipInfo));
-        config->method=HTTP_METHOD_POST;
+        sprintf((char*)config->url,"http://" IPSTR "/status/wifi",IP2STR(ipInfo));
+        config->method=HTTP_METHOD_PUT;
         config->timeout_ms = 9000;
         config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
         config->max_redirection_count=0;
         config->port=80;
         client = esp_http_client_init(config);
         char* postData="{\"enabled\":\"no\"}";
+        ESP_LOGV(__FUNCTION__,"Sending wifi off %s",postData);
         if ((ret = esp_http_client_open(client,strlen(postData))) == ESP_OK){
-            if ((err = esp_http_client_write(client,postData,strlen(postData))) != ESP_ERR_HTTP_CONNECT)
+            if (esp_http_client_write(client,postData,strlen(postData)) != strlen(postData))
             {
                 ESP_LOGD(__FUNCTION__, "Turn off wifi faile, but that is to be expected: %s", esp_err_to_name(err));
+            } else {
+                ESP_LOGD(__FUNCTION__,"Sent wifi off");
             }
         } else {
             ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(ret));
@@ -586,7 +574,7 @@ esp_err_t http_tar_download_event_handler(esp_http_client_event_t *evt)
         ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
         if (strcmp(evt->header_key,"filename")==0) {
             sprintf(tarfname,"/sdcard/kml/%s",evt->header_value);
-            if ((downloadedFile=fopen(tarfname,"w"))!=NULL){
+            if ((*(FILE**)evt->user_data=fopen(tarfname,"w"))!=NULL){
                 ESP_LOGD(__FUNCTION__, "%s opened", tarfname);
             } else {
                 ESP_LOGE(__FUNCTION__,"Cannot read %s",tarfname);
@@ -594,15 +582,15 @@ esp_err_t http_tar_download_event_handler(esp_http_client_event_t *evt)
         }
         break;
     case HTTP_EVENT_ON_DATA:
-        if ((downloadedFile != NULL) && (strlen(tarfname)>0)) {
-            fwrite(evt->data,sizeof(uint8_t),evt->data_len,downloadedFile);
+        if ((*(FILE**)evt->user_data != NULL) && (strlen(tarfname)>0)) {
+            fwrite(evt->data,sizeof(uint8_t),evt->data_len,*(FILE**)evt->user_data);
             ESP_LOGV(__FUNCTION__, "tar data len:%d\n", evt->data_len);
         } else {
-            ESP_LOGW(__FUNCTION__,"Got data with no dest tarnull:%s strlen(tarfname):%d",downloadedFile == NULL?"NULL":"NOT NULL",strlen(tarfname));
+            ESP_LOGW(__FUNCTION__,"Got data with no dest tarnull:%s strlen(tarfname):%d",*(FILE**)evt->user_data == NULL?"NULL":"NOT NULL",strlen(tarfname));
         }
         break;
     case HTTP_EVENT_ON_FINISH:
-        fclose(downloadedFile);
+        fclose(*(FILE**)evt->user_data);
         ESP_LOGD(__FUNCTION__, "HTTP_EVENT_ON_FINISH");
         break;
     case HTTP_EVENT_DISCONNECTED:

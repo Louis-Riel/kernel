@@ -288,7 +288,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
   ESP_ERROR_CHECK(gpio_reset_pin(enpin));
   ESP_ERROR_CHECK(gpio_set_direction(enpin, GPIO_MODE_OUTPUT));
 
-  ESP_LOGD(__FUNCTION__, "Turning on enable pin");
+  ESP_LOGV(__FUNCTION__, "Turning on enable pin");
   ESP_ERROR_CHECK(gpio_set_level(enpin,1));
 
   memset(runners,0,sizeof(runners));
@@ -304,7 +304,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
       .rx_flow_ctrl_thresh = 122,
       .use_ref_tick = true
   };
-  ESP_LOGD(__FUNCTION__, "Turning on uart");
+  ESP_LOGV(__FUNCTION__, "Turning on uart");
   ESP_ERROR_CHECK(uart_driver_install(UART_NUM_2, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart_queue, 0));
   ESP_ERROR_CHECK(uart_param_config(UART_NUM_2, &uart_config));
   ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, txpin, rxpin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
@@ -343,8 +343,9 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
       flagProtocol(gps_protocol_t::GPS_GST,pdFALSE);
       flagProtocol(gps_protocol_t::GPS_ZDA,pdFALSE);
 
-      int wb = uart_write_bytes(UART_NUM_2, (const char*) update_0_2_secs, 16);
-      ESP_LOGD(__FUNCTION__,"Sent freq scaledown command (%d bytes), ret %d bytes",16,wb);
+      int wb;
+      if ((wb = uart_write_bytes(UART_NUM_2, (const char*) update_0_2_secs, 16)) != 16)
+        ESP_LOGD(__FUNCTION__,"Failed sending freq scaledown command (%d bytes), ret %d bytes",16,wb);
 
       curFreqIdx=0;
       toBeFreqIdx=0;
@@ -380,7 +381,7 @@ void TinyGPSPlus::CalcChecksum(uint8_t *Message, uint8_t Length)
 //const uint8_t GPS_ON_OFF[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0XFF, 0X00, 0XFF, 0X00, 0X00, 0X00, 0X00, 0XFF, 0XFF};
 
 void TinyGPSPlus::flagProtocol(gps_protocol_t protocol, bool state) {
-  ESP_LOGD(__FUNCTION__,"%s protocol %s",state?"Enabling":"Disabling",gps_protocol_name[protocol]);
+  ESP_LOGV(__FUNCTION__,"%s protocol %s",state?"Enabling":"Disabling",gps_protocol_name[protocol]);
   uint8_t cmd[16];
   memccpy(cmd,GPS_ON_OFF,0,16);
   cmd[7]=protocol;
@@ -448,7 +449,7 @@ void TinyGPSPlus::uart_event_task(void *pvParameters)
   uart_event_t event;
   size_t buffered_size;
   uint8_t* dtmp = (uint8_t*) malloc(RD_BUF_SIZE);
-  ESP_LOGD(__FUNCTION__, "uart[%d] starting:", UART_NUM_2);
+  ESP_LOGV(__FUNCTION__, "uart[%d] starting:", UART_NUM_2);
   while (xEventGroupGetBits(gps->eg)&gpsEvent::gpsRunning){
     //Waiting for UART event.
     if(xQueueReceive(gps->uart_queue, (void * )&event, (portTickType)portMAX_DELAY)) {
@@ -501,7 +502,6 @@ void TinyGPSPlus::uart_event_task(void *pvParameters)
             case UART_PATTERN_DET:
                 uart_get_buffered_data_len(UART_NUM_2, &buffered_size);
                 int pos = uart_pattern_pop_pos(UART_NUM_2);
-                ESP_LOGV(__FUNCTION__, "[UART PATTERN DETECTED] pos: %d, buffered size: %d", pos, buffered_size);
                 if (pos == -1) {
                     // There used to be a UART_PATTERN_DET event, but the pattern position queue is full so that it can not
                     // record the position. We should set a larger queue size.
@@ -512,7 +512,7 @@ void TinyGPSPlus::uart_event_task(void *pvParameters)
                     uint8_t pat[PATTERN_CHR_NUM + 1];
                     memset(pat, 0, sizeof(pat));
                     if (msgLen > 1){
-
+                      ESP_LOGV(__FUNCTION__, "[UART PATTERN DETECTED] pos: %d, buffered size: %d msg: %s", pos, buffered_size, dtmp);
                       for (int idx=1; idx < msgLen; idx++) {
                         if (gps->encode(dtmp[idx])){
                           ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::msg,dtmp+1,msgLen,portMAX_DELAY));
