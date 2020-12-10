@@ -12,6 +12,7 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "dhcpserver/dhcpserver.h"
+#include "bootloader_random.h"
 
 #include "esp_wifi.h"
 #include "../rest/rest.h"
@@ -19,7 +20,7 @@
 #include <esp_pm.h>
 #include <lwip/sockets.h>
 
-#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 esp_event_loop_handle_t event_handle;
 wifi_config_t wifi_config;
@@ -29,6 +30,7 @@ static tcpip_adapter_ip_info_t ipInfo;
 
 uint8_t s_retry_num=0;
 esp_netif_t *sta_netif = NULL;
+esp_netif_t *ap_netif = NULL;
 wifi_event_ap_staconnected_t* station = (wifi_event_ap_staconnected_t*)malloc(sizeof(wifi_event_ap_staconnected_t));
 wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
 TaskHandle_t restHandle=NULL;
@@ -62,8 +64,12 @@ bool isSidManaged (const char* sid) {
             (startsWith(sid,"Linksys    ")!=0));
 }
 
-void generateSidConfig(wifi_config_t* wc) {
-    switch (rand()%4) {
+void generateSidConfig(wifi_config_t* wc, bool hasGps) {
+    ESP_LOGD(__FUNCTION__, "Generating SID %s", hasGps ? "with gps" : "without gps");
+    if (hasGps) {
+        bootloader_random_enable();
+    }
+    switch (esp_random()%4) {
         case 0:
             sprintf((char*)wc->ap.ssid,"VIDEOETRON 2%04d",rand()%999);
             break;
@@ -76,6 +82,9 @@ void generateSidConfig(wifi_config_t* wc) {
         case 3:
             sprintf((char*)wc->ap.ssid,"Linksys    4%04d",rand()%999);
             break;
+    }
+    if (hasGps) {
+        bootloader_random_disable();
     }
     wc->ap.ssid_len=strlen((char*)wc->ap.ssid);
     wc->ap.authmode=WIFI_AUTH_WPA_WPA2_PSK;
@@ -225,6 +234,7 @@ void ProcessScannedAPs(){
                 if (esp_wifi_connect() == ESP_OK){
                     ESP_LOGD(__FUNCTION__,"Configured in Station Mode %s/%s",wifi_config.sta.ssid,wifi_config.sta.password);
                     xEventGroupClearBits(config->s_wifi_eg,WIFI_SCAN_READY_BIT);
+                    xEventGroupSetBits(config->s_wifi_eg,WIFI_STA_CONFIGURED);
                     return;
                 }
                 break;
@@ -276,6 +286,7 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
                 ESP_LOGI(__FUNCTION__, "got ip::" IPSTR, IP2STR(&event->ip_info.ip));
                 memcpy(&ipInfo,&event->ip_info,sizeof(ipInfo));
                 xEventGroupSetBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
+                initSPISDCard();
                 if (restHandle == NULL) {
                     xTaskCreate(restSallyForth, "restSallyForth", 4096, getWifiConfig() , tskIDLE_PRIORITY, &restHandle);
                 }
@@ -337,13 +348,16 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
         switch(event_id) {
             case WIFI_EVENT_STA_START:
                 ESP_LOGI(__FUNCTION__, "Wifi is up");
-                xEventGroupSetBits(config->s_wifi_eg,WIFI_UP_BIT);
-                if (xEventGroupGetBits(config->s_wifi_eg)&WIFI_SCAN_READY_BIT) {
-                    wifiScan();
-                } else if (esp_wifi_connect() == ESP_OK) {
-                    ESP_LOGD(__FUNCTION__,"Configured in Station Mode");
-                    xEventGroupClearBits(config->s_wifi_eg,WIFI_SCAN_READY_BIT);
-                    xEventGroupClearBits(config->s_wifi_eg,WIFI_SCANING_BIT);
+                if (config->s_wifi_eg){
+                    xEventGroupSetBits(config->s_wifi_eg,WIFI_UP_BIT);
+                    if (xEventGroupGetBits(config->s_wifi_eg)&WIFI_SCAN_READY_BIT) {
+                        wifiScan();
+                    } else if ((xEventGroupGetBits(config->s_wifi_eg) & WIFI_STA_CONFIGURED) && esp_wifi_connect() == ESP_OK) {
+                        xEventGroupClearBits(config->s_wifi_eg,WIFI_SCANING_BIT);
+                        ESP_LOGD(__FUNCTION__,"Configured in Station Mode");
+                    }
+                } else {
+                    ESP_LOGW(__FUNCTION__, "Wifi does not have an event handler, weirdness is afoot");
                 }
                 break;
             case WIFI_EVENT_STA_STOP:
@@ -393,14 +407,15 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
             case WIFI_EVENT_STA_CONNECTED:
                 wifi_ap_record_t ap_info;
                 esp_wifi_sta_get_ap_info(&ap_info);
-                initSPISDCard();
                 ESP_LOGI(__FUNCTION__,"Wifi Connected to %s",ap_info.ssid);
                 //esp_netif_dhcpc_start(sta_netif);
                 break;
             case WIFI_EVENT_STA_DISCONNECTED:
-                ESP_LOGI(__FUNCTION__, "Got disconnected from AP");
-                xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
-                deinitSPISDCard();
+                if (xEventGroupGetBits(config->s_wifi_eg) & WIFI_CONNECTED_BIT){
+                    ESP_LOGI(__FUNCTION__, "Got disconnected from AP");
+                    deinitSPISDCard();
+                    xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
+                }
                 if (!(xEventGroupGetBits(config->s_wifi_eg)&WIFI_CLIENT_DONE)){
                     esp_wifi_connect();
                 }
@@ -412,59 +427,11 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
     }
 }
 
-esp_err_t initWifi(){
-    ESP_LOGD(__FUNCTION__,"Initializing netif");
-    ESP_ERROR_CHECK(esp_netif_init());
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_LOGD(__FUNCTION__,"Initialized netif");
-
-    if (config->wifi_mode == WIFI_MODE_AP) {
-        if (sta_netif==NULL)
-            sta_netif=esp_netif_create_default_wifi_ap();
-        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-        ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
-        ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
-        ESP_ERROR_CHECK(esp_netif_dhcps_start(sta_netif));
-        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP) );
-        ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config) );
-        ESP_ERROR_CHECK(esp_wifi_start() );
-    } else {
-        if (sta_netif==NULL){
-            ESP_LOGD(__FUNCTION__,"creating netif");
-            sta_netif=esp_netif_create_default_wifi_sta();
-            ESP_LOGD(__FUNCTION__,"created netif");
-        }
-        ESP_LOGD(__FUNCTION__,"Creating netif %li",(long int)sta_netif);
-        ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
-        ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
-        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
-        wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-        ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
-        ESP_ERROR_CHECK(esp_wifi_start() );
-    }
-
-    s_retry_num = 0;
-    ESP_LOGD(__FUNCTION__, "esp_wifi_start finished.");
-
-    return ESP_OK;
-}
-
 void wifiStop(void* pvParameter) {
     esp_wifi_disconnect();
     esp_wifi_stop();
     esp_wifi_deinit();
     esp_netif_deinit();
-    sta_netif=NULL;
-}
-
-void wifiStart(void *pvParameter) {
-    ESP_LOGD(__FUNCTION__,"Initing wifi");
-    if (initWifi()) {
-        ESP_LOGE(__FUNCTION__, "Wifi init failed");
-    }
 }
 
 void wifiSallyForth(void *pvParameter) {
@@ -481,31 +448,73 @@ void wifiSallyForth(void *pvParameter) {
                 "ESP_ERR_INVALID_ARG":"ESP_ERR_NOT_SUPPORTED");
     }
 
-    config = (the_wifi_config*)malloc(sizeof(the_wifi_config));
-    memset(config,0,sizeof(the_wifi_config));
-    config->s_wifi_eg = xEventGroupCreate();
-    config->disconnectWaitTime = 2000;
-    config->poolWaitTime = 3000;
-    xEventGroupSetBits(config->s_wifi_eg,WIFI_DOWN_BIT);
-    xEventGroupClearBits(config->s_wifi_eg,WIFI_UP_BIT);
-    xEventGroupClearBits(config->s_wifi_eg,WIFI_SCANING_BIT);
-    xEventGroupClearBits(config->s_wifi_eg,WIFI_CONNECTED_BIT);
-    xEventGroupClearBits(config->s_wifi_eg,WIFI_SCAN_READY_BIT);
+    if (config == NULL) {
+        config = (the_wifi_config*)malloc(sizeof(the_wifi_config));
+        memset(config,0,sizeof(the_wifi_config));
+        config->s_wifi_eg = xEventGroupCreate();
+        config->disconnectWaitTime = 2000;
+        config->poolWaitTime = 3000;
+        xEventGroupSetBits(config->s_wifi_eg,WIFI_DOWN_BIT);
+        xEventGroupClearBits(config->s_wifi_eg,WIFI_UP_BIT);
+        xEventGroupClearBits(config->s_wifi_eg,WIFI_SCANING_BIT);
+        xEventGroupClearBits(config->s_wifi_eg,WIFI_CONNECTED_BIT);
+        xEventGroupClearBits(config->s_wifi_eg,WIFI_SCAN_READY_BIT);
 
-    if (pvParameter != NULL){
-        ESP_LOGD(__FUNCTION__,"Station");
-        config->wifi_mode = WIFI_MODE_STA;
+        ESP_LOGD(__FUNCTION__,"Wifi mode %s", getAppConfig()->purpose & app_config_t::TRACKER ? "WIFI_MODE_STA" : "WIFI_MODE_AP");
+        config->wifi_mode = getAppConfig()->purpose & app_config_t::TRACKER ? WIFI_MODE_STA : WIFI_MODE_AP;
         wifi_config.sta.pmf_cfg.capable=true;
         wifi_config.sta.pmf_cfg.required=false;
         memset(clients,0,sizeof(void*)*MAX_NUM_CLIENTS);
-        xEventGroupSetBits(config->s_wifi_eg,WIFI_SCAN_READY_BIT);
-    } else {
-        ESP_LOGD(__FUNCTION__,"Access Point");
-        config->wifi_mode = WIFI_MODE_AP;
-        generateSidConfig(&wifi_config);
-        ESP_LOGD(__FUNCTION__,"AP %s/%s",wifi_config.ap.ssid,wifi_config.ap.password);
+        if (getAppConfig()->purpose & app_config_t::PULLER) {
+            generateSidConfig(&wifi_config,pvParameter!=NULL);
+            ESP_LOGD(__FUNCTION__,"Configured in AP Mode %s/%s",wifi_config.ap.ssid,wifi_config.ap.password);
+        }
     }
-    wifiStart(NULL);
+
+    if (getAppConfig()->purpose & app_config_t::TRACKER || pvParameter){
+        xEventGroupSetBits(config->s_wifi_eg,WIFI_SCAN_READY_BIT);
+    } 
+
+    ESP_LOGD(__FUNCTION__,"Initializing netif");
+    ESP_ERROR_CHECK(esp_netif_init());
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_LOGD(__FUNCTION__,"Initialized netif");
+
+    if (config->wifi_mode == WIFI_MODE_AP) {
+        if (ap_netif==NULL){
+            ESP_LOGD(__FUNCTION__,"created ap netif");
+            ap_netif=esp_netif_create_default_wifi_ap();
+            ESP_LOGD(__FUNCTION__,"Created netif %li",(long int)ap_netif);
+            ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
+            ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
+            ESP_ERROR_CHECK(esp_netif_dhcps_start(ap_netif));
+            ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+            ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+            ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config) );
+            ESP_ERROR_CHECK(esp_wifi_start() );
+        }
+    } else {
+        if (sta_netif==NULL){
+            sta_netif=esp_netif_create_default_wifi_sta();
+            ESP_LOGD(__FUNCTION__,"created station netif....");
+
+            ESP_LOGD(__FUNCTION__,"Created netif %li",(long int)sta_netif);
+            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
+            ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
+            ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+            ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+            ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+            wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+            ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
+            ESP_ERROR_CHECK(esp_wifi_start() );
+        }
+    }
+
+    s_retry_num = 0;
+    ESP_LOGD(__FUNCTION__, "esp_wifi_start finished.");
+
+
     vTaskDelete( NULL );
 }
 

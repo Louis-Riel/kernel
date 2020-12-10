@@ -3,3 +3,5 @@
 build
 .vscode
 *.kml
+test.tar
+sdkconfig.old

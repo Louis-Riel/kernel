@@ -13,12 +13,6 @@
 #include "esp_log.h"
 #include <stdlib.h>
 #include "../components/TinyGPS/TinyGPS++.h"
-#include "esp_vfs_fat.h"
-#include "driver/sdspi_host.h"
-#include "driver/spi_common.h"
-#include "sdmmc_cmd.h"
-#include "driver/sdmmc_host.h"
-#include "logs.h"
 
 #define SS TF_CS
 #define MAX_NUM_POIS 10
@@ -40,25 +34,39 @@ struct poiConfig_t {
   uint16_t statusBits;
 };
 
+struct cfg_label_t
+{
+  char value[32];
+  uint32_t version;
+};
+
+struct cfg_gpio_t
+{
+  gpio_num_t value;
+  uint32_t version;
+};
+
 struct app_config_t {
+  uint32_t devId;
+  cfg_label_t devName;
   struct sdcard_config_t {
-    gpio_num_t MisoPin;
-    gpio_num_t MosiPin;
-    gpio_num_t ClkPin;
-    gpio_num_t Cspin;
+    cfg_gpio_t MisoPin;
+    cfg_gpio_t MosiPin;
+    cfg_gpio_t ClkPin;
+    cfg_gpio_t Cspin;
   } sdcard_config;
   struct gps_config_t {
-    gpio_num_t rxPin;
-    gpio_num_t txPin;
-    gpio_num_t enPin;
+    cfg_gpio_t rxPin;
+    cfg_gpio_t txPin;
+    cfg_gpio_t enPin;
   } gps_config;
   enum purpose_t {
     UNKNOWN = 0,
     TRACKER = BIT0,
     PULLER = BIT1
   } purpose;
-  gpio_num_t wakePins[10];
-  poiConfig_t* pois;
+  cfg_gpio_t wakePins[10];
+  poiConfig_t pois[MAX_NUM_POIS];
 };
 
 enum item_state_t {
@@ -72,6 +80,8 @@ enum item_state_t {
 struct app_state_t {
   item_state_t gps;
   item_state_t sdCard;
+  double lattitude;
+  double longitude;
 };
 
 struct dataPoint
@@ -105,7 +115,6 @@ static const char* getErrorMsg(uint32_t errCode);
 bool initSPISDCard();
 bool deinitSPISDCard();
 bool initSDMMCSDCard();
-sdmmc_host_t* getSDHost();
 char* indexOf(const char* str, const char* key);
 bool endsWith(const char* str,const char* val) ;
 bool stringContains(const char* str,const char* val) ;

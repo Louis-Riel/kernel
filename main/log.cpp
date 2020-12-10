@@ -17,11 +17,11 @@ void dumpLogs(){
     if (initSPISDCard()) {
         FILE* fw = NULL;
 
-        if (strlen(logfname) == 0){
-            struct tm timeinfo;
-            time_t now = ::time(NULL);
+        struct tm timeinfo;
+        time_t now = ::time(NULL);
 
-            localtime_r(&now, &timeinfo);
+        localtime_r(&now, &timeinfo);
+        if ((strlen(logfname) == 0) || (indexOf(logfname,"1970") && (timeinfo.tm_year > 1970))){
             if (getAppConfig()->purpose == app_config_t::purpose_t::TRACKER)
                 strftime(logfname, 100, "/sdcard/logs/TRACKER-%Y-%m-%d_%H-%M-%S.log", &timeinfo);
             else

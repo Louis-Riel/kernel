@@ -314,7 +314,7 @@
         <div class="slides">
             <div id="slide-1" class="file_section"></div>
             <div id="slide-2" class="system-config">
-                <form action="/rest/status/system" method="post">
+                <form action="/status/system" method="post">
                     <fieldset class="status">
                         <legend>System</legend>
                         <label>
@@ -343,7 +343,7 @@
                 </form>
             </div>
             <div id="slide-3" class="system-config">
-                <form action="/rest/status/system" method="post">
+                <form action="/status/system" method="post">
                     <fieldset class="sdcard">
                         <legend>SD Card</legend>
                         <label>
@@ -367,7 +367,7 @@
                 </form>
             </div>
             <div id="slide-4" class="system-config">
-                <form action="/rest/status/system" method="post">
+                <form action="/status/system" method="post">
                     <fieldset class="gps">
                         <legend>GPS</legend>
                         <label>
@@ -390,7 +390,7 @@
                 </form>
             </div>
             <script>
-                fetch('/rest/status/system')
+                fetch('/status/system')
                     .then(data => {
                         data.json().then(jdata => {
                             document.getElementsByName("uptime")[0].value = jdata.uptime;
@@ -399,7 +399,7 @@
                             document.getElementsByName("ip")[0].value = jdata.wifi.ip;
                             var csection = document.getElementById("wificonfig");
                             if (jdata.wifi.type == "AP") {
-                                fetch('/rest/status/wifi')
+                                fetch('/status/wifi')
                                     .then(data => {
                                         data.json().then(jdata => {
                                             jdata.clients.forEach(client => {
@@ -444,7 +444,7 @@
                     }).catch(error => {
                         console.error(error);
                     });
-                fetch('/rest/config')
+                fetch('/config')
                     .then(data => {
                         data.json().then(jdata => {
                             document.getElementsByName("MisoPin")[0].value = jdata.sdcard.MisoPin;

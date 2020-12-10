@@ -2,7 +2,7 @@
     <div class="site-header">
         <h1>Config</h1>
     </div>
-    <form action="/rest/status/system" method="post">
+    <form action="/status/system" method="post">
         <fieldset class="status">
             <legend>Status</legend>
             <label>
@@ -54,7 +54,7 @@
         <button>Save</button>
     </form>
     <script>
-        fetch('/rest/status/system')
+        fetch('/status/system')
             .then(data => {
                 data.json().then(jdata => {
                     document.getElementsByName("uptime")[0].value = jdata.uptime;
@@ -63,7 +63,7 @@
             }).catch(error => {
                 console.error(error);
             });
-        fetch('/rest/config')
+        fetch('/config')
             .then(data => {
                 data.json().then(jdata => {
                     document.getElementsByName("MisoPin")[0].value = jdata.sdcard.MisoPin;

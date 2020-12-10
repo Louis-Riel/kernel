@@ -12,7 +12,7 @@ esp_err_t app_handler(httpd_req_t *req);
 esp_err_t list_entity_handler(httpd_req_t *req);
 esp_err_t rest_handler(httpd_req_t *req);
 esp_err_t stat_handler(httpd_req_t *req);
-esp_err_t ws_handler(httpd_req_t *req);
+//esp_err_t ws_handler(httpd_req_t *req);
 esp_err_t config_handler(httpd_req_t *req);
 //esp_err_t kmllist_event_handler(httpd_req_t *req);
 
@@ -33,13 +33,13 @@ static const httpd_uri_t restUris[] = {
     .user_ctx  = NULL
     },
     {
-    .uri       = "/rest/config",
+    .uri       = "/config",
     .method    = HTTP_POST,
     .handler   = config_handler,
     .user_ctx  = NULL
     },
     {
-    .uri       = "/rest/files/*",
+    .uri       = "/files/*",
     .method    = HTTP_POST,
     .handler   = list_files_handler,
     .user_ctx  = NULL
@@ -91,11 +91,11 @@ static const httpd_uri_t restPutUri = {
     .user_ctx  = NULL
 };
 
-static const httpd_uri_t wsUri = {
-    .uri       = "/ws/*",
-    .method    = HTTP_POST,
-    .handler   = ws_handler,
-    .user_ctx  = NULL
-};
+//static const httpd_uri_t wsUri = {
+//    .uri       = "/ws/*",
+//    .method    = HTTP_POST,
+//    .handler   = ws_handler,
+//    .user_ctx  = NULL
+//};
 
 #endif

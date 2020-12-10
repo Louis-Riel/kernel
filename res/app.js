@@ -1,3 +1,7 @@
+var controller = null;
+var fileStats = {};
+var lastFolder = "";
+
 function dirname(path) {
     return (path.match(/.*\//) + "").replace(/(.+)\/$/g, "$1");
 }
@@ -22,7 +26,7 @@ function elementInViewport(el) {
     );
 }
 
-function addTableRow(tbody, path, file) {
+function addTableRow(tbody, path, file, totCtrl) {
     var tr = document.createElement("tr");
     var td = document.createElement("td");
     tr.classList.add(file.ftype);
@@ -49,22 +53,44 @@ function addTableRow(tbody, path, file) {
     }
     tr.appendChild(td);
     tbody.appendChild(tr);
-    if ((file.ftype == 'file')) { //&& elementInViewport(tr)) {
-        fetch(`/stat${file.folder}/${file.name}`, {
-            method: 'post'
-        }).then(data => {
-            data.json().then(jdata => {
-                td = tr.children[1];
-                td.innerText = jdata.size;
+    if (file.ftype == 'file') { //&& elementInViewport(tr)) {
+        if (fileStats[file.name]) {
+            td = tr.children[1];
+            td.innerText = fileStats[file.name];
+            totCtrl.innerText = parseInt(totCtrl.innerText) + fileStats[file.name];
+        } else {
+            fetch(`/stat${file.folder}/${file.name}`, {
+                method: 'post',
+                signal: controller.signal
+            }).then(data => {
+                data.json().then(jdata => {
+                    td = tr.children[1];
+                    td.innerText = jdata.size;
+                    fileStats[file.name] = jdata.size;
+                    totCtrl.innerText = parseInt(totCtrl.innerText) + jdata.size;
+                });
+            }).catch(ex => {
+                if (ex.code != 20)
+                    console.error(ex);
             });
-        });
+        }
     }
 }
 
 function renderFolder(path) {
+    if (controller)
+        controller.abort();
+
+    if (lastFolder != path) {
+        fileStats = {};
+    }
+    lastFolder = path;
+    controller = new AbortController();
     var tbody = document.getElementsByClassName("file-table")[0].getElementsByTagName("tbody")[0];
     var caption = document.getElementsByClassName("file-table")[0].getElementsByTagName("caption")[0];
-    fetch('/rest/files' + path, {
+    var totctrl = document.getElementsByClassName("file-table")[0].getElementsByTagName("tfoot")[0].firstElementChild.children[1];
+    totctrl.innerText = 0;
+    fetch('/files' + path, {
         method: 'post'
     }).then(data => {
         data.json().then(jdata => {
@@ -85,136 +111,189 @@ function renderFolder(path) {
             var totlen = 0;
             jdata.forEach((file, idx, arr) => {
                 if (file.ftype == "file") {
-                    addTableRow(tbody, path, file);
+                    addTableRow(tbody, path, file, totctrl);
                     totlen += file.size;
-                }
-                if ((idx + 1) == arr.length) {
-                    var tfoot = document.getElementsByClassName("file-table")[0].getElementsByTagName("tfoot")[0];
-                    tfoot.firstElementChild.children[1].textContent = totlen;
                 }
             });
         });
+    });
+}
+
+function isFloat(n) {
+    return Number(n) === n && n % 1 !== 0;
+}
+
+
+function GetObject(data, path) {
+    if (path == "/") {
+        return data;
+    }
+    var curDir = path.substr(1, path.length - 1);
+    var childObj;
+    var idx = -1;
+    if (curDir.indexOf("/") > 0) {
+        curDir = curDir.substr(0, curDir.indexOf("/"));
+    }
+
+    if (curDir.indexOf("[") > 0) {
+        idx = parseInt(curDir.replace(/.*\[([0-9]+).*/, "$1"));
+        var arrayName = curDir.substr(0, curDir.indexOf("["));
+        data[arrayName] = data[arrayName] || [];
+        data[arrayName][idx] = data[arrayName][idx] || {}
+        return data[arrayName][idx];
+    } else {
+        childObj = data[curDir] = data[curDir] || {};
+        path = path.substr(curDir.length + 1);
+    }
+
+    if (path == "") {
+        return childObj;
+    }
+
+    return GetObject(childObj, path);
+}
+//{"type":"AP","sdcard":{"state":"valid","MisoPin":"19","MosiPin":"23","ClkPin":"18","CsPin":"4"},"gps":{"state":"inactive","txPin":"0","rxPin":"0","enPin":"0"}}
+function SaveForm(form) {
+    fetch(form.action, {
+        method: 'post',
+        body: JSON.stringify(GetJsonFromInputs(form))
+    }).then(data => {
+        console.log(data);
+        refreshConfig();
+    });
+}
+
+function GetJsonFromInputs(form) {
+    var res = {};
+    form.querySelectorAll("input").forEach(el => {
+        var path = dirname(el.name);
+        var prop = el.name.substr(path.length + (path.length > 1 ? 1 : 0));
+        var idx = parseInt(prop.indexOf("[") > 0 ? prop.replace(/.*\[([0-9]+)\].*/, "$1") : -1);
+        var value = el.type == "checkbox" ? el.checked :
+            el.type == "number" ? parseFloat(el.value) : el.value;
+        if (idx >= 0) {
+            path = `${path}/${prop.substr(0,prop.indexOf("]")+1)}`;
+            prop = prop.substr(0, prop.indexOf("["));
+            var subProp = el.name.substr(el.name.indexOf("]") + 1);
+            GetObject(res, path)[subProp] = value;
+        } else {
+            GetObject(res, path)[prop] = value;
+        }
+    });
+    return res;
+}
+
+function jsonifyField(fPath, curfs, fld, val) {
+    var cfld = Array.from(curfs.querySelectorAll("label")).find(cfld => {
+        var input = cfld.querySelector("input");
+        if (input && (input.name == fPath)) {
+            return cfld;
+        }
+        return undefined;
+    }) || curfs.appendChild(document.createElement("label"));
+    cfld.innerText = fld;
+    var input = cfld.querySelector("input") || cfld.appendChild(document.createElement("input"));
+    input.name = fPath;
+    if (isFloat(val)) {
+        if ((fld != "Lattitude") && (fld != "Longitude") && (fld != "lat") && (fld != "lng")) {
+            val = parseFloat(val).toFixed(2);
+            input.step = "0.01"
+        } else {
+            val = parseFloat(val).toFixed(8);
+            input.step = "0.00000001"
+        }
+    }
+
+    if (!isNaN(val) && (val !== "")) {
+        input.type = "number";
+    }
+
+    if (fld.match(".*ime$")) {
+        var dt = new Date(val);
+        if (dt.valid)
+            val = dt;
+    }
+    if ((val == "true") || (val == "yes") || (val === true)) {
+        input.type = "checkbox";
+        input.checked = true;
+    }
+    if ((val == "false") || (val == "no") || (val === false)) {
+        input.type = "checkbox";
+        input.checked = false;
+    }
+    input.value = val;
+}
+
+function jsonifyFormFielset(curPath, curfs, curObject) {
+    curfs.name = curPath;
+    Object.keys(curObject).forEach(fld => {
+        var fPath = `${curPath}${fld}`;
+        if (Array.isArray(curObject[fld])) {
+            var arrFs = curfs.querySelector(`label[id='${fPath}']`) || curfs.appendChild(document.createElement("label"));
+            arrFs.innerText = fld
+            arrFs.id = fPath;
+            curObject[fld].forEach((arit, idx) => {
+                var childPath = `${curPath}${fld}[${idx}]`;
+                var childFs = arrFs.querySelector(`fieldset[id='${childPath}']`) || arrFs.appendChild(document.createElement("fieldset"));
+                childFs.id = childPath;
+                (childFs.querySelector("legend") || childFs.appendChild(document.createElement("legend"))).innerText = idx;
+                jsonifyFormFielset(childPath, childFs, arit);
+            });
+            Array.from(arrFs.querySelectorAll("fieldset")).forEach(fs => {
+                if (!curObject[fld].some((ait, idx) => fs.id == `${curPath}${fld}[${idx}]`)) {
+                    arrFs.removeChild(fs);
+                }
+            });
+        } else if (typeof curObject[fld] == 'object') {
+            if (Object.keys(curObject[fld]).some(elem => elem == "version")) {
+                jsonifyField(fPath, curfs, fld, curObject[fld].value);
+            } else {
+                var childFs = curfs.querySelector(`fieldset[id='${fPath}']`) || curfs.appendChild(document.createElement("fieldset"));
+                (childFs.querySelector("legend") || childFs.appendChild(document.createElement("legend"))).innerText = fld;
+                childFs.id = fPath;
+                jsonifyFormFielset(`${curPath}${fld}/`, childFs, curObject[fld]);
+            }
+        } else {
+            jsonifyField(fPath, curfs, fld, curObject[fld]);
+        }
     });
 }
 
 function refreshStatus() {
+    if (controller)
+        controller.abort();
+    controller = null;
     fetch('/status/', {
         method: 'post'
     }).then(data => {
-        data.json().then(jdata => {
-            var csection = document.getElementById("wificonfig");
-            while (csection.querySelector("fieldset")) {
-                csection.removeChild(csection.querySelector("fieldset"));
-            }
-
-            document.getElementsByName("uptime")[0].value = jdata.uptime;
-            document.getElementsByName("sleeptime")[0].value = jdata.sleeptime;
-            document.getElementsByName("wifitype")[0].value = jdata.wifi.type;
-            document.getElementsByName("ip")[0].value = jdata.wifi.ip;
-            document.getElementsByName("freeram")[0].value = jdata.freeram;
-            document.getElementsByName("battery")[0].value = jdata.battery;
-            document.getElementsByName("ramusage")[0].value = (jdata.freeram / jdata.totalram) * 100.0;
-            if (jdata.wifi.type == "AP") {
-                fetch('/status/wifi', {
-                        method: 'post'
-                    })
-                    .then(data => {
-                        data.json().then(jdata => {
-                            jdata.clients.forEach(client => {
-                                var hclient = document.createElement("fieldset");
-                                csection.appendChild(hclient);
-                                hclient.classList.add("wificlient");
-                                var legend = document.createElement("legend");
-                                legend.textContent = client.mac;
-                                hclient.appendChild(legend);
-                                Object.keys(client).forEach(fld => {
-                                    if (fld != "mac") {
-                                        var ctrl = document.createElement("label");
-                                        ctrl.textContent = fld;
-                                        var ictrl = document.createElement("input");
-                                        ictrl.value = client[fld];
-                                        ictrl.name = client.mac + fld;
-                                        if (fld.match(".*ime$")) {
-                                            ictrl.type = "timespan";
-                                        }
-                                        if (ictrl.value == "true") {
-                                            ictrl.type = "checkbox";
-                                            ictrl.checked = true;
-                                        }
-                                        if (ictrl.value == "false") {
-                                            ictrl.type = "checkbox";
-                                            ictrl.checked = false;
-                                        }
-                                        ctrl.appendChild(ictrl);
-                                        hclient.appendChild(ctrl);
-                                    }
-                                });
-                            });
-                        });
-                    }).catch(error => {
-                        console.error(error);
-                    });
-            } else {
-                csection.classList.add("hidden");
-            }
+        data.json().then(status => {
+            var form = document.querySelectorAll(".system-config form")[0];
+            jsonifyFormFielset(
+                "/",
+                Array.from(form.querySelectorAll("fieldset")).find(fs => fs.id == "") || form.appendChild(document.createElement("fieldset")),
+                status);
         });
-    }).catch(error => {
-        console.error(error);
     });
 }
 
 function refreshConfig() {
-    fetch('/rest/config', {
-            method: 'post'
-        })
-        .then(data => {
-            data.json().then(jdata => {
-                document.getElementsByName("MisoPin")[0].value = jdata.sdcard.MisoPin;
-                document.getElementsByName("MosiPin")[0].value = jdata.sdcard.MosiPin;
-                document.getElementsByName("ClkPin")[0].value = jdata.sdcard.ClkPin;
-                document.getElementsByName("CsPin")[0].value = jdata.sdcard.CsPin;
-                document.getElementsByName("enPin")[0].value = jdata.gps.enPin;
-                document.getElementsByName("rxPin")[0].value = jdata.gps.rxPin;
-                document.getElementsByName("txPin")[0].value = jdata.gps.txPin;
-                document.querySelector("fieldset.gps").classList.add(jdata.gps.state);
-                document.querySelector("fieldset.sdcard").classList.add(jdata.sdcard.state);
-                for (posidx in jdata.gps.pois || []) {
-                    var syncpoints = document.querySelector("fieldset.syncpoints");
-                    var legend = document.createElement("legend");
-                    legend.innerText = `Syncpoint ${posidx}`;
-                    var pos = jdata.gps.pois[0];
-                    while (syncpoints.firstElementChild) {
-                        syncpoints.removeChild(syncpoints.firstElementChild);
-                    }
-                    syncpoints.appendChild(legend);
-                    Object.keys(pos).forEach(fld => {
-                        if (fld != "mac") {
-                            var ctrl = document.createElement("label");
-                            ctrl.textContent = fld;
-                            var ictrl = document.createElement("input");
-                            ictrl.value = pos[fld];
-                            ictrl.name = `syncpoints[${posidx}].${fld}`;
-                            if (fld.match(".*ime$")) {
-                                ictrl.type = "timespan";
-                            }
-                            if (ictrl.value == "true") {
-                                ictrl.type = "checkbox";
-                                ictrl.checked = true;
-                            }
-                            if (ictrl.value == "false") {
-                                ictrl.type = "checkbox";
-                                ictrl.checked = false;
-                            }
-                            ctrl.appendChild(ictrl);
-                            syncpoints.appendChild(ctrl);
-                        }
-                    });
-                }
-            });
-        }).catch(error => {
-            console.error(error);
+    if (controller)
+        controller.abort();
+    controller = null;
+    fetch('/config', {
+        method: 'post'
+    }).then(data => {
+        data.json().then(config => {
+            var form = document.querySelectorAll(".system-config form")[1];
+            var saveBtn = form.querySelector("button");
+            jsonifyFormFielset(
+                "/",
+                Array.from(form.querySelectorAll("fieldset")).find(fs => fs.id == "") || form.insertBefore(document.createElement("fieldset"), saveBtn),
+                config);
         });
+    });
 }
+
 
 const getCellValue = (tr, idx) => tr.children[idx].innerText || tr.children[idx].textContent;
 

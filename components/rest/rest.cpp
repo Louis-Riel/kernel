@@ -26,10 +26,11 @@ char* getPostField(const char* pname, const char* postData,char* dest) {
 }
 
 bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_t match_upto){
-    ESP_LOGV(__FUNCTION__,"routing ref:%s uri:%s",reference_uri,uri_to_match);
     sampleBatteryVoltage();
-    if ((strlen(reference_uri)==1) && (reference_uri[0]=='*'))
+    if ((strlen(reference_uri)==1) && (reference_uri[0]=='*')) {
+        ESP_LOGV(__FUNCTION__,"* match for %s",uri_to_match);
         return true;
+    }
 
     size_t tLen=strlen(reference_uri);
     size_t sLen=strlen(uri_to_match);
@@ -42,6 +43,7 @@ bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_
     bool eot=false;
     bool eos=false;
 
+    ESP_LOGV(__FUNCTION__,"routing ref:%s uri:%s",reference_uri,uri_to_match);
     while (matches && (sidx<sLen)) {
         tc=reference_uri[tidx];
         sc=uri_to_match[sidx];
@@ -87,11 +89,16 @@ bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_
 
 esp_err_t rest_handler(httpd_req_t *req)
 {
+    ESP_LOGV(__FUNCTION__,"rest handling (%d)%s",req->method, req->uri);
+    uint32_t idx=0;
     for (const httpd_uri_t &theUri : restUris) {
+        idx++;
         if ((req->method == theUri.method) && (routeHttpTraffic(theUri.uri, req->uri, strlen(req->uri)))){
+            ESP_LOGV(__FUNCTION__,"rest handled (%d)%s idx:%d",req->method, req->uri, idx);
             return theUri.handler(req);
         }
     }
+    httpd_resp_send_404(req);
     return ESP_FAIL;
 }
 
@@ -106,7 +113,7 @@ void restSallyForth(void *pvParameter) {
     xEventGroupClearBits(eventGroup,HTTP_SERVING);
     if (httpd_start(&server, &config) == ESP_OK) {
         ESP_LOGI(__FUNCTION__, "Registering URI handlers");
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &wsUri));
+        //ESP_ERROR_CHECK(httpd_register_uri_handler(server, &wsUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &restPostUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &restPutUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &appUri));

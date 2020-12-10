@@ -1,8 +1,7 @@
-#include "../build/config/sdkconfig.h"
-
-#include "utils.h"
 #include <stdio.h>
 #include <string.h>
+#include "../build/config/sdkconfig.h"
+#include "utils.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -29,6 +28,7 @@
 #include "mdctor/ulp.h"
 #include "../components/wifi/station.h"
 #include "../components/esp_littlefs/include/esp_littlefs.h"
+#include "bootloader_random.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -706,12 +706,16 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   time(&now);
   sampleBatteryVoltage();
   app_config_t* appcfg=NULL;
+  app_state_t* appstate=NULL;
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:
     ESP_LOGV(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters());
     if (lastLocTs == 0) {
       appcfg=getAppConfig();
+      appstate=getAppState();
+      appstate->lattitude=gps->location.lat();
+      appstate->longitude=gps->location.lng();
       if (appcfg->pois->minDistance==0 ) {
         appcfg->pois->minDistance=200;
         appcfg->pois->lat=gps->location.lat();
@@ -987,6 +991,7 @@ esp_err_t setupLittlefs(){
   bool hasCsv = false;
   bool hasLogs = false;
   bool hasFw = false;
+  bool hasCfg = false;
 
   DIR* root = opendir("/lfs");
   if (root == NULL) {
@@ -1004,6 +1009,9 @@ esp_err_t setupLittlefs(){
     }
     if (strcmp(de->d_name,"firmware")==0){
       hasFw=true;
+    }
+    if (strcmp(de->d_name,"config")==0){
+      hasCfg=true;
     }
   }
 
@@ -1029,6 +1037,14 @@ esp_err_t setupLittlefs(){
     ESP_LOGD(__FUNCTION__,"firmware folder created");
   }
 
+  if (!hasCfg){
+    if (mkdir("/lfs/config",0750) != 0) {
+      ESP_LOGE(__FUNCTION__,"Failed in creating config folder");
+      return ESP_FAIL;
+    }
+    ESP_LOGD(__FUNCTION__,"config folder created");
+  }
+
   if ((ret = closedir(root)) != ESP_OK) {
     ESP_LOGE(__FUNCTION__,"failed to close root %s", esp_err_to_name(ret));
     return ret;
@@ -1042,10 +1058,21 @@ esp_err_t setupLittlefs(){
   return ESP_OK;
 }
 
+uint32_t GenerateDevId() {
+  bootloader_random_enable();
+  uint32_t devId = esp_random();
+  bootloader_random_disable();
+  return devId;
+}
+
 void app_main(void)
 {
   ESP_ERROR_CHECK(esp_event_loop_create_default());
   app_config_t* appcfg=initConfig();
+  if (appcfg->devId == 0) {
+    appcfg->devId = GenerateDevId();
+    saveConfig();
+  }
   initLog();
   sampleBatteryVoltage();
   setupLittlefs();
@@ -1090,8 +1117,8 @@ void app_main(void)
   lng.negative = lastLngNeg;
 
   //gps = new TinyGPSPlus(GPIO_NUM_14, GPIO_NUM_27, GPIO_NUM_13, lastRate, lat, lng, lastCourse, lastSpeed, lastAltitude,app_eg);
-  if ((appcfg->purpose&app_config_t::purpose_t::TRACKER) && (appcfg->gps_config.rxPin != 0)){
-    gps = new TinyGPSPlus(appcfg->gps_config.rxPin, appcfg->gps_config.txPin, appcfg->gps_config.enPin, lastRate, lat, lng, lastCourse, lastSpeed, lastAltitude,app_eg);
+  if (appcfg->gps_config.rxPin.value != 0){
+    gps = new TinyGPSPlus(appcfg->gps_config.rxPin.value, appcfg->gps_config.txPin.value, appcfg->gps_config.enPin.value, lastRate, lat, lng, lastCourse, lastSpeed, lastAltitude,app_eg);
     if (gps != NULL){
       ESP_LOGD(__FUNCTION__,"Waiting for GPS");
       if (xEventGroupWaitBits(gps->eg,TinyGPSPlus::gpsEvent::gpsRunning,pdFALSE,pdTRUE,1500/portTICK_RATE_MS)){
@@ -1117,9 +1144,8 @@ void app_main(void)
         ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::gpsResumed, gpsEvent, &gps));
         ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::atSyncPoint, gpsEvent, &gps));
         ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::outSyncPoint, gpsEvent, &gps));
-        configureMotionDetector();
+        //configureMotionDetector();
         //commitTripToDisk((void*)(BIT1|BIT2));
-        getAppState()->sdCard=item_state_t::ACTIVE;
         //ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::atSyncPoint,NULL,0,portMAX_DELAY));
       } else {
         ESP_LOGD(__FUNCTION__,"No GPS Connected");
@@ -1134,6 +1160,7 @@ void app_main(void)
   }
 
   if (appcfg->purpose&app_config_t::purpose_t::PULLER){
+    ESP_LOGD(__FUNCTION__,"Starting puller's wifi");
     xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps , tskIDLE_PRIORITY, NULL);
   }
   //esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);

@@ -35,84 +35,10 @@
             </div>
             <div id="slide-2" class="system-config">
                 <form action="/status/system" method="post">
-                    <fieldset class="status">
-                        <legend>System</legend>
-                        <label>
-                            Up Time
-                            <input type="timespan" name="uptime" >
-                        </label>
-                        <label>
-                            Sleep Time
-                            <input type="timespan" name="sleeptime" >
-                        </label>
-                        <label>
-                            Free RAM
-                            <input type="number" name="freeram" >
-                        </label>
-                        <label>
-                            RAM Usage
-                            <input type="number" name="ramusage" >
-                        </label>
-                        <label>
-                            Battery
-                            <input type="number" name="battery" >
-                        </label>
-                    </fieldset>
-                    <fieldset id="wificonfig" class="status">
-                        <legend>Wifi</legend>
-                        <label>
-                            Type
-                            <select name="wifitype">
-                                <option value="AP">Access Point</option>
-                                <option value="Station">Station</option>
-                            </select>
-                        </label>
-                        <label>
-                            IP
-                            <input name="ip" >
-                        </label>
-                    </fieldset>
                 </form>
             </div>
             <div id="slide-3" class="system-config">
-                <form action="/status/form" method="post">
-                    <fieldset class="sdcard">
-                        <legend>SD Card</legend>
-                        <label>
-                            MISO Pin
-                            <input type="number" name="MisoPin">
-                        </label>
-                        <label>
-                            MOSI Pin
-                            <input type="number" name="MosiPin">
-                        </label>
-                        <label>
-                            Clock Pin
-                            <input type="number" name="ClkPin">
-                        </label>
-                        <label>
-                            CS Pin
-                            <input type="number" name="CsPin">
-                        </label>
-                    </fieldset>
-                    <fieldset class="gps">
-                        <legend>GPS</legend>
-                        <label>
-                            RX Pin
-                            <input type="number" name="rxPin">
-                        </label>
-                        <label>
-                            TX Pin
-                            <input type="number" name="txPin">
-                        </label>
-                        <label>
-                            Enable Pin
-                            <input type="number" name="enPin">
-                        </label>
-                        <fieldset class="syncpoints">
-                            <legend>Sync Points</legend>
-                        </fieldset>
-                    </fieldset>
+                <form onsubmit="SaveForm(this);return false;" action="/config" method="post">
                     <button>Save</button>
                 </form>
             </div>

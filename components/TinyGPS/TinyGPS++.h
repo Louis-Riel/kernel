@@ -35,6 +35,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "esp_event.h"
 #include "freertos/event_groups.h"
 #include "../../main/logs.h"
+#include "../../main/utils.h"
 
 #define _GPS_VERSION "1.0.2" // software version of this library
 #define _GPS_MPH_PER_KNOT 1.15077945
@@ -51,6 +52,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define RD_BUF_SIZE (BUF_SIZE)
 #define BLINK_GPIO GPIO_NUM_5
 #define GPS_TIMEOUT 300
+#define SLEEP_TIMEOUT 60
 
 const uint8_t update_1_secs[] =  {0xB5,0x62,0x06,0x08,0x06,0x00,0xE8,0x03,0x01,0x00,0x01,0x00,0x01,0x39};
 const uint8_t update_3_secs[] =  {0xB5,0x62,0x06,0x08,0x06,0x00,0x88,0x13,0x01,0x00,0x01,0x00,0xB1,0x49,0xB5,0x62,0x06,0x08,0x00,0x00,0x0E,0x30};
@@ -318,7 +320,7 @@ public:
   QueueHandle_t runnerSemaphore = xSemaphoreCreateCounting(10,0);
   EventGroupHandle_t app_eg;
   EventGroupHandle_t eg;
-
+  
   static const char *libraryVersion() { return _GPS_VERSION; }
   void processEncoded(void);
 
@@ -391,8 +393,6 @@ private:
   esp_timer_handle_t periodic_timer;
   uint8_t gpsWarmTime;
   uint8_t toBeFreqIdx;
-  double poiLng;
-  double poiLat;
   void adjustRate();
   void CalcChecksum(uint8_t *Message, uint8_t Length);
   static void waitOnStop(void* gps);

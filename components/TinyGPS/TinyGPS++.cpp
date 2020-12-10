@@ -36,6 +36,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <time.h>
 #include <sys/time.h>
 #include "esp_sleep.h"
+#include "../../main/utils.h"
 
 #define _GPRMCterm   "GPRMC"
 #define _GPGGAterm   "GPGGA"
@@ -137,15 +138,6 @@ void TinyGPSPlus::waitOnStop(void* param){
         ext_wakeup_pin_mask |= (1ULL << wakePins[idx]);
       }
     }
-    ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(GPS_TIMEOUT*1000000));
-    if (ext_wakeup_pin_mask != 0)
-    {
-      ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
-    }
-    else
-    {
-      ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[numWakePins - 1], curLvl == 0 ? 1 : 0));
-    }
     ESP_LOGD(__FUNCTION__, "We are stopped, waiting on bumps");
     if ((gps->poiState == poiState_t::in) && !(xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCED )) {
       int32_t timeToGo = sleepTimes[gps->curFreqIdx]*1000;
@@ -158,10 +150,19 @@ void TinyGPSPlus::waitOnStop(void* param){
       ESP_LOGD(__FUNCTION__, "In POI so not really");
       gpio_set_level(BLINK_GPIO,1);
     } else {
+      ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(SLEEP_TIMEOUT*1000000));
+      if (ext_wakeup_pin_mask != 0)
+      {
+        ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
+      }
+      else
+      {
+        ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[numWakePins - 1], curLvl == 0 ? 1 : 0));
+      }
       gpio_set_level(BLINK_GPIO,1);
       if (xEventGroupGetBits(*getAppEG())&app_bits_t::COMMITTING_TRIPS){
         ESP_LOGD(__FUNCTION__,"Waiting for trip commit");
-        xEventGroupWaitBits(*getAppEG(),app_bits_t::TRIPS_COMMITTED,pdFALSE,pdTRUE,portMAX_DELAY);
+        xEventGroupWaitBits(*getAppEG(),app_bits_t::TRIPS_COMMITTED,pdFALSE,pdTRUE,500/portTICK_PERIOD_MS);
       }
       esp_light_sleep_start();
       gpio_set_level(BLINK_GPIO,0);
@@ -263,10 +264,6 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
   this->insertCustom(this->gpTxt, "GPTXT", 4);
   ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEventProcessor, this));
 
-  //poiLat=45.623938;
-  //poiLng=-73.851018;
-  poiLat=45.662090;
-  poiLng=-73.857279;
   lastLocation.rawLatData=llat;
   lastLocation.rawLngData=llng;
   lastCourse.val=course;
@@ -452,78 +449,78 @@ void TinyGPSPlus::uart_event_task(void *pvParameters)
   ESP_LOGV(__FUNCTION__, "uart[%d] starting:", UART_NUM_2);
   while (xEventGroupGetBits(gps->eg)&gpsEvent::gpsRunning){
     //Waiting for UART event.
-    if(xQueueReceive(gps->uart_queue, (void * )&event, (portTickType)portMAX_DELAY)) {
-        bzero(dtmp, RD_BUF_SIZE);
-        switch(event.type) {
-            case UART_EVENT_MAX:
-                ESP_LOGW(__FUNCTION__, "UART_EVENT_MAX");
-                break;
-            case UART_DATA_BREAK:
-                ESP_LOGW(__FUNCTION__, "UART_DATA_BREAK");
-                break;
-            //Event of UART receving data
-            /*We'd better handler data event fast, there would be much more data events than
-            other types of events. If we take too much time on data event, the queue might
-            be full.*/
-            case UART_DATA:
-                //ESP_LOGV(__FUNCTION__, "[UART DATA]: %d", event.size);
-                //ESP_LOGV(__FUNCTION__, "[DATA EVT]:%s(%d)%d",dtmp,event.size,dtmp[event.size-1]);
-                break;
-            //Event of HW FIFO overflow detected
-            case UART_FIFO_OVF:
-                ESP_LOGW(__FUNCTION__, "hw fifo overflow");
-                // If fifo overflow happened, you should consider adding flow control for your application.
-                // The ISR has already reset the rx FIFO,
-                // As an example, we directly flush the rx buffer here in order to read more data.
-                uart_flush_input(UART_NUM_2);
-                xQueueReset(gps->uart_queue);
-                break;
-            //Event of UART ring buffer full
-            case UART_BUFFER_FULL:
-                ESP_LOGW(__FUNCTION__, "ring buffer full");
-                // If buffer full happened, you should consider encreasing your buffer size
-                // As an example, we directly flush the rx buffer here in order to read more data.
-                uart_flush_input(UART_NUM_2);
-                xQueueReset(gps->uart_queue);
-                break;
-            //Event of UART RX break detected
-            case UART_BREAK:
-                ESP_LOGE(__FUNCTION__, "uart rx break");
-                break;
-            //Event of UART parity check error
-            case UART_PARITY_ERR:
-                ESP_LOGE(__FUNCTION__, "uart parity error");
-                break;
-            //Event of UART frame error
-            case UART_FRAME_ERR:
-                ESP_LOGE(__FUNCTION__, "uart frame error");
-                break;
-            //UART_PATTERN_DET
-            case UART_PATTERN_DET:
-                uart_get_buffered_data_len(UART_NUM_2, &buffered_size);
-                int pos = uart_pattern_pop_pos(UART_NUM_2);
-                if (pos == -1) {
-                    // There used to be a UART_PATTERN_DET event, but the pattern position queue is full so that it can not
-                    // record the position. We should set a larger queue size.
-                    // As an example, we directly flush the rx buffer here.
-                    uart_flush_input(UART_NUM_2);
-                } else {
-                    int msgLen = uart_read_bytes(UART_NUM_2, dtmp, pos, 100 / portTICK_PERIOD_MS);
-                    uint8_t pat[PATTERN_CHR_NUM + 1];
-                    memset(pat, 0, sizeof(pat));
-                    if (msgLen > 1){
-                      ESP_LOGV(__FUNCTION__, "[UART PATTERN DETECTED] pos: %d, buffered size: %d msg: %s", pos, buffered_size, dtmp);
-                      for (int idx=1; idx < msgLen; idx++) {
-                        if (gps->encode(dtmp[idx])){
-                          ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::msg,dtmp+1,msgLen,portMAX_DELAY));
-                          gps->processEncoded();
-                        }
+    if(gps->uart_queue && xQueueReceive(gps->uart_queue, (void * )&event, (portTickType)portMAX_DELAY)) {
+      bzero(dtmp, RD_BUF_SIZE);
+      switch(event.type) {
+          case UART_EVENT_MAX:
+              ESP_LOGW(__FUNCTION__, "UART_EVENT_MAX");
+              break;
+          case UART_DATA_BREAK:
+              ESP_LOGW(__FUNCTION__, "UART_DATA_BREAK");
+              break;
+          //Event of UART receving data
+          /*We'd better handler data event fast, there would be much more data events than
+          other types of events. If we take too much time on data event, the queue might
+          be full.*/
+          case UART_DATA:
+              //ESP_LOGV(__FUNCTION__, "[UART DATA]: %d", event.size);
+              //ESP_LOGV(__FUNCTION__, "[DATA EVT]:%s(%d)%d",dtmp,event.size,dtmp[event.size-1]);
+              break;
+          //Event of HW FIFO overflow detected
+          case UART_FIFO_OVF:
+              ESP_LOGW(__FUNCTION__, "hw fifo overflow");
+              // If fifo overflow happened, you should consider adding flow control for your application.
+              // The ISR has already reset the rx FIFO,
+              // As an example, we directly flush the rx buffer here in order to read more data.
+              uart_flush_input(UART_NUM_2);
+              xQueueReset(gps->uart_queue);
+              break;
+          //Event of UART ring buffer full
+          case UART_BUFFER_FULL:
+              ESP_LOGW(__FUNCTION__, "ring buffer full");
+              // If buffer full happened, you should consider encreasing your buffer size
+              // As an example, we directly flush the rx buffer here in order to read more data.
+              uart_flush_input(UART_NUM_2);
+              xQueueReset(gps->uart_queue);
+              break;
+          //Event of UART RX break detected
+          case UART_BREAK:
+              ESP_LOGE(__FUNCTION__, "uart rx break");
+              break;
+          //Event of UART parity check error
+          case UART_PARITY_ERR:
+              ESP_LOGE(__FUNCTION__, "uart parity error");
+              break;
+          //Event of UART frame error
+          case UART_FRAME_ERR:
+              ESP_LOGE(__FUNCTION__, "uart frame error");
+              break;
+          //UART_PATTERN_DET
+          case UART_PATTERN_DET:
+              uart_get_buffered_data_len(UART_NUM_2, &buffered_size);
+              int pos = uart_pattern_pop_pos(UART_NUM_2);
+              if (pos == -1) {
+                  // There used to be a UART_PATTERN_DET event, but the pattern position queue is full so that it can not
+                  // record the position. We should set a larger queue size.
+                  // As an example, we directly flush the rx buffer here.
+                  uart_flush_input(UART_NUM_2);
+              } else {
+                  int msgLen = uart_read_bytes(UART_NUM_2, dtmp, pos, 100 / portTICK_PERIOD_MS);
+                  uint8_t pat[PATTERN_CHR_NUM + 1];
+                  memset(pat, 0, sizeof(pat));
+                  if (msgLen > 1){
+                    ESP_LOGV(__FUNCTION__, "[UART PATTERN DETECTED] pos: %d, buffered size: %d msg: %s", pos, buffered_size, dtmp);
+                    for (int idx=1; idx < msgLen; idx++) {
+                      if (gps->encode(dtmp[idx])){
+                        ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::msg,dtmp+1,msgLen,portMAX_DELAY));
+                        gps->processEncoded();
                       }
                     }
-                }
-                break;
-        }
+                  }
+              }
+              break;
       }
+    }
   }
   free(dtmp);
   dtmp = NULL;
@@ -786,32 +783,43 @@ bool TinyGPSPlus::endOfTermHandler()
          p->commit();
 
       if (altitude.isValid() && altitude.isUpdated()){
-        double dist = distanceBetween(location.lat(),location.lng(),poiLat,poiLng);
-        switch(poiState) {
-          case poiState_t::unknown:
-            poiState = (dist >= PIO_MIN_DIST) ? poiState_t::out : poiState_t::in;
-            if (poiState == poiState_t::in) {
-              ESP_LOGD(__FUNCTION__,"Initially in PIO %f",dist);
-              ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::atSyncPoint,NULL,0,portMAX_DELAY));
-            } else {
-              ESP_LOGD(__FUNCTION__,"Initially out of PIO %f",dist);
-              ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::outSyncPoint,NULL,0,portMAX_DELAY));
-            }
-            break;
-          case poiState_t::in:
-            if (dist >= (PIO_MIN_DIST*2) ){
-              ESP_LOGD(__FUNCTION__,"Out of PIO %f",dist);
-              poiState=poiState_t::out;
-              ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::outSyncPoint,NULL,0,portMAX_DELAY));
-            }
-            break;
-          case poiState_t::out:
-            if (dist <= (PIO_MIN_DIST*2) ){
-              ESP_LOGD(__FUNCTION__,"In of PIO %f",dist);
-              poiState=poiState_t::in;
-              ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::atSyncPoint,NULL,0,portMAX_DELAY));
-            }
-            break;
+
+        double dist = -1.0;
+        double dtmp = -1.0;
+        for (poiConfig_t poi : getAppConfig()->pois) {
+          dtmp=distanceBetween(location.lat(),location.lng(),poi.lat,poi.lng);
+          if ((dist == -1) || (dist > dtmp)) {
+            dist=dtmp;
+          }
+        }
+
+        if (dist >= 0.0) {
+          switch(poiState) {
+            case poiState_t::unknown:
+              poiState = (dist >= PIO_MIN_DIST) ? poiState_t::out : poiState_t::in;
+              if (poiState == poiState_t::in) {
+                ESP_LOGD(__FUNCTION__,"Initially in PIO %f",dist);
+                ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::atSyncPoint,NULL,0,portMAX_DELAY));
+              } else {
+                ESP_LOGD(__FUNCTION__,"Initially out of PIO %f",dist);
+                ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::outSyncPoint,NULL,0,portMAX_DELAY));
+              }
+              break;
+            case poiState_t::in:
+              if (dist >= (PIO_MIN_DIST*2) ){
+                ESP_LOGD(__FUNCTION__,"Out of PIO %f",dist);
+                poiState=poiState_t::out;
+                ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::outSyncPoint,NULL,0,portMAX_DELAY));
+              }
+              break;
+            case poiState_t::out:
+              if (dist <= (PIO_MIN_DIST*2) ){
+                ESP_LOGD(__FUNCTION__,"In of PIO %f",dist);
+                poiState=poiState_t::in;
+                ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::atSyncPoint,NULL,0,portMAX_DELAY));
+              }
+              break;
+          }
         }
         ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::locationChanged,NULL,0,portMAX_DELAY));
       }
