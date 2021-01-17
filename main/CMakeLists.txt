@@ -1,4 +1,4 @@
-set(COMPONENT_REQUIRES esp_adc_cal )
+set(COMPONENT_REQUIRES esp_adc_cal json )
 set(COMPONENT_PRIV_REQUIRES wifi rest TinyGPS esp_littlefs )
 
 set(COMPONENT_ADD_INCLUDEDIRS "." "../components/TinyGPS" )

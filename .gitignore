@@ -3,5 +3,7 @@
 build
 .vscode
 *.kml
-test.tar
+*.tar
+192.168.4.1/trips
 sdkconfig.old
+wget-log

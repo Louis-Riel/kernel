@@ -52,60 +52,6 @@ esp_err_t json_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
-esp_err_t filedownload_event_handler(esp_http_client_event_t *evt)
-{
-    switch (evt->event_id)
-    {
-    case HTTP_EVENT_ERROR:
-        ESP_LOGE(__FUNCTION__, "HTTP_EVENT_ERROR");
-        break;
-    case HTTP_EVENT_ON_CONNECTED:
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_CONNECTED");
-        xEventGroupClearBits(eventGroup,DOWNLOAD_STARTED);
-        xEventGroupClearBits(eventGroup,DOWNLOAD_FINISHED);
-        break;
-    case HTTP_EVENT_HEADER_SENT:
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_HEADER_SENT");
-        break;
-    case HTTP_EVENT_ON_HEADER:
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
-        if (strcmp(evt->header_key,"filename") == 0) {
-            FILE* dfile = fopen(*((char*)evt->user_data) != '/' ? evt->header_value : (char*)evt->user_data,"w",true);
-            if (dfile == NULL) {
-                ESP_LOGE(__FUNCTION__,"Error whiilst opening %s",evt->header_value);
-                return ESP_FAIL;
-            }
-            *(FILE**)evt->user_data = dfile;
-            xEventGroupSetBits(eventGroup,DOWNLOAD_STARTED);
-        }
-        break;
-    case HTTP_EVENT_ON_DATA:
-        if (*(FILE**)evt->user_data != NULL) {
-            fwrite(evt->data,1,evt->data_len,*(FILE**)evt->user_data);
-        } else {
-            ESP_LOGW(__FUNCTION__,"Data with no dest file %d bytes",evt->data_len);
-            if (evt->data_len < 200) {
-                ESP_LOGW(__FUNCTION__,"%s",(char*)evt->data);
-            }
-            return ESP_FAIL;
-        }
-        break;
-    case HTTP_EVENT_ON_FINISH:
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_FINISH ");
-        if (*(FILE**)evt->user_data != NULL) {
-            fclose(*(FILE**)evt->user_data);
-        } else {
-            ESP_LOGW(__FUNCTION__,"Close file with no dest file %d bytes",evt->data_len);
-        }
-        xEventGroupSetBits(eventGroup,DOWNLOAD_FINISHED);
-        break;
-    case HTTP_EVENT_DISCONNECTED:
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_DISCONNECTED\n");
-        break;
-    }
-    return ESP_OK;
-}
-
 bool moveFolder(char* folderName, char* toFolderName) {
     if ((folderName == NULL) || (toFolderName == NULL)) {
         ESP_LOGE(__FUNCTION__,"Empty params passed: foldername:%s, toFolderName:%s",folderName==NULL?"null":"not nukll",toFolderName==NULL?"null":"not nukll");
@@ -238,8 +184,9 @@ bool GetKmls(ip4_addr_t* ipInfo){
                 config->max_redirection_count=0;
                 config->port=80;
                 config->event_handler = filedownload_event_handler;
-                void* tmp = (void*)new FILE();
-                config->user_data = tmp;
+                char* destfname = (char*)malloc(100);
+                sprintf(destfname,"%s/%s",folder->valuestring,fname->valuestring);
+                config->user_data = destfname;
                 client = esp_http_client_init(config);
                 if (client != NULL){
                     esp_http_client_set_header(client,"movetosent","yes");
@@ -613,6 +560,75 @@ cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
 
 void pullStation(void *pvParameter) {
     if (initSPISDCard()){
+        esp_ip4_addr_t* ipInfo = (esp_ip4_addr_t*) pvParameter;
+
+        mtar_t tar;
+        char tarFName[255];
+
+        esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
+        memset(config,0,sizeof(esp_http_client_config_t));
+        config->url=(char*)malloc(30);
+        sprintf((char*)config->url,"http://" IPSTR "/trips",IP2STR(ipInfo));
+        config->method=HTTP_METHOD_POST;
+        config->timeout_ms = 9000;
+        config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
+        config->max_redirection_count=0;
+        config->port=80;
+        sprintf(tarFName,"/sdcard/tars/" IPSTR "/%d.tar",IP2STR(ipInfo),(int)abs((int)esp_random()));
+        ESP_LOGD(__FUNCTION__, "Saving as:%s",tarFName);
+        config->user_data = tarFName;
+        config->event_handler = filedownload_event_handler;
+        ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
+        esp_http_client_handle_t client = esp_http_client_init(config);
+        esp_err_t err;
+        uint8_t retryCnt=0;
+        while (((err = esp_http_client_perform(client)) == ESP_ERR_HTTP_CONNECT) && (retryCnt++<4))
+        {
+            ESP_LOGE(__FUNCTION__, "\nHTTP GET request failed: %s", esp_err_to_name(err));
+            vTaskDelay(500/portTICK_RATE_MS);
+        }
+
+        esp_http_client_cleanup(client);
+        ESP_LOGI(__FUNCTION__, "\nURL: %s\n\nHTTP GET Status = %d, content_length = %d\n",
+                config->url,
+                esp_http_client_get_status_code(client),
+                esp_http_client_get_content_length(client));
+        if (esp_http_client_get_status_code(client) == 200){
+
+            free((void*)config->url);
+            memset(config,0,sizeof(esp_http_client_config_t));
+            config->url=(char*)malloc(255);
+            sprintf((char*)config->url,"http://" IPSTR "/status/wifi",IP2STR(ipInfo));
+            config->method=HTTP_METHOD_PUT;
+            config->timeout_ms = 9000;
+            config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
+            config->max_redirection_count=0;
+            config->port=80;
+            esp_http_client_handle_t client = esp_http_client_init(config);
+            char* postData="{\"enabled\":\"no\"}";
+            ESP_LOGV(__FUNCTION__,"Sending wifi off %s",postData);
+            esp_err_t ret;
+            if ((ret = esp_http_client_open(client,strlen(postData))) == ESP_OK){
+                if (esp_http_client_write(client,postData,strlen(postData)) != strlen(postData))
+                {
+                    ESP_LOGD(__FUNCTION__, "Turn off wifi faile, but that is to be expected: %s", esp_err_to_name(ret));
+                } else {
+                    ESP_LOGD(__FUNCTION__,"Sent wifi off");
+                }
+            } else {
+                ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(ret));
+            }
+            esp_http_client_cleanup(client);
+        }
+        free((void*)config->url);
+        free((void*)config);
+        deinitSPISDCard();
+    }
+    vTaskDelete(NULL);
+}
+
+void oldpullStation(void *pvParameter) {
+    if (initSPISDCard()){
         ip4_addr_t* ipInfo= (ip4_addr_t*) pvParameter;
         if (GetKmls(ipInfo) && CheckOTA(ipInfo)){
             cJSON* cfg = GetConfig(ipInfo);
@@ -656,6 +672,15 @@ void pullStation(void *pvParameter) {
     vTaskDelete(NULL);
 }
 
+typedef struct 
+{
+    mtar_t* tar;
+    uint8_t* buf;
+    uint32_t bufsize;
+} tarDownloading_t;
+
+tarDownloading_t tarDownloading;
+
 esp_err_t http_tar_download_event_handler(esp_http_client_event_t *evt)
 {
     switch (evt->event_id)
@@ -671,25 +696,20 @@ esp_err_t http_tar_download_event_handler(esp_http_client_event_t *evt)
         break;
     case HTTP_EVENT_ON_HEADER:
         ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
-        if (strcmp(evt->header_key,"filename")==0) {
-            sprintf(tarfname,"/sdcard/kml/%s",evt->header_value);
-            if ((*(FILE**)evt->user_data=fopen(tarfname,"w"))!=NULL){
-                ESP_LOGD(__FUNCTION__, "%s opened", tarfname);
-            } else {
-                ESP_LOGE(__FUNCTION__,"Cannot read %s",tarfname);
-            }
-        }
         break;
     case HTTP_EVENT_ON_DATA:
-        if ((*(FILE**)evt->user_data != NULL) && (strlen(tarfname)>0)) {
-            fwrite(evt->data,sizeof(uint8_t),evt->data_len,*(FILE**)evt->user_data);
-            ESP_LOGV(__FUNCTION__, "tar data len:%d\n", evt->data_len);
+        if (*(FILE**)evt->user_data != NULL) {
+            fwrite(evt->data,1,evt->data_len,(FILE*)evt->user_data);
         } else {
-            ESP_LOGW(__FUNCTION__,"Got data with no dest tarnull:%s strlen(tarfname):%d",*(FILE**)evt->user_data == NULL?"NULL":"NOT NULL",strlen(tarfname));
+            ESP_LOGW(__FUNCTION__,"Data with no dest file %d bytes",evt->data_len);
+            if (evt->data_len < 200) {
+                ESP_LOGW(__FUNCTION__,"%s",(char*)evt->data);
+            }
+            return ESP_FAIL;
         }
         break;
     case HTTP_EVENT_ON_FINISH:
-        fclose(*(FILE**)evt->user_data);
+        fclose((FILE*)evt->user_data);
         ESP_LOGD(__FUNCTION__, "HTTP_EVENT_ON_FINISH");
         break;
     case HTTP_EVENT_DISCONNECTED:
@@ -698,39 +718,3 @@ esp_err_t http_tar_download_event_handler(esp_http_client_event_t *evt)
     }
     return ESP_OK;
 }
-
-
-void oldpullStation(void *pvParameter) {
-    if (initSPISDCard()){
-        esp_ip4_addr_t* ipInfo = (esp_ip4_addr_t*) pvParameter;
-        esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
-        memset(config,0,sizeof(esp_http_client_config_t));
-        config->url=(char*)malloc(30);
-        sprintf((char*)config->url,"http://" IPSTR "/trips",IP2STR(ipInfo));
-        config->method=HTTP_METHOD_POST;
-        config->timeout_ms = 9000;
-        config->event_handler = http_tar_download_event_handler;
-        config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
-        config->max_redirection_count=0;
-        config->port=80;
-        ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
-        esp_http_client_handle_t client = esp_http_client_init(config);
-        esp_err_t err;
-        uint8_t retryCnt=0;
-        while (((err = esp_http_client_perform(client)) == ESP_ERR_HTTP_CONNECT) && (retryCnt++<10))
-        {
-            ESP_LOGE(__FUNCTION__, "\nHTTP GET request failed: %s", esp_err_to_name(err));
-            vTaskDelay(500/portTICK_RATE_MS);
-        }
-        ESP_LOGI(__FUNCTION__, "\nURL: %s\n\nHTTP GET Status = %d, content_length = %d\n",
-                config->url,
-                esp_http_client_get_status_code(client),
-                esp_http_client_get_content_length(client));
-        esp_http_client_cleanup(client);
-        free((void*)config->url);
-        free((void*)config);
-        deinitSPISDCard();
-    }
-    vTaskDelete(NULL);
-}
-

@@ -9,6 +9,7 @@
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
 #include "logs.h"
+#include "cJSON.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -110,6 +111,7 @@ bool initSDMMCSDCard(){
       sdmmc_card_print_info(stdout, card);
 
     f_mkdir("/converted");
+    if (f_mkdir("/logs") != FR_OK) ESP_LOGD(__FUNCTION__,"Cannot create logs folder");
     f_mkdir("/kml");
     f_mkdir("/sent");
   }
@@ -120,7 +122,7 @@ bool initSDMMCSDCard(){
 bool deinitSPISDCard(){
   if (numSdCallers >= 0)
     numSdCallers--;
-  ESP_LOGD(__FUNCTION__, "SD callers %d", numSdCallers);
+  ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   if (numSdCallers == 0) {
     esp_err_t ret=esp_vfs_littlefs_unregister("storage");
     if (ret != ESP_OK) {
@@ -140,7 +142,7 @@ bool deinitSPISDCard(){
 
     return true;
   } else {
-    ESP_LOGD(__FUNCTION__,"Postponing SD card umount");
+    ESP_LOGV(__FUNCTION__,"Postponing SD card umount");
     return ESP_OK;
   }
 }
@@ -202,7 +204,7 @@ bool initSPISDCard()
       //f_mkdir("/firmware");
       //f_mkdir("/converted");
       //f_mkdir("/kml");
-      //f_mkdir("/logs");
+      f_mkdir("/logs");
       //f_mkdir("/sent");
       ret=esp_vfs_littlefs_register(&conf);
       if (ret != ESP_OK) {
@@ -218,7 +220,7 @@ bool initSPISDCard()
     numSdCallers=1;
   } else {
     numSdCallers++;
-    ESP_LOGD(__FUNCTION__, "SD callers %d", numSdCallers);
+    ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
     if (numSdCallers==1){
         dumpLogs();
     }

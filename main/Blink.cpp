@@ -805,7 +805,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     break;
   case TinyGPSPlus::gpsEvent::wakingup:
     sleepTime+=((uint64_t)event_data)*1000000;
-    ESP_LOGD(__FUNCTION__,"Sleep at %lu", (time_t)getSleepTime());
+    ESP_LOGV(__FUNCTION__,"Sleep at %lu", (time_t)getSleepTime());
     break;
   case TinyGPSPlus::gpsEvent::go:
     addDataPoint();
@@ -818,11 +818,11 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     isStopped = true;
     break;
   case TinyGPSPlus::gpsEvent::gpsPaused:
-    ESP_LOGD(__FUNCTION__,"Battery %f", getBatteryVoltage());
+    ESP_LOGV(__FUNCTION__,"Battery %f", getBatteryVoltage());
     getAppState()->gps=(item_state_t)(item_state_t::ACTIVE|item_state_t::PAUSED);
     break;
   case TinyGPSPlus::gpsEvent::gpsResumed:
-    ESP_LOGD(__FUNCTION__,"Battery %f", getBatteryVoltage());
+    ESP_LOGV(__FUNCTION__,"Battery %f", getBatteryVoltage());
     getAppState()->gps=(item_state_t)(item_state_t::ACTIVE);
     break;
   case TinyGPSPlus::gpsEvent::atSyncPoint:

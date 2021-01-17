@@ -28,7 +28,7 @@ typedef	struct {
                 wifi_mode_t                     wifi_mode;
                 char                            wname[40];
                 char                            wpdw[40];
-	} the_wifi_config;
+} the_wifi_config;
 
 class Aper
 {
