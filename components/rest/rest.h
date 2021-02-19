@@ -31,7 +31,7 @@
 #define F_BUF_SIZE 8192
 #define HTTP_BUF_SIZE 8192
 #define HTTP_CHUNK_SIZE 8192
-#define HTTP_RECEIVE_BUFFER_SIZE 1024
+#define HTTP_RECEIVE_BUFFER_SIZE 8192
 #define JSON_BUFFER_SIZE 8192
 #define KML_BUFFER_SIZE 204600
 
@@ -42,7 +42,7 @@ void pullStation(void *pvParameter);
 bool moveFolder(char* folderName, char* toFolderName);
 char* getPostField(const char* pname, const char* postData,char* dest);
 esp_err_t filedownload_event_handler(esp_http_client_event_t *evt);
-
+void extractClientTar(char* tarFName);
 typedef enum{
     TAR_BUFFER_FILLED = BIT0,
     TAR_BUFFER_SENT = BIT1,

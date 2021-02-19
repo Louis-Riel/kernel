@@ -2,6 +2,7 @@
 #include "route.h"
 #include <cstdio>
 #include <cstring>
+#include "math.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -558,11 +559,73 @@ cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
     return json;
 }
 
+void extractClientTar(char* tarFName){
+    mtar_t tar;
+    mtar_header_t header;
+    int ret = mtar_open(&tar,tarFName,"r");
+    char* buf =(char*) malloc(8192);
+    uint32_t len = 0;
+    uint32_t chunkLen = 0;
+    char fname[255];
+    FILE* fw = NULL;
+    if (ret == MTAR_ESUCCESS){
+        while ( (ret=mtar_read_header(&tar, &header)) != MTAR_ENULLRECORD ) {
+            if ((header.type == MTAR_TREG) && (header.size > 0)){
+                ESP_LOGD(__FUNCTION__,"File %s (%d bytes)\n", header.name, header.size);
+                len = 0;
+                if (endsWith(header.name,".json")) {
+                    ret = mtar_read_data(&tar,buf, header.size);
+                    if ((ret == MTAR_ESUCCESS) && (buf[0] == '{')){
+                        buf[header.size]=0;
+                        cJSON* msg=cJSON_Parse(buf);
+                        cJSON* devid;
+                        if ((msg != NULL)&&((devid = cJSON_GetObjectItemCaseSensitive(msg,"deviceid")) != NULL)){
+                            header.name[6]=0;
+                            ESP_LOGV(__FUNCTION__,"%s:%s",header.name, buf);
+                            sprintf(fname,"/lfs/%s/%d.json", header.name,devid->valueint);
+                            ESP_LOGD(__FUNCTION__,"Saved as %s (%d bytes)\n", fname, header.size);
+                            fw = fopen(fname,"w",true);
+                            fwrite(buf,1,header.size,fw);
+                            fclose(fw);
+                        }
+                        cJSON_Delete(msg);
+                    }
+                } else {
+                    sprintf(fname,"/%s",header.name);
+                    fw = fopen(fname,"w",true);
+                    if (fw != NULL) {
+                        while (len < header.size) {
+                            chunkLen = fmin(header.size - len,8192);
+                            mtar_read_data(&tar,buf, chunkLen);
+                            fwrite(buf,1,chunkLen,fw);
+                            len+=chunkLen;
+                        }
+                        fclose(fw);
+                        ESP_LOGD(__FUNCTION__,"end %s (%d bytes)\n", header.name, len);
+                    } else {
+                        ESP_LOGE(__FUNCTION__,"Cannot write %s", fname);
+                    }
+                }
+            }
+            if ((ret=mtar_next(&tar)) != MTAR_ESUCCESS){
+                ESP_LOGE(__FUNCTION__,"Error reading %s %s",header.name,mtar_strerror(ret));
+                break;
+            }
+        }
+        if (ret != MTAR_ENULLRECORD) {
+            ESP_LOGE(__FUNCTION__,"Error parsing %s %s",header.name,mtar_strerror(ret));
+        }
+        mtar_close(&tar);
+    } else {
+        ESP_LOGE(__FUNCTION__,"Cannot unter the tar %s:%s",tarFName, mtar_strerror(ret));
+    }
+    free(buf);
+}
+
 void pullStation(void *pvParameter) {
     if (initSPISDCard()){
         esp_ip4_addr_t* ipInfo = (esp_ip4_addr_t*) pvParameter;
 
-        mtar_t tar;
         char tarFName[255];
 
         esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
@@ -570,7 +633,7 @@ void pullStation(void *pvParameter) {
         config->url=(char*)malloc(30);
         sprintf((char*)config->url,"http://" IPSTR "/trips",IP2STR(ipInfo));
         config->method=HTTP_METHOD_POST;
-        config->timeout_ms = 9000;
+        config->timeout_ms = 30000;
         config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
         config->max_redirection_count=0;
         config->port=80;
@@ -582,19 +645,24 @@ void pullStation(void *pvParameter) {
         esp_http_client_handle_t client = esp_http_client_init(config);
         esp_err_t err;
         uint8_t retryCnt=0;
-        while (((err = esp_http_client_perform(client)) == ESP_ERR_HTTP_CONNECT) && (retryCnt++<4))
+        while ((((err = esp_http_client_perform(client)) == EAGAIN) || ( err == EWOULDBLOCK) || (err == EINPROGRESS)) && (retryCnt++<4))
         {
             ESP_LOGE(__FUNCTION__, "\nHTTP GET request failed: %s", esp_err_to_name(err));
             vTaskDelay(500/portTICK_RATE_MS);
         }
 
-        esp_http_client_cleanup(client);
-        ESP_LOGI(__FUNCTION__, "\nURL: %s\n\nHTTP GET Status = %d, content_length = %d\n",
+        tarFName[0]='/';
+        tarFName[1]='s';
+        tarFName[2]='d';
+        tarFName[3]='c';
+
+        ESP_LOGI(__FUNCTION__, "\nURL: %s\n\nHTTP GET Status = %d, content_length = %d\n%s",
                 config->url,
                 esp_http_client_get_status_code(client),
-                esp_http_client_get_content_length(client));
+                esp_http_client_get_content_length(client),
+                esp_err_to_name(err));
         if (esp_http_client_get_status_code(client) == 200){
-
+            esp_http_client_cleanup(client);
             free((void*)config->url);
             memset(config,0,sizeof(esp_http_client_config_t));
             config->url=(char*)malloc(255);
@@ -613,61 +681,18 @@ void pullStation(void *pvParameter) {
                 {
                     ESP_LOGD(__FUNCTION__, "Turn off wifi faile, but that is to be expected: %s", esp_err_to_name(ret));
                 } else {
-                    ESP_LOGD(__FUNCTION__,"Sent wifi off");
+                    ESP_LOGD(__FUNCTION__,"Sent wifi off %s",postData);
                 }
             } else {
                 ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(ret));
             }
             esp_http_client_cleanup(client);
+            extractClientTar(tarFName);
+            xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)(BIT2|BIT3), tskIDLE_PRIORITY, NULL);
         }
         free((void*)config->url);
         free((void*)config);
         deinitSPISDCard();
-    }
-    vTaskDelete(NULL);
-}
-
-void oldpullStation(void *pvParameter) {
-    if (initSPISDCard()){
-        ip4_addr_t* ipInfo= (ip4_addr_t*) pvParameter;
-        if (GetKmls(ipInfo) && CheckOTA(ipInfo)){
-            cJSON* cfg = GetConfig(ipInfo);
-            if (cfg){
-                uint32_t devId = cJSON_GetObjectItem(cfg,"devId")->valueint;
-                GetStatus(ipInfo,devId);
-                GetLogs(ipInfo,devId);
-                esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
-                memset(config,0,sizeof(esp_http_client_config_t));
-                config->url=(char*)malloc(255);
-                memset((void*)config->url,0,255);
-                sprintf((char*)config->url,"http://" IPSTR "/status/wifi",IP2STR(ipInfo));
-                config->method=HTTP_METHOD_PUT;
-                config->timeout_ms = 9000;
-                config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
-                config->max_redirection_count=0;
-                config->port=80;
-                esp_http_client_handle_t client = esp_http_client_init(config);
-                char* postData="{\"enabled\":\"no\"}";
-                ESP_LOGV(__FUNCTION__,"Sending wifi off %s",postData);
-                esp_err_t ret;
-                if ((ret = esp_http_client_open(client,strlen(postData))) == ESP_OK){
-                    if (esp_http_client_write(client,postData,strlen(postData)) != strlen(postData))
-                    {
-                        ESP_LOGD(__FUNCTION__, "Turn off wifi faile, but that is to be expected: %s", esp_err_to_name(ret));
-                    } else {
-                        ESP_LOGD(__FUNCTION__,"Sent wifi off");
-                    }
-                } else {
-                    ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(ret));
-                }
-                esp_http_client_cleanup(client);
-                free((void*)config->url);
-                free((void*)config);
-            }
-        }
-        deinitSPISDCard();
-        xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)((BIT1)|(BIT2)|(BIT3)), tskIDLE_PRIORITY, NULL);
-        ESP_LOGD(__FUNCTION__,"Done with request");
     }
     vTaskDelete(NULL);
 }

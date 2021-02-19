@@ -138,8 +138,8 @@ void TinyGPSPlus::waitOnStop(void* param){
         ext_wakeup_pin_mask |= (1ULL << wakePins[idx]);
       }
     }
-    ESP_LOGD(__FUNCTION__, "We are stopped, waiting on bumps");
     if ((gps->poiState == poiState_t::in) && !(xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCED )) {
+      ESP_LOGD(__FUNCTION__, "We are stopped, waiting on bumps");
       int32_t timeToGo = sleepTimes[gps->curFreqIdx]*1000;
       while ((timeToGo > 0) && !(xEventGroupWaitBits(gps->eg,gpsEvent::outSyncPoint,pdFALSE,pdTRUE,500/portTICK_PERIOD_MS)&gpsEvent::outSyncPoint)){
         gpio_set_level(BLINK_GPIO,0);
@@ -1125,7 +1125,7 @@ void TinyGPSCustom::commit()
 
 void TinyGPSCustom::set(const char *term)
 {
-   strncpy(this->stagingBuffer, term, sizeof(this->stagingBuffer));
+   strncpy(this->stagingBuffer, term, sizeof(this->stagingBuffer)-1);
 }
 
 void TinyGPSPlus::insertCustom(TinyGPSCustom *pElt, const char *sentenceName, int termNumber)

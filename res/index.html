@@ -9,8 +9,9 @@
 <body>
     <div class="slider">
         <a onclick="renderFolder(document.getElementsByClassName('file-table')[0].getElementsByTagName('caption')[0].innerText)" href="#slide-1">SDCard</a>
-        <a onclick="refreshStatus()" href="#slide-2">Status</a>
-        <a onclick="refreshConfig()" href="#slide-3">Config</a>
+        <a onclick="refreshStatus(true)" href="#slide-2">Status</a>
+        <a onclick="refreshConfig(true)" href="#slide-3">Config</a>
+        <a onclick="refreshSystem()" href="#slide-4">System</a>
         <div class="slides">
             <div id="slide-1" class="file_section">
                 <div class="file-table">
@@ -42,10 +43,20 @@
                     <button>Save</button>
                 </form>
             </div>
+            <div id="slide-4" class="logs">
+                <div>
+                    <button onclick="document.querySelectorAll('.log').forEach(log => log.remove())">Clear Logs</button>
+                    <button onclick="SendCommand({'command':'reboot'})">Reboot</button>
+                    <button onclick="SendCommand({'command':'parseFiles'})">ParseFiles</button>
+                </div>
+                <div class="loglines"></div>
+            </div>
             <script>
                 renderFolder("/");
-                refreshConfig();
-                refreshStatus();
+                setInterval(() => {
+                    refreshConfig(false);
+                    refreshStatus(false);
+                }, 1000);
                 document.querySelectorAll('th').forEach(th => th.addEventListener('click', (() => {
                     const table = document.getElementsByClassName("file-table")[0].getElementsByTagName("tbody")[0];
                     Array.from(table.querySelectorAll('tr:nth-child(n+2)'))

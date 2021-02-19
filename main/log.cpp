@@ -6,15 +6,15 @@
 char* logBuff = NULL;
 char* logfname = NULL;
 uint32_t logBufPos;
-static vprintf_like_t callbacks[5];
-static uint8_t numCallbacks=0;
+static LogFunction_t callbacks[5];
+static void* params[5];
 
 char* getLogFName(){
     return logfname;
 }
 
 void dumpLogs(){
-    if (initSPISDCard()) {
+    if (initSPISDCard(false)) {
         FILE* fw = NULL;
 
         struct tm timeinfo;
@@ -28,7 +28,7 @@ void dumpLogs(){
                 strftime(logfname, 100, "/sdcard/logs/PULLER-%Y-%m-%d_%H-%M-%S.log", &timeinfo);
         }
 
-        if ((fw = fopen(logfname,"a",true)) != NULL) {
+        if ((fw = fopen(logfname,"a",true,false)) != NULL) {
             if (fwrite((void*)logBuff,1,logBufPos,fw) == logBufPos) {
                 if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG){
                     fprintf(stdout,"Written %d into %s",logBufPos,logfname);
@@ -42,7 +42,17 @@ void dumpLogs(){
         } else if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG) {
             fprintf(stderr,"Failed to open %s",logfname);
         }
-        deinitSPISDCard();
+        deinitSPISDCard(false);
+    }
+}
+
+void registerLogCallback( LogFunction_t callback, void* param) {
+    for (int idx=0; idx < 5; idx++){
+        if (callbacks[idx] == NULL) {
+            callbacks[idx]=callback;
+            params[idx]=param;
+            break;
+        }
     }
 }
 
@@ -51,15 +61,18 @@ int loggit(const char *fmt, va_list args) {
     static const uint32_t WRITE_CACHE_CYCLE = 5;
     static uint32_t counter_write = 0;
     int iresult;
+    char* curLogLine = logBuff+logBufPos;
     logBufPos+=vsprintf(logBuff+logBufPos,fmt,args);
+    for (int idx=0; idx < 5; idx++){
+        if (callbacks[idx] != NULL) {
+            if (!callbacks[idx](params[idx],curLogLine)){
+                callbacks[idx] = nullptr;
+                free(params[idx]);
+            }
+        }
+    }
     if (logBufPos >= LOG_BUF_ULIMIT) {
         dumpLogs();
-    }
-
-    if (numCallbacks>0) {
-        for (int idx=0; idx < numCallbacks; idx++){
-            callbacks[idx](fmt,args);
-        }
     }
 
     return vprintf(fmt, args);

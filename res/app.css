@@ -112,9 +112,13 @@ table.greyGridTable tfoot td {
     opacity: 0.5;
 }
 
+textarea {
+    font-size: small !important;
+}
+
 label {
     font-style: italic;
-    width: 100%;
+    /* width: 100%; */
 }
 
 * {
@@ -239,11 +243,14 @@ body {
     float: left;
 }
 
-.system-config form fieldset input {
-    float: right;
+.system-config form fieldset input,
+textarea {
+    /* float: right; */
     background-color: #f0feff0d;
     color: inherit;
     font: inherit;
+    /* margin-right: 10px; */
+    width: 95%;
 }
 
 form {
@@ -253,10 +260,12 @@ form {
 .slides fieldset {
     border-style: inset;
     border-width: medium;
+    /* width: 100%; */
 }
 
 .slides fieldset fieldset {
     border-style: double;
+    width: 100%;
 }
 
 table.greyGridTable a {
@@ -293,11 +302,62 @@ th {
     cursor: pointer;
 }
 
-.system-config button {
+button {
     background-color: #23201c45;
     color: #7fffd4;
     font: inherit;
     margin-top: 20px;
     border-radius: 67%;
     padding: 10px;
+}
+
+.log div {
+    float: left;
+    padding-right: 5px;
+    font-size: small;
+}
+
+.LOGLEVEL {
+    clear: both;
+    width: 15px;
+}
+
+.log.LOGI {
+    color: antiquewhite;
+}
+
+.log.LOGE {
+    color: red;
+}
+
+.log.LOGW {
+    color: yellow;
+}
+
+.log.LOGV {
+    color: aquamarine;
+}
+
+label div {
+    margin-right: 10px;
+}
+
+label.textarea>label {
+    width: 40%;
+}
+
+label.textarea:nth-child(even) {
+    /* color: red; */
+    clear: both;
+    /* width: 50%; */
+}
+
+label.textarea:nth-child(odd) {
+    /* width: 50%; */
+    clear: initial;
+}
+
+label.textarea {
+    width: 50%;
+    min-width: 315px;
 }

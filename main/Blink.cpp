@@ -225,7 +225,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
   if (strlen(cvsFileName) > 1)
   {
     ESP_LOGD(__FUNCTION__, "Getting Facts from %s for %s", cvsFileName, kmlFileName);
-    FILE *trp = fopen(cvsFileName, "r");
+    FILE *trp = fopen(cvsFileName, "r",true);
     if (trp == NULL) {
       ESP_LOGE(__FUNCTION__,"Cannot open source");
       return false;
@@ -260,13 +260,14 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
       fclose(trp);
       return true;
     }
-    ESP_LOGD(__FUNCTION__, "Baking KML from %d lines %d chars", lineCount, pos);
+    ESP_LOGD(__FUNCTION__, "Baking KML from %s %d lines %d chars", kmlFileName, lineCount, pos);
     FILE *kml = fopen(kmlFileName, "w", true);
     if (kml == NULL)
     {
       ESP_LOGE(__FUNCTION__, "Cannot open %s", kmlFileName);
       return false;
     }
+    ESP_LOGD(__FUNCTION__, "Opened %s", kmlFileName);
     uint8_t chr = 0;
     uint8_t *bkeyPos = NULL;
     uint8_t *bvalPos = NULL;
@@ -490,38 +491,35 @@ void commitTripToDisk(void* param)
     char *kFName = (char *)malloc(350);
     char *cFName = (char *)malloc(350);
 
-    if (commitTrip(&curTrip))
+    if (commitTrip(&curTrip) && (theBits&BIT1))
     {
-      if (theBits&BIT1)
+      sprintf(kFName, "/sdcard/kml/%s.kml", &curTrip.fname[8]);
+      char* theChar;
+      for (theChar = kFName; *theChar != 0; theChar++) {
+        if (*theChar == '_') {
+          *theChar='/';
+          break;
+        }
+        if (*theChar == '-') {
+          *theChar='/';
+        }
+      }
+      sprintf(theChar+1, "%s.kml", &curTrip.fname[8]);
+      
+      if (bakeKml(curTrip.fname, kFName))
       {
-        sprintf(kFName, "/sdcard/kml/%s.kml", &curTrip.fname[8]);
-        char* theChar;
-        for (theChar = kFName; *theChar != 0; theChar++) {
-          if (*theChar == '_') {
-            *theChar='/';
-            break;
-          }
-          if (*theChar == '-') {
-            *theChar='/';
-          }
-        }
-        sprintf(theChar+1, "%s.kml", &curTrip.fname[8]);
-        
-        if (bakeKml(curTrip.fname, kFName))
+        sprintf(kFName, "/sdcard/converted/%s", &curTrip.fname[8]);
+        if (moveFile(curTrip.fname, kFName))
         {
-          sprintf(kFName, "/sdcard/converted/%s", &curTrip.fname[8]);
-          if (moveFile(curTrip.fname, kFName))
-          {
-            ESP_LOGD(__FUNCTION__, "Moved %s to %s.", curTrip.fname, kFName);
-          } else
-          {
-            ESP_LOGE(__FUNCTION__, "Failed moving %s to %s", curTrip.fname, kFName);
-          }
-        }
-        else
+          ESP_LOGD(__FUNCTION__, "Moved %s to %s.", curTrip.fname, kFName);
+        } else
         {
-          ESP_LOGE(__FUNCTION__, "Failed baking %s from %s", curTrip.fname, cFName);
+          ESP_LOGE(__FUNCTION__, "Failed moving %s to %s", curTrip.fname, kFName);
         }
+      }
+      else
+      {
+        ESP_LOGE(__FUNCTION__, "Failed baking %s from %s", curTrip.fname, cFName);
       }
     }
     if (theBits&BIT2)
@@ -566,7 +564,7 @@ void commitTripToDisk(void* param)
                     }
                   }
                 } else {
-                  ESP_LOGD(__FUNCTION__,"Skipping active trip %s",cFName);
+                  ESP_LOGD(__FUNCTION__,"Failed in baking %s",cFName);
                 }
               }
           }
@@ -992,6 +990,7 @@ esp_err_t setupLittlefs(){
   bool hasLogs = false;
   bool hasFw = false;
   bool hasCfg = false;
+  bool hasStat = false;
 
   DIR* root = opendir("/lfs");
   if (root == NULL) {
@@ -1012,6 +1011,9 @@ esp_err_t setupLittlefs(){
     }
     if (strcmp(de->d_name,"config")==0){
       hasCfg=true;
+    }
+    if (strcmp(de->d_name,"status")==0){
+      hasStat=true;
     }
   }
 
@@ -1043,6 +1045,14 @@ esp_err_t setupLittlefs(){
       return ESP_FAIL;
     }
     ESP_LOGD(__FUNCTION__,"config folder created");
+  }
+
+  if (!hasStat){
+    if (mkdir("/lfs/status",0750) != 0) {
+      ESP_LOGE(__FUNCTION__,"Failed in creating status folder");
+      return ESP_FAIL;
+    }
+    ESP_LOGD(__FUNCTION__,"status folder created");
   }
 
   if ((ret = closedir(root)) != ESP_OK) {
@@ -1077,6 +1087,7 @@ void app_main(void)
   sampleBatteryVoltage();
   setupLittlefs();
   uint32_t tmp;
+  ESP_LOGV(__FUNCTION__,"Pre-Loading Image");
   loadImage(false,&tmp);
   //initSPISDCard();
   gpio_reset_pin(BLINK_GPIO);
@@ -1116,7 +1127,6 @@ void app_main(void)
   lng.billionths = lastLngBil;
   lng.negative = lastLngNeg;
 
-  //gps = new TinyGPSPlus(GPIO_NUM_14, GPIO_NUM_27, GPIO_NUM_13, lastRate, lat, lng, lastCourse, lastSpeed, lastAltitude,app_eg);
   if (appcfg->gps_config.rxPin.value != 0){
     gps = new TinyGPSPlus(appcfg->gps_config.rxPin.value, appcfg->gps_config.txPin.value, appcfg->gps_config.enPin.value, lastRate, lat, lng, lastCourse, lastSpeed, lastAltitude,app_eg);
     if (gps != NULL){
@@ -1126,7 +1136,6 @@ void app_main(void)
         createTrip();
         adc1_config_width(ADC_WIDTH_12Bit);
         adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_11db);
-        //gpio_set_direction(GPIO_NUM_25, GPIO_MODE_OUTPUT);
         uint32_t defvref=1100;
         esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, defvref, &characteristics);
         ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::msg, gpsEvent, &gps));
@@ -1156,6 +1165,7 @@ void app_main(void)
       }
     }
   } else {
+    xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)(BIT2|BIT3), tskIDLE_PRIORITY, NULL);
     getAppState()->gps = item_state_t::INACTIVE;
   }
 

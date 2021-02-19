@@ -10,6 +10,7 @@ esp_err_t ota_handler(httpd_req_t *req);
 esp_err_t app_handler(httpd_req_t *req);
 esp_err_t list_entity_handler(httpd_req_t *req);
 esp_err_t rest_handler(httpd_req_t *req);
+esp_err_t ws_handler(httpd_req_t *req);
 esp_err_t stat_handler(httpd_req_t *req);
 esp_err_t config_handler(httpd_req_t *req);
 
@@ -88,11 +89,12 @@ static const httpd_uri_t restPutUri = {
     .user_ctx  = NULL
 };
 
-//static const httpd_uri_t wsUri = {
-//    .uri       = "/ws/*",
-//    .method    = HTTP_POST,
-//    .handler   = ws_handler,
-//    .user_ctx  = NULL
-//};
+static const httpd_uri_t wsUri = {
+    .uri       = "/ws",
+    .method    = HTTP_GET,
+    .handler   = ws_handler,
+    .user_ctx  = NULL,
+    .is_websocket = true
+};
 
 #endif

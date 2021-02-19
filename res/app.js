@@ -1,6 +1,8 @@
 var controller = null;
+var ws = null;
 var fileStats = {};
 var lastFolder = "";
+var activeTab = null;
 
 function dirname(path) {
     return (path.match(/.*\//) + "").replace(/(.+)\/$/g, "$1");
@@ -77,6 +79,13 @@ function addTableRow(tbody, path, file, totCtrl) {
     }
 }
 
+function SendCommand(body) {
+    return fetch("/status/cmd", {
+        method: 'put',
+        body: JSON.stringify(body)
+    });
+}
+
 function renderFolder(path) {
     if (controller)
         controller.abort();
@@ -87,6 +96,7 @@ function renderFolder(path) {
     lastFolder = path;
     controller = new AbortController();
     var tbody = document.getElementsByClassName("file-table")[0].getElementsByTagName("tbody")[0];
+    activeTab = tbody;
     var caption = document.getElementsByClassName("file-table")[0].getElementsByTagName("caption")[0];
     var totctrl = document.getElementsByClassName("file-table")[0].getElementsByTagName("tfoot")[0].firstElementChild.children[1];
     totctrl.innerText = 0;
@@ -158,8 +168,7 @@ function SaveForm(form) {
         method: 'post',
         body: JSON.stringify(GetJsonFromInputs(form))
     }).then(data => {
-        console.log(data);
-        refreshConfig();
+        refreshConfig(true);
     });
 }
 
@@ -184,16 +193,26 @@ function GetJsonFromInputs(form) {
 }
 
 function jsonifyField(fPath, curfs, fld, val) {
+    var tp = val.toString().indexOf("\n").toString() > 0 ? "textarea" : "input";
     var cfld = Array.from(curfs.querySelectorAll("label")).find(cfld => {
-        var input = cfld.querySelector("input");
+        var input = cfld.querySelector(tp);
         if (input && (input.name == fPath)) {
             return cfld;
         }
         return undefined;
     }) || curfs.appendChild(document.createElement("label"));
-    cfld.innerText = fld;
-    var input = cfld.querySelector("input") || cfld.appendChild(document.createElement("input"));
+    if (cfld.querySelectorAll("div").length == 0) {
+        var label = document.createElement("div");
+        label.innerText = fld;
+        cfld.appendChild(label);
+    }
+    var input = cfld.querySelector(tp) || cfld.appendChild(document.createElement(tp));
     input.name = fPath;
+    if (tp == "textarea") {
+        val = val.split("\n").filter(ln => ln != "").sort().join("\n");
+        input.cols = 40;
+        input.rows = val.split("\n").length;
+    }
     if (isFloat(val)) {
         if ((fld != "Lattitude") && (fld != "Longitude") && (fld != "lat") && (fld != "lng")) {
             val = parseFloat(val).toFixed(2);
@@ -204,7 +223,7 @@ function jsonifyField(fPath, curfs, fld, val) {
         }
     }
 
-    if (!isNaN(val) && (val !== "")) {
+    if ((val != true) && (val != false) && !isNaN(val) && (val !== "")) {
         input.type = "number";
     }
 
@@ -222,6 +241,7 @@ function jsonifyField(fPath, curfs, fld, val) {
         input.checked = false;
     }
     input.value = val;
+    cfld.classList.add(input.type);
 }
 
 function jsonifyFormFielset(curPath, curfs, curObject) {
@@ -230,7 +250,11 @@ function jsonifyFormFielset(curPath, curfs, curObject) {
         var fPath = `${curPath}${fld}`;
         if (Array.isArray(curObject[fld])) {
             var arrFs = curfs.querySelector(`label[id='${fPath}']`) || curfs.appendChild(document.createElement("label"));
-            arrFs.innerText = fld
+            if (arrFs.querySelectorAll("div").length == 0) {
+                var label = document.createElement("div");
+                label.innerText = fld;
+                arrFs.appendChild(label);
+            }
             arrFs.id = fPath;
             curObject[fld].forEach((arit, idx) => {
                 var childPath = `${curPath}${fld}[${idx}]`;
@@ -259,7 +283,10 @@ function jsonifyFormFielset(curPath, curfs, curObject) {
     });
 }
 
-function refreshStatus() {
+function refreshStatus(clicked) {
+    var form = document.querySelectorAll(".system-config form")[0];
+    if (clicked)
+        activeTab = form;
     if (controller)
         controller.abort();
     controller = null;
@@ -267,7 +294,6 @@ function refreshStatus() {
         method: 'post'
     }).then(data => {
         data.json().then(status => {
-            var form = document.querySelectorAll(".system-config form")[0];
             jsonifyFormFielset(
                 "/",
                 Array.from(form.querySelectorAll("fieldset")).find(fs => fs.id == "") || form.appendChild(document.createElement("fieldset")),
@@ -276,7 +302,10 @@ function refreshStatus() {
     });
 }
 
-function refreshConfig() {
+function refreshConfig(clicked) {
+    var form = document.querySelectorAll(".system-config form")[1];
+    if (clicked)
+        activeTab = form;
     if (controller)
         controller.abort();
     controller = null;
@@ -284,7 +313,6 @@ function refreshConfig() {
         method: 'post'
     }).then(data => {
         data.json().then(config => {
-            var form = document.querySelectorAll(".system-config form")[1];
             var saveBtn = form.querySelector("button");
             jsonifyFormFielset(
                 "/",
@@ -294,6 +322,59 @@ function refreshConfig() {
     });
 }
 
+function refreshSystem() {
+    var logs = document.getElementById("slide-4").getElementsByClassName("loglines")[0];
+    activeTab = logs;
+    if (controller)
+        controller.abort();
+    controller = null;
+
+    if (ws == null) {
+        ws = new WebSocket("ws://" + window.location.hostname + "/ws");
+        var lmsg;
+        var log;
+        ws.onmessage = function(event) {
+            if ((event.data == null) || (event.data.length == 0)) {
+                return;
+            }
+            var data = event.data.replaceAll(/^[^IDVWE]*/g, "").replaceAll(/(.*)([\x1B].*\n?)/g, "$1");
+
+            if (data.match(/^[IDVWE] \([0-9.:]{12}\) [^:]+:.*/)) {
+                log = document.createElement("div");
+                log.classList.add("log");
+                log.classList.add(`LOG${data.substr(0,1)}`);
+
+                var llevel = document.createElement("div");
+                llevel.classList.add(`LOGLEVEL`);
+                llevel.innerText = data.substr(0, 1);
+                log.appendChild(llevel);
+
+                var ldate = document.createElement("div");
+                ldate.classList.add(`LOGDATE`)
+                ldate.innerText = data.substr(3, 12);
+                log.appendChild(ldate);
+
+                var lfunc = document.createElement("div");
+                lfunc.classList.add(`LOGFUNCTION`)
+                lfunc.innerText = data.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
+                log.appendChild(lfunc);
+
+                lmsg = document.createElement("div");
+                lmsg.classList.add(`LOGLINE`)
+                lmsg.innerText = data.substr(data.indexOf(lfunc.innerText) + lfunc.innerText.length + 2).replaceAll(/^[\r\n]*/g, "");
+                log.appendChild(lmsg);
+
+                logs.appendChild(log);
+            } else {
+                lmsg.innerText += `\n${data}`;
+            }
+            if (activeTab == logs)
+                lmsg.scrollIntoView();
+        }
+        ws.onopen = () => { ws.send("Logs") };
+        ws.onerror = (err) => { ws = null };
+    }
+}
 
 const getCellValue = (tr, idx) => tr.children[idx].innerText || tr.children[idx].textContent;
 

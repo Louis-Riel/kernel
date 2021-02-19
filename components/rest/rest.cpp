@@ -49,8 +49,8 @@ esp_err_t filedownload_event_handler(esp_http_client_event_t *evt)
                     fname = (char*)evt->user_data;
                     ESP_LOGD(__FUNCTION__,"Saving as override %s", fname);
                 } else if (*((int*)evt->user_data) == 0) {
-                    ESP_LOGD(__FUNCTION__,"Saving as %s", fname);
                     fname = evt->header_value;
+                    ESP_LOGD(__FUNCTION__,"Saving as %s", fname);
                 } else {
                     ESP_LOGW(__FUNCTION__, "We got dup headers");
                     break;
@@ -69,6 +69,7 @@ esp_err_t filedownload_event_handler(esp_http_client_event_t *evt)
         break;
     case HTTP_EVENT_ON_DATA:
         if ((evt->user_data != NULL) && (*((char*)evt->user_data) != '/')) {
+            ESP_LOGV(__FUNCTION__,"%d bytes",evt->data_len);
             fwrite(evt->data,1,evt->data_len,*((FILE**)evt->user_data));
         } else {
             ESP_LOGW(__FUNCTION__,"Data with no dest file %d bytes",evt->data_len);
@@ -182,7 +183,7 @@ void restSallyForth(void *pvParameter) {
     xEventGroupClearBits(eventGroup,HTTP_SERVING);
     if (httpd_start(&server, &config) == ESP_OK) {
         ESP_LOGI(__FUNCTION__, "Registering URI handlers");
-        //ESP_ERROR_CHECK(httpd_register_uri_handler(server, &wsUri));
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &wsUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &restPostUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &restPutUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &appUri));

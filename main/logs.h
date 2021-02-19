@@ -25,5 +25,7 @@ typedef enum {
 void initLog();
 void dumpLogs();
 char* getLogFName();
+typedef bool (*LogFunction_t)( void * ,char * );
+void registerLogCallback( LogFunction_t callback, void* param);
 
 #endif
