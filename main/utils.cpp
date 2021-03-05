@@ -25,6 +25,8 @@ const char mount_point[] = "/sdcard";
 int8_t numSdCallers=0;
 wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
+static uint32_t numOpenFiles=0;
+
 sdmmc_host_t* getSDHost(){
   return &host;
 }
@@ -183,12 +185,12 @@ bool initSPISDCard(bool log)
     };
     
     if (log) ESP_LOGV(__FUNCTION__, "Using SPI peripheral");
-    app_config_t* cfg = getAppConfig();
+    AppConfig* cfg = AppConfig::GetAppConfig()->GetConfig("/sdcard");
 
     spi_bus_config_t bus_cfg = {
-        .mosi_io_num = cfg->sdcard_config.MosiPin.value,
-        .miso_io_num = cfg->sdcard_config.MisoPin.value,
-        .sclk_io_num = cfg->sdcard_config.ClkPin.value,
+        .mosi_io_num = cfg->GetIntProperty("MosiPin"),
+        .miso_io_num = cfg->GetIntProperty("MisoPin"),
+        .sclk_io_num = cfg->GetIntProperty("ClkPin"),
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = 4000,
@@ -198,7 +200,7 @@ bool initSPISDCard(bool log)
 
     sdspi_device_config_t slot_config = {
       .host_id   = SPI2_HOST,
-      .gpio_cs   = cfg->sdcard_config.Cspin.value, 
+      .gpio_cs   = cfg->GetPinNoProperty("Cspin"), 
       .gpio_cd   = SDSPI_SLOT_NO_CD, 
       .gpio_wp   = SDSPI_SLOT_NO_WP, 
       .gpio_int  = GPIO_NUM_NC 
@@ -251,7 +253,7 @@ bool initSPISDCard(bool log)
       //    return false;
       //}
       ret=esp_vfs_littlefs_register(&conf);
-      if (log) ESP_LOGD(__FUNCTION__, "SD card mounted %d", ret);
+      if (log) ESP_LOGD(__FUNCTION__, "lfs mounted %d", ret);
       if (ret != ESP_OK) {
         if (log) ESP_LOGE(__FUNCTION__,"Failed in registering littlefs %s", esp_err_to_name(ret));
         return ret;
@@ -281,7 +283,7 @@ bool initSPISDCard(){
 
 bool moveFile(char* src, char* dest){
   int res;
-  FILE* srcF = fopen(src,"r");
+  FILE* srcF = fOpen(src,"r");
   if (srcF != 0) {
     FILE* destF = fopen(dest,"w",true);
     if (destF != NULL) {
@@ -289,8 +291,8 @@ bool moveFile(char* src, char* dest){
       while ((ch=fgetc(srcF))!=EOF){
         fputc(ch,destF);
       }
-      fclose(destF);
-      fclose(srcF);
+      fClose(destF);
+      fClose(srcF);
       if ((res=unlink(src))==0){
         ESP_LOGD(__FUNCTION__,"moved %s to %s",src,dest);
         return true;
@@ -372,6 +374,24 @@ char* indexOf(const char* str, const char* key){
   return NULL;
 }
 
+char* lastIndexOf(const char* str, const char* key){
+  if ((str == NULL) || (key == NULL) || (strlen(str)==0) || (strlen(key) == 0)){
+    ESP_LOGV(__FUNCTION__,"Missing source or key");
+    return NULL;
+  }
+  uint32_t slen = strlen(str);
+  ESP_LOGV(__FUNCTION__,"Looking for %s in %s(%d)",key,str,slen);
+
+  for (int32_t idx=slen-1; idx >=0 ; idx--) {
+    if ((str[idx] == key[0]) && (indexOf(&str[idx],key) == &str[idx])) {
+      ESP_LOGV(__FUNCTION__,"found %s in %s(%d) at %d",key,str,slen, idx);
+      return (char*)&str[idx];
+    }
+  }
+  ESP_LOGV(__FUNCTION__,"%s not in %s(%d)",key,str,slen);
+  return NULL;
+}
+
 static uint8_t* img = NULL;
 static uint32_t ilen=0; 
 
@@ -407,7 +427,7 @@ uint8_t* loadImage(bool reset,uint32_t* iLen) {
 }
 
 FILE * fopen (const char * _name, const char * _type,bool createDir){
-  return fopen(_name,_type,createDir, true);
+  return fopen(_name,_type,createDir, LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE);
 }
 
 FILE * fopen (const char * _name, const char * _type,bool createDir, bool log){
@@ -438,10 +458,12 @@ FILE * fopen (const char * _name, const char * _type,bool createDir, bool log){
           if ((res=mkdir(folderName,0755)) != 0) {
             if (res != EEXIST) {
               if (log) ESP_LOGV(__FUNCTION__,"Folder %s can not be created,hopefully because it exists %s",folderName,esp_err_to_name_r(res,buf,255));
-              break;
             } else {
               if (log) ESP_LOGD(__FUNCTION__,"Folder %s created",folderName);
             }
+          }
+          if (closingMark == NULL) {
+            break;
           }
           if (closingMark){
             *(closingMark)='/';
@@ -459,5 +481,28 @@ FILE * fopen (const char * _name, const char * _type,bool createDir, bool log){
     }
     free(folderName);
   }
-  return ::fopen(_name,_type);
+  return fOpen(_name,_type);
 }
+
+FILE * fOpen (const char * _name, const char * _type){
+  FILE* ret = ::fopen(_name,_type);
+  if (ret != NULL) {
+    numOpenFiles++;
+  }
+  return ret;
+}
+
+int fClose (FILE * f){
+  int ret = EOF;
+  if (f != NULL){
+    ret = ::fclose(f);
+    if (ret == 0)
+      numOpenFiles--;
+  }
+  return ret;
+}
+
+uint32_t GetNumOpenFiles(){
+  return numOpenFiles;
+}
+

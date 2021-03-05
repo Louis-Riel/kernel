@@ -136,11 +136,7 @@ bool GetKmls(ip4_addr_t* ipInfo){
     uint8_t retryCnt=0;
     uint32_t kmlFilesPos=0;
     xEventGroupSetBits(eventGroup,GETTING_TRIP_LIST);
-    while (((err = esp_http_client_perform(client)) == ESP_ERR_HTTP_CONNECT) && (retryCnt++<10))
-    {
-        ESP_LOGD(__FUNCTION__, "HTTP GET listtrip failed: %s", esp_err_to_name(err));
-        vTaskDelay(500/portTICK_RATE_MS);
-    }
+    err = esp_http_client_perform(client);
 
     if (err != ESP_OK) {
         ESP_LOGD(__FUNCTION__,"Cannot get triplist. Probably not a tracker but a lurker. %s. len:%d", esp_err_to_name(err),kmlFilesPos);
@@ -261,7 +257,7 @@ bool CheckOTA(ip4_addr_t* ipInfo) {
                         ESP_LOGI(__FUNCTION__,"firmware update needed, %s!=%s",dmd5,ccmd5);
                         esp_http_client_cleanup(client);
                         memset(config,0,sizeof(esp_http_client_config_t));
-                        fclose(fw);
+                        fClose(fw);
                         uint32_t ilen;
                         uint8_t* img = loadImage(false,&ilen);
                         if (ilen > 0){
@@ -311,7 +307,7 @@ bool CheckOTA(ip4_addr_t* ipInfo) {
                 } else {
                     ESP_LOGE(__FUNCTION__,"Error with weird md5 len %d", len);
                 }
-                fclose(fw);
+                fClose(fw);
             } else {
                 ESP_LOGE(__FUNCTION__,"Failed in opeing md5");
             }
@@ -349,11 +345,7 @@ bool GetLogs(ip4_addr_t* ipInfo,uint32_t devId){
     xEventGroupSetBits(eventGroup,GETTING_TRIP_LIST);
     esp_err_t err;
     uint8_t retryCnt=0;
-    while (((err = esp_http_client_perform(client)) == ESP_ERR_HTTP_CONNECT) && (retryCnt++<10) && (kmlFilesPos == 0))
-    {
-        ESP_LOGD(__FUNCTION__, "HTTP GET log failed: %s", esp_err_to_name(err));
-        vTaskDelay(500/portTICK_RATE_MS);
-    }
+    err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
 
     if (err != ESP_OK) {
@@ -458,11 +450,7 @@ cJSON* GetConfig(ip4_addr_t* ipInfo){
     xEventGroupSetBits(eventGroup,GETTING_TRIP_LIST);
     esp_err_t err;
     uint8_t retryCnt=0;
-    while (((err = esp_http_client_perform(client)) == ESP_ERR_HTTP_CONNECT) && (retryCnt++<10) && (kmlFilesPos == 0))
-    {
-        ESP_LOGD(__FUNCTION__, "HTTP GET config failed: %s", esp_err_to_name(err));
-        vTaskDelay(500/portTICK_RATE_MS);
-    }
+    err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
     free((void*)config->url);
     free((void*)config);
@@ -485,7 +473,7 @@ cJSON* GetConfig(ip4_addr_t* ipInfo){
         FILE* destF = fopen(fname,"w",true);
         if (destF != NULL) {
             fputs(kmlFiles,destF);
-            fclose(destF);
+            fClose(destF);
             ESP_LOGV(__FUNCTION__,"Wrote %s",fname);
         } else {
             ESP_LOGE(__FUNCTION__,"Cannot open dest %s",fname);
@@ -520,11 +508,7 @@ cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
     xEventGroupSetBits(eventGroup,GETTING_TRIP_LIST);
     esp_err_t err;
     uint8_t retryCnt=0;
-    while (((err = esp_http_client_perform(client)) == ESP_ERR_HTTP_CONNECT) && (retryCnt++<10) && (kmlFilesPos == 0))
-    {
-        ESP_LOGD(__FUNCTION__, "HTTP GET status failed: %s", esp_err_to_name(err));
-        vTaskDelay(500/portTICK_RATE_MS);
-    }
+    err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
     free((void*)config->url);
     free((void*)config);
@@ -547,7 +531,7 @@ cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
         FILE* destF = fopen(fname,"w",true);
         if (destF != NULL) {
             fputs(kmlFiles,destF);
-            fclose(destF);
+            fClose(destF);
             ESP_LOGV(__FUNCTION__,"Wrote %s",fname);
         } else {
             ESP_LOGE(__FUNCTION__,"Cannot open dest %s",fname);
@@ -586,7 +570,7 @@ void extractClientTar(char* tarFName){
                             ESP_LOGD(__FUNCTION__,"Saved as %s (%d bytes)\n", fname, header.size);
                             fw = fopen(fname,"w",true);
                             fwrite(buf,1,header.size,fw);
-                            fclose(fw);
+                            fClose(fw);
                         }
                         cJSON_Delete(msg);
                     }
@@ -600,7 +584,7 @@ void extractClientTar(char* tarFName){
                             fwrite(buf,1,chunkLen,fw);
                             len+=chunkLen;
                         }
-                        fclose(fw);
+                        fClose(fw);
                         ESP_LOGD(__FUNCTION__,"end %s (%d bytes)\n", header.name, len);
                     } else {
                         ESP_LOGE(__FUNCTION__,"Cannot write %s", fname);
@@ -623,12 +607,12 @@ void extractClientTar(char* tarFName){
 }
 
 void pullStation(void *pvParameter) {
+    esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
     if (initSPISDCard()){
         esp_ip4_addr_t* ipInfo = (esp_ip4_addr_t*) pvParameter;
 
         char tarFName[255];
 
-        esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
         memset(config,0,sizeof(esp_http_client_config_t));
         config->url=(char*)malloc(30);
         sprintf((char*)config->url,"http://" IPSTR "/trips",IP2STR(ipInfo));
@@ -645,22 +629,13 @@ void pullStation(void *pvParameter) {
         esp_http_client_handle_t client = esp_http_client_init(config);
         esp_err_t err;
         uint8_t retryCnt=0;
-        while ((((err = esp_http_client_perform(client)) == EAGAIN) || ( err == EWOULDBLOCK) || (err == EINPROGRESS)) && (retryCnt++<4))
-        {
-            ESP_LOGE(__FUNCTION__, "\nHTTP GET request failed: %s", esp_err_to_name(err));
-            vTaskDelay(500/portTICK_RATE_MS);
-        }
+        err = esp_http_client_perform(client);
 
         tarFName[0]='/';
         tarFName[1]='s';
         tarFName[2]='d';
         tarFName[3]='c';
 
-        ESP_LOGI(__FUNCTION__, "\nURL: %s\n\nHTTP GET Status = %d, content_length = %d\n%s",
-                config->url,
-                esp_http_client_get_status_code(client),
-                esp_http_client_get_content_length(client),
-                esp_err_to_name(err));
         if (esp_http_client_get_status_code(client) == 200){
             esp_http_client_cleanup(client);
             free((void*)config->url);
@@ -686,14 +661,22 @@ void pullStation(void *pvParameter) {
             } else {
                 ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(ret));
             }
-            esp_http_client_cleanup(client);
             extractClientTar(tarFName);
             xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)(BIT2|BIT3), tskIDLE_PRIORITY, NULL);
+        } else {
+            ESP_LOGW(__FUNCTION__, "\nURL: %s\n\nHTTP GET Status = %d, content_length = %d\n%s",
+                    config->url,
+                    esp_http_client_get_status_code(client),
+                    esp_http_client_get_content_length(client),
+                    esp_err_to_name(err));
         }
+        esp_http_client_cleanup(client);
         free((void*)config->url);
-        free((void*)config);
-        deinitSPISDCard();
     }
+    
+    free((void*)config);
+    free(pvParameter);
+    deinitSPISDCard();
     vTaskDelete(NULL);
 }
 
@@ -734,7 +717,7 @@ esp_err_t http_tar_download_event_handler(esp_http_client_event_t *evt)
         }
         break;
     case HTTP_EVENT_ON_FINISH:
-        fclose((FILE*)evt->user_data);
+        fClose((FILE*)evt->user_data);
         ESP_LOGD(__FUNCTION__, "HTTP_EVENT_ON_FINISH");
         break;
     case HTTP_EVENT_DISCONNECTED:

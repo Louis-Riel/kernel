@@ -81,12 +81,13 @@ esp_err_t filedownload_event_handler(esp_http_client_event_t *evt)
         break;
     case HTTP_EVENT_ON_FINISH:
         ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_FINISH ");
+        xEventGroupSetBits(eventGroup,DOWNLOAD_FINISHED);
         if ((evt->user_data != NULL) && (*((char*)evt->user_data) != '/')) {
-            fclose(*(FILE**)evt->user_data);
+            fClose(*(FILE**)evt->user_data);
         } else {
             ESP_LOGW(__FUNCTION__,"Close file with no dest file %d bytes",evt->data_len);
+            return ESP_FAIL;
         }
-        xEventGroupSetBits(eventGroup,DOWNLOAD_FINISHED);
         break;
     case HTTP_EVENT_DISCONNECTED:
         ESP_LOGV(__FUNCTION__, "HTTP_EVENT_DISCONNECTED\n");

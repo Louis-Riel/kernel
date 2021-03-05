@@ -36,6 +36,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "freertos/event_groups.h"
 #include "../../main/logs.h"
 #include "../../main/utils.h"
+#include "cJSON.h"
 
 #define _GPS_VERSION "1.0.2" // software version of this library
 #define _GPS_MPH_PER_KNOT 1.15077945
@@ -298,8 +299,8 @@ enum poiState_t {
 class TinyGPSPlus
 {
 public:
-  TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin,uint8_t lastSleepIdx,
-              RawDegrees llat, RawDegrees llng, uint32_t course, uint32_t speed, uint32_t altitude,EventGroupHandle_t app_eg);
+  TinyGPSPlus(cJSON* config);
+  TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin);
   bool encode(char c); // process one character received from GPS
   TinyGPSPlus &operator << (char c) {encode(c); return *this;}
 
@@ -315,11 +316,6 @@ public:
   TinyGPSAltitude lastAltitude;
   TinyGPSInteger satellites;
   TinyGPSHDOP hdop;
-  gpio_num_t enpin;
-  uint8_t curFreqIdx;
-  QueueHandle_t runnerSemaphore = xSemaphoreCreateCounting(10,0);
-  EventGroupHandle_t app_eg;
-  EventGroupHandle_t eg;
   
   static const char *libraryVersion() { return _GPS_VERSION; }
   void processEncoded(void);
@@ -372,27 +368,25 @@ public:
   void gpsResume();
   void gpsPause();
   TaskHandle_t runners[255];
-  uint8_t numRunners;
   uint8_t stackTask();
+  gpio_num_t enPin();
   void unStackTask(uint8_t taskHandle);
   uint32_t getSleepTime();
-  poiState_t poiState;
   void flagProtocol(gps_protocol_t protocol, bool state);
   esp_err_t gps_esp_event_post(esp_event_base_t event_base,
                             int32_t event_id,
                             void* event_data,
                             size_t event_data_size,
                             TickType_t ticks_to_wait);
+  EventGroupHandle_t eg;
 
-   TinyGPSCustom* gpTxt;
 private:
+  void Init();
   static void gpsEventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
   enum {GPS_SENTENCE_GPGGA, GPS_SENTENCE_GPRMC, GPS_SENTENCE_OTHER};
   static QueueHandle_t uart0_queue;
   static void uart_event_task(void *pvParameters);
   esp_timer_handle_t periodic_timer;
-  uint8_t gpsWarmTime;
-  uint8_t toBeFreqIdx;
   void adjustRate();
   void CalcChecksum(uint8_t *Message, uint8_t Length);
   static void waitOnStop(void* gps);
@@ -419,6 +413,14 @@ private:
   uint32_t sentencesWithFixCount;
   uint32_t failedChecksumCount;
   uint32_t passedChecksumCount;
+  gpio_num_t enpin;
+  uint8_t curFreqIdx;
+  QueueHandle_t runnerSemaphore;
+  uint8_t numRunners;
+  poiState_t poiState;
+  TinyGPSCustom* gpTxt;
+  uint8_t gpsWarmTime;
+  uint8_t toBeFreqIdx;
 
   // internal utilities
   int fromHex(char a);

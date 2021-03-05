@@ -1,7 +1,7 @@
 table.greyGridTable td,
 table.greyGridTable th {
-    border: 1px solid #333333;
-    padding: 3px 4px;
+    border: 1px solid grey;
+    border-style: inset;
 }
 
 table.greyGridTable tbody td {
@@ -9,7 +9,7 @@ table.greyGridTable tbody td {
 }
 
 table.greyGridTable td:nth-child(even) {
-    background: #2a3428;
+    background: #2a34288c;
 }
 
 table.greyGridTable td:nth-child(le) {
@@ -23,14 +23,17 @@ table.greyGridTable tfoot {
 table.greyGridTable caption {
     position: sticky;
     top: 0;
-    background-color: #3a4938;
-    height: 22px;
+    height: 30px;
+    font-family: monospace;
+    font-size: x-large;
+    background: linear-gradient(to left, #040404, #222b21);
 }
 
 .file {
     background-image: url('data:image/svg+xml;utf8,<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 512.007 512.007" style="enable-background:new 0 0 512.007 512.007;" xml:space="preserve"><g>	<g>		<g>			<path d="M128.004,375.474h51.2c4.71,0,8.533-3.823,8.533-8.533s-3.823-8.533-8.533-8.533h-51.2c-4.71,0-8.533,3.823-8.533,8.533				S123.293,375.474,128.004,375.474z"/>			<path d="M475.37,121.974L355.903,2.508c-2.449-2.449-6.118-3.183-9.301-1.852c-3.183,1.323-5.265,4.437-5.265,7.885v85.333				c0,23.927,18.739,42.667,42.667,42.667h34.133c4.71,0,8.533-3.823,8.533-8.533c0-4.71-3.823-8.533-8.533-8.533h-34.133				c-14.592,0-25.6-11.008-25.6-25.6V29.14l102.4,102.4v337.801c0,14.114-11.486,25.6-25.6,25.6h-358.4				c-14.114,0-25.6-11.486-25.6-25.6V42.674c0-14.114,11.486-25.6,25.6-25.6h238.933c4.71,0,8.533-3.823,8.533-8.533				s-3.823-8.533-8.533-8.533H76.804c-23.526,0-42.667,19.14-42.667,42.667v426.667c0,23.526,19.14,42.667,42.667,42.667h358.4				c23.526,0,42.667-19.14,42.667-42.667V128.007C477.87,125.746,476.966,123.57,475.37,121.974z"/>			<path d="M128.004,426.674h85.333c4.71,0,8.533-3.823,8.533-8.533s-3.823-8.533-8.533-8.533h-85.333				c-4.71,0-8.533,3.823-8.533,8.533S123.293,426.674,128.004,426.674z"/>			<path d="M307.204,366.941c0-4.71-3.823-8.533-8.533-8.533h-85.333c-4.71,0-8.533,3.823-8.533,8.533s3.823,8.533,8.533,8.533				h85.333C303.381,375.474,307.204,371.651,307.204,366.941z"/>			<path d="M392.537,196.274c0-4.71-3.823-8.533-8.533-8.533h-256c-4.71,0-8.533,3.823-8.533,8.533v119.467				c0,4.71,3.823,8.533,8.533,8.533h51.2c2.261,0,4.429-0.896,6.033-2.5l53.7-53.7l19.567,19.567c3.337,3.336,8.73,3.336,12.066,0				l36.634-36.634l36.634,36.634c3.336,3.336,8.73,3.336,12.066,0c3.337-3.337,3.337-8.73,0-12.066l-42.667-42.667				c-3.337-3.337-8.73-3.337-12.066,0l-36.634,36.634l-19.567-19.567c-3.336-3.336-8.73-3.336-12.066,0l-57.233,57.233h-39.134				v-102.4H375.47v102.4H230.404c-4.71,0-8.533,3.823-8.533,8.533s3.823,8.533,8.533,8.533h153.6c4.71,0,8.533-3.823,8.533-8.533				V196.274z"/>			<path d="M153.604,238.941c0,9.412,7.654,17.067,17.067,17.067c9.412,0,17.067-7.654,17.067-17.067s-7.654-17.067-17.067-17.067				C161.258,221.874,153.604,229.528,153.604,238.941z"/>			<path d="M247.47,426.674h119.467c4.71,0,8.533-3.823,8.533-8.533s-3.823-8.533-8.533-8.533H247.47				c-4.71,0-8.533,3.823-8.533,8.533S242.76,426.674,247.47,426.674z"/>			<path d="M128.004,153.607h85.333c4.71,0,8.533-3.823,8.533-8.533c0-4.71-3.823-8.533-8.533-8.533h-85.333				c-4.71,0-8.533,3.823-8.533,8.533C119.47,149.784,123.293,153.607,128.004,153.607z"/>			<path d="M392.537,366.941c0-4.71-3.823-8.533-8.533-8.533h-51.209c-4.71,0-8.533,3.823-8.533,8.533s3.823,8.533,8.533,8.533				h51.209C388.714,375.474,392.537,371.651,392.537,366.941z"/>		</g>	</g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g><g></g></svg>');
     background-size: contain;
     background-color: #20281f;
+    font-size: large;
 }
 
 .folder {
@@ -40,14 +43,14 @@ table.greyGridTable caption {
 }
 
 table.greyGridTable thead * {
-    font-weight: bold;
-    /* color: #333333; */
     text-align: center;
     border-left: 2px solid #333333;
     background: #181d17;
-    border-bottom: 4px solid #333333;
+    border-bottom: 2px solid #c0c0c0;
     position: sticky;
     top: 20px;
+    color: aqua;
+    padding-top: 8px;
 }
 
 table.greyGridTable thead th:first-child {
@@ -62,7 +65,6 @@ table.greyTable caption {
 table.greyGridTable tfoot * {
     font-size: 14px;
     font-weight: bold;
-    /* color: #333333; */
     position: sticky;
     bottom: 0;
     background-color: #181d17 !important;
@@ -70,11 +72,6 @@ table.greyGridTable tfoot * {
 
 table.greyGridTable tfoot td {
     font-size: 14px;
-}
-
-.file-table {
-    max-height: 100%;
-    width: 100%;
 }
 
 .site-header {
@@ -118,7 +115,7 @@ textarea {
 
 label {
     font-style: italic;
-    /* width: 100%; */
+    font-size: small;
 }
 
 * {
@@ -127,9 +124,10 @@ label {
 
 .slider {
     overflow: hidden;
-    height: 90%;
-    width: 90%;
+    height: 100%;
+    width: 100%;
     color: chartreuse;
+    padding-top: 20px;
 }
 
 .slides {
@@ -139,7 +137,7 @@ label {
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
     position: relative;
-    max-height: 90%;
+    max-height: 95%;
     max-width: 100%;
 }
 
@@ -165,6 +163,11 @@ label {
     transition: transform 0.5s;
     overflow: auto;
     width: 100%;
+    border: solid;
+    border-color: silver;
+    padding-left: 15px;
+    padding-top: 10px;
+    max-height: 100%;
 }
 
 .author-info {
@@ -184,7 +187,7 @@ label {
 }
 
 img {
-    object-fit: cover;
+    object-fit: jsoneditor;
     position: absolute;
     top: 0;
     left: 0;
@@ -192,22 +195,16 @@ img {
     height: 100%;
 }
 
-.slider>a {
-    display: inline-flex;
-    height: 30px;
-    /* background: white; */
+div.slider>a {
+    height: 150px;
     text-decoration: none;
-    align-items: center;
-    justify-content: center;
-    position: relative;
     border-top-left-radius: 25%;
     border-top-right-radius: 25%;
     margin-left: 15px;
-    margin-right: 15px;
     padding-left: 10px;
     padding-right: 10px;
-    /* background-color: #ededed; */
-    color: aquamarine;
+    color: #7fff02;
+    background-color: #242d23;
 }
 
 .slider>a:active {
@@ -234,7 +231,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(to bottom, #040404, #3e4e3c);
+    background: linear-gradient(to bottom, #040404, #3a4a38);
     font-family: 'Ropa Sans', sans-serif;
     font-size: x-large;
 }
@@ -243,29 +240,25 @@ body {
     float: left;
 }
 
-.system-config form fieldset input,
+.system-config form fieldset label>input,
 textarea {
-    /* float: right; */
-    background-color: #f0feff0d;
-    color: inherit;
-    font: inherit;
-    /* margin-right: 10px; */
-    width: 95%;
+    width: 90%;
+    font-size: large;
 }
 
-form {
-    height: 100%;
+.system-config form fieldset input,
+textarea {
+    background-color: #f0feff0d;
+    color: greenyellow;
 }
 
 .slides fieldset {
-    border-style: inset;
-    border-width: medium;
-    /* width: 100%; */
+    border-style: none;
+    background: linear-gradient(to bottom, #151a15, #273426);
 }
 
-.slides fieldset fieldset {
+.slides fieldset>fieldset {
     border-style: double;
-    width: 100%;
 }
 
 table.greyGridTable a {
@@ -303,12 +296,14 @@ th {
 }
 
 button {
-    background-color: #23201c45;
-    color: #7fffd4;
-    font: inherit;
-    margin-top: 20px;
-    border-radius: 67%;
-    padding: 10px;
+    background-color: #374635;
+    color: #76ff02;
+    font: caption;
+    border-radius: 42%;
+    padding-left: 15px;
+    padding-right: 15px;
+    padding-top: 5px;
+    padding-bottom: 5px;
 }
 
 .log div {
@@ -340,24 +335,76 @@ button {
 
 label div {
     margin-right: 10px;
-}
-
-label.textarea>label {
-    width: 40%;
-}
-
-label.textarea:nth-child(even) {
-    /* color: red; */
-    clear: both;
-    /* width: 50%; */
+    margin-left: 10px;
+    text-align: center;
+    font-size: large;
 }
 
 label.textarea:nth-child(odd) {
-    /* width: 50%; */
     clear: initial;
 }
 
 label.textarea {
     width: 50%;
     min-width: 315px;
+}
+
+.label {
+    margin-top: 10px;
+    font-size: small;
+    color: aqua;
+    text-align: center;
+}
+
+label.table {
+    width: 100%;
+    margin-top: 10px;
+}
+
+label>div.value {
+    margin-top: 10px;
+    font-size: large;
+}
+
+dialog#jsoneditor {
+    width: 98%;
+    background-color: #323a31;
+}
+
+div#jsoneditorcontrol {
+    color: greenyellow;
+    font-family: monospace;
+    font-size: small;
+    white-space: pre;
+}
+
+.controls {
+    float: right;
+    width: min-content;
+}
+
+caption div.controls button {
+    float: right;
+    margin-top: -30px;
+}
+
+summary {
+    clear: both;
+}
+
+details>details {
+    margin-left: 15px;
+}
+
+summary>label {
+    margin-right: 5px;
+    border: none;
+    padding-top: 7px;
+}
+
+div.slider>a.active {
+    background-color: #3d4d3b;
+    padding-left: 20px;
+    padding-right: 20px;
+    font-family: system-ui;
 }

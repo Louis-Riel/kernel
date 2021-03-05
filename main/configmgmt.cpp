@@ -5,140 +5,537 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-static app_config_t* _app_config = NULL;
 static app_state_t app_state;
 
-app_state_t* getAppState() {
+extern const uint8_t defaultconfig_json_start[] asm("_binary_defaultconfig_json_start");
+extern const uint8_t defaultconfig_json_end[] asm("_binary_defaultconfig_json_end");
+
+app_state_t *getAppState()
+{
   return &app_state;
 }
 
-static app_config_t* resetAppConfig() {
-  ESP_LOGI(__FUNCTION__,"Resetting to Factory Default settings" );
-  memset(_app_config,0,sizeof(app_config_t));
-#ifdef IS_TRACKER
-  _app_config->purpose = (app_config_t::purpose_t)(app_config_t::purpose_t::TRACKER);
-  _app_config->sdcard_config.MisoPin.value=GPIO_NUM_19;
-  _app_config->sdcard_config.MosiPin.value=GPIO_NUM_23;
-  _app_config->sdcard_config.ClkPin.value=GPIO_NUM_18;
-  _app_config->sdcard_config.Cspin.value=GPIO_NUM_4;
-  _app_config->gps_config.enPin.value=GPIO_NUM_13;
-  _app_config->gps_config.rxPin.value=GPIO_NUM_14;
-  _app_config->gps_config.txPin.value=GPIO_NUM_27;
-#endif
-#ifndef IS_TRACKER
-  _app_config->purpose = (app_config_t::purpose_t)(app_config_t::purpose_t::PULLER);
-  _app_config->sdcard_config.MisoPin.value=GPIO_NUM_2;
-  _app_config->sdcard_config.MosiPin.value=GPIO_NUM_15;
-  _app_config->sdcard_config.ClkPin.value=GPIO_NUM_14;
-  _app_config->sdcard_config.Cspin.value=GPIO_NUM_13;
-#define PIN_NUM_MISO (gpio_num_t)2
-#define PIN_NUM_MOSI (gpio_num_t)15
-#define PIN_NUM_CLK (gpio_num_t)14
-#define PIN_NUM_CS (gpio_num_t)13
-#endif
-  return _app_config;
+void cJSON_AddVersionedStringToObject(cfg_label_t *itemToAdd, char *name, cJSON *dest)
+{
+  cJSON *item = cJSON_CreateObject();
+  cJSON_AddItemToObject(item, "value", cJSON_CreateString(itemToAdd->value));
+  cJSON_AddItemToObject(item, "version", cJSON_CreateNumber(itemToAdd->version));
+  cJSON_AddItemToObject(dest, name, item);
 }
 
-app_config_t* getAppConfig() {
-  return _app_config;
+void cJSON_AddVersionedGpioToObject(cfg_gpio_t *itemToAdd, char *name, cJSON *dest)
+{
+  cJSON *item = cJSON_CreateObject();
+  cJSON_AddItemToObject(item, "value", cJSON_CreateNumber(itemToAdd->value));
+  cJSON_AddItemToObject(item, "version", cJSON_CreateNumber(itemToAdd->version));
+  cJSON_AddItemToObject(dest, name, item);
 }
 
-app_config_t* initConfig() {
-  if (_app_config == NULL) {
-    _app_config = (app_config_t*)malloc(sizeof(app_config_t));
-    memset(_app_config,0,sizeof(app_config_t));
-    nvs_handle my_handle;
-    esp_err_t err;
+AppConfig *GetAppConfig()
+{
+  return AppConfig::GetAppConfig();
+}
 
-    if ((err=nvs_flash_init()) == ESP_OK){
-      if ((err = nvs_open("nvs", NVS_READWRITE, &my_handle)) == ESP_OK) {
-        ESP_LOGD(__FUNCTION__,"Opening app config blob");
-        size_t required_size = 0;  // value will default to 0, if not set yet in NVS
-        if ((err = nvs_get_blob(my_handle, "mainappconfig", NULL, &required_size)) == ESP_OK) {
-          if (required_size == sizeof(app_config_t) &&
-              ((err = nvs_get_blob(my_handle, "mainappconfig", _app_config, &required_size)) == ESP_OK)) {
-            ESP_LOGI(__FUNCTION__,"Main App Config Initialized as %d",_app_config->purpose);
-          } else if (err != ESP_OK) {
-              memset(_app_config,0,sizeof(app_config_t));
-              ESP_LOGE(__FUNCTION__,"Failed to get blob content %s",esp_err_to_name(err));
-          } else {
-              memset(_app_config,0,sizeof(app_config_t));
-              ESP_LOGW(__FUNCTION__,"App config size mismatch %d!=%d",required_size,sizeof(app_config_t));
-          }
-        } else if (err == ESP_ERR_NVS_NOT_FOUND) {
-          ESP_LOGW(__FUNCTION__, "Resetting config from not finding existing mainappconfig");
-          if ((err = nvs_set_blob(my_handle,"mainappconfig",(void*)resetAppConfig(),sizeof(app_config_t))) == ESP_OK) {
-            nvs_commit(my_handle);
-          } else {
-            ESP_LOGE(__FUNCTION__,"Failed to save default config %s",esp_err_to_name(err));
-          }
-        } else {
-          ESP_LOGE(__FUNCTION__, "Failed to get blob size, %s",esp_err_to_name(err));
-        }
+AppConfig *AppConfig::configInstance = NULL;
+AppConfig *AppConfig::statusInstance = NULL;
 
-        nvs_close(my_handle);
-        if (_app_config->purpose == app_config_t::purpose_t::UNKNOWN) {
-          ESP_LOGW(__FUNCTION__, "Resetting config from unknown purpose");
-          resetAppConfig();
-          saveConfig();
-        }
+AppConfig::AppConfig(char *filePath)
+{
+  this->filePath=filePath;
+  if ((configInstance == NULL) && (filePath != NULL))
+  {
+    ESP_LOGV(__FUNCTION__, "Setting global config instance");
+    configInstance = this;
+    FILE *currentCfg = fOpen(filePath, "r");
+    if (currentCfg == NULL)
+    {
+      ESP_LOGD(__FUNCTION__, "Getting default config for %s", filePath);
+      json = cJSON_ParseWithLength((const char *)defaultconfig_json_start, defaultconfig_json_end - defaultconfig_json_start);
+      AppConfig::SaveAppConfig(true);
+    }
+    else
+    {
+      ESP_LOGD(__FUNCTION__, "Reading config at %s", filePath);
+      struct stat fileStat;
+      fstat(fileno(currentCfg), &fileStat);
+      char *sjson = (char *)malloc(fileStat.st_size);
+      fread(sjson, 1, fileStat.st_size, currentCfg);
+      fClose(currentCfg);
+      cJSON* toBeCfg = cJSON_ParseWithLength(sjson, fileStat.st_size);
+      if ((toBeCfg != NULL) && (cJSON_GetObjectItem(toBeCfg,"type") != NULL)) {
+        json = toBeCfg;
       } else {
-        ESP_LOGE(__FUNCTION__, "Failed to open nvs %s",esp_err_to_name(err));
+        ESP_LOGE(__FUNCTION__,"Corrupted configuration, not applying:%s",sjson);
       }
-    } else {
-      ESP_LOGE(__FUNCTION__,"Cannot init the NVS %s",esp_err_to_name(err));
+      free(sjson);
     }
   }
-  if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG){
-    ESP_LOGD(__FUNCTION__,"sdcard:{MisoPin:%d,MosiPin:%d,ClkPin:%d,Cspin;%d}",
-        _app_config->sdcard_config.MisoPin.value,
-        _app_config->sdcard_config.MosiPin.value,
-        _app_config->sdcard_config.ClkPin.value,
-        _app_config->sdcard_config.Cspin.value);
-    ESP_LOGD(__FUNCTION__,"gps:{rx:%d,tx:%d,en;%d}",
-        _app_config->gps_config.rxPin.value,
-        _app_config->gps_config.txPin.value,
-        _app_config->gps_config.enPin.value);
-    ESP_LOGD(__FUNCTION__,"Tracker:%s Puller:%s",
-        _app_config->purpose&app_config_t::purpose_t::TRACKER?"Yes":"No",
-        _app_config->purpose&app_config_t::purpose_t::PULLER?"Yes":"No");
+  if ((statusInstance == NULL) && (filePath == NULL))
+  {
+    statusInstance = this;
   }
-
-  //gpio_num_t wakePins[10];
-  //poiConfig_t* pois;
-  return _app_config;
 }
 
-void saveConfig() {
-  nvs_handle my_handle;
-  esp_err_t err;
-  if (_app_config != NULL) {
-    if ((err = nvs_open("nvs", NVS_READWRITE, &my_handle)) == ESP_OK) {
-      // Read the size of memory space required for blob
-      ESP_LOGD(__FUNCTION__,"Opening app config blob");
-      size_t required_size = 0;  // value will default to 0, if not set yet in NVS
-      if ((err = nvs_get_blob(my_handle, "mainappconfig", NULL, &required_size)) == ESP_OK) {
-        if ((err = nvs_set_blob(my_handle, "mainappconfig", _app_config, sizeof(app_config_t))) == ESP_OK) {
-          nvs_commit(my_handle);
-          ESP_LOGI(__FUNCTION__,"Main App Config Updated");
-          if (required_size != sizeof(app_config_t)) {
-            ESP_LOGW(__FUNCTION__,"Config size changed from %d to %d",required_size,sizeof(app_config_t));
-          }
-        } else {
-            ESP_LOGE(__FUNCTION__,"Failed to update blob content %s",esp_err_to_name(err));
-        }
-      } else if (err == ESP_ERR_NVS_NOT_FOUND) {
-        if ((err = nvs_set_blob(my_handle,"mainappconfig",(void*)_app_config,sizeof(app_config_t))) == ESP_OK) {
-          nvs_commit(my_handle);
-        } else {
-          ESP_LOGE(__FUNCTION__,"Failed to save default config %s",esp_err_to_name(err));
-        }
-      } else {
-        ESP_LOGE(__FUNCTION__, "Failed to get blob size, %s",esp_err_to_name(err));
-      }
-      nvs_close(my_handle);
-    } else {
-      ESP_LOGE(__FUNCTION__, "Failed to open nvs %s",esp_err_to_name(err));
+AppConfig::AppConfig(cJSON *config)
+{
+  json = config;
+}
+
+AppConfig *AppConfig::GetAppConfig()
+{
+  return AppConfig::configInstance;
+}
+
+AppConfig *AppConfig::GetAppStatus()
+{
+  return AppConfig::configInstance;
+}
+
+void AppConfig::SetAppConfig(cJSON *config)
+{
+  if (config == NULL)
+  {
+    ESP_LOGE(__FUNCTION__, "Save with empty set");
+    return;
+  }
+  char *c1, *c2;
+  if (strcmp((c1 = cJSON_PrintUnformatted(json)), (c2 = cJSON_PrintUnformatted(config))) != 0)
+  {
+    cJSON_Delete(json);
+    json = config;
+    SaveAppConfig();
+  }
+  else
+  {
+    ESP_LOGV(__FUNCTION__, "No changes to save");
+  }
+  free(c1);
+  free(c2);
+}
+
+void AppConfig::ResetAppConfig(bool save)
+{
+  configInstance->json = cJSON_ParseWithLength((const char *)defaultconfig_json_start, defaultconfig_json_end - defaultconfig_json_start);
+  if (save) {
+    AppConfig::SaveAppConfig(false);
+    esp_restart();
+  }
+}
+
+void AppConfig::SaveAppConfig()
+{
+  AppConfig::SaveAppConfig(false);
+}
+
+void AppConfig::SaveAppConfig(bool skipMount)
+{
+  AppConfig *config = AppConfig::GetAppConfig();
+  if (config->filePath == NULL)
+  {
+    return;
+  }
+  ESP_LOGD(__FUNCTION__, "Saving config");
+  if (!skipMount)
+  {
+    initSPISDCard();
+  }
+  FILE *currentCfg = fOpen(config->filePath, "w");
+  if (currentCfg != NULL)
+  {
+    char *sjson = cJSON_Print(config->json);
+    fwrite(sjson, 1, strlen(sjson), currentCfg);
+    fClose(currentCfg);
+    free(sjson);
+  }
+  else
+  {
+    ESP_LOGE(__FUNCTION__, "Cannot save config at %s", config->filePath);
+  }
+  if (!skipMount)
+  {
+    deinitSPISDCard();
+  }
+}
+
+AppConfig *AppConfig::GetConfig(char *path)
+{
+  if ((path == NULL) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
+  {
+    return this;
+  }
+  return new AppConfig(GetJSONConfig(path));
+}
+
+cJSON *AppConfig::GetJSONConfig(char *path)
+{
+  return GetJSONConfig(json, path, false);
+}
+
+cJSON *AppConfig::GetJSONConfig(cJSON *json, char *path, bool createWhenMissing)
+{
+  if ((path == NULL) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
+  {
+    return json;
+  }
+  ESP_LOGV(__FUNCTION__, "Getting JSON at path %s", path);
+
+  if (path[0] == '/')
+  {
+    path++;
+    ESP_LOGV(__FUNCTION__, "Removed heading / from JSON, path:%s", path);
+  }
+
+  char *slash = 0;
+  if ((slash = indexOf(path, "/")) > 0)
+  {
+    ESP_LOGV(__FUNCTION__, "Getting Child JSON as:%s", slash);
+    char *name = (char *)malloc((slash - path) + 1);
+    memcpy(name, path, slash - path);
+    cJSON *parJson = cJSON_GetObjectItem(json, slash + 1);
+    if (createWhenMissing && (parJson == NULL))
+    {
+      ESP_LOGV(__FUNCTION__, "Creating missing level at path %s", path);
+      parJson = cJSON_AddObjectToObject(json, name);
+    }
+    free(name);
+    return GetJSONConfig(parJson, slash + 1, createWhenMissing);
+  }
+  else
+  {
+    ESP_LOGV(__FUNCTION__, "Getting JSON as:%s", path);
+    if (createWhenMissing && !cJSON_HasObjectItem(json, path))
+    {
+      ESP_LOGV(__FUNCTION__, "%s was missing", path);
+      return cJSON_AddObjectToObject(json, path);
+    }
+    else
+    {
+      return cJSON_GetObjectItem(json, path);
     }
   }
+}
+
+cJSON *AppConfig::GetPropertyHolder(cJSON *prop)
+{
+  if (prop == NULL)
+  {
+    return NULL;
+  }
+
+  if (cJSON_IsObject(prop))
+  {
+    if (cJSON_HasObjectItem(prop, "version"))
+    {
+      return cJSON_GetObjectItem(prop, "value");
+    }
+    else
+    {
+      char *sjson = cJSON_Print(prop);
+      ESP_LOGE(__FUNCTION__, "JSon is an object but missing version:%s", sjson);
+      free(sjson);
+      return NULL;
+    }
+  }
+  return prop;
+}
+
+cJSON *AppConfig::GetJSONProperty(char *path)
+{
+  return GetJSONProperty(json, path, false);
+}
+
+cJSON *AppConfig::GetJSONProperty(cJSON *json, char *path, bool createWhenMissing)
+{
+  if ((path == NULL) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
+  {
+    ESP_LOGW(__FUNCTION__, "Invalid os Missing path:%s", path == NULL ? "*null*" : path);
+    return NULL;
+  }
+  ESP_LOGV(__FUNCTION__, "Getting JSON at %s", path);
+
+  if (path[0] == '/')
+  {
+    path++;
+    ESP_LOGV(__FUNCTION__, "Path adjusted to %s", path);
+  }
+
+  char *lastSlash = lastIndexOf(path, "/");
+  if (lastSlash > 0)
+  {
+    char *propPath = (char *)malloc(strlen(path));
+    memcpy(propPath, path, lastSlash - path);
+    propPath[lastSlash - path] = 0;
+    ESP_LOGV(__FUNCTION__, "Pathed value prop at %s,%s,%s", path == NULL ? "*null*" : path, lastSlash, propPath);
+    cJSON *holder = GetJSONConfig(json, propPath, createWhenMissing);
+    if (holder != NULL)
+    {
+      free(propPath);
+      return cJSON_GetObjectItem(holder, lastSlash + 1);
+    }
+    else
+    {
+      ESP_LOGE(__FUNCTION__, "Cannot get property holder for %s", propPath);
+      free(propPath);
+    }
+  }
+  else
+  {
+    ESP_LOGV(__FUNCTION__, "Value prop at %s(%d)", path == NULL ? "*null*" : path, createWhenMissing);
+    cJSON *prop = cJSON_GetObjectItem(json, path);
+    if (createWhenMissing && (prop == NULL))
+    {
+      if (filePath != NULL)
+      {
+        ESP_LOGV(__FUNCTION__, "Creating versioned prop at %s", path == NULL ? "*null*" : path);
+        prop = cJSON_AddObjectToObject(json, path);
+        cJSON_AddObjectToObject(prop, "value");
+        cJSON_AddObjectToObject(prop, "version");
+      }
+      else
+      {
+        ESP_LOGV(__FUNCTION__, "Creating prop at %s", path == NULL ? "*null*" : path);
+        prop = cJSON_CreateObject();
+        cJSON_AddItemToObject(json, path, prop);
+      }
+    }
+    else
+    {
+      if (prop == NULL)
+        ESP_LOGV(__FUNCTION__, "Missing prop at %s", path == NULL ? "*null*" : path);
+    }
+    return prop;
+  }
+
+  return NULL;
+}
+
+bool AppConfig::HasProperty(char *path)
+{
+  return GetPropertyHolder(GetJSONProperty(path)) != NULL;
+}
+
+char *AppConfig::GetStringProperty(char *path)
+{
+  ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == NULL ? "*null*" : path);
+  cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
+  if (prop != NULL)
+  {
+    return prop->valuestring;
+  }
+  ESP_LOGW(__FUNCTION__, "Nothing to get at %s", path);
+  return NULL;
+}
+
+void AppConfig::SetStringProperty(char *path, char *value)
+{
+  cJSON *holder = GetJSONConfig(json, path, true);
+  if (holder == NULL)
+  {
+    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s", path);
+    return;
+  }
+
+  cJSON *val = cJSON_GetObjectItem(holder, "value");
+  cJSON *version = cJSON_GetObjectItem(holder, "version");
+
+  if (cJSON_IsObject(holder))
+  {
+    if (filePath != NULL)
+    {
+      if (version == NULL)
+      {
+        ESP_LOGV(__FUNCTION__, "Creating versioned %s to %s", path, value);
+        val = cJSON_AddStringToObject(holder, "value", value);
+        version = cJSON_AddNumberToObject(holder, "version", 0);
+        AppConfig::SaveAppConfig();
+      }
+      else if (strcmp(val->valuestring, value) != 0)
+      {
+        ESP_LOGV(__FUNCTION__, "Setting versioned %s to %s", path, value);
+        cJSON_SetValuestring(holder, value);
+        cJSON_SetIntValue(version, version->valueint + 1);
+        AppConfig::SaveAppConfig();
+      }
+    }
+    else
+    {
+      cJSON_SetValuestring(holder, value);
+    }
+  }
+  else
+  {
+    ESP_LOGV(__FUNCTION__, "Setting %s to %s", path, value);
+    cJSON_SetValuestring(holder, value);
+    AppConfig::SaveAppConfig();
+  }
+}
+
+int32_t AppConfig::GetIntProperty(char *path)
+{
+  ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == NULL ? "*null*" : path);
+  cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
+  if (prop != NULL)
+  {
+    return prop->valueint;
+  }
+  ESP_LOGW(__FUNCTION__, "Nothing to get at %s", path);
+  return -1;
+}
+
+void AppConfig::SetIntProperty(char *path, int value)
+{
+  cJSON *holder = GetJSONConfig(json, path, true);
+  if (holder == NULL)
+  {
+    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s", path);
+    return;
+  }
+  if (cJSON_IsObject(holder))
+  {
+    cJSON *val = cJSON_GetObjectItem(holder, "value");
+    cJSON *version = cJSON_GetObjectItem(holder, "version");
+
+    if (version == NULL)
+    {
+      ESP_LOGV(__FUNCTION__, "Creating versioned %s to %d", path, value);
+      val = cJSON_AddNumberToObject(holder, "value", value);
+      version = cJSON_AddNumberToObject(holder, "version", 0);
+      AppConfig::SaveAppConfig();
+    }
+    else if (val->valueint != value)
+    {
+      ESP_LOGV(__FUNCTION__, "Setting versioned %s to %d", path, value);
+      cJSON_SetIntValue(val, value);
+      cJSON_SetIntValue(version, version->valueint + 1);
+      AppConfig::SaveAppConfig();
+    }
+    else
+    {
+      ESP_LOGE(__FUNCTION__, "No change at path %s", path);
+    }
+  }
+  else
+  {
+    ESP_LOGV(__FUNCTION__, "Setting %s to %d", path, value);
+    cJSON_SetIntValue(holder, value);
+    AppConfig::SaveAppConfig();
+  }
+}
+
+double AppConfig::GetDoubleProperty(char *path)
+{
+  ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == NULL ? "*null*" : path);
+  cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
+  if (prop != NULL)
+  {
+    return prop->valuedouble;
+  }
+  ESP_LOGW(__FUNCTION__, "Nothing to get at %s", path);
+  return -1;
+}
+
+void AppConfig::SetDoubleProperty(char *path, double value)
+{
+  cJSON *holder = GetJSONConfig(json, path, true);
+  if (holder == NULL)
+  {
+    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s", path);
+    return;
+  }
+  if (cJSON_IsObject(holder))
+  {
+    cJSON *val = cJSON_GetObjectItem(holder, "value");
+    cJSON *version = cJSON_GetObjectItem(holder, "version");
+
+    if (version == NULL)
+    {
+      ESP_LOGV(__FUNCTION__, "Creating versioned %s to %f", path, value);
+      val = cJSON_AddNumberToObject(holder, "value", value);
+      version = cJSON_AddNumberToObject(holder, "version", 0);
+      AppConfig::SaveAppConfig();
+    }
+    else if (val->valuedouble != value)
+    {
+      ESP_LOGV(__FUNCTION__, "Setting versioned %s to %f", path, value);
+      cJSON_SetNumberValue(val, value);
+      cJSON_SetIntValue(version, version->valueint + 1);
+      AppConfig::SaveAppConfig();
+    }
+    else
+    {
+      ESP_LOGE(__FUNCTION__, "No change at path %s", path);
+    }
+  }
+  else
+  {
+    ESP_LOGV(__FUNCTION__, "Setting %s to %f", path, value);
+    cJSON_SetIntValue(holder, value);
+    AppConfig::SaveAppConfig();
+  }
+}
+
+bool AppConfig::GetBoolProperty(char *path)
+{
+  cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
+  if (prop != NULL)
+  {
+    return prop->valuestring != NULL ? strcmp(prop->valuestring, "true") == 0 : prop->valueint;
+  }
+  ESP_LOGW(__FUNCTION__, "Nothing to get at %s", path);
+  return false;
+}
+
+void AppConfig::SetBoolProperty(char *path, bool value)
+{
+  cJSON *holder = GetJSONConfig(json, path, true);
+  if (holder == NULL)
+  {
+    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s", path);
+    return;
+  }
+  if (cJSON_IsObject(holder))
+  {
+    cJSON *val = cJSON_GetObjectItem(holder, "value");
+    cJSON *version = cJSON_GetObjectItem(holder, "version");
+
+    if (version == NULL)
+    {
+      ESP_LOGV(__FUNCTION__, "Creating versioned %s to %d", path, value);
+      val = cJSON_AddNumberToObject(holder, "value", value);
+      version = cJSON_AddNumberToObject(holder, "version", 0);
+      AppConfig::SaveAppConfig();
+    }
+    else if (val->valueint != value)
+    {
+      ESP_LOGV(__FUNCTION__, "Setting versioned %s to %d", path, value);
+      cJSON_SetIntValue(holder, value);
+      cJSON_SetIntValue(version, version->valueint + 1);
+      AppConfig::SaveAppConfig();
+    }
+    else
+    {
+      ESP_LOGE(__FUNCTION__, "No change at path %s", path);
+    }
+  }
+  else
+  {
+    ESP_LOGV(__FUNCTION__, "Setting %s to %d", path, value);
+    cJSON_SetIntValue(holder, value);
+    AppConfig::SaveAppConfig();
+  }
+}
+
+gpio_num_t AppConfig::GetPinNoProperty(char *path)
+{
+  return (gpio_num_t)GetIntProperty(path);
+}
+
+void AppConfig::SetPinNoProperty(char *path, gpio_num_t value)
+{
+  SetIntProperty(path, (int)value);
+}
+
+bool AppConfig::IsAp()
+{
+  return strcmp(GetStringProperty("type"), "AP") == 0;
 }

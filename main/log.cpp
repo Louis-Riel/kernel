@@ -21,8 +21,9 @@ void dumpLogs(){
         time_t now = ::time(NULL);
 
         localtime_r(&now, &timeinfo);
+        
         if ((strlen(logfname) == 0) || (indexOf(logfname,"1970") && (timeinfo.tm_year > 1970))){
-            if (getAppConfig()->purpose == app_config_t::purpose_t::TRACKER)
+            if (GetAppConfig()->IsAp())
                 strftime(logfname, 100, "/sdcard/logs/TRACKER-%Y-%m-%d_%H-%M-%S.log", &timeinfo);
             else
                 strftime(logfname, 100, "/sdcard/logs/PULLER-%Y-%m-%d_%H-%M-%S.log", &timeinfo);
@@ -38,7 +39,7 @@ void dumpLogs(){
             } else if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG) {
                 fprintf(stderr,"Logs not written to %s",logfname);
             }
-            fclose(fw);
+            fClose(fw);
         } else if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG) {
             fprintf(stderr,"Failed to open %s",logfname);
         }
@@ -67,7 +68,7 @@ int loggit(const char *fmt, va_list args) {
         if (callbacks[idx] != NULL) {
             if (!callbacks[idx](params[idx],curLogLine)){
                 callbacks[idx] = nullptr;
-                free(params[idx]);
+                //free(params[idx]);
             }
         }
     }

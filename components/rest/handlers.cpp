@@ -4,6 +4,11 @@
 #include "../../main/logs.h"
 #include "../../main/utils.h"
 #include "../esp_littlefs/include/esp_littlefs.h"
+#include "rom/ets_sys.h"
+#include "soc/rtc_cntl_reg.h"
+#include "soc/sens_reg.h"
+#include "driver/adc.h"
+#include "../eventmgr/eventmgr.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -18,12 +23,26 @@ static uint8_t* img=NULL;
 static uint32_t totLen=0;
 
 //char* kmlFileName=(char*)malloc(255);
+float temperatureReadFixed(){
+  SET_PERI_REG_BITS(SENS_SAR_MEAS_WAIT2_REG, SENS_FORCE_XPD_SAR, 3, SENS_FORCE_XPD_SAR_S);
+  SET_PERI_REG_BITS(SENS_SAR_TSENS_CTRL_REG, SENS_TSENS_CLK_DIV, 10, SENS_TSENS_CLK_DIV_S);
+  CLEAR_PERI_REG_MASK(SENS_SAR_TSENS_CTRL_REG, SENS_TSENS_POWER_UP);
+  CLEAR_PERI_REG_MASK(SENS_SAR_TSENS_CTRL_REG, SENS_TSENS_DUMP_OUT);
+  SET_PERI_REG_MASK(SENS_SAR_TSENS_CTRL_REG, SENS_TSENS_POWER_UP_FORCE);
+  SET_PERI_REG_MASK(SENS_SAR_TSENS_CTRL_REG, SENS_TSENS_POWER_UP);
+  ets_delay_us(100);
+  SET_PERI_REG_MASK(SENS_SAR_TSENS_CTRL_REG, SENS_TSENS_DUMP_OUT);
+  ets_delay_us(5);
+  float temp_f = (float)GET_PERI_REG_BITS2(SENS_SAR_SLAVE_ADDR3_REG, SENS_TSENS_OUT, SENS_TSENS_OUT_S);
+  float temp_c = (temp_f - 32) / 1.8;
+  return temp_c;
+}
 
 cJSON* status_json()
 {
     ESP_LOGV(__FUNCTION__,"Status Handler");
 
-    app_config_t* appcfg=getAppConfig();
+    AppConfig* appcfg = AppConfig::GetAppConfig();
     app_state_t* appstate=getAppState();
     the_wifi_config* wcfg = getWifiConfig();
     char strftime_buf[64];
@@ -47,7 +66,7 @@ cJSON* status_json()
     upTime=getUpTime();
     sleepTime=getSleepTime();
 
-    cJSON_AddItemToObject(status, "deviceid",  cJSON_CreateNumber(appcfg->devId));
+    cJSON_AddItemToObject(status, "deviceid",  cJSON_CreateNumber(appcfg->GetIntProperty("deviceid")));
     sprintf(buf,"%d:%02d:%02d",(uint32_t)floor(upTime/3600),(uint32_t)floor((upTime%3600)/60),(uint32_t)upTime%60);
     cJSON_AddStringToObject(status, "uptime", buf);
     sprintf(buf,"%d:%02d:%02d",(uint32_t)floor(sleepTime/3600),(uint32_t)floor((sleepTime%3600)/60),(uint32_t)sleepTime%60);
@@ -55,8 +74,10 @@ cJSON* status_json()
     cJSON_AddItemToObject(status, "freeram",  cJSON_CreateNumber(esp_get_free_heap_size()));
     cJSON_AddItemToObject(status, "totalram", cJSON_CreateNumber(heap_caps_get_total_size(MALLOC_CAP_DEFAULT)));
     cJSON_AddItemToObject(status, "battery",  cJSON_CreateNumber(getBatteryVoltage()));
+    cJSON_AddItemToObject(status, "temperature",  cJSON_CreateNumber(temperatureReadFixed()));
+    cJSON_AddItemToObject(status, "hallsensor",  cJSON_CreateNumber(hall_sensor_read()));
+    cJSON_AddItemToObject(status, "openfiles",  cJSON_CreateNumber(GetNumOpenFiles()));
     cJSON_AddItemToObject(status, "systemtime",  cJSON_CreateString(strftime_buf));
-    cJSON_AddStringToObject(wifi, "type", appcfg->purpose == app_config_t::purpose_t::PULLER?"AP":"Station");
     cJSON_AddStringToObject(wifi, "enabled", xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_UP_BIT?"yes":"no");
     cJSON_AddStringToObject(wifi, "connected", xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_CONNECTED_BIT?"yes":"no");
     cJSON_AddStringToObject(wifi, "scanning", xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_SCANING_BIT?"yes":"no");
@@ -74,23 +95,36 @@ cJSON* status_json()
 
     Aper** clients = GetClients();
     for (Aper* client = clients[idx++];idx < MAX_NUM_CLIENTS; client = clients[idx++]){
-        ESP_LOGV(__FUNCTION__,"client(%d),%s",idx,client==NULL?"null":"not null");
         if (client) {
             cJSON_AddItemToArray(jclients,client->toJson());
         }
     }
 
-    char* taskList = (char*)malloc(JSON_BUFFER_SIZE);
-    memset(taskList,0,JSON_BUFFER_SIZE);
-    vTaskGetRunTimeStats(taskList);
-    cJSON_AddStringToObject(status,"Runstats",taskList);
+    volatile UBaseType_t numTasks = uxTaskGetNumberOfTasks();
+    uint32_t totalRunTime;
+    TaskStatus_t* statuses =(TaskStatus_t*) pvPortMalloc(numTasks*sizeof(TaskStatus_t));
+    if (statuses != NULL){
+        numTasks = uxTaskGetSystemState( statuses, numTasks, &totalRunTime );
+        if (totalRunTime>0){
+            cJSON* tasks = cJSON_CreateArray();
+            for (uint32_t taskNo = 0; taskNo < numTasks; taskNo++) {
+                cJSON* task = cJSON_CreateObject();
+                cJSON_AddNumberToObject(task,"TaskNumber",statuses[taskNo].xTaskNumber);
+                cJSON_AddStringToObject(task,"Name",statuses[taskNo].pcTaskName);
+                cJSON_AddNumberToObject(task,"Priority",statuses[taskNo].uxCurrentPriority);
+                cJSON_AddNumberToObject(task,"Runtime",statuses[taskNo].ulRunTimeCounter);
+                cJSON_AddNumberToObject(task,"Core",statuses[taskNo].xCoreID > 100 ? -1 : statuses[taskNo].xCoreID);
+                cJSON_AddNumberToObject(task,"State",statuses[taskNo].eCurrentState);
+                cJSON_AddNumberToObject(task,"Stackfree",statuses[taskNo].usStackHighWaterMark*4);
+                cJSON_AddNumberToObject(task,"Pct",((double)statuses[taskNo].ulRunTimeCounter/totalRunTime)*100.0);
+                cJSON_AddItemToArray(tasks,task);
+            }
+            cJSON_AddItemToObject(status,"tasks",tasks);
+        }
+        vPortFree(statuses);
+    }
     
-    memset(taskList,0,JSON_BUFFER_SIZE);
-    vTaskList(taskList);
-    cJSON_AddStringToObject(status,"Tasklist",taskList);
-    free(taskList);
     cJSON_AddItemToObject(wifi,"clients",jclients);
-
     cJSON_AddItemToObject(status,"wifi",wifi);
     free(buf);
     return status;
@@ -103,6 +137,7 @@ void flashTheThing(void* param){
 
     const esp_partition_t *configured = esp_ota_get_boot_partition();
     const esp_partition_t *running = esp_ota_get_running_partition();
+    AppConfig* appcfg = AppConfig::GetAppConfig();
 
     if (configured != running) {
         ESP_LOGW(__FUNCTION__, "Configured OTA boot partition at offset 0x%08x, but running from offset 0x%08x",
@@ -123,14 +158,14 @@ void flashTheThing(void* param){
 
     if (initSPISDCard()) {
         FILE* fw = NULL;
-        if ((getAppConfig()->purpose == app_config_t::purpose_t::PULLER ) && (fw = fopen("/lfs/firmware/current.bin","w",true)) != NULL) {
+        if (!appcfg->IsAp() && (fw = fopen("/lfs/firmware/current.bin","w",true)) != NULL) {
             if (fwrite((void*)img,1,totLen,fw) == totLen) {
-                fclose(fw);
+                fClose(fw);
             } else {
                 ESP_LOGE(__FUNCTION__,"Firmware not backedup");
             }
         } else {
-            if (getAppConfig()->purpose == app_config_t::purpose_t::PULLER ){
+            if (!appcfg->IsAp() ){
                 ESP_LOGE(__FUNCTION__,"Failed to open /tfs/firmware/current.bin");
             }
         }
@@ -145,7 +180,7 @@ void flashTheThing(void* param){
                 sprintf((char*)&ccmd5[i * 2], "%02x", (unsigned int)md5[i]);
             }
             fwrite((void*)ccmd5,1,sizeof(ccmd5),fw);
-            fclose(fw);
+            fClose(fw);
             ESP_LOGI(__FUNCTION__,"Firmware md5 written");
         } else {
             ESP_LOGE(__FUNCTION__,"Failed in opeing /firmware/current.bin.md5");
@@ -187,12 +222,9 @@ esp_err_t stat_handler(httpd_req_t *req){
     char* fname = (char*)(req->uri + 5);
     ESP_LOGV(__FUNCTION__,"Getting stats on %s",fname);
     struct stat st;
-    uint8_t retryCnt=0;
     int ret=0;
     
-    while ((retryCnt++ < 5) && ((ret=stat(fname,&st)) != 0)) {
-        vTaskDelay(50/portTICK_PERIOD_MS);
-    }
+    ret=stat(fname,&st);
 
     if (ret == 0) {
         char* res = (char*)malloc(JSON_BUFFER_SIZE);
@@ -294,7 +326,6 @@ esp_err_t ota_handler(httpd_req_t *req)
                 ESP_LOGD(__FUNCTION__,"Flashing md5:(%s)%dvs%d",ccmd5,totLen,curLen);
                 ESP_LOGI(__FUNCTION__, "RAM:%d", esp_get_free_heap_size());
                 httpd_resp_send(req, "Flashing", 9);
-                vTaskDelay(pdMS_TO_TICKS(500));
                 xTaskCreate(&flashTheThing,"flashTheThing",4096, NULL, 5, NULL);
                 stopGps();
                 esp_wifi_stop();
@@ -315,13 +346,13 @@ esp_err_t ota_handler(httpd_req_t *req)
                 uint32_t len=0;
                 if ((len=fread((void*)ccmd5,1,36,fw)) == 36) {
                     httpd_resp_send(req,ccmd5,36);
-                    fclose(fw);
+                    fClose(fw);
                     deinitSPISDCard();
                     return ESP_OK;
                 } else {
                     ESP_LOGE(__FUNCTION__,"Error with weird md5 len %d", len);
                 }
-                fclose(fw);
+                fClose(fw);
             } else {
                 ESP_LOGE(__FUNCTION__,"Failed in opeing md5");
             }
@@ -513,75 +544,10 @@ void UpdateStringProp(cfg_label_t* cfg,char* val) {
     }
 }
 
-void cJSON_AddVersionedStringToObject(cfg_label_t* itemToAdd, char* name, cJSON* dest) {
-    cJSON* item=cJSON_CreateObject(); 
-    cJSON_AddItemToObject(item, "value",  cJSON_CreateString(itemToAdd->value));
-    cJSON_AddItemToObject(item, "version",  cJSON_CreateNumber(itemToAdd->version));
-    cJSON_AddItemToObject(dest, name,  item);
-}
-
-void cJSON_AddVersionedGpioToObject(cfg_gpio_t* itemToAdd, char* name,  cJSON* dest) {
-    cJSON* item=cJSON_CreateObject(); 
-    cJSON_AddItemToObject(item, "value",  cJSON_CreateNumber(itemToAdd->value));
-    cJSON_AddItemToObject(item, "version",  cJSON_CreateNumber(itemToAdd->version));
-    cJSON_AddItemToObject(dest, name,  item);
-}
-
-cJSON* config_json()
+esp_err_t eventmgr_handler(httpd_req_t *req)
 {
-    app_config_t* appcfg=getAppConfig();
-    app_state_t* appstate=getAppState();
-    appcfg = getAppConfig();
-    appstate = getAppState();
-
-    ESP_LOGV(__FUNCTION__,"Building Json");
-    cJSON* config=cJSON_CreateObject();
-    cJSON* sdcard=cJSON_CreateObject();
-    cJSON* gps=cJSON_CreateObject();
-    cJSON_AddItemToObject(config, "sdcard",  sdcard);
-    cJSON_AddItemToObject(config, "gps",  gps);
-
-    cJSON_AddItemToObject(config, "type",  cJSON_CreateString(appcfg->purpose == app_config_t::purpose_t::PULLER?"AP":"Station"));
-    cJSON_AddItemToObject(config, "deviceid",  cJSON_CreateNumber(appcfg->devId));
-    cJSON_AddVersionedStringToObject(&appcfg->devName,"devName",config);
-
-    cJSON_AddItemToObject(sdcard, "state",  cJSON_CreateString(appstate->sdCard&item_state_t::ERROR?"invalid":appstate->sdCard&item_state_t::INACTIVE?"inactive":"valid"));
-    cJSON_AddVersionedGpioToObject(&appcfg->sdcard_config.MisoPin,"MisoPin",sdcard);
-    cJSON_AddVersionedGpioToObject(&appcfg->sdcard_config.MosiPin,"MosiPin",sdcard);
-    cJSON_AddVersionedGpioToObject(&appcfg->sdcard_config.ClkPin,"ClkPin",sdcard);
-    cJSON_AddVersionedGpioToObject(&appcfg->sdcard_config.Cspin,"Cspin",sdcard);
-
-    cJSON_AddItemToObject(gps, "state",  cJSON_CreateString(appstate->gps&item_state_t::ERROR?"invalid":appstate->gps&item_state_t::INACTIVE?"inactive":"valid"));
-    cJSON_AddVersionedGpioToObject(&appcfg->gps_config.txPin,"txPin",gps);
-    cJSON_AddVersionedGpioToObject(&appcfg->gps_config.rxPin,"rxPin",gps);
-    cJSON_AddVersionedGpioToObject(&appcfg->gps_config.enPin,"enPin",gps);
-
-    cJSON* pois = cJSON_CreateArray();
-    cJSON_AddItemToObject(gps,"pois",pois);
-
-    ESP_LOGV(__FUNCTION__,"Getting POIs");
-    for (poiConfig_t pc :appcfg->pois){
-        ESP_LOGV(__FUNCTION__,"poi min distance: %d",pc.minDistance);
-        if ((pc.minDistance < 2000) && (pc.minDistance > 0)) {
-            cJSON* poi = cJSON_CreateObject();
-            cJSON_AddItemToObject(poi, "lat",  cJSON_CreateNumber(pc.lat));
-            cJSON_AddItemToObject(poi, "lng",  cJSON_CreateNumber(pc.lng));
-            cJSON_AddItemToObject(poi, "distance",  cJSON_CreateNumber(pc.minDistance));
-            cJSON_AddItemToArray(pois, poi);
-        }
-    }
-
-    return config;
-}
-
-esp_err_t config_handler(httpd_req_t *req)
-{
-    ESP_LOGV(__FUNCTION__,"Config Handler");
+    ESP_LOGV(__FUNCTION__,"EventMgr Handler");
     esp_err_t ret = ESP_OK;
-    app_config_t* appcfg=getAppConfig();
-    app_state_t* appstate=getAppState();
-    appcfg = getAppConfig();
-    appstate = getAppState();
 
     httpd_resp_set_type(req, "application/json");
 
@@ -591,42 +557,38 @@ esp_err_t config_handler(httpd_req_t *req)
     if (len) {
         *(postData+len)=0;
         ESP_LOGV(__FUNCTION__,"postData(%d):%s",len,postData);
-        cJSON* config=cJSON_Parse(postData);
-        cJSON* sdcard=cJSON_GetObjectItemCaseSensitive(config,"sdcard");
-        cJSON* gps=cJSON_GetObjectItemCaseSensitive(config,"gps");
-        UpdateStringProp(&appcfg->devName,cJSON_GetObjectItem(config,"devName")->valuestring);
-        appcfg->purpose = strcmp(cJSON_GetObjectItem(config,"type")->valuestring,"AP")==0 ? app_config_t::purpose_t::PULLER : app_config_t::purpose_t::TRACKER;
-        if (sdcard){
-            ESP_LOGV(__FUNCTION__,"Configuring sdcard");
-            UpdateGpioProp(&appcfg->sdcard_config.MisoPin,(gpio_num_t) cJSON_GetObjectItem(sdcard,"MisoPin")->valueint);
-            UpdateGpioProp(&appcfg->sdcard_config.MosiPin, (gpio_num_t) cJSON_GetObjectItem(sdcard,"MosiPin")->valueint);
-            UpdateGpioProp(&appcfg->sdcard_config.ClkPin, (gpio_num_t) cJSON_GetObjectItem(sdcard,"ClkPin")->valueint);
-            UpdateGpioProp(&appcfg->sdcard_config.Cspin, (gpio_num_t) cJSON_GetObjectItem(sdcard,"CsPin")->valueint);
-        } else {
-            ESP_LOGW(__FUNCTION__,"No sdcard config");
-        }
-        if (gps){
-            ESP_LOGV(__FUNCTION__,"Configuring gps");
-            UpdateGpioProp(&appcfg->gps_config.txPin, (gpio_num_t) cJSON_GetObjectItem(gps,"txPin")->valueint);
-            UpdateGpioProp(&appcfg->gps_config.rxPin, (gpio_num_t) cJSON_GetObjectItem(gps,"rxPin")->valueint);
-            UpdateGpioProp(&appcfg->gps_config.enPin, (gpio_num_t) cJSON_GetObjectItem(gps,"enPin")->valueint);
-        } else {
-            ESP_LOGW(__FUNCTION__,"No gps config");
-        }
-        saveConfig();
-        initConfig();
-        if (initSPISDCard()) {
-            deinitSPISDCard();
-        }
-        cJSON_Delete(config);
+        EventManager::SetConfig(cJSON_Parse(postData));
     }
-
-    cJSON* config=config_json();
-    char* sjson = cJSON_PrintUnformatted(config);
-    ret= httpd_resp_send(req,sjson,strlen(sjson));
-    cJSON_Delete(config);
-    free(sjson);
     free(postData);
+
+    char* sjson = cJSON_PrintUnformatted(EventManager::GetConfig());
+    ret= httpd_resp_send(req,sjson,strlen(sjson));
+    free(sjson);
+    return ret;
+}
+
+
+esp_err_t config_handler(httpd_req_t *req)
+{
+    ESP_LOGV(__FUNCTION__,"Config Handler");
+    esp_err_t ret = ESP_OK;
+    AppConfig* appcfg = AppConfig::GetAppConfig();
+
+    httpd_resp_set_type(req, "application/json");
+
+    char* postData = (char*) malloc(JSON_BUFFER_SIZE);
+    int len = httpd_req_recv(req,postData,JSON_BUFFER_SIZE);
+
+    if (len) {
+        *(postData+len)=0;
+        ESP_LOGV(__FUNCTION__,"postData(%d):%s",len,postData);
+        appcfg->SetAppConfig(cJSON_Parse(postData));
+    }
+    free(postData);
+
+    char* sjson = cJSON_PrintUnformatted(appcfg->GetJSONConfig("/"));
+    ret= httpd_resp_send(req,sjson,strlen(sjson));
+    free(sjson);
     return ret;
 }
 
@@ -715,6 +677,9 @@ esp_err_t HandleSystemCommand(httpd_req_t *req)
             }
             if (jitem && (strcmp(jitem->valuestring,"parseFiles")==0)) {
                 xTaskCreate(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
+            }
+            if (jitem && (strcmp(jitem->valuestring,"factoryReset")==0)) {
+                AppConfig::ResetAppConfig(true);
             }
             cJSON_Delete(jresponse);
         } else {
@@ -900,7 +865,7 @@ esp_err_t sendFile(httpd_req_t *req){
     httpd_resp_set_hdr(req,"filename",path);
     FILE* theFile;
     if (initSPISDCard()) {
-        if ((theFile=fopen(path,"r"))!=NULL) {
+        if ((theFile=fOpen(path,"r"))!=NULL) {
             ESP_LOGV(__FUNCTION__, "%s opened", path);
             uint8_t* buf = (uint8_t*)malloc(F_BUF_SIZE);
             uint32_t len=0;
@@ -912,7 +877,7 @@ esp_err_t sendFile(httpd_req_t *req){
             }
             httpd_resp_send_chunk(req, NULL, 0);
             free(buf);
-            fclose(theFile);
+            fClose(theFile);
             if (moveTheSucker){
                 char* topath = (char*)malloc(530);
                 memset(topath,0,530);
@@ -922,8 +887,8 @@ esp_err_t sendFile(httpd_req_t *req){
                 }
             }
         } else {
-            httpd_resp_send(req, "Not Found", 9);
             httpd_resp_set_status(req,HTTPD_404);
+            httpd_resp_send(req, "Not Found", 9);
         }
     }
     ESP_LOGI(__FUNCTION__,"Sent %s",path);
@@ -1015,7 +980,7 @@ esp_err_t tarFiles(mtar_t* tar,char* path,const char* ext,bool recursive,const c
                 sprintf(theFName,"%s/%s", path, fi->d_name);
                 if ((excludeList == NULL) || (strcmp(fi->d_name,excludeList)!=0)){
                     gettimeofday(&tv_start, NULL);
-                    if ((theFile=fopen(theFName,"r")) && 
+                    if ((theFile=fOpen(theFName,"r")) && 
                         (gettimeofday(&tv_open, NULL) == 0)){
                         
                         uint32_t startPos = tar->pos;
@@ -1065,7 +1030,7 @@ esp_err_t tarFiles(mtar_t* tar,char* path,const char* ext,bool recursive,const c
                                         (tar->pos-startPos)/((end_time_ms-start_time_ms)/1000.0) ,
                                         heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
                         }
-                        fclose(theFile);
+                        fClose(theFile);
                     } else {
                         ESP_LOGE(__FUNCTION__,"Cannot read %s",theFName);
                         ret=ESP_FAIL;
@@ -1119,7 +1084,7 @@ bool dumpFolder(char* folderName,mtar_t* tar) {
                 ESP_LOGD(__FUNCTION__, "%s - %d", fi->fname, fi->fsize);
                 sprintf(fName,"/sdcard%s/%s",folderName,fi->fname);
                 mtar_write_file_header(tar, fName, fi->fsize);
-                if ((theFile=fopen(fName,"r"))!=NULL){
+                if ((theFile=fOpen(fName,"r"))!=NULL){
                     ESP_LOGV(__FUNCTION__, "%s opened", fName);
                     while (!feof(theFile)){
                         if ((len=fread(buf,1,F_BUF_SIZE,theFile))>0) {
@@ -1127,7 +1092,7 @@ bool dumpFolder(char* folderName,mtar_t* tar) {
                             mtar_write_data(tar, buf, len);
                         }
                     }
-                    fclose(theFile);
+                    fClose(theFile);
                 } else {
                     ESP_LOGE(__FUNCTION__,"Cannot read %s",fName);
                     retval=false;
@@ -1176,9 +1141,10 @@ esp_err_t trips_handler(httpd_req_t *req)
         sp.len=0;
 
         cJSON* status = status_json();
-        cJSON* config = config_json();
-        if ((tarString(&tar,"status.json",cJSON_PrintUnformatted(status)) == ESP_OK) &&
-            (tarString(&tar,"config.json",cJSON_PrintUnformatted(config)) == ESP_OK) &&
+        AppConfig* config = AppConfig::GetAppConfig();
+        char* cs = NULL,* ss = NULL;
+        if ((tarString(&tar,"status.json",(cs = cJSON_PrintUnformatted(status))) == ESP_OK) &&
+            (tarString(&tar,"config.json",(ss = cJSON_PrintUnformatted(config->GetJSONConfig(NULL)))) == ESP_OK) &&
             (tarFiles(&tar,"/lfs","",true,"current.bin",1048576)==ESP_OK) && 
             (tarFiles(&tar,"/sdcard/logs","",true,NULL,1048576)==ESP_OK)) {
             ESP_LOGV(__FUNCTION__, "Finalizing tar");
@@ -1189,8 +1155,9 @@ esp_err_t trips_handler(httpd_req_t *req)
         } else {
             ESP_LOGE(__FUNCTION__,"Error sending trips");
         }
-        cJSON_Delete(config);
         cJSON_Delete(status);
+        free(cs);
+        free(ss);
     } else  {
         ESP_LOGE(__FUNCTION__,"Cannot mount the fucking sd card");
         httpd_resp_send(req, "No Bueno", 8);

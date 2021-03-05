@@ -8,10 +8,10 @@
 
 <body>
     <div class="slider">
-        <a onclick="renderFolder(document.getElementsByClassName('file-table')[0].getElementsByTagName('caption')[0].innerText)" href="#slide-1">SDCard</a>
-        <a onclick="refreshStatus(true)" href="#slide-2">Status</a>
-        <a onclick="refreshConfig(true)" href="#slide-3">Config</a>
-        <a onclick="refreshSystem()" href="#slide-4">System</a>
+        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');renderFolder(document.getElementsByClassName('file-table')[0].getElementsByTagName('caption')[0].innerText)" href="#slide-1">SDCard</a>
+        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');refreshStatus(true)" href="#slide-2">Status</a>
+        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');refreshConfig(true)" href="#slide-3">Config</a>
+        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');refreshSystem()" href="#slide-4">System</a>
         <div class="slides">
             <div id="slide-1" class="file_section">
                 <div class="file-table">
@@ -48,13 +48,13 @@
                     <button onclick="document.querySelectorAll('.log').forEach(log => log.remove())">Clear Logs</button>
                     <button onclick="SendCommand({'command':'reboot'})">Reboot</button>
                     <button onclick="SendCommand({'command':'parseFiles'})">ParseFiles</button>
+                    <button onclick="SendCommand({'command':'factoryReset'})">Reset</button>
                 </div>
                 <div class="loglines"></div>
             </div>
             <script>
                 renderFolder("/");
                 setInterval(() => {
-                    refreshConfig(false);
                     refreshStatus(false);
                 }, 1000);
                 document.querySelectorAll('th').forEach(th => th.addEventListener('click', (() => {
@@ -66,4 +66,9 @@
             </script>
         </div>
     </div>
+    <dialog id="jsoneditor">
+        <button onclick="jsoneditorcontrol.value=undefined; jsoneditor.close();">Cancel</button>
+        <button onclick="jsoneditor.close()">Close</button>
+        <div contenteditable="true" class="editorcontor" id="jsoneditorcontrol"></div>
+    </dialog>
 </body>

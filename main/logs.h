@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "esp_log.h"
+#include "cJSON.h"
 
 static EventGroupHandle_t app_eg = xEventGroupCreate();
 EventGroupHandle_t* getAppEG();

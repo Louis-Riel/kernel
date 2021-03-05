@@ -1,0 +1,135 @@
+{
+    "sdcard": {
+        "MisoPin": {
+            "value": 19,
+            "version": 0
+        },
+        "MosiPin": {
+            "value": 23,
+            "version": 0
+        },
+        "ClkPin": {
+            "value": 18,
+            "version": 0
+        },
+        "Cspin": {
+            "value": 4,
+            "version": 0
+        }
+    },
+    "gps": {
+        "txPin": {
+            "value": 0,
+            "version": 0
+        },
+        "rxPin": {
+            "value": 0,
+            "version": 0
+        },
+        "enPin": {
+            "value": 0,
+            "version": 0
+        },
+        "pois": []
+    },
+    "type": {
+        "value": "AP",
+        "version": 0
+    },
+    "devName": {
+        "value": "Puller",
+        "version": 0
+    },
+    "pins": [{
+        "pinNo": {
+            "value": 5,
+            "version": 0
+        },
+        "driverFlags": {
+            "value": 2,
+            "version": 0
+        },
+        "pinName": {
+            "value": "led",
+            "version": 0
+        }
+    }, {
+        "pinNo": {
+            "value": 13,
+            "version": 0
+        },
+        "driverFlags": {
+            "value": 1,
+            "version": 0
+        },
+        "pinName": {
+            "value": "Touch",
+            "version": 0
+        }
+    }],
+    "events": [{
+            "eventBase": {
+                "value": "DigitalPin",
+                "version": 0
+            },
+            "eventId": {
+                "value": "ON",
+                "version": 0
+            },
+            "method": {
+                "value": "Post",
+                "version": 0
+            },
+            "params": {
+                "pinNo": {
+                    "value": 5,
+                    "version": 0
+                },
+                "state": {
+                    "value": 1,
+                    "version": 0
+                },
+                "eventId": {
+                    "value": "TRIGGER",
+                    "version": 0
+                },
+                "eventBase": {
+                    "value": "DigitalPin",
+                    "version": 0
+                }
+            }
+        },
+        {
+            "eventBase": {
+                "value": "DigitalPin",
+                "version": 0
+            },
+            "eventId": {
+                "value": "OFF",
+                "version": 0
+            },
+            "method": {
+                "value": "Post",
+                "version": 0
+            },
+            "params": {
+                "pinNo": {
+                    "value": 5,
+                    "version": 0
+                },
+                "state": {
+                    "value": 0,
+                    "version": 0
+                },
+                "eventId": {
+                    "value": "TRIGGER",
+                    "version": 0
+                },
+                "eventBase": {
+                    "value": "DigitalPin",
+                    "version": 0
+                }
+            }
+        }
+    ]
+}

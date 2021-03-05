@@ -29,6 +29,8 @@
 #include "../components/wifi/station.h"
 #include "../components/esp_littlefs/include/esp_littlefs.h"
 #include "bootloader_random.h"
+#include "../components/eventmgr/eventmgr.h"
+#include "../components/pins/pins.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -115,11 +117,16 @@ void sampleBatteryVoltage()
 
   uint32_t voltage=0;
   uint32_t tmp;
+  uint32_t cnt=0;
   for (int idx = 0; idx < 10; idx++){
     esp_adc_cal_get_voltage((adc_channel_t)ADC1_CHANNEL_7, &characteristics, &tmp);
-    voltage+=tmp;
+    if (tmp < 5){
+      voltage+=tmp;
+      cnt++;
+    }
   }
-  batLvls[batSmplCnt++] = (voltage/10) /4096.0*7.445;
+  if (cnt > 0)
+    batLvls[batSmplCnt++] = (voltage/cnt);
 }
 
 float getBatteryVoltage()
@@ -190,7 +197,7 @@ bool commitTrip(trip *trip)
     strftime(trip->fname, sizeof(trip->fname), "/lfs/csv/%Y-%m-%d_%H-%M-%S.csv", &timeinfo);
   }
   ESP_LOGI(__FUNCTION__, "Saving trip with %d nodes to %s %s", trip->numNodes, trip->fname,curTrip.fname);
-  FILE *f = fopen(trip->fname, "a");
+  FILE *f = fOpen(trip->fname, "a");
   if (f == NULL)
   {
     ESP_LOGE(__FUNCTION__, "Failed to open %s for writing", trip->fname);
@@ -215,7 +222,7 @@ bool commitTrip(trip *trip)
       cnt++;
     }
   }
-  fclose(f);
+  fClose(f);
   ESP_LOGD(__FUNCTION__, "%d nodes written", cnt);
   return true;
 }
@@ -257,7 +264,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
 
     if (lineCount <= 0) {
       ESP_LOGE(__FUNCTION__,"Nothing in this trip");
-      fclose(trp);
+      fClose(trp);
       return true;
     }
     ESP_LOGD(__FUNCTION__, "Baking KML from %s %d lines %d chars", kmlFileName, lineCount, pos);
@@ -461,8 +468,8 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
       }
       prevChr = chr;
     }
-    fclose(kml);
-    fclose(trp);
+    fClose(kml);
+    fClose(trp);
     ESP_LOGD(__FUNCTION__, "Done baking KML");
     return true;
   }
@@ -610,31 +617,12 @@ void addDataPoint()
   }
 }
 
-static void flash(void *pvParameters)
-{
-  uint8_t curIdx = gps->numRunners++;
-  gps->runners[curIdx] = (BaseType_t *)xTaskGetCurrentTaskHandle();
-  uint32_t flashes = (uint32_t)pvParameters;
-  ESP_LOGV(__FUNCTION__, "Runners %d is flash on handle %p with %d flashes", gps->numRunners, gps->runners[curIdx], flashes);
-
-  for (uint8_t idx = 0; idx < flashes; idx++)
-  {
-    gpio_set_level(BLINK_GPIO, 0);
-    vTaskDelay(50 / portTICK_PERIOD_MS);
-    gpio_set_level(BLINK_GPIO, 1);
-    vTaskDelay(50 / portTICK_PERIOD_MS);
-  }
-  gps->runners[curIdx] = NULL;
-  xSemaphoreGive(gps->runnerSemaphore);
-  vTaskDelete(NULL);
-}
-
 void doHibernate(void* param)
 {
   if (gps!=NULL)
   {
     addDataPoint();
-    ESP_LOGI(__FUNCTION__, "Deep Sleeping %d = %d", bumpCnt, gps->numRunners);
+    ESP_LOGI(__FUNCTION__, "Deep Sleeping %d", bumpCnt);
     if (gps != NULL){
       commitTripToDisk((void*)0);
     }
@@ -658,8 +646,8 @@ void doHibernate(void* param)
     {
       ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[0], 0));
     }
-    gpio_set_level(gps->enpin, 0);
-    gpio_hold_en(gps->enpin);
+    gpio_set_level(gps->enPin(), 0);
+    gpio_hold_en(gps->enPin());
 
     //gpio_deep_sleep_hold_en();
     lastSpeed = 0;
@@ -703,23 +691,15 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
 {
   time(&now);
   sampleBatteryVoltage();
-  app_config_t* appcfg=NULL;
-  app_state_t* appstate=NULL;
+    app_state_t* appstate=NULL;
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:
     ESP_LOGV(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters());
     if (lastLocTs == 0) {
-      appcfg=getAppConfig();
       appstate=getAppState();
       appstate->lattitude=gps->location.lat();
       appstate->longitude=gps->location.lng();
-      if (appcfg->pois->minDistance==0 ) {
-        appcfg->pois->minDistance=200;
-        appcfg->pois->lat=gps->location.lat();
-        appcfg->pois->lng=gps->location.lng();
-        saveConfig();
-      }
     }
     lastLocTs = now;
     break;
@@ -1060,32 +1040,55 @@ esp_err_t setupLittlefs(){
     return ret;
   }
 
-  if ((ret=esp_vfs_littlefs_unregister("storage")) != ESP_OK) {
-    ESP_LOGE(__FUNCTION__,"Failed in unregistering littlefs %s", esp_err_to_name(ret));
-    return ret;
-  }
-
   return ESP_OK;
 }
 
-uint32_t GenerateDevId() {
+int32_t GenerateDevId() {
   bootloader_random_enable();
-  uint32_t devId = esp_random();
+  int32_t devId = esp_random();
   bootloader_random_disable();
   return devId;
 }
 
+void ConfigurePins(cJSON* pins){
+  ESP_LOGD(__FUNCTION__,"Configuring pins");
+  cJSON* pin = NULL;
+  uint8_t numPins=0;
+  cJSON_ArrayForEach(pin,pins) {
+    AppConfig* cpin = new AppConfig(pin);
+    gpio_num_t pinNo = cpin->GetPinNoProperty("pinNo");
+    if (pinNo > 0) {
+      ESP_LOGD(__FUNCTION__,"Configuring pin %d",pinNo);
+      new Pin(cpin);
+      numPins++;
+    }
+    free(cpin);
+  }
+}
+
 void app_main(void)
 {
+  setupLittlefs();
+  ESP_LOGI(__FUNCTION__,"Starting");
   ESP_ERROR_CHECK(esp_event_loop_create_default());
-  app_config_t* appcfg=initConfig();
-  if (appcfg->devId == 0) {
-    appcfg->devId = GenerateDevId();
-    saveConfig();
+  AppConfig* appcfg = new AppConfig(CFG_PATH);
+
+  if (appcfg->GetStringProperty("type") == NULL) {
+    ESP_LOGE(__FUNCTION__,"We have invalid configuration, resetting to default");
+    appcfg->ResetAppConfig(false);
+  }
+  esp_err_t ret=ESP_OK;
+  if ((ret=esp_vfs_littlefs_unregister("storage")) != ESP_OK) {
+    ESP_LOGE(__FUNCTION__,"Failed in unregistering littlefs %s", esp_err_to_name(ret));
+  }
+
+  if (appcfg->GetIntProperty("deviceid") <= 0) {
+    ESP_LOGD(__FUNCTION__,"Seeding device id");
+    appcfg->SetIntProperty("deviceid",GenerateDevId());
   }
   initLog();
   sampleBatteryVoltage();
-  setupLittlefs();
+  EventManager* mgr = new EventManager(appcfg->GetJSONConfig("/events"));
   uint32_t tmp;
   ESP_LOGV(__FUNCTION__,"Pre-Loading Image");
   loadImage(false,&tmp);
@@ -1126,13 +1129,11 @@ void app_main(void)
   lng.deg = lastLngDeg;
   lng.billionths = lastLngBil;
   lng.negative = lastLngNeg;
-
-  if (appcfg->gps_config.rxPin.value != 0){
-    gps = new TinyGPSPlus(appcfg->gps_config.rxPin.value, appcfg->gps_config.txPin.value, appcfg->gps_config.enPin.value, lastRate, lat, lng, lastCourse, lastSpeed, lastAltitude,app_eg);
+  if (appcfg->HasProperty("/gps/rxPin") && appcfg->GetIntProperty("/gps/rxPin")){
+    gps = new TinyGPSPlus(appcfg->GetJSONConfig(("/gps/rxPin")));
     if (gps != NULL){
       ESP_LOGD(__FUNCTION__,"Waiting for GPS");
       if (xEventGroupWaitBits(gps->eg,TinyGPSPlus::gpsEvent::gpsRunning,pdFALSE,pdTRUE,1500/portTICK_RATE_MS)){
-        gps->poiState=lastPoiState;
         createTrip();
         adc1_config_width(ADC_WIDTH_12Bit);
         adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_11db);
@@ -1169,16 +1170,16 @@ void app_main(void)
     getAppState()->gps = item_state_t::INACTIVE;
   }
 
-  if (appcfg->purpose&app_config_t::purpose_t::PULLER){
+  if (strcmp(appcfg->GetStringProperty("type"),"AP")==0){
     ESP_LOGD(__FUNCTION__,"Starting puller's wifi");
     xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps , tskIDLE_PRIORITY, NULL);
   }
+  ConfigurePins(appcfg->GetJSONConfig("pins"));
   //esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF);
   //esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF);
   //esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
   //esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
   //esp_deep_sleep_start();
-
 }
 
 void stopGps(){

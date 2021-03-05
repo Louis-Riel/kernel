@@ -13,9 +13,30 @@ esp_err_t rest_handler(httpd_req_t *req);
 esp_err_t ws_handler(httpd_req_t *req);
 esp_err_t stat_handler(httpd_req_t *req);
 esp_err_t config_handler(httpd_req_t *req);
+esp_err_t eventmgr_handler(httpd_req_t *req);
 
 
 bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_t match_upto);
+
+class WebsocketManager {
+  public:
+    WebsocketManager(char* name);
+    bool RegisterClient(httpd_handle_t hd,int fd);
+    QueueHandle_t rdySem;
+    bool isLive;
+    struct ws_client_t
+    {
+      httpd_handle_t hd;
+      int fd;
+      bool isLive = false;
+      time_t lastTs;
+    } clients[5];
+
+  private:
+    TaskHandle_t handlerTask;
+    uint32_t logPos = 0;
+};
+
 
 static const httpd_uri_t restUris[] = {
     {
@@ -34,6 +55,12 @@ static const httpd_uri_t restUris[] = {
     .uri       = "/config",
     .method    = HTTP_POST,
     .handler   = config_handler,
+    .user_ctx  = NULL
+    },
+    {
+    .uri       = "/eventmgr",
+    .method    = HTTP_POST,
+    .handler   = eventmgr_handler,
     .user_ctx  = NULL
     },
     {

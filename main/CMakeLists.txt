@@ -1,9 +1,9 @@
 set(COMPONENT_REQUIRES esp_adc_cal json )
-set(COMPONENT_PRIV_REQUIRES wifi rest TinyGPS esp_littlefs )
+set(COMPONENT_PRIV_REQUIRES wifi rest TinyGPS esp_littlefs eventmgr pins )
 
 set(COMPONENT_ADD_INCLUDEDIRS "." "../components/TinyGPS" )
 set(COMPONENT_SRCS "log.cpp" "Blink.cpp" "utils.cpp" "configmgmt.cpp" )
-set(COMPONENT_EMBED_TXTFILES "../res/trip.kml" )
+set(COMPONENT_EMBED_TXTFILES "../res/trip.kml" "../res/defaultconfig.json" )
 
 register_component()
 

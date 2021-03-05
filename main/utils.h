@@ -13,9 +13,13 @@
 #include "esp_log.h"
 #include <stdlib.h>
 #include "../components/TinyGPS/TinyGPS++.h"
+#include "cJSON.h"
 
 #define SS TF_CS
 #define MAX_NUM_POIS 10
+#define MAX_NUM_PINS 25
+#define MAX_CONFIG_INSTANCES 20
+#define CFG_PATH "/lfs/config/current.json"
 
 extern const unsigned char favicon_ico_start[] asm("_binary_favicon_ico_start");
 extern const unsigned char favicon_ico_end[]   asm("_binary_favicon_ico_end");
@@ -46,27 +50,36 @@ struct cfg_gpio_t
   uint32_t version;
 };
 
-struct app_config_t {
-  uint32_t devId;
-  cfg_label_t devName;
-  struct sdcard_config_t {
+struct sdcard_config_t {
     cfg_gpio_t MisoPin;
     cfg_gpio_t MosiPin;
     cfg_gpio_t ClkPin;
     cfg_gpio_t Cspin;
-  } sdcard_config;
-  struct gps_config_t {
-    cfg_gpio_t rxPin;
-    cfg_gpio_t txPin;
-    cfg_gpio_t enPin;
-  } gps_config;
-  enum purpose_t {
-    UNKNOWN = 0,
-    TRACKER = BIT0,
-    PULLER = BIT1
-  } purpose;
-  cfg_gpio_t wakePins[10];
-  poiConfig_t pois[MAX_NUM_POIS];
+};
+
+struct gps_config_t {
+  cfg_gpio_t rxPin;
+  cfg_gpio_t txPin;
+  cfg_gpio_t enPin;
+};  
+
+enum purpose_t {
+  UNKNOWN_PURPOSE = 0,
+  TRACKER = BIT0,
+  PULLER = BIT1
+};
+
+struct gpio_driver_t {
+  cfg_gpio_t pinNo;
+  cfg_label_t pinName;
+  bool isActive;
+  enum driver_type_t {
+    digital_in = BIT0,
+    digital_out = BIT1,
+    pullup = BIT2,
+    pulldown = BIT3,
+    touch = BIT4
+  } driverFlags;
 };
 
 enum item_state_t {
@@ -106,6 +119,58 @@ struct trip
   uint32_t lastExportedTs = 0;
 };
 
+struct app_config_t {
+  uint32_t devId;
+  cfg_label_t devName;
+//  gps_config_t gps_config;
+  sdcard_config_t sdcard_config;
+  purpose_t purpose;
+  cfg_gpio_t wakePins[10];
+  poiConfig_t pois[MAX_NUM_POIS];
+  gpio_driver_t pins[MAX_NUM_PINS];
+};
+
+class AppConfig {
+public:
+  AppConfig(char* filePath);
+  AppConfig(cJSON* config);
+
+  static AppConfig* GetAppConfig();
+  static AppConfig* GetAppStatus();
+  static void ResetAppConfig(bool save);
+  static void SaveAppConfig();
+
+  AppConfig* GetConfig(char* path);
+  cJSON* GetJSONConfig(char* path);
+  void SetAppConfig(cJSON* config);
+
+  bool HasProperty(char* path);
+
+  char* GetStringProperty(char* path);
+  int32_t GetIntProperty(char* path);
+  gpio_num_t GetPinNoProperty(char* path);
+  double GetDoubleProperty(char* path);
+  bool GetBoolProperty(char* path);
+
+  void SetStringProperty(char* path,char* value);
+  void SetIntProperty(char* path,int32_t value);
+  void SetPinNoProperty(char* path,gpio_num_t value);
+  void SetDoubleProperty(char* path,double value);
+  void SetBoolProperty(char* path,bool value);
+  bool IsAp();
+protected:
+  cJSON* GetJSONProperty(cJSON* json,char* path, bool createWhenMissing);
+  cJSON* GetJSONProperty(char* path);
+  cJSON* GetJSONConfig(cJSON* json, char* path,bool createWhenMissing);
+  static void SaveAppConfig(bool skipMount);
+  cJSON* GetPropertyHolder(cJSON* prop);
+  cJSON* json;
+  static AppConfig* configInstance;
+  static AppConfig* statusInstance;
+  char* filePath;
+};  
+
+AppConfig* GetAppConfig();
 bool startsWith(const char* str,const char* key);
 uint8_t* loadImage(bool reset,uint32_t* iLen);
 void sampleBatteryVoltage();
@@ -118,12 +183,16 @@ bool deinitSPISDCard();
 bool deinitSPISDCard(bool);
 bool initSDMMCSDCard();
 char* indexOf(const char* str, const char* key);
+char* lastIndexOf(const char* str, const char* key);
 bool endsWith(const char* str,const char* val) ;
 bool stringContains(const char* str,const char* val) ;
+
+int fClose (FILE * f);
+FILE * fOpen (const char * _name, const char * _type);
 FILE * fopen (const char * _name, const char * _type,bool createDir);
 FILE * fopen (const char * _name, const char * _type,bool createDir, bool log);
+
 app_config_t* initConfig();
-app_config_t* getAppConfig();
 app_state_t* getAppState();
 void saveConfig();
 void commitTripToDisk(void* param);
@@ -131,5 +200,8 @@ trip* getActiveTrip();
 void stopGps();
 int64_t getSleepTime();
 int64_t getUpTime();
+void cJSON_AddVersionedStringToObject(cfg_label_t* itemToAdd, char* name, cJSON* dest);
+void cJSON_AddVersionedGpioToObject(cfg_gpio_t* itemToAdd, char* name,  cJSON* dest);
+uint32_t GetNumOpenFiles();
 
 #endif

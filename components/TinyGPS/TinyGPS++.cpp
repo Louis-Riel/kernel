@@ -37,6 +37,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include <sys/time.h>
 #include "esp_sleep.h"
 #include "../../main/utils.h"
+#include "../eventmgr/eventmgr.h"
 
 #define _GPRMCterm   "GPRMC"
 #define _GPGGAterm   "GPGGA"
@@ -241,10 +242,16 @@ void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, i
   }
 }
 
-TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, uint8_t lastSleepIdx,
-                         RawDegrees llat, RawDegrees llng, uint32_t course, uint32_t speed,uint32_t altitude,
-                         EventGroupHandle_t app_eg)
-  :  parity(0)
+TinyGPSPlus::TinyGPSPlus(cJSON* config):TinyGPSPlus(
+                (gpio_num_t)cJSON_GetObjectItem(config,"rxPin")->valueint,
+                (gpio_num_t)cJSON_GetObjectItem(config,"txPin")->valueint,
+                (gpio_num_t)cJSON_GetObjectItem(config,"enPin")->valueint) 
+{
+}
+
+TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
+  :  eg(xEventGroupCreate())
+  ,  parity(0)
   ,  isChecksumTerm(false)
   ,  curSentenceType(GPS_SENTENCE_OTHER)
   ,  curTermNumber(0)
@@ -256,28 +263,35 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
   ,  sentencesWithFixCount(0)
   ,  failedChecksumCount(0)
   ,  passedChecksumCount(0)
+  ,  enpin(enpin)
+  ,  curFreqIdx(0)
+  ,  runnerSemaphore(xSemaphoreCreateCounting(10,0))
+  ,  numRunners(0)
+  ,  poiState(poiState_t::unknown)
+  ,  gpTxt(new TinyGPSCustom(*this,"GPTXT", 4))
+  ,  gpsWarmTime(3)
+  ,  toBeFreqIdx(0)
 {
-  TinyGPSPlus* gps = this;
-  this->eg = xEventGroupCreate();
+  insertCustom(gpTxt, "GPTXT", 4);
+  ESP_ERROR_CHECK(esp_event_handler_register(GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEventProcessor, this));
+  EventHandlerDescriptor* handler = new EventHandlerDescriptor(GPSPLUS_EVENTS,"GPSPLUS_EVENTS");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::go, "go");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::stop, "stop");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::sleeping, "sleeping");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::wakingup, "wakingup");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::rateChanged, "rateChanged");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::systimeChanged, "systimeChanged");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::locationChanged, "locationChanged");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::significantCourseChange, "significantCourseChange");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::significantDistanceChange, "significantDistanceChange");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::significantSpeedChange, "significantSpeedChange");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::gpsPaused, "gpsPaused");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::gpsResumed, "gpsResumed");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::atSyncPoint, "atSyncPoint");
+  handler->SetEventName(TinyGPSPlus::gpsEvent::outSyncPoint, "outSyncPoint");
+  EventManager::RegisterEventHandler(handler);
 
-  this->gpTxt = new TinyGPSCustom(*gps,"GPTXT", 4);
-  this->insertCustom(this->gpTxt, "GPTXT", 4);
-  ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEventProcessor, this));
-
-  lastLocation.rawLatData=llat;
-  lastLocation.rawLngData=llng;
-  lastCourse.val=course;
-  lastSpeed.val=speed;
-  lastAltitude.val=altitude;
-  gpsWarmTime=3;
-  this->app_eg = app_eg;
-
-  poiState = poiState_t::unknown;
-  numRunners=0;
   term[0]=0;
-  this->enpin=enpin;
-  curFreqIdx=0;
-  toBeFreqIdx=0;
   bool woke = esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED;
 
   ESP_LOGD(__FUNCTION__, "Initializing GPS Pins");
@@ -307,20 +321,14 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
   ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, txpin, rxpin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
   ESP_ERROR_CHECK(uart_enable_pattern_det_baud_intr(UART_NUM_2, '\n', 1, 9, 0, 0));
   ESP_ERROR_CHECK(uart_pattern_queue_reset(UART_NUM_2, 20));
-  xEventGroupClearBits(gps->eg,gpsEvent::gpsStopped);
-  xEventGroupSetBits(gps->eg,gpsEvent::gpsRunning);
+  xEventGroupClearBits(eg,gpsEvent::gpsStopped);
+  xEventGroupSetBits(eg,gpsEvent::gpsRunning);
   xTaskCreate(uart_event_task, "uart_event_task", 2048, this, 12, NULL);
   ESP_LOGD(__FUNCTION__, "UART Initialized");
 
   if (woke) {
-    xEventGroupSetBits(gps->eg,gpsEvent::gpsRunning);
+    xEventGroupSetBits(eg,gpsEvent::gpsRunning);
     gpsResume();
-    curFreqIdx=lastSleepIdx;
-    toBeFreqIdx=lastSleepIdx;
-    lastCourse.setValue(course);
-    lastSpeed.setValue(speed);
-    lastLocation.setLat(llat);
-    lastLocation.setLng(llng);
     ESP_LOGD(__FUNCTION__,"llng:%3.7f,llat:%3.7f,lspeed:%f, lcourse:%f",
       lastLocation.lng(),
       lastLocation.lat(),
@@ -355,6 +363,10 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin, u
       uart_driver_delete(UART_NUM_2);
     }
   }
+}
+
+gpio_num_t TinyGPSPlus::enPin(){
+  return enpin;
 }
 
 void TinyGPSPlus::CalcChecksum(uint8_t *Message, uint8_t Length)
@@ -786,11 +798,24 @@ bool TinyGPSPlus::endOfTermHandler()
 
         double dist = -1.0;
         double dtmp = -1.0;
-        for (poiConfig_t poi : getAppConfig()->pois) {
-          dtmp=distanceBetween(location.lat(),location.lng(),poi.lat,poi.lng);
+        cJSON* poi=NULL;
+        cJSON* pois=AppConfig::GetAppConfig()->GetJSONConfig("pois");
+        cJSON_ArrayForEach(poi,pois){
+          dtmp=distanceBetween(location.lat(),location.lng(),cJSON_GetObjectItem(poi,"lat")->valuedouble,cJSON_GetObjectItem(poi,"lng")->valuedouble);
           if ((dist == -1) || (dist > dtmp)) {
             dist=dtmp;
           }
+        }
+
+        if (poi == NULL) {
+           poi = cJSON_CreateObject();
+           cJSON_AddItemToArray(pois,poi);
+           AppConfig* cpoi= new AppConfig(poi);
+           cpoi->SetDoubleProperty("lat",location.lat());
+           cpoi->SetDoubleProperty("lng",location.lng());
+           cpoi->SetIntProperty("lng",location.lng());
+           free(cpoi);
+           AppConfig::SaveAppConfig();
         }
 
         if (dist >= 0.0) {
