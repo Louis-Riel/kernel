@@ -48,7 +48,21 @@ the_wifi_config*  getWifiConfig(){
     return config;
 }
 
-void inferPassword(const char* sid, char* pwd) {
+void InferPassword(const char* sid, char* pwd) {
+    AppConfig* cfg = GetAppConfig();
+    cJSON* stations = cfg->GetJSONConfig("/stations");
+    if ((stations != NULL) && (cJSON_IsArray(stations))) {
+        cJSON* ap = NULL;
+        cJSON_ArrayForEach(ap,stations){
+            cJSON* jsid = cJSON_GetObjectItem(ap,"ssid");
+            if (strcmp(cJSON_GetObjectItem(jsid,"value")->valuestring,sid) == 0) {
+                cJSON* jpwd = cJSON_GetObjectItem(ap,"password");
+                strcpy(pwd,cJSON_GetObjectItem(jpwd,"value")->valuestring);
+                return;
+            }
+        }
+    }
+
     sprintf(pwd,"8008");
     uint8_t sidLen=strlen(sid);
     for (int idx=sidLen-1; idx>=0; idx--) {
@@ -58,6 +72,18 @@ void inferPassword(const char* sid, char* pwd) {
 }
 
 bool isSidManaged (const char* sid) {
+    AppConfig* cfg = GetAppConfig();
+    cJSON* stations = cfg->GetJSONConfig("/stations");
+    if ((stations != NULL) && (cJSON_IsArray(stations))) {
+        cJSON* ap = NULL;
+        cJSON_ArrayForEach(ap,stations){
+            cJSON* jsid = cJSON_GetObjectItem(ap,"ssid");
+            if (strcmp(cJSON_GetObjectItem(jsid,"value")->valuestring,sid) == 0) {
+                return true;
+            }
+        }
+    }
+
     return ((startsWith(sid,"VIDEOETRON ")!=0) ||
             (startsWith(sid,"BELL ")!=0) ||
             (startsWith(sid,"Cogeco ")!=0) ||
@@ -90,7 +116,7 @@ void generateSidConfig(wifi_config_t* wc, bool hasGps) {
     wc->ap.authmode=WIFI_AUTH_WPA_WPA2_PSK;
     wc->ap.max_connection=4;
 
-    inferPassword((char*)wc->ap.ssid,(char*)wc->ap.password);
+    InferPassword((char*)wc->ap.ssid,(char*)wc->ap.password);
 }
 
 static void print_auth_mode(int authmode)
@@ -207,7 +233,7 @@ void ProcessScannedAPs(){
         ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
         ESP_LOGD(__FUNCTION__, "Total APs scanned = %u", ap_count);
         for (int i = 0; (i < DEFAULT_SCAN_LIST_SIZE) && (i < ap_count); i++) {
-            if (LOG_LOCAL_LEVEL == ESP_LOG_DEBUG){
+            if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
                 ESP_LOGD(__FUNCTION__, "SSID \t\t%s", ap_info[i].ssid);
                 ESP_LOGV(__FUNCTION__, "RSSI \t\t%d", ap_info[i].rssi);
                 if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
@@ -225,7 +251,7 @@ void ProcessScannedAPs(){
                 }
 
                 strcpy((char*)wifi_config.sta.ssid,(char*)ap_info[i].ssid);
-                inferPassword((char*)wifi_config.sta.ssid,(char*)wifi_config.sta.password);
+                InferPassword((char*)wifi_config.sta.ssid,(char*)wifi_config.sta.password);
                 memcpy(wifi_config.sta.bssid,ap_info[i].bssid,sizeof(uint8_t)*6);
                 wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
                 ESP_LOGD(__FUNCTION__,"Connecting to %s/",ap_info[i].ssid);
@@ -341,6 +367,7 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
     }
     if (base == WIFI_EVENT) {
         ESP_LOGD(__FUNCTION__,"wifi event %d",event_id);
+        AppConfig* cfg = GetAppConfig();
         switch(event_id) {
             case WIFI_EVENT_STA_START:
                 ESP_LOGI(__FUNCTION__, "Wifi Station is up");
@@ -419,7 +446,7 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
                     deinitSPISDCard();
                     xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
                 }
-                if (!(xEventGroupGetBits(config->s_wifi_eg)&WIFI_CLIENT_DONE)){
+                if (!(xEventGroupGetBits(config->s_wifi_eg)&WIFI_CLIENT_DONE) || (cfg->IsAp() && cfg->IsSta())){
                     esp_wifi_connect();
                 }
                 break;
@@ -428,6 +455,7 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
                 break;
         }
     }
+    AppConfig::SignalStateChange();
 }
 
 void wifiStop(void* pvParameter) {
@@ -465,19 +493,9 @@ void wifiSallyForth(void *pvParameter) {
         xEventGroupClearBits(config->s_wifi_eg,WIFI_SCAN_READY_BIT);
 
         ESP_LOGD(__FUNCTION__,"Wifi mode %s", appcfg->IsAp() ? "WIFI_MODE_AP" : "WIFI_MODE_STA");
-        config->wifi_mode = appcfg->IsAp() ? WIFI_MODE_AP : WIFI_MODE_STA;
-        wifi_config.sta.pmf_cfg.capable=true;
-        wifi_config.sta.pmf_cfg.required=false;
+        config->wifi_mode = appcfg->IsAp() ? appcfg->IsSta() ? WIFI_MODE_APSTA : WIFI_MODE_AP : WIFI_MODE_STA;
         memset(clients,0,sizeof(void*)*MAX_NUM_CLIENTS);
-        if (appcfg->IsAp()) {
-            generateSidConfig(&wifi_config,pvParameter!=NULL);
-            ESP_LOGD(__FUNCTION__,"Configured in AP Mode %s/%s",wifi_config.ap.ssid,wifi_config.ap.password);
-        }
     }
-
-    if (!appcfg->IsAp() || pvParameter){
-        xEventGroupSetBits(config->s_wifi_eg,WIFI_SCAN_READY_BIT);
-    } 
 
     ESP_LOGD(__FUNCTION__,"Initializing netif");
     ESP_ERROR_CHECK(esp_netif_init());
@@ -485,36 +503,38 @@ void wifiSallyForth(void *pvParameter) {
     ESP_LOGD(__FUNCTION__,"Initialized netif");
     nvs_flash_init();
 
-    if (config->wifi_mode == WIFI_MODE_AP) {
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(config->wifi_mode));
+
+    if (appcfg->IsAp()) {
         if (ap_netif==NULL){
-            ESP_LOGD(__FUNCTION__,"created ap netif");
             ap_netif=esp_netif_create_default_wifi_ap();
             ESP_LOGD(__FUNCTION__,"Created netif %li",(long int)ap_netif);
-            ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
-            ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
             ESP_ERROR_CHECK(esp_netif_dhcps_start(ap_netif));
-            ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-            ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-            ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config) );
-            ESP_ERROR_CHECK(esp_wifi_start() );
+            generateSidConfig(&wifi_config,pvParameter!=NULL);
+            ESP_LOGD(__FUNCTION__,"Configured in AP Mode %s/%s",wifi_config.ap.ssid,wifi_config.ap.password);
+            ESP_ERROR_CHECK(esp_wifi_set_config( ESP_IF_WIFI_AP , &wifi_config) );
         }
-    } else {
+    } 
+
+    if (appcfg->IsSta()){
+        memset(&wifi_config.sta,0,sizeof(wifi_sta_config_t));
+        xEventGroupSetBits(config->s_wifi_eg,WIFI_SCAN_READY_BIT);
         if (sta_netif==NULL){
             sta_netif=esp_netif_create_default_wifi_sta();
             ESP_LOGD(__FUNCTION__,"created station netif....");
-
-            ESP_LOGD(__FUNCTION__,"Created netif %li",(long int)sta_netif);
-            ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
-            ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
-            ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-            ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-            ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA) );
+            wifi_config.sta.pmf_cfg.capable=true;
+            wifi_config.sta.pmf_cfg.required=false;
             wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-            ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config) );
-            ESP_ERROR_CHECK(esp_wifi_start() );
+            ESP_ERROR_CHECK(esp_wifi_set_config( ESP_IF_WIFI_STA , &wifi_config) );
         }
     }
+
+    ESP_ERROR_CHECK(esp_wifi_start() );
+
     EventHandlerDescriptor* handler = new EventHandlerDescriptor(IP_EVENT,"IP_EVENT");
     handler->SetEventName(IP_EVENT_AP_STAIPASSIGNED,"IP_EVENT_AP_STAIPASSIGNED");
     handler->SetEventName(IP_EVENT_STA_GOT_IP,"IP_EVENT_STA_GOT_IP");
@@ -589,21 +609,14 @@ cJSON* Aper::toJson(){
     cJSON_AddStringToObject(j,"mac",tbuf);
     sprintf(tbuf, IPSTR, IP2STR(&ip));
     cJSON_AddStringToObject(j,"ip",tbuf);
-    struct tm timeinfo;
     if (connectTime != 0){
-        localtime_r(&connectTime, &timeinfo);
-        strftime(tbuf, 255, "%c", &timeinfo);
-        cJSON_AddStringToObject(j,"connectTime",tbuf);
+        cJSON_AddNumberToObject(j,"connectTime_sec",connectTime);
     }
     if (disconnectTime != 0){
-        localtime_r(&disconnectTime, &timeinfo);
-        strftime(tbuf, 255, "%c", &timeinfo);
-        cJSON_AddStringToObject(j,"disconnectTime",tbuf);
+        cJSON_AddNumberToObject(j,"disconnectTime_sec",disconnectTime);
     }
     if (connectionTime) {
-        localtime_r(&connectionTime, &timeinfo);
-        strftime(tbuf, 255, "%c", &timeinfo);
-        cJSON_AddStringToObject(j,"connectionTime",tbuf);
+        cJSON_AddNumberToObject(j,"connectionTime_sec",connectionTime);
     }
     if (isConnected())
         cJSON_AddTrueToObject(j,"isConnected");

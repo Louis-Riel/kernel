@@ -30,7 +30,6 @@ extern const unsigned char app_css_end[]   asm("_binary_app_css_end");
 extern const unsigned char app_js_start[] asm("_binary_app_js_start");
 extern const unsigned char app_js_end[]   asm("_binary_app_js_end");
 
-
 struct poiConfig_t {
   float lat;
   float lng;
@@ -67,6 +66,13 @@ enum purpose_t {
   UNKNOWN_PURPOSE = 0,
   TRACKER = BIT0,
   PULLER = BIT1
+};
+
+enum state_change_t {
+  UNKNOWN_STATE = 0,
+  CHANGED = BIT0,
+  RESET = BIT1,
+  INITIALIZED = BIT2
 };
 
 struct gpio_driver_t {
@@ -137,6 +143,7 @@ public:
 
   static AppConfig* GetAppConfig();
   static AppConfig* GetAppStatus();
+  static EventGroupHandle_t GetStateGroupHandle();
   static void ResetAppConfig(bool save);
   static void SaveAppConfig();
 
@@ -151,6 +158,7 @@ public:
   gpio_num_t GetPinNoProperty(char* path);
   double GetDoubleProperty(char* path);
   bool GetBoolProperty(char* path);
+  static void SignalStateChange();
 
   void SetStringProperty(char* path,char* value);
   void SetIntProperty(char* path,int32_t value);
@@ -158,6 +166,7 @@ public:
   void SetDoubleProperty(char* path,double value);
   void SetBoolProperty(char* path,bool value);
   bool IsAp();
+  bool IsSta();
 protected:
   cJSON* GetJSONProperty(cJSON* json,char* path, bool createWhenMissing);
   cJSON* GetJSONProperty(char* path);
@@ -167,6 +176,7 @@ protected:
   cJSON* json;
   static AppConfig* configInstance;
   static AppConfig* statusInstance;
+  EventGroupHandle_t eg;
   char* filePath;
 };  
 

@@ -1,6 +1,7 @@
 #include "rest.h"
 #include "route.h"
 #include "math.h"
+#include "time.h"
 #include "../../main/logs.h"
 #include "../../main/utils.h"
 #include "../esp_littlefs/include/esp_littlefs.h"
@@ -45,39 +46,32 @@ cJSON* status_json()
     AppConfig* appcfg = AppConfig::GetAppConfig();
     app_state_t* appstate=getAppState();
     the_wifi_config* wcfg = getWifiConfig();
-    char strftime_buf[64];
-    struct tm timeinfo;
-    time_t now;
-    time(&now);
-    localtime_r(&now, &timeinfo);
-    strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-
+    struct timeval tv_now;
+    gettimeofday(&tv_now, NULL);
+    int64_t time_us = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
+    
     cJSON* status=NULL;
     cJSON* wifi=NULL;
     cJSON* jclients=NULL;
 
     char* buf = (char*)malloc(255);
     uint32_t idx=0;
-    uint64_t upTime=0,sleepTime=0;
 
     status=cJSON_CreateObject();
     wifi=cJSON_CreateObject();
     jclients = cJSON_CreateArray();
-    upTime=getUpTime();
-    sleepTime=getSleepTime();
 
     cJSON_AddItemToObject(status, "deviceid",  cJSON_CreateNumber(appcfg->GetIntProperty("deviceid")));
-    sprintf(buf,"%d:%02d:%02d",(uint32_t)floor(upTime/3600),(uint32_t)floor((upTime%3600)/60),(uint32_t)upTime%60);
-    cJSON_AddStringToObject(status, "uptime", buf);
-    sprintf(buf,"%d:%02d:%02d",(uint32_t)floor(sleepTime/3600),(uint32_t)floor((sleepTime%3600)/60),(uint32_t)sleepTime%60);
-    cJSON_AddStringToObject(status, "sleeptime", buf);
+    cJSON_AddNumberToObject(status, "uptime_sec", getUpTime());
+    cJSON_AddNumberToObject(status, "sleeptime_sec", getSleepTime());
     cJSON_AddItemToObject(status, "freeram",  cJSON_CreateNumber(esp_get_free_heap_size()));
     cJSON_AddItemToObject(status, "totalram", cJSON_CreateNumber(heap_caps_get_total_size(MALLOC_CAP_DEFAULT)));
     cJSON_AddItemToObject(status, "battery",  cJSON_CreateNumber(getBatteryVoltage()));
     cJSON_AddItemToObject(status, "temperature",  cJSON_CreateNumber(temperatureReadFixed()));
     cJSON_AddItemToObject(status, "hallsensor",  cJSON_CreateNumber(hall_sensor_read()));
     cJSON_AddItemToObject(status, "openfiles",  cJSON_CreateNumber(GetNumOpenFiles()));
-    cJSON_AddItemToObject(status, "systemtime",  cJSON_CreateString(strftime_buf));
+    cJSON_AddItemToObject(status, "runtime_ms",  cJSON_CreateNumber(xTaskGetTickCount()*portTICK_PERIOD_MS));
+    cJSON_AddItemToObject(status, "systemtime_us",  cJSON_CreateNumber(time_us));
     cJSON_AddStringToObject(wifi, "enabled", xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_UP_BIT?"yes":"no");
     cJSON_AddStringToObject(wifi, "connected", xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_CONNECTED_BIT?"yes":"no");
     cJSON_AddStringToObject(wifi, "scanning", xEventGroupGetBits(wcfg->s_wifi_eg)&WIFI_SCANING_BIT?"yes":"no");
@@ -694,12 +688,27 @@ esp_err_t status_handler(httpd_req_t *req)
     ESP_LOGV(__FUNCTION__,"Status Handler");
     esp_err_t ret = ESP_FAIL;
 
-    ESP_LOGV(__FUNCTION__,"uri:%s method: %s",req->uri, req->method == HTTP_POST ? "POST" : "PUT" );
+    char* path = (char*)req->uri+8;
+    ESP_LOGV(__FUNCTION__,"uri:%s method: %s path:%s",req->uri, req->method == HTTP_POST ? "POST" : "PUT", path );
 
     if (req->method==HTTP_POST){
         httpd_resp_set_type(req, "application/json");
         cJSON* status=status_json();
-        char* sjson = cJSON_PrintUnformatted(status);
+        char* sjson = NULL;
+        if (strlen(path) == 0){
+            ESP_LOGV(__FUNCTION__,"Getting root");
+            sjson = cJSON_PrintUnformatted(status);
+        } else {
+            char* tmp = indexOf(path,"/");
+            if (tmp != NULL) {
+                *tmp=0;
+                ESP_LOGV(__FUNCTION__,"Getting %s/%s", path, tmp+1);
+                sjson = cJSON_PrintUnformatted(cJSON_GetObjectItem(cJSON_GetObjectItem(status,path),tmp+1));
+            } else {
+                ESP_LOGV(__FUNCTION__,"Getting %s", path);
+                sjson = cJSON_PrintUnformatted(cJSON_GetObjectItem(status,path));
+            }
+        }
         ret= httpd_resp_send(req, sjson, strlen(sjson));
         cJSON_Delete(status);
         free(sjson);

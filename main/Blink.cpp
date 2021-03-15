@@ -1090,7 +1090,7 @@ void app_main(void)
   sampleBatteryVoltage();
   EventManager* mgr = new EventManager(appcfg->GetJSONConfig("/events"));
   uint32_t tmp;
-  ESP_LOGV(__FUNCTION__,"Pre-Loading Image");
+  ESP_LOGV(__FUNCTION__,"Pre-Loading Image....");
   loadImage(false,&tmp);
   //initSPISDCard();
   gpio_reset_pin(BLINK_GPIO);
@@ -1130,6 +1130,7 @@ void app_main(void)
   lng.billionths = lastLngBil;
   lng.negative = lastLngNeg;
   if (appcfg->HasProperty("/gps/rxPin") && appcfg->GetIntProperty("/gps/rxPin")){
+    ESP_LOGD(__FUNCTION__,"Starting GPS");
     gps = new TinyGPSPlus(appcfg->GetJSONConfig(("/gps/rxPin")));
     if (gps != NULL){
       ESP_LOGD(__FUNCTION__,"Waiting for GPS");
@@ -1170,7 +1171,7 @@ void app_main(void)
     getAppState()->gps = item_state_t::INACTIVE;
   }
 
-  if (strcmp(appcfg->GetStringProperty("type"),"AP")==0){
+  if (indexOf(appcfg->GetStringProperty("type"),"AP")!=NULL){
     ESP_LOGD(__FUNCTION__,"Starting puller's wifi");
     xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps , tskIDLE_PRIORITY, NULL);
   }
@@ -1180,6 +1181,7 @@ void app_main(void)
   //esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF);
   //esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF);
   //esp_deep_sleep_start();
+  
 }
 
 void stopGps(){

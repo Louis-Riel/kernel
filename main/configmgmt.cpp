@@ -70,11 +70,12 @@ AppConfig::AppConfig(char *filePath)
       free(sjson);
     }
   }
-  if ((statusInstance == NULL) && (filePath == NULL))
-  {
-    statusInstance = this;
-  }
 }
+
+EventGroupHandle_t AppConfig::GetStateGroupHandle(){
+  return GetAppStatus()->eg;
+}
+
 
 AppConfig::AppConfig(cJSON *config)
 {
@@ -88,7 +89,12 @@ AppConfig *AppConfig::GetAppConfig()
 
 AppConfig *AppConfig::GetAppStatus()
 {
-  return AppConfig::configInstance;
+  if (statusInstance == NULL)
+  {
+    statusInstance = new AppConfig((char*)NULL);
+    statusInstance->eg = xEventGroupCreate();
+  }
+  return statusInstance;
 }
 
 void AppConfig::SetAppConfig(cJSON *config)
@@ -120,6 +126,11 @@ void AppConfig::ResetAppConfig(bool save)
     AppConfig::SaveAppConfig(false);
     esp_restart();
   }
+}
+
+void AppConfig::SignalStateChange(){
+    xEventGroupSetBits(GetAppStatus()->eg,state_change_t::CHANGED);
+    xEventGroupClearBits(GetAppStatus()->eg,state_change_t::CHANGED);
 }
 
 void AppConfig::SaveAppConfig()
@@ -537,5 +548,10 @@ void AppConfig::SetPinNoProperty(char *path, gpio_num_t value)
 
 bool AppConfig::IsAp()
 {
-  return strcmp(GetStringProperty("type"), "AP") == 0;
+  return indexOf(GetStringProperty("type"), "AP") != NULL;
+}
+
+bool AppConfig::IsSta()
+{
+  return indexOf(GetStringProperty("type"), "STA") != NULL;
 }

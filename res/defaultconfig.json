@@ -36,6 +36,16 @@
         "value": "AP",
         "version": 0
     },
+    "stations": [{
+        "ssid": {
+            "value": "",
+            "version": 0
+        },
+        "password": {
+            "value": "",
+            "version": 0
+        }
+    }],
     "devName": {
         "value": "Puller",
         "version": 0
@@ -79,6 +89,17 @@
             "method": {
                 "value": "Post",
                 "version": 0
+            },
+            "condition": {
+                "src": {
+                    "otype": "integer",
+                    "name": "event"
+                },
+                "operator": "==",
+                "comp": {
+                    "otype": "integer",
+                    "value": 13
+                }
             },
             "params": {
                 "pinNo": {

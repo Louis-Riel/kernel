@@ -37,6 +37,7 @@
 
 static EventGroupHandle_t eventGroup=xEventGroupCreate();
 
+cJSON* status_json();
 void restSallyForth(void *pvParameter);
 void pullStation(void *pvParameter);
 bool moveFolder(char* folderName, char* toFolderName);

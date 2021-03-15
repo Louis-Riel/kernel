@@ -6,12 +6,17 @@
 #include "esp_http_server.h"
 #include "esp_websocket_client.h"
 #include "../../main/logs.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-WebsocketManager* logsHandler = NULL;
+static WebsocketManager* logsHandler = NULL;
+static WebsocketManager* stateHandler = NULL;
 
-static void LogsHandler(void* instance){
+void WebsocketManager::QueueHandler(void* instance){
   WebsocketManager* me = (WebsocketManager*)instance;
   char* buf = (char*)malloc(JSON_BUFFER_SIZE);
   httpd_ws_frame_t ws_pkt;
@@ -36,25 +41,26 @@ static void LogsHandler(void* instance){
     }
     me->isLive = isLive;
   }
-  ESP_LOGD(__FUNCTION__,"Logpumper Done");
+  ESP_LOGD(__FUNCTION__,"QueueHandler Done");
   vQueueDelete(me->rdySem);
   ws_pkt.final = true;
-    for (uint8_t idx = 0; idx < 5; idx++){
-      if (me->clients[idx].fd){
-        httpd_ws_send_frame_async(me->clients[idx].hd, me->clients[idx].fd, &ws_pkt);
-      }
+  for (uint8_t idx = 0; idx < 5; idx++){
+    if (me->clients[idx].fd){
+      httpd_ws_send_frame_async(me->clients[idx].hd, me->clients[idx].fd, &ws_pkt);
     }
+  }
   free(buf);
-  logsHandler = NULL;
   vTaskDelete(NULL);
 }
 
-
-WebsocketManager::WebsocketManager(char* name){
-    this->rdySem=xQueueCreate(10, JSON_BUFFER_SIZE);
-    isLive = true;
+WebsocketManager::WebsocketManager(char* name):
+    rdySem(xQueueCreate(10, JSON_BUFFER_SIZE)),
+    name((char*)malloc(strlen(name)+1)),
+    isLive(true)
+{
+    strcpy(this->name,name);
     memset(clients,0,sizeof(clients));
-    xTaskCreate(LogsHandler,name,4096,this,tskIDLE_PRIORITY,&handlerTask);
+    xTaskCreate(QueueHandler,name,4096,this,tskIDLE_PRIORITY,&queueTask);
 };
 
 bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
@@ -78,15 +84,32 @@ time_t GetTime() {
 }
 
 static bool logCallback(void* instance, char* logData){
-  return logsHandler == NULL || logsHandler->isLive == false ? false : xQueueSend(logsHandler->rdySem,logData,portMAX_DELAY);
+  WebsocketManager* ws = (WebsocketManager*) instance;
+  return ws == NULL || ws->isLive == false ? false : xQueueSend(ws->rdySem,logData,portMAX_DELAY);
 };
 
-int logsSessionManager(httpd_handle_t hd, httpd_req_t* req){
-  if (logsHandler == NULL) {
-    logsHandler = new WebsocketManager("LogsWebsocket");
-    registerLogCallback(logCallback,logsHandler);
+static void statePoller(void *instance){
+  WebsocketManager* ws = (WebsocketManager*) instance;
+  EventGroupHandle_t stateEg = AppConfig::GetStateGroupHandle();
+  httpd_ws_frame_t ws_pkt;
+  ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+  ws_pkt.final = false;
+
+  EventBits_t bits = 0;
+  while ((ws!=NULL) && (ws->isLive)) {
+    EventBits_t lastBits = xEventGroupWaitBits(stateEg,0xff,pdFALSE,pdFALSE,10000/portTICK_RATE_MS);
+    if (lastBits != bits){
+      cJSON* state = NULL;
+      char* buf = cJSON_Print((state=status_json()));
+      xQueueSend(ws->rdySem,buf,portMAX_DELAY);
+      free(buf);
+      cJSON_free(state);
+    }
+    bits = lastBits;
   }
-  return logsHandler->RegisterClient(req->handle,httpd_req_to_sockfd(req)) ? ESP_OK : ESP_FAIL;
+  ESP_LOGD(__FUNCTION__,"State Poller Done");
+  stateHandler=NULL;
+  vTaskDelete(NULL);
 }
 
 
@@ -105,9 +128,21 @@ esp_err_t ws_handler(httpd_req_t *req){
     }
     ESP_LOGD(__FUNCTION__, "Got packet with message: %s", ws_pkt.payload);
     ESP_LOGD(__FUNCTION__, "Packet type: %d", ws_pkt.type);
-    if (ws_pkt.type == HTTPD_WS_TYPE_TEXT &&
-        strcmp((char*)ws_pkt.payload,"Logs") == 0) {
-        return logsSessionManager(req->handle, req);
+    if (ws_pkt.type == HTTPD_WS_TYPE_TEXT){
+      if (strcmp((char*)ws_pkt.payload,"Logs") == 0) {
+        if (logsHandler == NULL) {
+          logsHandler = new WebsocketManager("LogsWebsocket");
+          registerLogCallback(logCallback,logsHandler);
+        }
+        return logsHandler->RegisterClient(req->handle,httpd_req_to_sockfd(req)) ? ESP_OK : ESP_FAIL;
+      }
+      if (strcmp((char*)ws_pkt.payload,"State") == 0) {
+        if (stateHandler == NULL) {
+          stateHandler = new WebsocketManager("StateWebsocket");
+          xTaskCreate(statePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
+        }
+        return stateHandler->RegisterClient(req->handle,httpd_req_to_sockfd(req)) ? ESP_OK : ESP_FAIL;
+      }
     }
 
     ret = httpd_ws_send_frame(req, &ws_pkt);

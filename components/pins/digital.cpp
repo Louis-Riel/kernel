@@ -83,7 +83,7 @@ void Pin::RefrestState(){
     if (curState != state) {
         state=curState;
         ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, name,state?"On":"Off");
-        PostEvent(this,sizeof(void*),state ? eventIds::ON : eventIds::OFF);
+        PostEvent((void*)&pinNo,sizeof(pinNo),state ? eventIds::ON : eventIds::OFF);
     }
 }
 

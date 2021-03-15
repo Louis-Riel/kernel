@@ -487,6 +487,7 @@ FILE * fopen (const char * _name, const char * _type,bool createDir, bool log){
 FILE * fOpen (const char * _name, const char * _type){
   FILE* ret = ::fopen(_name,_type);
   if (ret != NULL) {
+    AppConfig::SignalStateChange();
     numOpenFiles++;
   }
   return ret;
@@ -496,8 +497,10 @@ int fClose (FILE * f){
   int ret = EOF;
   if (f != NULL){
     ret = ::fclose(f);
-    if (ret == 0)
+    if (ret == 0){
+      AppConfig::SignalStateChange();
       numOpenFiles--;
+    }
   }
   return ret;
 }

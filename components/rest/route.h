@@ -22,7 +22,9 @@ class WebsocketManager {
   public:
     WebsocketManager(char* name);
     bool RegisterClient(httpd_handle_t hd,int fd);
+    TaskHandle_t queueTask;
     QueueHandle_t rdySem;
+    char* name;
     bool isLive;
     struct ws_client_t
     {
@@ -33,7 +35,7 @@ class WebsocketManager {
     } clients[5];
 
   private:
-    TaskHandle_t handlerTask;
+    static void QueueHandler(void* instance);
     uint32_t logPos = 0;
 };
 

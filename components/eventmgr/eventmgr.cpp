@@ -4,7 +4,9 @@
 
 EventManager* EventManager::instance=NULL;
 
-EventManager::EventManager(cJSON* cfg):config(NULL){
+EventManager::EventManager(cJSON* cfg)
+:config(NULL)
+{
     EventManager::instance=this;
     memset(eventInterpretors,0,sizeof(void*)*MAX_NUM_EVENTS);
     SetConfig(cfg);
@@ -35,9 +37,9 @@ cJSON* EventManager::SetConfig(cJSON* config){
             isValid=false;
             ESP_LOGW(__FUNCTION__,"Missing method");
         }
-        if (isValid)
+        if (isValid){
             instance->eventInterpretors[idx++] = new EventInterpretor(event);
-        else{
+        }else{
             char* json = cJSON_Print(event);
             ESP_LOGW(__FUNCTION__,"Event:%s",json);
             free(json);

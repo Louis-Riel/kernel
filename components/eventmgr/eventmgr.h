@@ -13,6 +13,7 @@
 #include "../../main/logs.h"
 #include "../../main/utils.h"
 #include "cJSON.h"
+#include <regex> 
 
 #define MAX_NUM_HANDLERS_PER_BASE 20
 #define MAX_NUM_HANDLERS 100
@@ -43,6 +44,52 @@ private:
     char* name;
 };
 
+enum class compare_operation_t {
+    Invalid,
+    Equal,
+    Bigger,
+    BiggerOrEqual,
+    Smaller,
+    SmallerOrEqual,
+    RexEx
+};
+
+enum class compare_entity_type_t {
+    Invalid,
+    Integer,
+    Fractional,
+    String
+};
+
+enum class compare_origin_t {
+    Invalid,
+    Event,
+    Litteral
+};
+
+class EventCondition {
+public:
+    EventCondition(cJSON* json);
+    bool IsEventCompliant(void *event_data);
+    bool IsValid();
+private:
+    static compare_operation_t GetCompareOperator(cJSON* json);
+    static compare_entity_type_t GetEntityType(cJSON* json,char* fldName);
+    static compare_origin_t GetOriginType(cJSON* json,char* fldName);
+
+    compare_operation_t compareOperation;
+    compare_entity_type_t valType;
+    compare_origin_t valOrigin;
+    compare_entity_type_t compType;
+    compare_origin_t compOrigin;
+    std::regex regexp;
+    bool isValid;
+    char* compStrVal;
+    char* eventJsonPropName;
+    int32_t compIntValue;
+    double compDblValue;
+};
+
 class EventInterpretor {
 public:
     EventInterpretor(cJSON* json);
@@ -52,6 +99,7 @@ private:
     char* eventBase;
     char* eventId;
     char* method;
+    EventCondition* condition;
     cJSON* params;
     EventHandlerDescriptor* handler;
     int32_t id;
