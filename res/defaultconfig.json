@@ -90,7 +90,7 @@
                 "value": "Post",
                 "version": 0
             },
-            "condition": {
+            "conditions": [{
                 "src": {
                     "otype": "integer",
                     "name": "event"
@@ -100,7 +100,19 @@
                     "otype": "integer",
                     "value": 13
                 }
-            },
+            }, {
+                "boper": "and"
+            }, {
+                "src": {
+                    "otype": "integer",
+                    "name": "event"
+                },
+                "operator": ">=",
+                "comp": {
+                    "otype": "integer",
+                    "value": 13
+                }
+            }],
             "params": {
                 "pinNo": {
                     "value": 5,

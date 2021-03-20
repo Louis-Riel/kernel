@@ -3,15 +3,27 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-EventInterpretor::EventInterpretor(cJSON* json):condition(NULL){
+EventInterpretor::EventInterpretor(cJSON* json)
+{
+    memset(conditions,0,5*sizeof(void*));
+    memset(isAnd,0,5*sizeof(bool));
     id = -1;
     handler = NULL;
     eventBase=cJSON_GetObjectItem(cJSON_GetObjectItem(json,"eventBase"),"value")->valuestring;
     eventId=cJSON_GetObjectItem(cJSON_GetObjectItem(json,"eventId"),"value")->valuestring;
     method=cJSON_GetObjectItem(cJSON_GetObjectItem(json,"method"),"value")->valuestring;
     params=cJSON_GetObjectItem(json,"params");
-    if (cJSON_HasObjectItem(json,"condition")){
-        condition = new EventCondition(cJSON_GetObjectItem(json,"condition"));
+    if (cJSON_HasObjectItem(json,"conditions")){
+        cJSON* condition = NULL;
+        int idx=0;
+        cJSON_ArrayForEach(condition,cJSON_GetObjectItem(json,"conditions")){
+            if (cJSON_HasObjectItem(condition,"operator")){
+                conditions[idx] = new EventCondition(condition);
+            }
+            if (cJSON_HasObjectItem(condition,"boper")){
+                isAnd[idx++] = strcmp("and",cJSON_GetObjectItem(condition,"boper")->valuestring);
+            }
+        }
     }
 }
 
@@ -32,8 +44,13 @@ bool EventInterpretor::IsValid(EventHandlerDescriptor *handler, int32_t id, void
     bool ret = (this->handler != NULL) && (handler->GetEventBase() == this->handler->GetEventBase()) && (id == this->id);
     if (ret) {
         ESP_LOGV(__FUNCTION__,"%s-%d Match",handler->GetName(),id);
-        if (condition != NULL) {
-            return condition->IsEventCompliant(event_data);
+        for (int idx=0; idx < 5; idx++){
+            if (conditions[idx]) {
+                ret=conditions[idx]->IsEventCompliant(event_data);
+                if (!ret && (idx < 4) && (isAnd[idx+1])) {
+                    return ret;
+                }
+            }
         }
     }
     return ret;
@@ -83,7 +100,10 @@ EventCondition::EventCondition(cJSON* json)
 ,compType(GetEntityType(json,"comp"))
 ,compOrigin(GetOriginType(json,"comp"))
 ,isValid(true)
+,compStrVal(NULL)
 ,eventJsonPropName(NULL)
+,compIntValue(0)
+,compDblValue(0.0)
 {
     char* ctmp;
     cJSON* comp = cJSON_GetObjectItem(json,"comp");
@@ -120,6 +140,22 @@ EventCondition::EventCondition(cJSON* json)
     }
 }
 
+void EventCondition::PrintState(){
+    if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE) {
+        ESP_LOGV(__FUNCTION__,"isValid:%d compareOperation:%d valType:%d valOrigin:%d,compType:%d compOrigin:%d compStrVal:%s eventJsonPropName:%s compIntValue:%d compDblValue:%f",
+                                isValid,
+                                (int)compareOperation,
+                                (int)valType,
+                                (int)valOrigin,
+                                (int)compType,
+                                (int)compOrigin,
+                                compStrVal == NULL ? "*null*" : compStrVal,
+                                eventJsonPropName == NULL ? "*null*" : eventJsonPropName,
+                                compIntValue,
+                                compDblValue);
+    }
+}
+
 bool EventCondition::IsEventCompliant(void *event_data){
     if (!IsValid()){
         return false;
@@ -127,6 +163,7 @@ bool EventCondition::IsEventCompliant(void *event_data){
     double dcval=0.0;
     int icval=0;
     char* scval = NULL;
+    PrintState();
     switch (compType)
     {
     case compare_entity_type_t::Fractional:
@@ -162,15 +199,19 @@ bool EventCondition::IsEventCompliant(void *event_data){
             return icval == compIntValue;
             break;
         case compare_operation_t::Bigger:
+            ESP_LOGV(__FUNCTION__,"%d>%d",icval, compIntValue);
             return icval > compIntValue;
             break;
         case compare_operation_t::BiggerOrEqual:
+            ESP_LOGV(__FUNCTION__,"%d>=%d",icval, compIntValue);
             return icval >= compIntValue;
             break;
         case compare_operation_t::Smaller:
+            ESP_LOGV(__FUNCTION__,"%d<%d",icval, compIntValue);
             return icval < compIntValue;
             break;
         case compare_operation_t::SmallerOrEqual:
+            ESP_LOGV(__FUNCTION__,"%d<=%d",icval, compIntValue);
             return icval <= compIntValue;
             break;
         default:
@@ -218,20 +259,20 @@ compare_operation_t EventCondition::GetCompareOperator(cJSON* json){
     if (strncmp("==",val->valuestring,2) == 0){
         return compare_operation_t::Equal;    
     }
-    if (strncmp(">",val->valuestring,1) == 0){
-        return compare_operation_t::Bigger;    
-    }
     if (strncmp(">=",val->valuestring,2) == 0){
         return compare_operation_t::BiggerOrEqual;    
-    }
-    if (strncmp("<",val->valuestring,1) == 0){
-        return compare_operation_t::Smaller;    
     }
     if (strncmp("<=",val->valuestring,2) == 0){
         return compare_operation_t::SmallerOrEqual;    
     }
     if (strncmp("~=",val->valuestring,2) == 0){
         return compare_operation_t::RexEx;    
+    }
+    if (strncmp(">",val->valuestring,1) == 0){
+        return compare_operation_t::Bigger;    
+    }
+    if (strncmp("<",val->valuestring,1) == 0){
+        return compare_operation_t::Smaller;    
     }
     char* sjson = cJSON_Print(json);
     ESP_LOGW(__FUNCTION__,"Invalid operator value:%s",sjson);

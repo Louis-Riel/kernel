@@ -154,8 +154,12 @@ void AppConfig::SaveAppConfig(bool skipMount)
   if (currentCfg != NULL)
   {
     char *sjson = cJSON_Print(config->json);
-    fwrite(sjson, 1, strlen(sjson), currentCfg);
-    fClose(currentCfg);
+    ESP_LOGV(__FUNCTION__,"Config:%s",sjson);
+    size_t wlen = fwrite(sjson, 1, strlen(sjson), currentCfg);
+    ESP_LOGV(__FUNCTION__,"Wrote %d config bytes",wlen);
+    if (fClose(currentCfg) != 0){
+      ESP_LOGE(__FUNCTION__,"Failed wo close config");
+    }
     free(sjson);
   }
   else

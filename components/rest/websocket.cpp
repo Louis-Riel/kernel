@@ -42,7 +42,6 @@ void WebsocketManager::QueueHandler(void* instance){
     me->isLive = isLive;
   }
   ESP_LOGD(__FUNCTION__,"QueueHandler Done");
-  vQueueDelete(me->rdySem);
   ws_pkt.final = true;
   for (uint8_t idx = 0; idx < 5; idx++){
     if (me->clients[idx].fd){
@@ -50,6 +49,9 @@ void WebsocketManager::QueueHandler(void* instance){
     }
   }
   free(buf);
+  free(emptyString);
+  free(me->name);
+  vQueueDelete(me->rdySem);
   vTaskDelete(NULL);
 }
 
@@ -66,6 +68,7 @@ WebsocketManager::WebsocketManager(char* name):
 bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
   for (uint8_t idx = 0; idx < 5; idx++){
     if ((clients[idx].hd == hd) && (clients[idx].fd == fd)){
+      ESP_LOGV(__FUNCTION__,"Client was at position %d",idx);
       return clients[idx].isLive = true;
     }
   }
@@ -73,6 +76,7 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
     if (!clients[idx].isLive){
       clients[idx].hd = hd;
       clients[idx].fd = fd;
+      ESP_LOGV(__FUNCTION__,"Client is inserted at position %d",idx);
       return clients[idx].isLive = true;
     }
   }
@@ -101,6 +105,7 @@ static void statePoller(void *instance){
     if (lastBits != bits){
       cJSON* state = NULL;
       char* buf = cJSON_Print((state=status_json()));
+      ESP_LOGV(__FUNCTION__,"State Changed:%s",buf);
       xQueueSend(ws->rdySem,buf,portMAX_DELAY);
       free(buf);
       cJSON_free(state);

@@ -175,7 +175,6 @@ esp_err_t rest_handler(httpd_req_t *req)
 
 void restSallyForth(void *pvParameter) {
     assert(pvParameter);
-    //eventGroup = xEventGroupCreate();
     the_wifi_config* cfg = (the_wifi_config*)pvParameter;
     xEventGroupWaitBits(cfg->s_wifi_eg,WIFI_CONNECTED_BIT,pdFALSE,pdFALSE,portMAX_DELAY);
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -192,6 +191,5 @@ void restSallyForth(void *pvParameter) {
     } else {
         ESP_LOGI(__FUNCTION__, "Error starting server!");
     }
-
     vTaskDelete( NULL );
 }

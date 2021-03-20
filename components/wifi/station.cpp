@@ -20,6 +20,9 @@
 #include <esp_pm.h>
 #include <lwip/sockets.h>
 #include "../eventmgr/eventmgr.h"
+#include "esp_sntp.h"
+#include <time.h>
+#include <sys/time.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -34,6 +37,7 @@ esp_netif_t *ap_netif = NULL;
 wifi_event_ap_staconnected_t* station = (wifi_event_ap_staconnected_t*)malloc(sizeof(wifi_event_ap_staconnected_t));
 wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
 TaskHandle_t restHandle=NULL;
+TaskHandle_t timeHandle=NULL;
 
 Aper** GetClients(){
     return clients;
@@ -299,11 +303,40 @@ Aper* GetAper(uint8_t* mac){
     return NULL;
 }
 
+void time_sync_notification_cb(struct timeval *tv)
+{
+    ESP_LOGD(__FUNCTION__, "Notification of a time synchronization event");
+    settimeofday(tv, NULL);
+    sntp_set_sync_status(SNTP_SYNC_STATUS_COMPLETED);
+}
+
+static void updateTime(void* param)
+{
+    ESP_LOGV(__FUNCTION__, "Initializing SNTP");
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, "pool.ntp.org");
+    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
+    sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+    sntp_init();
+
+    time_t now = 0;
+    struct tm timeinfo = { 0 };
+    int retry = 0;
+    const int retry_count = 10;
+    while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count) {
+        ESP_LOGV(__FUNCTION__, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+    }
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    vTaskDelete(NULL);
+}
+
 void static network_event(void* handler_arg, esp_event_base_t base, int32_t event_id, void* event_data)
 {
     Aper* client = NULL;
     if (base == IP_EVENT) {
-        ESP_LOGD(__FUNCTION__,"ip event %d",event_id);
+        ESP_LOGV(__FUNCTION__,"ip event %d",event_id);
         ip_event_got_ip_t* event;
         system_event_info_t* evt;
         switch(event_id) {
@@ -313,6 +346,17 @@ void static network_event(void* handler_arg, esp_event_base_t base, int32_t even
                 memcpy(&ipInfo,&event->ip_info,sizeof(ipInfo));
                 xEventGroupSetBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
                 initSPISDCard();
+
+                time_t now;
+                struct tm timeinfo;
+                time(&now);
+                localtime_r(&now, &timeinfo);
+                // Is time set? If not, tm_year will be (1970 - 1900).
+                if (timeinfo.tm_year < (2016 - 1900) && (timeHandle == NULL)) {
+                    ESP_LOGD(__FUNCTION__, "Time is not set yet. Connecting to WiFi and getting time over NTP.");
+                    xTaskCreate(updateTime, "updateTime", 4096, NULL , tskIDLE_PRIORITY, &timeHandle);
+                }
+
                 if (restHandle == NULL) {
                     xTaskCreate(restSallyForth, "restSallyForth", 4096, getWifiConfig() , tskIDLE_PRIORITY, &restHandle);
                 }

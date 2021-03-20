@@ -612,6 +612,7 @@ esp_err_t HandleWifiCommand(httpd_req_t *req)
             ESP_LOGE(__FUNCTION__,"Error whilst parsing json");
         }
     }
+    free(postData);
     return ret;
 }
 
@@ -680,6 +681,7 @@ esp_err_t HandleSystemCommand(httpd_req_t *req)
             ESP_LOGE(__FUNCTION__,"Error whilst parsing json");
         }
     }
+    free(postData);
     return ret;
 }
 
@@ -709,7 +711,9 @@ esp_err_t status_handler(httpd_req_t *req)
                 sjson = cJSON_PrintUnformatted(cJSON_GetObjectItem(status,path));
             }
         }
-        ret= httpd_resp_send(req, sjson, strlen(sjson));
+        if ((sjson != NULL) && (strlen(sjson) > 0)) {
+            ret= httpd_resp_send(req, sjson, strlen(sjson));
+        }
         cJSON_Delete(status);
         free(sjson);
     }
@@ -894,6 +898,7 @@ esp_err_t sendFile(httpd_req_t *req){
                 if (!moveFile(path,topath)) {
                     ESP_LOGE(__FUNCTION__,"Cannot move %s to %s",path,topath);
                 }
+                free(topath);
             }
         } else {
             httpd_resp_set_status(req,HTTPD_404);

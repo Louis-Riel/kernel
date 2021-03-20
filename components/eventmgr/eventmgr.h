@@ -72,6 +72,7 @@ public:
     EventCondition(cJSON* json);
     bool IsEventCompliant(void *event_data);
     bool IsValid();
+    void PrintState();
 private:
     static compare_operation_t GetCompareOperator(cJSON* json);
     static compare_entity_type_t GetEntityType(cJSON* json,char* fldName);
@@ -99,7 +100,8 @@ private:
     char* eventBase;
     char* eventId;
     char* method;
-    EventCondition* condition;
+    EventCondition* conditions[5];
+    bool isAnd[5];
     cJSON* params;
     EventHandlerDescriptor* handler;
     int32_t id;

@@ -16,7 +16,7 @@ function isFloat(n) {
 }
 
 function IsDatetimeValue(fld) {
-    return fld.match(".*ime$");
+    return fld.match(".*ime_.s$");
 }
 
 function IsBooleanValue(val) {
@@ -210,7 +210,144 @@ function formEvent(container, event, key) {
     AddTriggerField(summary, null, "eventId", event, "label");
 
     BuildTriggerSection(hevent, event);
+    BuildConditionsSection(hevent, event);
     BuildRunSection(hevent, event);
+}
+
+function BuildConditionsSection(hevent, event) {
+    if ((event.conditions === undefined) || (event.conditions.length == 0)) {
+        return;
+    }
+    var triggerDiv = hevent.querySelector(`details.conditions`) || hevent.appendChild(document.createElement("details"));
+    triggerDiv.classList.add("conditions");
+    triggerDiv.data = event;
+    var label = triggerDiv.querySelector(`summary.conditions`) || triggerDiv.appendChild(document.createElement("summary"));
+    label.classList.add("conditions");
+    label.innerText = "Conditions";
+    event.conditions.forEach((condition, idx) => BuildConditionSection(idx, triggerDiv, condition));
+}
+
+function BuildConditionSection(idx, parentDiv, condition) {
+    if (condition.src !== undefined) {
+        var triggerDiv = parentDiv.querySelector(`#condition${idx}`) || parentDiv.appendChild(document.createElement("details"));
+        triggerDiv.data = condition;
+        triggerDiv.classList.add("condition");
+        triggerDiv.id = `condition${idx}`;
+        var label = triggerDiv.querySelector(`summary.condition`) || triggerDiv.appendChild(document.createElement("summary"));
+        label.classList.add("condition");
+        label.innerText = "Condition";
+        BuildConditionField(triggerDiv, "src", condition);
+        BuildOperatorInput(triggerDiv, condition);
+        BuildConditionField(triggerDiv, "comp", condition);
+    }
+}
+
+function BuildConditionField(triggerDiv, fld, condition) {
+    var label = triggerDiv.querySelector(`label.${fld}`) || triggerDiv.appendChild(document.createElement("label"));
+    label.classList.add(fld);
+    label.classList.add("label");
+    label.textContent = fld == "src" ? "Source" : "Compare To";
+    if (fld == "src")
+        BuildTypeInput(label, fld, condition);
+    BuildValueInput(label, fld, condition);
+}
+
+function BuildOperatorInput(parentDiv, condition) {
+    var label = parentDiv.querySelector(`label.operator`) || parentDiv.appendChild(document.createElement("label"));
+    label.classList.add("operator");
+    label.classList.add("label");
+    label.textContent = "Operator";
+    var operInput = label.querySelector(`select.operator`) || label.appendChild(document.createElement("select"));
+    operInput.classList.add("operator");
+    operInput.data = condition;
+    operInput.value = condition.operator;
+    operInput.onchange = () => { condition.operator = operInput.value };
+    var op = operInput.querySelector("option.equals") || operInput.appendChild(document.createElement("option"));
+    op.classList.add("equals");
+    op.value = "==";
+    op.textContent = "==";
+    op = operInput.querySelector("option.bigger") || operInput.appendChild(document.createElement("option"));
+    op.classList.add("bigger");
+    op.value = ">";
+    op.textContent = ">";
+    op = operInput.querySelector("option.biggerorequal") || operInput.appendChild(document.createElement("option"));
+    op.classList.add("biggerorequal");
+    op.value = ">=";
+    op.textContent = ">=";
+    op = operInput.querySelector("option.smaller") || operInput.appendChild(document.createElement("option"));
+    op.classList.add("smaller");
+    op.value = "<";
+    op.textContent = "<";
+    op = operInput.querySelector("option.smallerorequal") || operInput.appendChild(document.createElement("option"));
+    op.classList.add("smallerorequal");
+    op.value = "<=";
+    op.textContent = "<=";
+    operInput.value = condition.operator;
+    operInput.onchange = () => { condition.operator = operInput.value };
+}
+
+function BuildValueInput(parentDiv, fld, condition) {
+    var intp = fld == "src" ? "select" : "input"
+    var valueInput = parentDiv.querySelector(`${intp}.${fld}.value`) || parentDiv.appendChild(document.createElement(intp));
+    valueInput.classList.add(fld);
+    valueInput.classList.add("value");
+    valueInput.data = condition[fld];
+
+    if (intp == "select") {
+        var op = valueInput.querySelector("option.event") || valueInput.appendChild(document.createElement("option"));
+        op.classList.add("event");
+        op.value = "event";
+        op.textContent = "Event";
+        op = valueInput.querySelector("option.litteral") || valueInput.appendChild(document.createElement("option"));
+        op.classList.add("litteral");
+        op.value = "Litteral";
+        op.textContent = "Litteral";
+        valueInput.value = condition[fld].name;
+        valueInput.onchange = () => { condition[fld].name = valueInput.value };
+    } else {
+        valueInput.value = condition[fld].value;
+        switch (condition[fld].otype) {
+            case "integer":
+                valueInput.onchange = () => { condition[fld].value = parseInt(valueInput.value) };
+                valueInput.type = "number";
+                break;
+            case "fractional":
+                valueInput.onchange = () => { condition[fld].value = parseFloat(valueInput.value) };
+                valueInput.type = "number";
+                valueInput.step = 0.1;
+                break;
+            case "string":
+                valueInput.onchange = () => { condition[fld].value = valueInput.value };
+                valueInput.type = "text";
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+function BuildTypeInput(parentDiv, fld, condition) {
+    var typeInput = parentDiv.querySelector(`select.${fld},select.type`) || parentDiv.appendChild(document.createElement("select"));
+    typeInput.classList.add(fld);
+    typeInput.classList.add("type");
+    typeInput.value = condition[fld].otype;
+    typeInput.data = condition[fld];
+    typeInput.onchange = () => {
+        condition["src"].otype = typeInput.value;
+        condition["comp"].otype = typeInput.value
+    };
+    var op = typeInput.querySelector("option.integer") || typeInput.appendChild(document.createElement("option"));
+    op.classList.add("integer");
+    op.value = "integer";
+    op.textContent = "Integer";
+    op = typeInput.querySelector("option.fractional") || typeInput.appendChild(document.createElement("option"));
+    op.classList.add("fractional");
+    op.value = "fractional";
+    op.textContent = "Fractional";
+    op = typeInput.querySelector("option.string") || typeInput.appendChild(document.createElement("option"));
+    op.classList.add("string");
+    op.value = "string";
+    op.textContent = "String";
 }
 
 function BuildRunSection(hevent, event) {
@@ -279,6 +416,63 @@ function jsonifyField(fPath, parentElement, fld, val) {
     GetFieldInput(fieldContainer, tp, fPath, fld, val);
 }
 
+function degToRad(degree) {
+    var factor = Math.PI / 180;
+    return degree * factor;
+}
+
+function renderTime(input, fld, val) {
+    var now = fld.endsWith("_us") ? new Date(val / 1000) : new Date(val);
+    if (fld.startsWith("run"))
+        now.setTime(now.getTime() + now.getTimezoneOffset() * 60 * 1000);
+    var today = now.toDateString();
+    var time = now.toLocaleTimeString();
+    var hrs = now.getHours();
+    var min = now.getMinutes();
+    var sec = now.getSeconds();
+    var mil = now.getMilliseconds();
+    var smoothsec = sec + (mil / 1000);
+    var smoothmin = min + (smoothsec / 60);
+    var canvas = input.querySelector(`canvas`) || input.appendChild(document.createElement("canvas"));
+    canvas.height = 100;
+    canvas.width = 100;
+    var ctx = canvas.getContext("2d");
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 4;
+    ctx.shadowBlur = 2;
+    ctx.shadowColor = '#00ffff'
+    var rect = input.getBoundingClientRect();
+
+    //Background
+    gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
+    gradient.addColorStop(0, "#03303a");
+    gradient.addColorStop(1, "black");
+    ctx.fillStyle = gradient;
+    //ctx.fillStyle = 'rgba(00 ,00 , 00, 1)';
+    ctx.clearRect(0, 0, rect.width, rect.height);
+    console.log(0, 0, rect.width, rect.height);
+    console.log(rect);
+    //Hours
+    ctx.beginPath();
+    ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad((hrs * 30) - 90));
+    ctx.stroke();
+    //Minutes
+    ctx.beginPath();
+    ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad((smoothmin * 6) - 90));
+    ctx.stroke();
+    //Date
+    ctx.font = "8px Helvetica";
+    ctx.fillStyle = 'rgba(00, 255, 255, 1)'
+    var txtbx = ctx.measureText(today);
+    ctx.fillText(today, (rect.width / 2) - txtbx.width / 2, rect.height * .55);
+    //Time
+    ctx.font = "12px Helvetica";
+    ctx.fillStyle = 'rgba(00, 255, 255, 1)';
+    txtbx = ctx.measureText(time);
+    ctx.fillText(time, (rect.width * 0.50) - txtbx.width / 2, rect.height * 0.45);
+
+}
+
 function GetFieldInput(fieldContainer, tp, fPath, fld, value) {
     if (value === undefined)
         return;
@@ -304,7 +498,11 @@ function GetFieldInput(fieldContainer, tp, fPath, fld, value) {
     }
 
     if (tp == "div") {
-        input.innerText = val;
+        if (IsDatetimeValue(fld)) {
+            renderTime(input, fld, val);
+        } else {
+            input.innerText = val;
+        }
     } else {
         input.value = val;
     }

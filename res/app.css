@@ -241,13 +241,15 @@ body {
 }
 
 .system-config form fieldset label>input,
-textarea {
+textarea,
+select {
     width: 90%;
     font-size: large;
 }
 
 .system-config form fieldset input,
-textarea {
+textarea,
+select {
     background-color: #f0feff0d;
     color: greenyellow;
 }
@@ -263,13 +265,6 @@ textarea {
 
 table.greyGridTable a {
     color: inherit;
-}
-
-.system-config form fieldset select {
-    float: right;
-    background: #10130f;
-    color: inherit;
-    font: inherit;
 }
 
  ::-webkit-scrollbar {
@@ -390,6 +385,7 @@ caption div.controls button {
 
 summary {
     clear: both;
+    font-size: small;
 }
 
 details>details {
