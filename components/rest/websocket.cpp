@@ -18,12 +18,12 @@ static WebsocketManager* stateHandler = NULL;
 
 void WebsocketManager::QueueHandler(void* instance){
   WebsocketManager* me = (WebsocketManager*)instance;
-  char* buf = (char*)malloc(JSON_BUFFER_SIZE);
+  char* buf = (char*)dmalloc(JSON_BUFFER_SIZE);
   httpd_ws_frame_t ws_pkt;
   ws_pkt.type = HTTPD_WS_TYPE_TEXT;
   ws_pkt.final = false;
   esp_err_t ret;
-  uint8_t* emptyString = (uint8_t*)malloc(1);
+  uint8_t* emptyString = (uint8_t*)dmalloc(1);
   *emptyString=0;
   while(me->isLive){
     if (xQueueReceive(me->rdySem,buf,3000/portTICK_PERIOD_MS)) {
@@ -48,16 +48,16 @@ void WebsocketManager::QueueHandler(void* instance){
       httpd_ws_send_frame_async(me->clients[idx].hd, me->clients[idx].fd, &ws_pkt);
     }
   }
-  free(buf);
-  free(emptyString);
-  free(me->name);
+  ldfree(buf);
+  ldfree(emptyString);
+  ldfree(me->name);
   vQueueDelete(me->rdySem);
   vTaskDelete(NULL);
 }
 
 WebsocketManager::WebsocketManager(char* name):
     rdySem(xQueueCreate(10, JSON_BUFFER_SIZE)),
-    name((char*)malloc(strlen(name)+1)),
+    name((char*)dmalloc(strlen(name)+1)),
     isLive(true)
 {
     strcpy(this->name,name);
@@ -101,13 +101,13 @@ static void statePoller(void *instance){
 
   EventBits_t bits = 0;
   while ((ws!=NULL) && (ws->isLive)) {
-    EventBits_t lastBits = xEventGroupWaitBits(stateEg,0xff,pdFALSE,pdFALSE,10000/portTICK_RATE_MS);
+    EventBits_t lastBits = xEventGroupWaitBits(stateEg,state_change_t::CHANGED,pdTRUE,pdTRUE,1000/portTICK_RATE_MS);
     if (lastBits != bits){
       cJSON* state = NULL;
       char* buf = cJSON_Print((state=status_json()));
-      ESP_LOGV(__FUNCTION__,"State Changed:%s",buf);
+      ESP_LOGD(__FUNCTION__,"State Changed");
       xQueueSend(ws->rdySem,buf,portMAX_DELAY);
-      free(buf);
+      ldfree(buf);
       cJSON_free(state);
     }
     bits = lastBits;

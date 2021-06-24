@@ -16,10 +16,10 @@ Pin::Pin(AppConfig* config)
     flags(config->GetIntProperty("driverFlags")),
     name(config->GetStringProperty("pinName"))
 {
-    char* pname = (char*)malloc(sizeof(name)+1);
+    char* pname = (char*)dmalloc(sizeof(name)+1);
     strcpy(pname,name);
     uint32_t sz = strlen(pname)+1;
-    name = (char*) malloc(sz);
+    name = (char*) dmalloc(sz);
     name[0]=0;
     if (sz > 1)
         strcpy(name,pname);

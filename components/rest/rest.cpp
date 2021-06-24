@@ -120,11 +120,11 @@ bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_
         sc=uri_to_match[sidx];
         if (tidx >= 0){
             if (tc=='*') {
-                ESP_LOGV(__FUNCTION__,"Match on wildcard");
+                //ESP_LOGV(__FUNCTION__,"Match on wildcard");
                 break;
             }
             if (!eot && !eos && (tc != sc)) {
-                ESP_LOGV(__FUNCTION__,"Missmatch on tpos:%d spos:%d %c!=%c",tidx,sidx,tc,sc);
+                //ESP_LOGV(__FUNCTION__,"Missmatch on tpos:%d spos:%d %c!=%c",tidx,sidx,tc,sc);
                 matches=false;
                 break;
             }
@@ -135,7 +135,7 @@ bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_
                 if (tc=='/') {
                     break;
                 }
-                ESP_LOGV(__FUNCTION__,"Missmatch slen being longer at tpos:%d tlen:%d spos:%d slen:%d",tidx,tLen,sidx,sLen);
+                //ESP_LOGV(__FUNCTION__,"Missmatch slen being longer at tpos:%d tlen:%d spos:%d slen:%d",tidx,tLen,sidx,sLen);
                 matches=false;
                 break;
             }
@@ -148,7 +148,7 @@ bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_
                     ((sLen == (tLen-1)) && (reference_uri[tLen-1] == '*')) ) {
                     break;
                 }
-                ESP_LOGV(__FUNCTION__,"Missmatch slen being sorter at tpos:%d spos:%d",tidx,sidx);
+                //ESP_LOGV(__FUNCTION__,"Missmatch slen being sorter at tpos:%d spos:%d",tidx,sidx);
                 matches=false;
                 break;
             }
@@ -182,14 +182,14 @@ void restSallyForth(void *pvParameter) {
     ESP_LOGI(__FUNCTION__, "Starting server on port %d", config.server_port);
     xEventGroupClearBits(eventGroup,HTTP_SERVING);
     if (httpd_start(&server, &config) == ESP_OK) {
-        ESP_LOGI(__FUNCTION__, "Registering URI handlers");
+        ESP_LOGD(__FUNCTION__, "Registering URI handlers");
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &wsUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &restPostUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &restPutUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &appUri));
         xEventGroupSetBits(eventGroup,HTTP_SERVING);
     } else {
-        ESP_LOGI(__FUNCTION__, "Error starting server!");
+        ESP_LOGE(__FUNCTION__, "Error starting server!");
     }
     vTaskDelete( NULL );
 }

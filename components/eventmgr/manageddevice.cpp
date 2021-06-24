@@ -7,7 +7,7 @@ EventHandlerDescriptor* ManagedDevice::handlerDescriptors = NULL;
 
 ManagedDevice::ManagedDevice(AppConfig* config, char* type):config(config) {
   if (ManagedDevice::eventBase == NULL) {
-      ManagedDevice::eventBase = (esp_event_base_t)malloc(strlen(type)+1);
+      ManagedDevice::eventBase = (esp_event_base_t)dmalloc(strlen(type)+1);
       strcpy((char*)ManagedDevice::eventBase,type);
   }
 }

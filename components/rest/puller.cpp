@@ -6,7 +6,7 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-char* tarfname=(char*)malloc(255);
+char* tarfname=(char*)dmalloc(255);
 
 esp_err_t json_event_handler(esp_http_client_event_t *evt)
 {
@@ -66,10 +66,10 @@ bool moveFolder(char* folderName, char* toFolderName) {
     FILE* theFile;
     FILE* theDestFile;
     uint32_t len=0;
-    char* fName=(char*)malloc(270);
-    char* destfName=(char*)malloc(270);
-    void* buf = malloc(F_BUF_SIZE);
-    FILINFO* fi = (FILINFO*)malloc(sizeof(FILINFO));
+    char* fName=(char*)dmalloc(270);
+    char* destfName=(char*)dmalloc(270);
+    void* buf = dmalloc(F_BUF_SIZE);
+    FILINFO* fi = (FILINFO*)dmalloc(sizeof(FILINFO));
     bool retval=true;
 
     if (f_opendir(&theFolder, folderName) == FR_OK)
@@ -107,20 +107,20 @@ bool moveFolder(char* folderName, char* toFolderName) {
         ESP_LOGE(__FUNCTION__,"Cannot read dir %s",folderName);
         retval=false;
     }
-    free(fi);
-    free(fName);
-    free(destfName);
-    free(buf);
+    ldfree(fi);
+    ldfree(fName);
+    ldfree(destfName);
+    ldfree(buf);
     return retval;
 }
 
 bool GetKmls(ip4_addr_t* ipInfo){
     bool retVal=true;
-    char* kmlFiles = (char*)malloc(KML_BUFFER_SIZE);
+    char* kmlFiles = (char*)dmalloc(KML_BUFFER_SIZE);
     memset(kmlFiles,0,KML_BUFFER_SIZE);
-    esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
+    esp_http_client_config_t* config = (esp_http_client_config_t*)dmalloc(sizeof(esp_http_client_config_t));
     memset(config,0,sizeof(esp_http_client_config_t));
-    config->url=(char*)malloc(255);
+    config->url=(char*)dmalloc(255);
     sprintf((char*)config->url,"http://" IPSTR "/listentities/csv",IP2STR(ipInfo));
     config->method=HTTP_METHOD_POST;
     config->timeout_ms = 9000;
@@ -141,9 +141,9 @@ bool GetKmls(ip4_addr_t* ipInfo){
     if (err != ESP_OK) {
         ESP_LOGD(__FUNCTION__,"Cannot get triplist. Probably not a tracker but a lurker. %s. len:%d", esp_err_to_name(err),kmlFilesPos);
         esp_http_client_cleanup(client);
-        free((void*)config->url);
-        free((void*)config);
-        free(kmlFiles);
+        ldfree((void*)config->url);
+        ldfree((void*)config);
+        ldfree(kmlFiles);
         deinitSPISDCard();
         vTaskDelete(NULL);
     }
@@ -169,10 +169,10 @@ bool GetKmls(ip4_addr_t* ipInfo){
                     ESP_LOGW(__FUNCTION__, "Weirdness is afoot with this one:%s[%d]",kmlFiles,idx);
                     continue;
                 }
-                ESP_LOGI(__FUNCTION__,"Getting file %s", fname->valuestring);
-                free((void*)config->url);
+                ESP_LOGD(__FUNCTION__,"Getting file %s", fname->valuestring);
+                ldfree((void*)config->url);
                 memset(config,0,sizeof(esp_http_client_config_t));
-                config->url=(char*)malloc(255);
+                config->url=(char*)dmalloc(255);
                 memset((void*)config->url,0,255);
                 sprintf((char*)config->url,"http://" IPSTR "%s/%s",IP2STR(ipInfo),folder->valuestring,fname->valuestring);
                 config->method=HTTP_METHOD_GET;
@@ -181,7 +181,7 @@ bool GetKmls(ip4_addr_t* ipInfo){
                 config->max_redirection_count=0;
                 config->port=80;
                 config->event_handler = filedownload_event_handler;
-                char* destfname = (char*)malloc(100);
+                char* destfname = (char*)dmalloc(100);
                 sprintf(destfname,"%s/%s",folder->valuestring,fname->valuestring);
                 config->user_data = destfname;
                 client = esp_http_client_init(config);
@@ -206,17 +206,17 @@ bool GetKmls(ip4_addr_t* ipInfo){
         ESP_LOGE(__FUNCTION__,"Error whilst parsing csv json");
     }
     cJSON_Delete(json);
-    free((void*)config);
-    free((void*)kmlFiles);
+    ldfree((void*)config);
+    ldfree((void*)kmlFiles);
     return retVal;
 }
 
 bool CheckOTA(ip4_addr_t* ipInfo) {
     esp_err_t err=ESP_OK;
     bool retCode=true;
-    esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
+    esp_http_client_config_t* config = (esp_http_client_config_t*)dmalloc(sizeof(esp_http_client_config_t));
     memset(config,0,sizeof(esp_http_client_config_t));
-    config->url=(char*)malloc(255);
+    config->url=(char*)dmalloc(255);
     sprintf((char*)config->url,"http://" IPSTR "/ota/getmd5",IP2STR(ipInfo));
     config->method=HTTP_METHOD_POST;
     config->timeout_ms = 9000;
@@ -261,9 +261,9 @@ bool CheckOTA(ip4_addr_t* ipInfo) {
                         uint32_t ilen;
                         uint8_t* img = loadImage(false,&ilen);
                         if (ilen > 0){
-                            free((void*)config->url);
+                            ldfree((void*)config->url);
                             memset(config,0,sizeof(esp_http_client_config_t));
-                            config->url=(char*)malloc(255);
+                            config->url=(char*)dmalloc(255);
                             memset((void*)config->url,0,255);
                             sprintf((char*)config->url,"http://" IPSTR "/ota/flash?md5=%s&len=%d",IP2STR(ipInfo),ccmd5,ilen);
                             config->method=HTTP_METHOD_POST;
@@ -284,7 +284,7 @@ bool CheckOTA(ip4_addr_t* ipInfo) {
                                     } else {
                                         if ((len=esp_http_client_read(client,dmd5,36)) > 0) {
                                             if (strcmp(dmd5,"Flashing")==0) {
-                                                ESP_LOGI(__FUNCTION__,"Station will be updated:%s",dmd5);
+                                                ESP_LOGD(__FUNCTION__,"Station will be updated:%s",dmd5);
                                                 retCode=false;
                                             } else {
                                                 ESP_LOGE(__FUNCTION__,"Station will not be updated:%s",dmd5);
@@ -318,17 +318,17 @@ bool CheckOTA(ip4_addr_t* ipInfo) {
         ESP_LOGE(__FUNCTION__, "Version chack request failed: %s", esp_err_to_name(err));
     }
     esp_http_client_cleanup(client);
-    free((void*)config->url);
-    free((void*)config);
+    ldfree((void*)config->url);
+    ldfree((void*)config);
     return retCode;
 }
 
 bool GetLogs(ip4_addr_t* ipInfo,uint32_t devId){
-    char* kmlFiles = (char*)malloc(KML_BUFFER_SIZE);
-    esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
+    char* kmlFiles = (char*)dmalloc(KML_BUFFER_SIZE);
+    esp_http_client_config_t* config = (esp_http_client_config_t*)dmalloc(sizeof(esp_http_client_config_t));
     memset(kmlFiles,0,KML_BUFFER_SIZE);
     memset(config,0,sizeof(esp_http_client_config_t));
-    config->url=(char*)malloc(255);
+    config->url=(char*)dmalloc(255);
     memset((void*)config->url,0,255);
     sprintf((char*)config->url,"http://" IPSTR "/listentities/log",IP2STR(ipInfo));
     config->method=HTTP_METHOD_POST;
@@ -350,9 +350,9 @@ bool GetLogs(ip4_addr_t* ipInfo,uint32_t devId){
 
     if (err != ESP_OK) {
         ESP_LOGD(__FUNCTION__,"Cannot get loglist. Probably not a tracker but a lurker");
-        free((void*)config->url);
-        free((void*)config);
-        free(kmlFiles);
+        ldfree((void*)config->url);
+        ldfree((void*)config);
+        ldfree(kmlFiles);
         deinitSPISDCard();
         return false;
     }
@@ -373,9 +373,9 @@ bool GetLogs(ip4_addr_t* ipInfo,uint32_t devId){
                     ESP_LOGW(__FUNCTION__, "Weirdness is afoot with this one:%s[%d]",kmlFiles,idx);
                     continue;
                 }
-                ESP_LOGI(__FUNCTION__,"Getting file %s", fname->valuestring);
+                ESP_LOGD(__FUNCTION__,"Getting file %s", fname->valuestring);
                 memset(config,0,sizeof(esp_http_client_config_t));
-                config->url=(char*)malloc(255);
+                config->url=(char*)dmalloc(255);
                 memset((void*)config->url,0,255);
                 sprintf((char*)config->url,"http://" IPSTR "%s/%s",IP2STR(ipInfo),folder->valuestring,fname->valuestring);
                 config->method=HTTP_METHOD_GET;
@@ -383,8 +383,8 @@ bool GetLogs(ip4_addr_t* ipInfo,uint32_t devId){
                 config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
                 config->max_redirection_count=0;
                 config->port=80;
-                char* destfname = (char*)malloc(100);
-                char* destpath = (char*)malloc(512);
+                char* destfname = (char*)dmalloc(100);
+                char* destpath = (char*)dmalloc(512);
                 strcpy(destfname,strchr(fname->valuestring,'-')+1);
                 *(destfname+4)=0;
                 *(destfname+7)=0;
@@ -403,23 +403,23 @@ bool GetLogs(ip4_addr_t* ipInfo,uint32_t devId){
                         }
                     } else {
                         ESP_LOGE(__FUNCTION__, "log GET request failed: %s", esp_err_to_name(err));
-                        free(destfname);
-                        free(destpath);
-                        free((void*)config->url);
+                        ldfree(destfname);
+                        ldfree(destpath);
+                        ldfree((void*)config->url);
                         esp_http_client_cleanup(client);
                         break;
                     }
                 } else {
                     ESP_LOGE(__FUNCTION__, "log GET request alloc failed: %s", esp_err_to_name(err));
                 }
-                free(destfname);
-                free(destpath);
-                free((void*)config->url);
+                ldfree(destfname);
+                ldfree(destpath);
+                ldfree((void*)config->url);
                 esp_http_client_cleanup(client);
             }
         }
-        free((void*)config);
-        free((void*)kmlFiles);
+        ldfree((void*)config);
+        ldfree((void*)kmlFiles);
         cJSON_Delete(json);
     } else {
         ESP_LOGE(__FUNCTION__,"Error whilst parsing log json");
@@ -429,11 +429,11 @@ bool GetLogs(ip4_addr_t* ipInfo,uint32_t devId){
 
 cJSON* GetConfig(ip4_addr_t* ipInfo){
     bool retVal=true;
-    char* kmlFiles = (char*)malloc(KML_BUFFER_SIZE);
-    esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
+    char* kmlFiles = (char*)dmalloc(KML_BUFFER_SIZE);
+    esp_http_client_config_t* config = (esp_http_client_config_t*)dmalloc(sizeof(esp_http_client_config_t));
     memset(kmlFiles,0,KML_BUFFER_SIZE);
     memset(config,0,sizeof(esp_http_client_config_t));
-    config->url=(char*)malloc(255);
+    config->url=(char*)dmalloc(255);
     memset((void*)config->url,0,255);
     sprintf((char*)config->url,"http://" IPSTR "/config",IP2STR(ipInfo));
     config->method=HTTP_METHOD_POST;
@@ -452,12 +452,12 @@ cJSON* GetConfig(ip4_addr_t* ipInfo){
     uint8_t retryCnt=0;
     err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
-    free((void*)config->url);
-    free((void*)config);
+    ldfree((void*)config->url);
+    ldfree((void*)config);
 
     if (err != ESP_OK) {
         ESP_LOGD(__FUNCTION__,"Probably not a tracker but a lurker %s", esp_err_to_name(err));
-        //free(kmlFiles);
+        //ldfree(kmlFiles);
         //deinitSPISDCard();
         //vTaskDelete(NULL);
     }
@@ -466,7 +466,7 @@ cJSON* GetConfig(ip4_addr_t* ipInfo){
     ESP_LOGV(__FUNCTION__,"Got %s",kmlFiles);
     cJSON* json = cJSON_Parse(kmlFiles);
     if (json != NULL) {
-        char* fname = (char*)malloc(255);
+        char* fname = (char*)dmalloc(255);
         sprintf(fname,"/lfs/config/%d.json",cJSON_GetObjectItem(json,"devId")->valueint);
         ESP_LOGV(__FUNCTION__,"Writing %s",fname);
         int res;
@@ -487,11 +487,11 @@ cJSON* GetConfig(ip4_addr_t* ipInfo){
 
 cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
     bool retVal=true;
-    char* kmlFiles = (char*)malloc(KML_BUFFER_SIZE);
-    esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
+    char* kmlFiles = (char*)dmalloc(KML_BUFFER_SIZE);
+    esp_http_client_config_t* config = (esp_http_client_config_t*)dmalloc(sizeof(esp_http_client_config_t));
     memset(kmlFiles,0,KML_BUFFER_SIZE);
     memset(config,0,sizeof(esp_http_client_config_t));
-    config->url=(char*)malloc(255);
+    config->url=(char*)dmalloc(255);
     memset((void*)config->url,0,255);
     sprintf((char*)config->url,"http://" IPSTR "/status/",IP2STR(ipInfo));
     config->method=HTTP_METHOD_POST;
@@ -510,12 +510,12 @@ cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
     uint8_t retryCnt=0;
     err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
-    free((void*)config->url);
-    free((void*)config);
+    ldfree((void*)config->url);
+    ldfree((void*)config);
 
     if (err != ESP_OK) {
         ESP_LOGD(__FUNCTION__,"Probably not a tracker but a lurker %s", esp_err_to_name(err));
-        //free(kmlFiles);
+        //ldfree(kmlFiles);
         //deinitSPISDCard();
         //vTaskDelete(NULL);
     }
@@ -524,7 +524,7 @@ cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
     ESP_LOGV(__FUNCTION__,"Got %s",kmlFiles);
     cJSON* json = cJSON_Parse(kmlFiles);
     if (json != NULL) {
-        char* fname = (char*)malloc(255);
+        char* fname = (char*)dmalloc(255);
         sprintf(fname,"/lfs/status/%d.json",devId);
         ESP_LOGV(__FUNCTION__,"Writing %s",fname);
         int res;
@@ -547,7 +547,7 @@ void extractClientTar(char* tarFName){
     mtar_t tar;
     mtar_header_t header;
     int ret = mtar_open(&tar,tarFName,"r");
-    char* buf =(char*) malloc(8192);
+    char* buf =(char*) dmalloc(8192);
     uint32_t len = 0;
     uint32_t chunkLen = 0;
     char fname[255];
@@ -603,18 +603,18 @@ void extractClientTar(char* tarFName){
     } else {
         ESP_LOGE(__FUNCTION__,"Cannot unter the tar %s:%s",tarFName, mtar_strerror(ret));
     }
-    free(buf);
+    ldfree(buf);
 }
 
 void pullStation(void *pvParameter) {
-    esp_http_client_config_t* config = (esp_http_client_config_t*)malloc(sizeof(esp_http_client_config_t));
+    esp_http_client_config_t* config = (esp_http_client_config_t*)dmalloc(sizeof(esp_http_client_config_t));
     if (initSPISDCard()){
         esp_ip4_addr_t* ipInfo = (esp_ip4_addr_t*) pvParameter;
 
         char tarFName[255];
 
         memset(config,0,sizeof(esp_http_client_config_t));
-        config->url=(char*)malloc(30);
+        config->url=(char*)dmalloc(30);
         sprintf((char*)config->url,"http://" IPSTR "/trips",IP2STR(ipInfo));
         config->method=HTTP_METHOD_POST;
         config->timeout_ms = 30000;
@@ -638,9 +638,9 @@ void pullStation(void *pvParameter) {
 
         if (esp_http_client_get_status_code(client) == 200){
             esp_http_client_cleanup(client);
-            free((void*)config->url);
+            ldfree((void*)config->url);
             memset(config,0,sizeof(esp_http_client_config_t));
-            config->url=(char*)malloc(255);
+            config->url=(char*)dmalloc(255);
             sprintf((char*)config->url,"http://" IPSTR "/status/wifi",IP2STR(ipInfo));
             config->method=HTTP_METHOD_PUT;
             config->timeout_ms = 9000;
@@ -671,11 +671,11 @@ void pullStation(void *pvParameter) {
                     esp_err_to_name(err));
         }
         esp_http_client_cleanup(client);
-        free((void*)config->url);
+        ldfree((void*)config->url);
     }
     
-    free((void*)config);
-    free(pvParameter);
+    ldfree((void*)config);
+    ldfree(pvParameter);
     deinitSPISDCard();
     vTaskDelete(NULL);
 }

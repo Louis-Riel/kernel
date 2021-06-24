@@ -7,13 +7,13 @@ uint32_t EventHandlerDescriptor::numCacheEntries = 0;
 
 EventHandlerDescriptor::EventHandlerDescriptor(esp_event_base_t eventBase,char* name){
     this->eventBase = eventBase;
-    this->eventDescriptors = (EventDescriptor_t*)malloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS_PER_BASE);
+    this->eventDescriptors = (EventDescriptor_t*)dmalloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS_PER_BASE);
     memset(this->eventDescriptors,0,sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS_PER_BASE);
     if (EventHandlerDescriptor::eventDescriptorCache == NULL) {
-        EventHandlerDescriptor::eventDescriptorCache = (EventDescriptor_t*)malloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS);
+        EventHandlerDescriptor::eventDescriptorCache = (EventDescriptor_t*)dmalloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS);
         memset(EventHandlerDescriptor::eventDescriptorCache,0,sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS);
     }
-    this->name = (char*)malloc(strlen(name)+1);
+    this->name = (char*)dmalloc(strlen(name)+1);
     strcpy(this->name,name);
 }
 
@@ -94,7 +94,7 @@ void EventHandlerDescriptor::SetEventName(int32_t id,char* name){
         if (eventDescriptors[idx].eventName == NULL) {
             ESP_LOGV(__FUNCTION__,"%d:%s set at idx:%d", id, name, idx);
             eventDescriptors[idx].id = id;
-            eventDescriptors[idx].eventName = (char*)malloc(strlen(name)+1);
+            eventDescriptors[idx].eventName = (char*)dmalloc(strlen(name)+1);
             strcpy(eventDescriptors[idx].eventName,name);
             return;
         } else {

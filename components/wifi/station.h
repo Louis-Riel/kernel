@@ -30,6 +30,9 @@ typedef	struct {
                 char                            wpdw[40];
 } the_wifi_config;
 
+static void print_auth_mode(cJSON* json, int authmode);
+static void print_cipher_type(cJSON* json, int pairwise_cipher, int group_cipher);
+
 class Aper
 {
 public:

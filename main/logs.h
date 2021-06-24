@@ -10,8 +10,10 @@
 #include "../build/config/sdkconfig.h"
 #include <stdio.h>
 #include <string.h>
+#include "freertos/FreeRTOS.h"
 #include "esp_log.h"
 #include "cJSON.h"
+#include "freertos/event_groups.h"
 
 static EventGroupHandle_t app_eg = xEventGroupCreate();
 EventGroupHandle_t* getAppEG();

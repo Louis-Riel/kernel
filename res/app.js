@@ -5,6 +5,7 @@ var fileStats = {};
 var fileStatsToFetch = [];
 var lastFolder = "";
 var activeTab = null;
+var activeInterval = null;
 
 //#region utility functions
 function dirname(path) {
@@ -450,8 +451,6 @@ function renderTime(input, fld, val) {
     ctx.fillStyle = gradient;
     //ctx.fillStyle = 'rgba(00 ,00 , 00, 1)';
     ctx.clearRect(0, 0, rect.width, rect.height);
-    console.log(0, 0, rect.width, rect.height);
-    console.log(rect);
     //Hours
     ctx.beginPath();
     ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad((hrs * 30) - 90));
@@ -547,7 +546,7 @@ function jsonifyFormFielset(curPath, curfs, curObject) {
         if (fld == "events") {
             formEvents(curfs, fPath, curObject[fld]);
         } else if (Array.isArray(curObject[fld])) {
-            jsonifyArray(curfs, fPath, fld, curObject[fld], curPath);
+            jsonifyArray(curfs, fPath, fld, curObject[fld]);
         } else if (typeof curObject[fld] == 'object') {
             jsonifyObject(curObject[fld], fld, fPath, curfs, curPath);
         } else {
@@ -567,7 +566,7 @@ function jsonifyObject(curObject, fld, fPath, curfs, curPath) {
     }
 }
 
-function jsonifyArray(curfs, fPath, fld, curArray, curPath) {;
+function jsonifyArray(curfs, fPath, fld, curArray) {;
     var arrFs = curfs.querySelector(`label[id='${fPath}']`) || curfs.appendChild(document.createElement("label"));
     arrFs.id = fPath;
     arrFs.classList.add("table");
@@ -614,8 +613,7 @@ function jsonifyArray(curfs, fPath, fld, curArray, curPath) {;
                     btn.textContent = "Dup";
                     btn.onclick = () => {
                         curArray.push(JSON.parse(JSON.stringify(obj)));
-                        jsonifyArray(curfs, fPath, fld, curArray, curPath);
-                        return false;
+                        jsonifyArray(curfs, fPath, fld, curArray);
                     };
                     btn = curRow.querySelector("button.delete") || curRow.appendChild(document.createElement("button"));
                     btn.classList.add("delete");
@@ -655,7 +653,7 @@ function HandleNumberValue(val, input, fld) {
     if (IsNumberValue(val)) {
         input.type = "number";
         if (isFloat(val)) {
-            if ((fld != "Lattitude") && (fld != "Longitude") && (fld != "lat") && (fld != "lng")) {
+            if ((fld.toLowerCase() != "lattitude") && (fld.toLowerCase() != "longitude") && (fld != "lat") && (fld != "lng")) {
                 val = parseFloat(val).toFixed(2);
                 input.step = "0.01";
             } else {
@@ -714,14 +712,20 @@ function refreshSystem() {
 
     if (logWs == null) {
         logWs = new WebSocket("ws://" + window.location.hostname + "/ws");
-        logWs.onmessage = (event) => { event && event.data ? AddLogLine(event.data, logs) : null };
-        logWs.onopen = () => { logWs.send("Logs") };
+        logWs.onmessage = (event) => {
+            event && event.data ? AddLogLine(event.data, logs) : null
+        };
+        logWs.onopen = () => {
+            console.log("Requesting log ws");
+            logWs.send("Logs")
+        };
         logWs.onerror = (err) => {
             console.error(err);
+            logWs.close();
             logWs = null;
         };
         logWs.onclose = (evt => {
-            console.log("closed");
+            console.log("log closed");
             logWs = null;
         })
     }
@@ -744,6 +748,16 @@ function SaveForm(form) {
     });
 }
 
+function AutoRefreshClicked(target) {
+    if (target.checked) {
+        activeInterval = setInterval(() => {
+            refreshStatus(false);
+        }, parseInt(document.getElementById("refreshFreq").value) * 1000);
+    } else if (activeInterval !== null) {
+        clearInterval(activeInterval);
+        activeInterval = null;
+    }
+}
 
 function refreshStatus(clicked) {
     var form = document.querySelectorAll(".system-config form")[0];
@@ -752,39 +766,86 @@ function refreshStatus(clicked) {
         if (controller)
             controller.abort();
     }
-    const timeout = new AbortController();
-    const timer = setTimeout(() => timeout.abort(), 1000);
-    fetch('/status/', {
-        method: 'post',
-        signal: timeout.signal
-    }).then(data => {
-        clearTimeout(timer);
-        data.json().then(status => {
-            jsonifyFormFielset(
+    if (stateWs == null) {
+        stateWs = new WebSocket("ws://" + window.location.hostname + "/ws");
+        stateWs.onmessage = (event) => {
+            event && event.data ? jsonifyFormFielset(
                 "/",
                 Array.from(form.querySelectorAll("fieldset")).find(fs => fs.id == "") || form.appendChild(document.createElement("fieldset")),
-                status);
-            if (stateWs == null) {
-                stateWs = new WebSocket("ws://" + window.location.hostname + "/ws");
-                stateWs.onmessage = (event) => {
-                    event && event.data ? jsonifyFormFielset(
+                JSON.parse(event.data)) : null
+        };
+        stateWs.onopen = () => { console.log("Requesting State ws");
+            stateWs.send("State") };
+        stateWs.onerror = (err) => {
+            console.error(err);
+            stateWs.close();
+            stateWs = null;
+        };
+        stateWs.onclose = (evt => {
+            console.log("closed state ws");
+            stateWs = null;
+        })
+    }
+
+    const timeout1 = new AbortController();
+    const timer1 = setTimeout(() => timeout1.abort(), 1000);
+    fetch('/status/', {
+        method: 'post',
+        signal: timeout1.signal
+    }).then(data => {
+        clearTimeout(timer1);
+        return new Promise((resolve, reject) => {
+            data.json().then(status => {
+                var fieldset = Array.from(form.querySelectorAll("fieldset")).find(fs => fs.id == "") || form.appendChild(document.createElement("fieldset"));
+                jsonifyFormFielset(
+                    "/",
+                    fieldset,
+                    status);
+                resolve(fieldset)
+            }).catch(reject);
+        })
+    }).then(fieldset => {
+        return jsonifyStatusArray("tasks", fieldset)
+            .then(fieldset => jsonifyStatusArray("mallocs", fieldset))
+            .then(fieldset => {
+                const timeout1 = new AbortController();
+                const timer1 = setTimeout(() => timeout1.abort(), 1000);
+                fetch('/status/app', {
+                    method: 'post',
+                    signal: timeout1.signal
+                }).then(data => data.json().then((status) => {
+                    jsonifyFormFielset(
                         "/",
-                        Array.from(form.querySelectorAll("fieldset")).find(fs => fs.id == "") || form.appendChild(document.createElement("fieldset")),
-                        JSON.parse(event.data)) : null
-                };
-                stateWs.onopen = () => { stateWs.send("State") };
-                stateWs.onerror = (err) => {
-                    console.error(err);
-                    stateWs = null;
-                };
-                stateWs.onclose = (evt => {
-                    console.log("closed");
-                    stateWs = null;
-                })
-            }
-        });
+                        fieldset,
+                        status)
+                }));
+            })
     }).catch((err) => {
-        clearTimeout(timer);
+        clearTimeout(timer1);
+    });
+
+}
+
+function jsonifyStatusArray(name, fieldset) {
+    return new Promise((resolve, reject) => {
+        const timeout2 = new AbortController();
+        const timer2 = setTimeout(() => timeout2.abort(), 1000);
+        fetch(`/status/${name}`, {
+            method: 'post',
+            signal: timeout2.signal
+        }).then(data => {
+            data.json().then(status => {
+                jsonifyArray(
+                    fieldset,
+                    `/status/${name}`,
+                    name,
+                    status);
+                resolve(fieldset);
+            });
+        }).catch((err) => {
+            clearTimeout(timer2);
+            reject(err);
+        });
     });
 }
 
@@ -814,6 +875,7 @@ function refreshConfig(clicked) {
     });
 }
 
+//#region SHA-1
 /*
  * A JavaScript implementation of the Secure Hash Algorithm, SHA-1, as defined
  * in FIPS 180-1
@@ -940,3 +1002,4 @@ function safe_add(a, d) {
 function bit_rol(a, b) {
     return (a << b) | (a >>> (32 - b))
 };
+//#endregion

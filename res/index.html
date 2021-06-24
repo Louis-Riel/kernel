@@ -35,6 +35,11 @@
                 </div>
             </div>
             <div id="slide-2" class="system-config">
+                <fieldset id="controls">
+                    <legend>Controls</legend>
+                    <label class="editable"><div class="label">Auto Refresh</div><input onclick="AutoRefreshClicked(this)" type="checkbox"></label>
+                    <label class="editable"><div class="label">Freq(sec)</div><input id="refreshFreq" type="number" value=10></label>
+                </fieldset>
                 <form action="/status/system" method="post">
                 </form>
             </div>
@@ -54,13 +59,10 @@
             </div>
             <script>
                 renderFolder("/");
-                setInterval(() => {
-                    refreshStatus(false);
-                }, 10000);
                 document.querySelectorAll('th').forEach(th => th.addEventListener('click', (() => {
                     const table = document.getElementsByClassName("file-table")[0].getElementsByTagName("tbody")[0];
                     Array.from(table.querySelectorAll('tr:nth-child(n+2)'))
-                        .sort(comparer(Array.from(th.parentNode.children).indexOf(th), this.asc = !this.asc))
+                        .sort(compare(Array.from(th.parentNode.children).indexOf(th), this.asc = !this.asc))
                         .forEach(tr => table.appendChild(tr));
                 })));
             </script>

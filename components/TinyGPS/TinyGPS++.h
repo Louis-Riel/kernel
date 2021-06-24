@@ -34,9 +34,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "freertos/queue.h"
 #include "esp_event.h"
 #include "freertos/event_groups.h"
-#include "../../main/logs.h"
 #include "../../main/utils.h"
+#include "../../main/logs.h"
 #include "cJSON.h"
+#include "driver/uart.h"
 
 #define _GPS_VERSION "1.0.2" // software version of this library
 #define _GPS_MPH_PER_KNOT 1.15077945
@@ -54,6 +55,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define BLINK_GPIO GPIO_NUM_5
 #define GPS_TIMEOUT 300
 #define SLEEP_TIMEOUT 60
+#define PIO_MIN_DIST 200
 
 const uint8_t update_1_secs[] =  {0xB5,0x62,0x06,0x08,0x06,0x00,0xE8,0x03,0x01,0x00,0x01,0x00,0x01,0x39};
 const uint8_t update_3_secs[] =  {0xB5,0x62,0x06,0x08,0x06,0x00,0x88,0x13,0x01,0x00,0x01,0x00,0xB1,0x49,0xB5,0x62,0x06,0x08,0x00,0x00,0x0E,0x30};
@@ -92,7 +94,6 @@ static const char* gps_protocol_name[] = {
    "GPS_GRS",
    "GPS_GST",
    "GPS_ZDA"};
-
 
 //const uint8_t GGA_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0XFF, 0X23};
 //const uint8_t GLL_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X01, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X2A};
@@ -133,8 +134,30 @@ public:
    void setLat(RawDegrees val) {rawLatData=val;}
    void setLng(RawDegrees val) {rawLngData=val;}
 
-   TinyGPSLocation() : valid(false), updated(false)
-   {}
+   TinyGPSLocation()
+   {
+   }
+
+   TinyGPSLocation(char* name) : valid(false), updated(false)
+   {
+      AppConfig* gpscfg = AppConfig::GetAppStatus()->GetConfig("gps");
+      if (name != NULL){
+         AppConfig* tmp = gpscfg;
+         gpscfg = gpscfg->GetConfig(name);
+         free(tmp);
+      } 
+      AppConfig* clng = gpscfg->GetConfig("Longitude");
+      AppConfig* clat = gpscfg->GetConfig("Lattitude");
+      gpscfg->SetDoubleProperty("Longitude",0);
+      gpscfg->SetDoubleProperty("Lattitude",0);
+      latVal=cJSON_GetObjectItem(clat->GetJSONConfig(NULL),"value");
+      latVer=cJSON_GetObjectItem(clat->GetJSONConfig(NULL),"version");
+      lngVal=cJSON_GetObjectItem(clng->GetJSONConfig(NULL),"value");
+      lngVer=cJSON_GetObjectItem(clng->GetJSONConfig(NULL),"version");
+      free(gpscfg);
+      free(clng);
+      free(clat);
+   }
 
 private:
    bool valid, updated;
@@ -143,6 +166,10 @@ private:
    void commit();
    void setLatitude(const char *term);
    void setLongitude(const char *term);
+   cJSON* latVer;
+   cJSON* latVal;
+   cJSON* lngVer;
+   cJSON* lngVal;
 };
 
 struct TinyGPSDate
@@ -206,10 +233,21 @@ public:
    int32_t value()         { updated = false; return val; }
    void setValue(uint32_t val) {this->val=val;}
 
-   TinyGPSDecimal() : valid(false), updated(false), val(0)
-   {}
+   TinyGPSDecimal(char* name) : valid(false), updated(false), val(0)
+   {
+      if (name != NULL)
+      {
+        AppConfig* gpscfg = AppConfig::GetAppStatus()->GetConfig("gps");
+        gpscfg->SetIntProperty(name,0);
+        jval=cJSON_GetObjectItem(gpscfg->GetJSONConfig(name),"value");
+        jver=cJSON_GetObjectItem(gpscfg->GetJSONConfig(name),"version");
+        free(gpscfg);
+      }
+   }
 
 private:
+   cJSON* jval = NULL;
+   cJSON* jver = NULL;
    bool valid, updated;
    uint32_t lastCommitTime;
    int32_t val, newval, diff;
@@ -226,10 +264,24 @@ public:
    uint32_t age() const    { return valid ? millis() - lastCommitTime : (uint32_t)ULONG_MAX; }
    uint32_t value()        { updated = false; return val; }
 
-   TinyGPSInteger() : valid(false), updated(false), val(0)
-   {}
+   TinyGPSInteger(const char* name):
+      valid(false), 
+      updated(false), 
+      val(0)
+   {
+      if (name != NULL)
+      {
+         AppConfig* gpscfg = AppConfig::GetAppStatus()->GetConfig("gps");
+         gpscfg->SetIntProperty(name,-1);
+         jval=cJSON_GetObjectItem(gpscfg->GetJSONConfig(name),"value");
+         jver=cJSON_GetObjectItem(gpscfg->GetJSONConfig(name),"version");
+         free(gpscfg);
+      }
+   }
 
 private:
+   cJSON* jval = NULL;
+   cJSON* jver = NULL;
    bool valid, updated;
    uint32_t lastCommitTime;
    uint32_t val, newval, diff;
@@ -239,6 +291,7 @@ private:
 
 struct TinyGPSSpeed : TinyGPSDecimal
 {
+   TinyGPSSpeed(char* name) : TinyGPSDecimal(name) {}
    double knots()    { return value() / 100.0; }
    double mph()      { return _GPS_MPH_PER_KNOT * value() / 100.0; }
    double mps()      { return _GPS_MPS_PER_KNOT * value() / 100.0; }
@@ -247,11 +300,13 @@ struct TinyGPSSpeed : TinyGPSDecimal
 
 struct TinyGPSCourse : public TinyGPSDecimal
 {
+   TinyGPSCourse(char* name) : TinyGPSDecimal(name) {}
    double deg()      { return value() / 100.0; }
 };
 
 struct TinyGPSAltitude : TinyGPSDecimal
 {
+   TinyGPSAltitude(char* name) : TinyGPSDecimal(name) {}
    double meters()       { return value() / 100.0; }
    double miles()        { return _GPS_MILES_PER_METER * value() / 100.0; }
    double kilometers()   { return _GPS_KM_PER_METER * value() / 100.0; }
@@ -260,6 +315,7 @@ struct TinyGPSAltitude : TinyGPSDecimal
 
 struct TinyGPSHDOP : TinyGPSDecimal
 {
+   TinyGPSHDOP() : TinyGPSDecimal(NULL) {}
    double hdop() { return value() / 100.0; }
 };
 
@@ -299,10 +355,19 @@ enum poiState_t {
 class TinyGPSPlus
 {
 public:
-  TinyGPSPlus(cJSON* config);
+  TinyGPSPlus(AppConfig* config);
   TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin);
   bool encode(char c); // process one character received from GPS
   TinyGPSPlus &operator << (char c) {encode(c); return *this;}
+
+  uart_config_t uart_config = {
+      .baud_rate = 9600,
+      .data_bits = UART_DATA_8_BITS,
+      .parity = UART_PARITY_DISABLE,
+      .stop_bits = UART_STOP_BITS_1,
+      .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+      .rx_flow_ctrl_thresh = 122,
+      .use_ref_tick = true};
 
   TinyGPSLocation location;
   TinyGPSLocation lastLocation;
@@ -363,7 +428,8 @@ public:
      gpsPaused=BIT14,
      gpsResumed=BIT15,
      gpsRunning=BIT16,
-     gpsStopped=BIT17
+     gpsStopped=BIT17,
+     poiChecked=BIT18
   };
   void gpsResume();
   void gpsPause();
@@ -379,9 +445,11 @@ public:
                             size_t event_data_size,
                             TickType_t ticks_to_wait);
   EventGroupHandle_t eg;
+  poiState_t poiState;
 
 private:
   void Init();
+  void checkPOIs();
   static void gpsEventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
   enum {GPS_SENTENCE_GPGGA, GPS_SENTENCE_GPRMC, GPS_SENTENCE_OTHER};
   static QueueHandle_t uart0_queue;
@@ -417,7 +485,6 @@ private:
   uint8_t curFreqIdx;
   QueueHandle_t runnerSemaphore;
   uint8_t numRunners;
-  poiState_t poiState;
   TinyGPSCustom* gpTxt;
   uint8_t gpsWarmTime;
   uint8_t toBeFreqIdx;

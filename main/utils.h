@@ -4,15 +4,17 @@
 //#define IS_TRACKER
 
 #include "../build/config/sdkconfig.h"
+#include "mallocdbg.h"
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_system.h"
+#include "freertos/event_groups.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include <stdlib.h>
-#include "../components/TinyGPS/TinyGPS++.h"
 #include "cJSON.h"
 
 #define SS TF_CS
@@ -96,13 +98,6 @@ enum item_state_t {
   INACTIVE = BIT4
 };
 
-struct app_state_t {
-  item_state_t gps;
-  item_state_t sdCard;
-  double lattitude;
-  double longitude;
-};
-
 struct dataPoint
 {
   uint32_t ts;
@@ -139,45 +134,52 @@ struct app_config_t {
 class AppConfig {
 public:
   AppConfig(char* filePath);
-  AppConfig(cJSON* config);
+  AppConfig(cJSON* json, AppConfig* root);
 
   static AppConfig* GetAppConfig();
   static AppConfig* GetAppStatus();
   static EventGroupHandle_t GetStateGroupHandle();
   static void ResetAppConfig(bool save);
-  static void SaveAppConfig();
+  void SaveAppConfig();
+  static const char* GetActiveStorage();
 
-  AppConfig* GetConfig(char* path);
-  cJSON* GetJSONConfig(char* path);
+  bool isValid();
+  AppConfig* GetConfig(const char* path);
+  cJSON* GetJSONConfig(const char* path);
+  cJSON* GetJSONConfig(const char *path, bool createWhenMissing);
   void SetAppConfig(cJSON* config);
 
-  bool HasProperty(char* path);
+  bool HasProperty(const char* path);
 
-  char* GetStringProperty(char* path);
-  int32_t GetIntProperty(char* path);
-  gpio_num_t GetPinNoProperty(char* path);
-  double GetDoubleProperty(char* path);
-  bool GetBoolProperty(char* path);
+  char* GetStringProperty(const char* path);
+  int32_t GetIntProperty(const char* path);
+  gpio_num_t GetPinNoProperty(const char* path);
+  item_state_t GetStateProperty(const char* path);
+  double GetDoubleProperty(const char* path);
+  bool GetBoolProperty(const char* path);
   static void SignalStateChange();
+  uint32_t version;
 
-  void SetStringProperty(char* path,char* value);
-  void SetIntProperty(char* path,int32_t value);
-  void SetPinNoProperty(char* path,gpio_num_t value);
-  void SetDoubleProperty(char* path,double value);
-  void SetBoolProperty(char* path,bool value);
+  void SetStringProperty(const char* path,char* value);
+  void SetIntProperty(const char* path,int32_t value);
+  void SetPinNoProperty(const char* path,gpio_num_t value);
+  void SetStateProperty(const char* path,item_state_t value);
+  void SetDoubleProperty(const char* path,double value);
+  void SetBoolProperty(const char* path,bool value);
   bool IsAp();
   bool IsSta();
 protected:
-  cJSON* GetJSONProperty(cJSON* json,char* path, bool createWhenMissing);
-  cJSON* GetJSONProperty(char* path);
-  cJSON* GetJSONConfig(cJSON* json, char* path,bool createWhenMissing);
-  static void SaveAppConfig(bool skipMount);
+  cJSON* GetJSONProperty(cJSON* json,const char* path, bool createWhenMissing);
+  cJSON* GetJSONProperty(const char* path);
+  cJSON* GetJSONConfig(cJSON* json, const char* path,bool createWhenMissing);
+  void SaveAppConfig(bool skipMount);
   cJSON* GetPropertyHolder(cJSON* prop);
   cJSON* json;
   static AppConfig* configInstance;
   static AppConfig* statusInstance;
   EventGroupHandle_t eg;
   char* filePath;
+  AppConfig* root = NULL;
 };  
 
 AppConfig* GetAppConfig();
@@ -186,7 +188,6 @@ uint8_t* loadImage(bool reset,uint32_t* iLen);
 void sampleBatteryVoltage();
 float getBatteryVoltage();
 bool moveFile(char* src, char* dest);
-static const char* getErrorMsg(uint32_t errCode);
 bool initSPISDCard();
 bool initSPISDCard(bool);
 bool deinitSPISDCard();
@@ -203,8 +204,6 @@ FILE * fopen (const char * _name, const char * _type,bool createDir);
 FILE * fopen (const char * _name, const char * _type,bool createDir, bool log);
 
 app_config_t* initConfig();
-app_state_t* getAppState();
-void saveConfig();
 void commitTripToDisk(void* param);
 trip* getActiveTrip();
 void stopGps();

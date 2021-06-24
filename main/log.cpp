@@ -1,3 +1,4 @@
+#include "logs.h"
 #include "utils.h"
 #include "esp_log.h"
 #include "time.h"
@@ -23,10 +24,9 @@ void dumpLogs(){
         localtime_r(&now, &timeinfo);
         
         if ((strlen(logfname) == 0) || (indexOf(logfname,"1970") && (timeinfo.tm_year > 1970))){
-            if (GetAppConfig()->IsAp())
-                strftime(logfname, 100, "/sdcard/logs/TRACKER-%Y-%m-%d_%H-%M-%S.log", &timeinfo);
-            else
-                strftime(logfname, 100, "/sdcard/logs/PULLER-%Y-%m-%d_%H-%M-%S.log", &timeinfo);
+            char lpath[255];
+            sprintf(lpath,"%s/logs/%s-%%Y-%%m-%%d_%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),GetAppConfig()->IsAp()?"TRACKER":"PULLER");
+            strftime(logfname, 254, lpath, &timeinfo);
         }
 
         if ((fw = fopen(logfname,"a",true,false)) != NULL) {
@@ -68,7 +68,7 @@ int loggit(const char *fmt, va_list args) {
         if (callbacks[idx] != NULL) {
             if (!callbacks[idx](params[idx],curLogLine)){
                 callbacks[idx] = nullptr;
-                //free(params[idx]);
+                //ldfree(params[idx]);
             }
         }
     }
@@ -80,8 +80,8 @@ int loggit(const char *fmt, va_list args) {
 }
 
 void initLog() {
-    logBuff = (char*)malloc(LOG_BUF_SIZE);
-    logfname = (char*)malloc(LOG_FNAME_LEN);
+    logBuff = (char*)dmalloc(LOG_BUF_SIZE);
+    logfname = (char*)dmalloc(LOG_FNAME_LEN);
     memset(logBuff,0,LOG_BUF_SIZE);
     memset(logfname,0,LOG_FNAME_LEN);
     logBufPos=0;
