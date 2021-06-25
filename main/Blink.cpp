@@ -737,6 +737,10 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
 {
   time(&now);
   sampleBatteryVoltage();
+  if ((id != TinyGPSPlus::gpsEvent::msg) && (id != TinyGPSPlus::gpsEvent::locationChanged)){
+    AppConfig::SignalStateChange(state_change_t::GPS);
+    ESP_LOGD(__FUNCTION__,"gps:%d",id);
+  }
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:

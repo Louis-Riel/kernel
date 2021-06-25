@@ -788,6 +788,7 @@ esp_err_t status_handler(httpd_req_t *req)
             sjson = cJSON_PrintUnformatted(status);
             cJSON_Delete(status);
         }
+#ifdef DEBUG_MALLOC
         else if (strcmp(path,"mallocs") == 0)
         {
             status = getMemoryStats();
@@ -795,6 +796,7 @@ esp_err_t status_handler(httpd_req_t *req)
             sjson = cJSON_PrintUnformatted(status);
             cJSON_Delete(status);
         }
+#endif
         else if (strcmp(path,"tasks") == 0)
         {
             status = tasks_json();

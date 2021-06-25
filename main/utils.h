@@ -71,10 +71,9 @@ enum purpose_t {
 };
 
 enum state_change_t {
-  UNKNOWN_STATE = 0,
-  CHANGED = BIT0,
-  RESET = BIT1,
-  INITIALIZED = BIT2
+  MAIN = BIT0,
+  GPS = BIT1,
+  WIFI = BIT2
 };
 
 struct gpio_driver_t {
@@ -157,7 +156,7 @@ public:
   item_state_t GetStateProperty(const char* path);
   double GetDoubleProperty(const char* path);
   bool GetBoolProperty(const char* path);
-  static void SignalStateChange();
+  static void SignalStateChange(state_change_t state);
   uint32_t version;
 
   void SetStringProperty(const char* path,char* value);

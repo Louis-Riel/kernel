@@ -1165,7 +1165,6 @@ void TinyGPSLocation::commit()
     latVer->valueint++;
     lngVal->valuedouble = lng();
     lngVer->valueint++;
-    AppConfig::SignalStateChange();
   }
 }
 
@@ -1270,7 +1269,6 @@ void TinyGPSDecimal::commit()
   {
     jval->valueint = val;
     jver->valueint++;
-    AppConfig::SignalStateChange();
   }
 }
 
@@ -1289,7 +1287,6 @@ void TinyGPSInteger::commit()
   {
     jval->valueint = val;
     jver->valueint++;
-    AppConfig::SignalStateChange();
   }
 }
 

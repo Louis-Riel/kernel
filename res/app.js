@@ -1,11 +1,11 @@
 var controller = null;
-var logWs = null;
-var stateWs = null;
+var ws = null;
 var fileStats = {};
 var fileStatsToFetch = [];
 var lastFolder = "";
 var activeTab = null;
 var activeInterval = null;
+var logs = null;
 
 //#region utility functions
 function dirname(path) {
@@ -671,6 +671,9 @@ function HandleNumberValue(val, input, fld) {
 
 //#region Logs
 function AddLogLine(logLn, logs) {
+    if (logs == null) {
+        return;
+    }
     var data = logLn.replaceAll(/^[^IDVWE]*/g, "").replaceAll(/(.*)([\x1B].*\n?)/g, "$1");
 
     if (data.match(/^[IDVWE] \([0-9.:]{12}\) [^:]+:.*/)) {
@@ -694,41 +697,73 @@ function AddLogLine(logLn, logs) {
         log.appendChild(lfunc);
 
         lmsg = document.createElement("div");
-        lmsg.classList.add(`LOGLINE`);
         lmsg.innerText = data.substr(data.indexOf(lfunc.innerText) + lfunc.innerText.length + 2).replaceAll(/^[\r\n]*/g, "");
+        lmsg.classList.add(`LOGLINE`);
         log.appendChild(lmsg);
-
         logs.appendChild(log);
     } else {
-        lmsg.innerText += `\n${data}`;
+        if (lmsg)
+            lmsg.innerText += `\n${data}`;
     }
     if (activeTab == logs)
-        lmsg.scrollIntoView();
+        if (lmsg)
+            lmsg.scrollIntoView();
+}
+
+function setupWs(ctrl) {
+    if (ctrl.checked) {
+        ctrl.disabled = true;
+        if (ws == null) {
+            console.log("Creating ws://" + window.location.hostname + "/ws");
+            ws = new WebSocket("ws://" + window.location.hostname + "/ws");
+            var form = document.querySelectorAll(".system-config form")[0];
+            var stopItWithThatShit = setTimeout(() => {
+                ws.close();
+                ws = null;
+            }, 3000);
+            ws.onmessage = (event) => {
+                if (event && event.data) {
+                    if (event.data[0] == "{") {
+                        jsonifyFormFielset(
+                            "/",
+                            Array.from(form.querySelectorAll("fieldset")).find(fs => fs.id == "") || form.appendChild(document.createElement("fieldset")),
+                            JSON.parse(event.data));
+                    } else {
+                        AddLogLine(event.data, logs);
+                    }
+                }
+            };
+            ws.onopen = () => {
+                ctrl.disabled = false;
+                clearTimeout(stopItWithThatShit);
+                console.log("Requesting log ws");
+                ws.send("Logs")
+                console.log("Requesting state ws");
+                ws.send("State")
+            };
+            ws.onerror = (err) => {
+                clearTimeout(stopItWithThatShit);
+                console.error(err);
+                ws.close();
+                ws = null;
+            };
+            ws.onclose = (evt => {
+                ctrl.checked = false;
+                ctrl.disabled = false;
+                console.log("log closed");
+                ws = null;
+            })
+        }
+    } else {
+        if (ws != null) {
+            ws.close();
+            ws = null;
+        }
+    }
 }
 
 function refreshSystem() {
-    var logs = document.getElementById("slide-4").getElementsByClassName("loglines")[0];
     activeTab = logs;
-
-    if (logWs == null) {
-        logWs = new WebSocket("ws://" + window.location.hostname + "/ws");
-        logWs.onmessage = (event) => {
-            event && event.data ? AddLogLine(event.data, logs) : null
-        };
-        logWs.onopen = () => {
-            console.log("Requesting log ws");
-            logWs.send("Logs")
-        };
-        logWs.onerror = (err) => {
-            console.error(err);
-            logWs.close();
-            logWs = null;
-        };
-        logWs.onclose = (evt => {
-            console.log("log closed");
-            logWs = null;
-        })
-    }
 }
 //#endregion
 
@@ -748,7 +783,7 @@ function SaveForm(form) {
     });
 }
 
-function AutoRefreshClicked(target) {
+function PeriodicRefreshClicked(target) {
     if (target.checked) {
         activeInterval = setInterval(() => {
             refreshStatus(false);
@@ -765,26 +800,6 @@ function refreshStatus(clicked) {
         activeTab = form;
         if (controller)
             controller.abort();
-    }
-    if (stateWs == null) {
-        stateWs = new WebSocket("ws://" + window.location.hostname + "/ws");
-        stateWs.onmessage = (event) => {
-            event && event.data ? jsonifyFormFielset(
-                "/",
-                Array.from(form.querySelectorAll("fieldset")).find(fs => fs.id == "") || form.appendChild(document.createElement("fieldset")),
-                JSON.parse(event.data)) : null
-        };
-        stateWs.onopen = () => { console.log("Requesting State ws");
-            stateWs.send("State") };
-        stateWs.onerror = (err) => {
-            console.error(err);
-            stateWs.close();
-            stateWs = null;
-        };
-        stateWs.onclose = (evt => {
-            console.log("closed state ws");
-            stateWs = null;
-        })
     }
 
     const timeout1 = new AbortController();

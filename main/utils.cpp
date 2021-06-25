@@ -664,7 +664,7 @@ FILE *fOpen(const char *_name, const char *_type)
   FILE *ret = ::fopen(_name, _type);
   if (ret != NULL)
   {
-    AppConfig::SignalStateChange();
+    AppConfig::SignalStateChange(state_change_t::MAIN);
     numOpenFiles++;
   }
   else
@@ -682,7 +682,7 @@ int fClose(FILE *f)
     ret = ::fclose(f);
     if (ret == 0)
     {
-      AppConfig::SignalStateChange();
+      AppConfig::SignalStateChange(state_change_t::MAIN);
       numOpenFiles--;
     }
   }

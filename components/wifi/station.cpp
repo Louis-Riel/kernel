@@ -415,7 +415,6 @@ void static ParseStateBits(AppConfig* state) {
     state->SetBoolProperty("Connected",bits & WIFI_CONNECTED_BIT);
     state->SetBoolProperty("Scanning",bits & WIFI_SCANING_BIT);
     state->SetBoolProperty("Up",bits & WIFI_UP_BIT);
-    state->SetBoolProperty("Down",bits & WIFI_DOWN_BIT);
     state->SetBoolProperty("Synching",!(bits & WIFI_CLIENT_DONE));
 }
 
@@ -433,7 +432,7 @@ void static RefreshApMembers(AppConfig* state) {
             cJSON_AddItemToArray(jclients, client->toJson());
         }
     }
-    AppConfig::SignalStateChange();
+    AppConfig::SignalStateChange(state_change_t::WIFI);
 }
 
 void static network_event(void *handler_arg, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -551,7 +550,6 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
             ESP_LOGD(__FUNCTION__, "Wifi Station is up");
             if (config->s_wifi_eg)
             {
-                xEventGroupSetBits(config->s_wifi_eg, WIFI_UP_BIT);
                 if (xEventGroupGetBits(config->s_wifi_eg) & WIFI_SCAN_READY_BIT)
                 {
                     wifiScan();
@@ -569,8 +567,6 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
             ParseStateBits(stationStat);
             break;
         case WIFI_EVENT_STA_STOP:
-            xEventGroupSetBits(config->s_wifi_eg, WIFI_DOWN_BIT);
-            xEventGroupClearBits(config->s_wifi_eg, WIFI_UP_BIT);
             xEventGroupClearBits(config->s_wifi_eg, WIFI_SCANING_BIT);
             xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
             xEventGroupClearBits(config->s_wifi_eg, WIFI_SCAN_READY_BIT);
@@ -582,8 +578,6 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
             ProcessScannedAPs();
             break;
         case WIFI_EVENT_AP_START:
-            xEventGroupSetBits(config->s_wifi_eg, WIFI_UP_BIT);
-            xEventGroupClearBits(config->s_wifi_eg, WIFI_DOWN_BIT);
             ESP_LOGD(__FUNCTION__, "AP STARTED");
             xEventGroupSetBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
             tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_AP, &ipInfo);
@@ -598,8 +592,6 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
             }
             break;
         case WIFI_EVENT_AP_STOP:
-            xEventGroupClearBits(config->s_wifi_eg, WIFI_UP_BIT);
-            xEventGroupSetBits(config->s_wifi_eg, WIFI_DOWN_BIT);
             ESP_LOGD(__FUNCTION__, "AP STOPPED");
             xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
             xEventGroupClearBits(eventGroup, HTTP_SERVING);
@@ -663,7 +655,7 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
     }
     free(stationStat);
     free(apStat);
-    state->SignalStateChange();
+    AppConfig::SignalStateChange(state_change_t::WIFI);
 }
 
 void wifiStop(void *pvParameter)
@@ -672,6 +664,7 @@ void wifiStop(void *pvParameter)
     esp_wifi_stop();
     esp_wifi_deinit();
     esp_netif_deinit();
+    xEventGroupClearBits(config->s_wifi_eg, WIFI_UP_BIT);
 }
 
 void wifiSallyForth(void *pvParameter)
@@ -697,8 +690,6 @@ void wifiSallyForth(void *pvParameter)
         config->s_wifi_eg = xEventGroupCreate();
         config->disconnectWaitTime = 2000;
         config->poolWaitTime = 3000;
-        xEventGroupSetBits(config->s_wifi_eg, WIFI_DOWN_BIT);
-        xEventGroupClearBits(config->s_wifi_eg, WIFI_UP_BIT);
         xEventGroupClearBits(config->s_wifi_eg, WIFI_SCANING_BIT);
         xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
         xEventGroupClearBits(config->s_wifi_eg, WIFI_SCAN_READY_BIT);
@@ -749,6 +740,7 @@ void wifiSallyForth(void *pvParameter)
     }
 
     ESP_ERROR_CHECK(esp_wifi_start());
+    xEventGroupSetBits(config->s_wifi_eg, WIFI_UP_BIT);
 
     EventHandlerDescriptor *handler = new EventHandlerDescriptor(IP_EVENT, "IP_EVENT");
     handler->SetEventName(IP_EVENT_AP_STAIPASSIGNED, "IP_EVENT_AP_STAIPASSIGNED");

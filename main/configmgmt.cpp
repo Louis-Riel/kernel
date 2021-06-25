@@ -145,9 +145,8 @@ void AppConfig::ResetAppConfig(bool save)
   }
 }
 
-void AppConfig::SignalStateChange(){
-  AppConfig* state = GetAppStatus();
-  xEventGroupSetBits(GetAppStatus()->eg,state_change_t::CHANGED);
+void AppConfig::SignalStateChange(state_change_t state){
+  xEventGroupSetBits(GetAppStatus()->eg,state);
 }
 
 void AppConfig::SaveAppConfig()

@@ -37,8 +37,9 @@
             <div id="slide-2" class="system-config">
                 <fieldset id="controls">
                     <legend>Controls</legend>
-                    <label class="editable"><div class="label">Auto Refresh</div><input onclick="AutoRefreshClicked(this)" type="checkbox"></label>
+                    <label class="editable"><div class="label">Periodic Refresh</div><input onclick="PeriodicRefreshClicked(this)" type="checkbox"></label>
                     <label class="editable"><div class="label">Freq(sec)</div><input id="refreshFreq" type="number" value=10></label>
+                    <label class="editable"><div class="label">Auto Refresh</div><input id="autoRefresh" onclick="setupWs(this)" type="checkbox"></label>
                 </fieldset>
                 <form action="/status/system" method="post">
                 </form>
@@ -59,6 +60,7 @@
             </div>
             <script>
                 renderFolder("/");
+                logs = document.getElementById("slide-4").getElementsByClassName("loglines")[0];
                 document.querySelectorAll('th').forEach(th => th.addEventListener('click', (() => {
                     const table = document.getElementsByClassName("file-table")[0].getElementsByTagName("tbody")[0];
                     Array.from(table.querySelectorAll('tr:nth-child(n+2)'))
