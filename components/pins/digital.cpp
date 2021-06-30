@@ -14,7 +14,8 @@ Pin::Pin(AppConfig* config)
     :ManagedDevice(config,"DigitalPin"),
     pinNo(config->GetPinNoProperty("pinNo")),
     flags(config->GetIntProperty("driverFlags")),
-    name(config->GetStringProperty("pinName"))
+    name(config->GetStringProperty("pinName")),
+    status(BuildStatus())
 {
     char* pname = (char*)dmalloc(sizeof(name)+1);
     strcpy(pname,name);
@@ -71,18 +72,43 @@ void Pin::InitDevice(){
     }
 }
 
-cJSON* Pin::GetStatus(){
+cJSON* Pin::BuildStatus(){
     ESP_LOGV(__FUNCTION__,"Pin(%d):%s GetStatus",pinNo,name);
-    cJSON* status = ManagedDevice::GetStatus();
-    cJSON_AddBoolToObject(status,"level",gpio_get_level(pinNo));
-    return status;
+
+    AppConfig* state = AppConfig::GetAppStatus();
+    cJSON* sjson = state->GetJSONConfig(NULL);
+    cJSON* pins = NULL;
+    cJSON* pin = NULL;
+    if ((pins = cJSON_GetObjectItem(sjson,"Pins")) == NULL) {
+        cJSON_AddItemToObject(sjson,"pins", pins = cJSON_CreateArray());
+    }
+    cJSON* item = NULL;
+    cJSON_ArrayForEach(item,pins) {
+        AppConfig* apin = new AppConfig(item,state);
+        if (apin->GetPinNoProperty("pinNo") == pinNo) {
+            pin = AppConfig::GetPropertyHolder(apin->GetJSONConfig("state"));
+            free(apin);
+            break;
+        }
+        free(apin);
+    }
+    if (pin == NULL) {
+        AppConfig* apin = new AppConfig(pin=cJSON_CreateObject(),state);
+        cJSON_AddItemToArray(pins,pin);
+        apin->SetPinNoProperty("pinNo",pinNo);
+        apin->SetStringProperty("name",name);
+        apin->SetBoolProperty("state",state);
+        pin = AppConfig::GetPropertyHolder(apin->GetJSONConfig("state"));
+        free(apin); 
+    }
+    return pin;
 }
 
 void Pin::RefrestState(){
     bool curState = gpio_get_level(pinNo);
     if (curState != state) {
         state=curState;
-        ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, name,state?"On":"Off");
+        ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, eventBase,state?"On":"Off");
         PostEvent((void*)&pinNo,sizeof(pinNo),state ? eventIds::ON : eventIds::OFF);
     }
 }
@@ -108,37 +134,38 @@ void Pin::PollPins(){
   xTaskCreate(queuePoller, "pinsPoller", 4096, NULL, tskIDLE_PRIORITY, NULL);
   gpio_install_isr_service(0);
   ESP_LOGV(__FUNCTION__, "ISR Service Started");
-
 }
 
 void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
     ESP_LOGV(__FUNCTION__,"Event %s-%d",base,id);
-    Pin* pin;
-    uint8_t idx;
-    gpio_num_t pinNo;
-    cJSON* event;
-    cJSON* params;
-    switch (id)
-    {
-    case Pin::eventIds::TRIGGER:
-        params = *(cJSON**)event_data;
-        if ((params != NULL) && cJSON_HasObjectItem(params,"pinNo")){
-            pin = NULL;
-            idx = 0;
-            pinNo = (gpio_num_t)cJSON_GetObjectItem(cJSON_GetObjectItem(params,"pinNo"),"value")->valueint;
-            while((pin=Pin::pins[idx++])!= NULL) {
-                if (pin->pinNo == pinNo) {
-                    pin->HandleEvent(params);
-                    return;
+    if (strcmp(base,"DigitalPin") == 0) {
+        Pin* pin;
+        uint8_t idx;
+        gpio_num_t pinNo;
+        cJSON* event;
+        cJSON* params;
+        switch (id)
+        {
+        case Pin::eventIds::TRIGGER:
+            params = *(cJSON**)event_data;
+            if ((params != NULL) && cJSON_HasObjectItem(params,"pinNo")){
+                pin = NULL;
+                idx = 0;
+                pinNo = (gpio_num_t)cJSON_GetObjectItem(cJSON_GetObjectItem(params,"pinNo"),"value")->valueint;
+                while((pin=Pin::pins[idx++])!= NULL) {
+                    if (pin->pinNo == pinNo) {
+                        pin->HandleEvent(params);
+                        return;
+                    }
                 }
+            } else {
+                ESP_LOGW(__FUNCTION__,"Missing params:%d",params!=NULL);
             }
-        } else {
-            ESP_LOGW(__FUNCTION__,"Missing params:%d",params!=NULL);
+            break;
+        
+        default:
+            break;
         }
-        break;
-    
-    default:
-        break;
     }
 }
 

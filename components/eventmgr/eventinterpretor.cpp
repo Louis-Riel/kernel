@@ -17,6 +17,7 @@ EventInterpretor::EventInterpretor(cJSON *json)
     {
         cJSON *condition = NULL;
         int idx = 0;
+        char* boper;
         cJSON_ArrayForEach(condition, cJSON_GetObjectItem(json, "conditions"))
         {
             if (cJSON_HasObjectItem(condition, "operator"))
@@ -25,7 +26,11 @@ EventInterpretor::EventInterpretor(cJSON *json)
             }
             if (cJSON_HasObjectItem(condition, "boper"))
             {
-                isAnd[idx++] = strcmp("and", cJSON_GetObjectItem(condition, "boper")->valuestring);
+                boper = cJSON_GetObjectItem(condition, "boper")->valuestring;
+                if (boper == NULL) {
+                    boper = cJSON_GetObjectItem(cJSON_GetObjectItem(condition, "boper"),"value")->valuestring;
+                }
+                isAnd[idx++] = strcmp("and", boper);
             }
         }
     }

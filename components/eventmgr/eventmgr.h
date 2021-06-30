@@ -125,14 +125,16 @@ public:
     ManagedDevice(AppConfig* config,char* type);
     void HandleEvent(cJSON* params);
     cJSON* GetStatus();
-    static esp_event_base_t eventBase;
-    static EventHandlerDescriptor* handlerDescriptors;
+    esp_event_base_t eventBase;
+    EventHandlerDescriptor* handlerDescriptors=NULL;
 protected:
     AppConfig* config;
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     void PostEvent(void* content, size_t len,int32_t event_id);
     void InitDevice();
-    static EventHandlerDescriptor* BuildHandlerDescriptors();
+    EventHandlerDescriptor* BuildHandlerDescriptors();
+    cJSON* BuildStatus();
+    cJSON* status;
 };
 
 #endif

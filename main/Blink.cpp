@@ -121,15 +121,18 @@ void sampleBatteryVoltage()
   uint32_t voltage = 0;
   uint32_t tmp;
   uint32_t cnt = 0;
+  esp_err_t ret;
+  adc_power_acquire();
   for (int idx = 0; idx < 10; idx++)
   {
-    esp_adc_cal_get_voltage((adc_channel_t)ADC1_CHANNEL_7, &characteristics, &tmp);
-    if (tmp < 5)
-    {
-      voltage += tmp;
+    if ((ret=esp_adc_cal_get_voltage(ADC_CHANNEL_7, &characteristics, &tmp))==ESP_OK){
+      voltage += (tmp*2);
       cnt++;
+    } else {
+      ESP_LOGW(__FUNCTION__,"Error getting voltage %s",esp_err_to_name(ret));
     }
   }
+  adc_power_release();
   if (cnt > 0)
     batLvls[batSmplCnt++] = (voltage / cnt);
 }
@@ -238,7 +241,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
 {
   if (strlen(cvsFileName) > 1)
   {
-    ESP_LOGD(__FUNCTION__, "Getting Facts from %s for %s", cvsFileName, kmlFileName);
+    ESP_LOGV(__FUNCTION__, "Getting Facts from %s for %s", cvsFileName, kmlFileName);
     FILE *trp = fopen(cvsFileName, "r", true);
     if (trp == NULL)
     {
@@ -283,7 +286,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
       ESP_LOGE(__FUNCTION__, "Cannot open %s", kmlFileName);
       return false;
     }
-    ESP_LOGD(__FUNCTION__, "Opened %s", kmlFileName);
+    ESP_LOGV(__FUNCTION__, "Opened %s", kmlFileName);
     uint8_t chr = 0;
     uint8_t *bkeyPos = NULL;
     uint8_t *bvalPos = NULL;
@@ -489,7 +492,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
     }
     fClose(kml);
     fClose(trp);
-    ESP_LOGD(__FUNCTION__, "Done baking KML");
+    ESP_LOGV(__FUNCTION__, "Done baking KML");
     return true;
   }
   return false;
@@ -739,7 +742,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   sampleBatteryVoltage();
   if ((id != TinyGPSPlus::gpsEvent::msg) && (id != TinyGPSPlus::gpsEvent::locationChanged)){
     AppConfig::SignalStateChange(state_change_t::GPS);
-    ESP_LOGD(__FUNCTION__,"gps:%d",id);
+    ESP_LOGV(__FUNCTION__,"gps:%d",id);
   }
   switch (id)
   {
@@ -854,7 +857,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     break;
   case TinyGPSPlus::gpsEvent::atSyncPoint:
     ESP_LOGD(__FUNCTION__, "Synching");
-    if (gps != NULL)
+    if ((gps != NULL) && (now > 10000))
     {
       xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT3), tskIDLE_PRIORITY, NULL);
     }
@@ -862,7 +865,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     break;
   case TinyGPSPlus::gpsEvent::outSyncPoint:
     ESP_LOGD(__FUNCTION__, "Leaving Synching");
-    wifiStop(NULL);
+    TheWifi::GetInstance()->wifiStop(NULL);
     break;
   default:
     break;
@@ -1152,11 +1155,46 @@ void ConfigurePins(AppConfig* cfg)
   }
 }
 
+static void check_efuse()
+{
+    //Check TP is burned into eFuse
+    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) {
+        ESP_LOGD(__FUNCTION__,"eFuse Two Point: Supported\n");
+    } else {
+        ESP_LOGD(__FUNCTION__,"eFuse Two Point: NOT supported\n");
+    }
+
+    //Check Vref is burned into eFuse
+    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK) {
+        ESP_LOGD(__FUNCTION__,"eFuse Vref: Supported\n");
+    } else {
+        ESP_LOGD(__FUNCTION__,"eFuse Vref: NOT supported\n");
+    }
+}
+
+static void print_char_val_type(esp_adc_cal_value_t val_type)
+{
+    if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
+        ESP_LOGD(__FUNCTION__,"Characterized using Two Point Value\n");
+    } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
+        ESP_LOGD(__FUNCTION__,"Characterized using eFuse Vref\n");
+    } else {
+        ESP_LOGD(__FUNCTION__,"Characterized using Default Vref\n");
+    }
+}
+
 void app_main(void)
 {
   if (setupLittlefs() == ESP_OK)
   {
     ESP_LOGI(__FUNCTION__, "Starting");
+    check_efuse();
+    adc1_config_width(ADC_WIDTH_12Bit);
+    adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_11db);
+    //adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_11db);
+    uint32_t defvref = 1100;
+    esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, defvref, &characteristics);
+    print_char_val_type(val_type);
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     AppConfig *appcfg = new AppConfig(CFG_PATH);
     esp_err_t ret = ESP_OK;
@@ -1172,7 +1210,7 @@ void app_main(void)
       ESP_LOGD(__FUNCTION__,"Spiff is still spiffy");
     }
 
-    if (appcfg->GetStringProperty("type") == NULL)
+    if (appcfg->GetStringProperty("wifitype") == NULL)
     {
       ESP_LOGE(__FUNCTION__, "We have invalid configuration, resetting to default");
       appcfg->ResetAppConfig(false);
@@ -1183,6 +1221,7 @@ void app_main(void)
       ESP_LOGD(__FUNCTION__, "Seeding device id");
       appcfg->SetIntProperty("deviceid", GenerateDevId());
     }
+
     initLog();
     sampleBatteryVoltage();
     EventManager *mgr = new EventManager(appcfg->GetJSONConfig("/events"));
@@ -1236,10 +1275,6 @@ void app_main(void)
         if (xEventGroupWaitBits(gps->eg, TinyGPSPlus::gpsEvent::gpsRunning, pdFALSE, pdTRUE, 1500 / portTICK_RATE_MS)&TinyGPSPlus::gpsEvent::gpsRunning)
         {
           createTrip();
-          adc1_config_width(ADC_WIDTH_12Bit);
-          adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_11db);
-          uint32_t defvref = 1100;
-          esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, defvref, &characteristics);
           ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::msg, gpsEvent, &gps));
           ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::go, gpsEvent, &gps));
           ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::stop, gpsEvent, &gps));
@@ -1273,7 +1308,7 @@ void app_main(void)
       xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT2 | BIT3), tskIDLE_PRIORITY, NULL);
     }
 
-    if (indexOf(appcfg->GetStringProperty("type"), "AP") != NULL)
+    if (indexOf(appcfg->GetStringProperty("wifitype"), "AP") != NULL)
     {
       ESP_LOGD(__FUNCTION__, "Starting puller's wifi");
       xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps, tskIDLE_PRIORITY, NULL);

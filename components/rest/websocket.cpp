@@ -124,21 +124,23 @@ static void statePoller(void *instance){
     if (bits){
       cJSON* state = status_json();
       if (bits&state_change_t::GPS) {
-        ESP_LOGD(__FUNCTION__,"gState Changed %d", bits);
+        ESP_LOGV(__FUNCTION__,"gState Changed %d", bits);
         cJSON_AddItemReferenceToObject(state,"gps",AppConfig::GetAppStatus()->GetJSONConfig("gps"));
       } 
       if (bits&state_change_t::WIFI) {
-        ESP_LOGD(__FUNCTION__,"wState Changed %d", bits);
+        ESP_LOGV(__FUNCTION__,"wState Changed %d", bits);
         cJSON* item;
         cJSON_ArrayForEach(item,AppConfig::GetAppStatus()->GetJSONConfig(NULL)) {
           cJSON_AddItemReferenceToObject(state,item->string,AppConfig::GetAppStatus()->GetJSONConfig(item->string));
         }
       } else {
-        ESP_LOGD(__FUNCTION__,"State Changed %d", bits);
+        ESP_LOGV(__FUNCTION__,"State Changed %d", bits);
       }
       char* buf = cJSON_Print(state);
-      xQueueSend(ws->rdySem,buf,portMAX_DELAY);
-      ldfree(buf);
+      if (buf){
+        xQueueSend(ws->rdySem,buf,portMAX_DELAY);
+        ldfree(buf);
+      }
       cJSON_free(state);
     }
   }

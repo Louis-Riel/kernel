@@ -6,6 +6,7 @@ var lastFolder = "";
 var activeTab = null;
 var activeInterval = null;
 var logs = null;
+var editor = null;
 
 //#region utility functions
 function dirname(path) {
@@ -775,12 +776,13 @@ function SendCommand(body) {
 }
 
 function SaveForm(form) {
-    fetch(form.action, {
-        method: 'post',
-        body: JSON.stringify(form.querySelector("fieldset").data)
-    }).then(data => {
-        refreshConfig(true);
-    });
+    getJsonConfig().then(vcfg => fromPlainToVersionned(editor.getValue(), vcfg))
+        .then(cfg => fetch(form.action, {
+            method: 'post',
+            body: JSON.stringify(cfg)
+        }).then(data => {
+            refreshConfig(true);
+        }));
 }
 
 function PeriodicRefreshClicked(target) {
@@ -864,7 +866,115 @@ function jsonifyStatusArray(name, fieldset) {
     });
 }
 
+function fromVersionedToPlain(obj, level = "") {
+    var ret = {};
+    var arr = Object.keys(obj);
+    for (fldidx in arr) {
+        var fld = arr[fldidx];
+        if ((typeof obj[fld] == 'object') &&
+            (Object.keys(obj[fld]).filter(cfld => cfld == "version" || cfld == "value").length == 2)) {
+            ret[fld] = obj[fld]["value"];
+        } else if (Array.isArray(obj[fld])) {
+            ret[fld] = [];
+            obj[fld].forEach((item, idx) => {
+                if (obj[fld][idx].boper) {
+                    ret[fld][ret[fld].length - 1]["boper"] = obj[fld][idx].boper;
+                } else {
+                    ret[fld].push(fromVersionedToPlain(item, `${level}/${fld}[${idx}]`));
+                }
+            });
+        } else if (typeof obj[fld] == 'object') {
+            ret[fld] = fromVersionedToPlain(obj[fld], `${level}/${fld}`);
+        } else {
+            ret[fld] = obj[fld];
+        }
+    }
+    return ret;
+}
+
+function fromPlainToVersionned(obj, vobj, level = "") {
+    var ret = {};
+    var arr = Object.keys(obj);
+    for (fldidx in arr) {
+        var fld = arr[fldidx];
+        var pvobj = vobj ? vobj[fld] : undefined;
+        if (Array.isArray(obj[fld])) {
+            ret[fld] = [];
+            for (var idx = 0; idx < obj[fld].length; idx++) {
+                var item = obj[fld][idx];
+                var vitem = fromPlainToVersionned(item, pvobj[idx], `${level}/${fld}[${idx}]`);
+                ret[fld].push(vitem);
+                if (vitem.boper) {
+                    ret[fld].push({
+                        boper: vitem.boper
+                    });
+                    delete vitem.boper;
+                }
+            }
+        } else if (typeof obj[fld] == 'object') {
+            ret[fld] = fromPlainToVersionned(obj[fld], pvobj, `${level}/${fld}`);
+        } else {
+            if ((fld === "boper") || (fld === "operator") || (fld === "otype") || (fld === "value") || (fld === "name")) {
+                ret[fld] = obj[fld];
+            } else {
+                ret[fld] = {
+                    version: pvobj === undefined ? 0 : obj[fld] === pvobj.value ? pvobj.version : pvobj.version + 1,
+                    value: obj[fld]
+                }
+            }
+        }
+    }
+    return ret;
+}
+
+function getJsonConfig() {
+    return new Promise((resolve, reject) => {
+        const timeout = new AbortController();
+        const timer = setTimeout(() => timeout.abort(), 1000);
+        fetch('/config', {
+                method: 'post',
+                signal: timeout.signal
+            }).then(data => {
+                clearTimeout(timer);
+                resolve(data.json());
+            })
+            .catch((err) => {
+                clearTimeout(timer);
+                reject(err);
+            });
+    });
+}
+
+function getEditableJsonConfig() {
+    return new Promise((resolve, reject) => {
+        getJsonConfig().then(fromVersionedToPlain).then(resolve).catch(reject);
+    });
+}
+
 function refreshConfig(clicked) {
+    var form = document.querySelectorAll(".system-config form")[1];
+    if (clicked) {
+        activeTab = form;
+        if (controller)
+            controller.abort();
+    }
+    getEditableJsonConfig().then(cfg => {
+        if (editor == null) {
+            editor = new JSONEditor(document.getElementById('editor_holder'), {
+                ajax: true,
+                schema: {
+                    $ref: "configschema.json",
+                    format: "grid",
+                },
+                startval: cfg
+            });
+        } else {
+            editor.setValue(cfg);
+        }
+    });
+}
+
+function refreshConfigold(clicked) {
     var form = document.querySelectorAll(".system-config form")[1];
     if (clicked) {
         activeTab = form;

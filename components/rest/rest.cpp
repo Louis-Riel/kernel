@@ -175,12 +175,15 @@ esp_err_t rest_handler(httpd_req_t *req)
 
 void restSallyForth(void *pvParameter) {
     assert(pvParameter);
-    the_wifi_config* cfg = (the_wifi_config*)pvParameter;
-    xEventGroupWaitBits(cfg->s_wifi_eg,WIFI_CONNECTED_BIT,pdFALSE,pdFALSE,portMAX_DELAY);
+    EventGroupHandle_t weg = (EventGroupHandle_t*)pvParameter;
+    if(xEventGroupGetBits(eventGroup) & HTTP_SERVING){
+        ESP_LOGD(__FUNCTION__,"Not starting httpd, already serving");
+        vTaskDelete( NULL );
+    }
+    xEventGroupWaitBits(weg,WIFI_CONNECTED_BIT,pdFALSE,pdFALSE,portMAX_DELAY);
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = routeHttpTraffic;
     ESP_LOGI(__FUNCTION__, "Starting server on port %d", config.server_port);
-    xEventGroupClearBits(eventGroup,HTTP_SERVING);
     if (httpd_start(&server, &config) == ESP_OK) {
         ESP_LOGD(__FUNCTION__, "Registering URI handlers");
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &wsUri));
@@ -188,8 +191,13 @@ void restSallyForth(void *pvParameter) {
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &restPutUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &appUri));
         xEventGroupSetBits(eventGroup,HTTP_SERVING);
+        xEventGroupWaitBits(weg,WIFI_DISCONNECTED_BIT,pdFALSE,pdFALSE,portMAX_DELAY);
+        xEventGroupClearBits(eventGroup,HTTP_SERVING);
+        ESP_LOGI(__FUNCTION__, "Stopping server on port %d", config.server_port);
+        httpd_stop(&server);
     } else {
         ESP_LOGE(__FUNCTION__, "Error starting server!");
     }
+    
     vTaskDelete( NULL );
 }

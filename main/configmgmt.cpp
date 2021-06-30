@@ -65,7 +65,7 @@ AppConfig::AppConfig(char *filePath)
       fClose(currentCfg);
       if (sjson && (strlen(sjson) > 0)){
         cJSON* toBeCfg = cJSON_ParseWithLength(sjson, fileStat.st_size);
-        if ((toBeCfg != NULL) && (cJSON_GetObjectItem(toBeCfg,"type") != NULL)) {
+        if ((toBeCfg != NULL) && (cJSON_GetObjectItem(toBeCfg,"wifitype") != NULL)) {
           json = toBeCfg;
         } else if (sjson != NULL) {
           ESP_LOGE(__FUNCTION__,"Corrupted configuration, not applying:%s",sjson);
@@ -621,10 +621,10 @@ item_state_t AppConfig::GetStateProperty(const char* path)
 
 bool AppConfig::IsAp()
 {
-  return indexOf(GetStringProperty("type"), "AP") != NULL;
+  return indexOf(GetStringProperty("wifitype"), "AP") != NULL;
 }
 
 bool AppConfig::IsSta()
 {
-  return indexOf(GetStringProperty("type"), "STA") != NULL;
+  return indexOf(GetStringProperty("wifitype"), "STA") != NULL;
 }

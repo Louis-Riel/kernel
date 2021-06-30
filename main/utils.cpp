@@ -245,8 +245,10 @@ bool initSPISDCard(bool log)
   AppConfig* appState = AppConfig::GetAppStatus();
   AppConfig* spiffState = appState->GetConfig("spiff");
   AppConfig* sdcState = appState->GetConfig("sdcard");
+  bool sdon=false;
   if (numSdCallers <= 0)
   {
+    numSdCallers = 1;
     log=true;
     esp_err_t ret;
     const esp_vfs_littlefs_conf_t conf = {
@@ -267,6 +269,9 @@ bool initSPISDCard(bool log)
       {
         if (log)
           ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
+        numSdCallers=0;
+        free(spiffState);
+        free(sdcState);
         return ret;
       }
     }
@@ -278,77 +283,89 @@ bool initSPISDCard(bool log)
     spiffState->SetStateProperty("state",item_state_t::ACTIVE);
 
     AppConfig *cfg = AppConfig::GetAppConfig()->GetConfig("/sdcard");
+    if (cfg->HasProperty("MosiPin") &&
+        cfg->HasProperty("MisoPin") &&
+        cfg->HasProperty("ClkPin") &&
+        cfg->HasProperty("Cspin")) {
+      spi_bus_config_t bus_cfg = {
+          .mosi_io_num = cfg->GetIntProperty("MosiPin"),
+          .miso_io_num = cfg->GetIntProperty("MisoPin"),
+          .sclk_io_num = cfg->GetIntProperty("ClkPin"),
+          .quadwp_io_num = -1,
+          .quadhd_io_num = -1,
+          .max_transfer_sz = 4000,
+          .flags = 0,
+          .intr_flags = 0};
 
-    spi_bus_config_t bus_cfg = {
-        .mosi_io_num = cfg->GetIntProperty("MosiPin"),
-        .miso_io_num = cfg->GetIntProperty("MisoPin"),
-        .sclk_io_num = cfg->GetIntProperty("ClkPin"),
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = 4000,
-        .flags = 0,
-        .intr_flags = 0};
+      sdspi_device_config_t slot_config = {
+          .host_id = SPI2_HOST,
+          .gpio_cs = cfg->GetPinNoProperty("Cspin"),
+          .gpio_cd = SDSPI_SLOT_NO_CD,
+          .gpio_wp = SDSPI_SLOT_NO_WP,
+          .gpio_int = GPIO_NUM_NC};
 
-    sdspi_device_config_t slot_config = {
-        .host_id = SPI2_HOST,
-        .gpio_cs = cfg->GetPinNoProperty("Cspin"),
-        .gpio_cd = SDSPI_SLOT_NO_CD,
-        .gpio_wp = SDSPI_SLOT_NO_WP,
-        .gpio_int = GPIO_NUM_NC};
 
-    free(cfg);
-
-    if (bus_cfg.miso_io_num && bus_cfg.mosi_io_num && bus_cfg.sclk_io_num)
-    {
-      if ((ret = spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, 1)) == ESP_OK)
+      if (bus_cfg.miso_io_num && bus_cfg.mosi_io_num && bus_cfg.sclk_io_num)
       {
-        if ((ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card)) != ESP_OK)
+        if ((ret = spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, 1)) == ESP_OK)
         {
-          if (ret == ESP_FAIL)
+          if ((ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card)) != ESP_OK)
           {
-            if (log)
-              ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
-                                     "If you want the card to be formatted, set format_if_mount_failed = true.");
+            if (ret == ESP_FAIL)
+            {
+              if (log)
+                ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
+                                      "If you want the card to be formatted, set format_if_mount_failed = true.");
+            }
+            else
+            {
+              if (log)
+                ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
+                                      "Make sure SD card lines have pull-up resistors in place.",
+                        esp_err_to_name(ret));
+            }
+            sdcState->SetStateProperty("state",item_state_t::ERROR);
+            spi_bus_free(SPI2_HOST);
+            free(spiffState);
+            free(sdcState);
+            free(cfg);
+            return false;
           }
-          else
-          {
-            if (log)
-              ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
-                                     "Make sure SD card lines have pull-up resistors in place.",
-                       esp_err_to_name(ret));
-          }
+
+          if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
+            sdmmc_card_print_info(stdout, card);
+          if (log)
+            ESP_LOGD(__FUNCTION__, "SD card mounted %d", (int)card);
+          sdcState->SetStateProperty("state",item_state_t::ACTIVE);
+        }
+        else if (ret == ESP_ERR_INVALID_STATE)
+        {
           sdcState->SetStateProperty("state",item_state_t::ERROR);
-          spi_bus_free(SPI2_HOST);
+          if (log)
+            ESP_LOGW(__FUNCTION__, "Error initing SPI bus %s", esp_err_to_name(ret));
+        }
+        else
+        {
+          sdcState->SetStateProperty("state",item_state_t::ERROR);
+          if (log)
+            ESP_LOGE(__FUNCTION__, "Error initing SPI bus %s", esp_err_to_name(ret));
+          free(spiffState);
+          free(sdcState);
+          free(cfg);
           return false;
         }
-
-        if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
-          sdmmc_card_print_info(stdout, card);
-        if (log)
-          ESP_LOGD(__FUNCTION__, "SD card mounted %d", (int)card);
-        sdcState->SetStateProperty("state",item_state_t::ACTIVE);
-        free(sdcState);
-      }
-      else if (ret == ESP_ERR_INVALID_STATE)
-      {
-        if (log)
-          ESP_LOGW(__FUNCTION__, "Error initing SPI bus %s", esp_err_to_name(ret));
       }
       else
       {
         if (log)
-          ESP_LOGE(__FUNCTION__, "Error initing SPI bus %s", esp_err_to_name(ret));
-        return false;
+        {
+          ESP_LOGW(__FUNCTION__,"No SD Card bus_cfg.miso_io_num:%d bus_cfg.mosi_io_num:%d bus_cfg.sclk_io_num:%d",bus_cfg.miso_io_num, bus_cfg.mosi_io_num, bus_cfg.sclk_io_num);
+        }
       }
+    } else {
+      ESP_LOGW(__FUNCTION__, "Cannot mount SD, Missingparams");
     }
-    else
-    {
-      if (log)
-      {
-        ESP_LOGW(__FUNCTION__,"No SD Card bus_cfg.miso_io_num:%d bus_cfg.mosi_io_num:%d bus_cfg.sclk_io_num:%d",bus_cfg.miso_io_num, bus_cfg.mosi_io_num, bus_cfg.sclk_io_num);
-      }
-    }
-    numSdCallers = 1;
+    free(cfg);
   }
   else
   {
@@ -370,11 +387,10 @@ bool initSPISDCard(bool log)
       spiffState->SetIntProperty("total",total_bytes);
       spiffState->SetIntProperty("used",used_bytes);
       spiffState->SetIntProperty("free",total_bytes-used_bytes);
-      free(spiffState);
     }
   }
   state = sdcState->GetStateProperty("state");
-  if (state == item_state_t::ACTIVE) {
+  if (sdon) {
     FATFS *fs;
     DWORD fre_clust, fre_sect, tot_sect;
 
@@ -387,6 +403,8 @@ bool initSPISDCard(bool log)
       sdcState->SetIntProperty("free",fre_sect / 2);
     }
   }
+  free(spiffState);
+  free(sdcState);
 
   return true;
 }

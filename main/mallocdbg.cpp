@@ -24,7 +24,7 @@ void* dbgmalloc(const char* funcname, size_t size)
 
     if(size > 0)
     {
-        ptr = pvPortMalloc (size);
+        ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
 
         #ifdef DEBUG_MALLOC
         mallocdbg* freeSpot=NULL;

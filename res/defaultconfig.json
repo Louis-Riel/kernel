@@ -32,8 +32,12 @@
         },
         "pois": []
     },
-    "type": {
+    "wifitype": {
         "value": "AP",
+        "version": 0
+    },
+    "clienttype": {
+        "value": "Puller",
         "version": 0
     },
     "stations": [{
@@ -78,6 +82,22 @@
         }
     }],
     "events": [{
+            "eventBase": {
+                "value": "Wifi",
+                "version": 0
+            },
+            "eventId": {
+                "value": "IP_EVENT_AP_STAIPASSIGNED",
+                "version": 0
+            },
+            "method": {
+                "value": "PullStation",
+                "version": 0
+            },
+            "conditions": [],
+            "params": {}
+        },
+        {
             "eventBase": {
                 "value": "DigitalPin",
                 "version": 0

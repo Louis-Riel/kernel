@@ -6,8 +6,6 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-char* tarfname=(char*)dmalloc(255);
-
 esp_err_t json_event_handler(esp_http_client_event_t *evt)
 {
     switch (evt->event_id)
@@ -36,7 +34,7 @@ esp_err_t json_event_handler(esp_http_client_event_t *evt)
                 ESP_LOGE(__FUNCTION__,"Cannot fit %d in the ram",evt->data_len);
             }
         } else {
-            ESP_LOGV(__FUNCTION__,"Got data with no dest: strlen(tarfname):%d",strlen(tarfname));
+            ESP_LOGV(__FUNCTION__,"Got data with no dest");
         }
         break;
     case HTTP_EVENT_ON_FINISH:
@@ -147,7 +145,6 @@ bool GetKmls(ip4_addr_t* ipInfo){
         deinitSPISDCard();
         vTaskDelete(NULL);
     }
-    the_wifi_config* wc = getWifiConfig();
 
     xEventGroupWaitBits(eventGroup,GETTING_TRIPS,pdFALSE,pdTRUE,portMAX_DELAY);
     esp_http_client_cleanup(client);
@@ -544,6 +541,7 @@ cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
 }
 
 void extractClientTar(char* tarFName){
+    ESP_LOGD(__FUNCTION__,"Parsing File %s", tarFName);
     mtar_t tar;
     mtar_header_t header;
     int ret = mtar_open(&tar,tarFName,"r");
@@ -555,7 +553,7 @@ void extractClientTar(char* tarFName){
     if (ret == MTAR_ESUCCESS){
         while ( (ret=mtar_read_header(&tar, &header)) != MTAR_ENULLRECORD ) {
             if ((header.type == MTAR_TREG) && (header.size > 0)){
-                ESP_LOGD(__FUNCTION__,"File %s (%d bytes)\n", header.name, header.size);
+                ESP_LOGD(__FUNCTION__,"File %s (%d bytes)", header.name, header.size);
                 len = 0;
                 if (endsWith(header.name,".json")) {
                     ret = mtar_read_data(&tar,buf, header.size);
@@ -585,7 +583,7 @@ void extractClientTar(char* tarFName){
                             len+=chunkLen;
                         }
                         fClose(fw);
-                        ESP_LOGD(__FUNCTION__,"end %s (%d bytes)\n", header.name, len);
+                        ESP_LOGV(__FUNCTION__,"end %s (%d bytes)", header.name, len);
                     } else {
                         ESP_LOGE(__FUNCTION__,"Cannot write %s", fname);
                     }
@@ -606,13 +604,49 @@ void extractClientTar(char* tarFName){
     ldfree(buf);
 }
 
+bool IsTheFuckerUp(esp_ip4_addr_t* ipInfo){
+    esp_http_client_handle_t client=NULL;
+    esp_http_client_config_t* config=NULL;
+    bool ret=false;
+    
+    config = (esp_http_client_config_t*)dmalloc(sizeof(esp_http_client_config_t));
+    memset(config,0,sizeof(esp_http_client_config_t));
+    config->url=(char*)dmalloc(30);
+    sprintf((char*)config->url,"http://" IPSTR "/files/",IP2STR(ipInfo));
+    config->method=HTTP_METHOD_POST;
+    config->timeout_ms = 30000;
+    config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
+    config->max_redirection_count=0;
+    config->port=80;
+    ESP_LOGV(__FUNCTION__,"Getting %s",config->url);
+    client = esp_http_client_init(config);
+    esp_err_t err;
+    uint8_t retryCnt=0;
+    ret = (err = esp_http_client_perform(client)) == ESP_OK;
+    esp_http_client_cleanup(client);
+    ldfree((void*)config->url);
+    ldfree((void*)config);
+    return ret;
+}
+static bool isPulling=false;
 void pullStation(void *pvParameter) {
+    if (isPulling) {
+        ESP_LOGW(__FUNCTION__,"Not repulling");
+        vTaskDelete(NULL);
+    }
+    isPulling=true;
+    esp_ip4_addr_t* ipInfo = (esp_ip4_addr_t*) pvParameter;
+    int retryCtn = 10;
+    bool isUp = false;
+    char tarFName[255];
+    bool isAllGood=false;
+    while (!(isUp=IsTheFuckerUp(ipInfo)) && (retryCtn-->=0)) {
+        vTaskDelay(1000/portTICK_PERIOD_MS);
+    }
+
+    if (isUp){
     esp_http_client_config_t* config = (esp_http_client_config_t*)dmalloc(sizeof(esp_http_client_config_t));
     if (initSPISDCard()){
-        esp_ip4_addr_t* ipInfo = (esp_ip4_addr_t*) pvParameter;
-
-        char tarFName[255];
-
         memset(config,0,sizeof(esp_http_client_config_t));
         config->url=(char*)dmalloc(30);
         sprintf((char*)config->url,"http://" IPSTR "/trips",IP2STR(ipInfo));
@@ -636,6 +670,7 @@ void pullStation(void *pvParameter) {
         tarFName[2]='d';
         tarFName[3]='c';
 
+        esp_err_t ret;
         if (esp_http_client_get_status_code(client) == 200){
             esp_http_client_cleanup(client);
             ldfree((void*)config->url);
@@ -649,34 +684,37 @@ void pullStation(void *pvParameter) {
             config->port=80;
             esp_http_client_handle_t client = esp_http_client_init(config);
             char* postData="{\"enabled\":\"no\"}";
-            ESP_LOGV(__FUNCTION__,"Sending wifi off %s",postData);
-            esp_err_t ret;
+            ESP_LOGD(__FUNCTION__,"Sending wifi off %s to %s",postData,config->url);
             if ((ret = esp_http_client_open(client,strlen(postData))) == ESP_OK){
                 if (esp_http_client_write(client,postData,strlen(postData)) != strlen(postData))
                 {
-                    ESP_LOGD(__FUNCTION__, "Turn off wifi faile, but that is to be expected: %s", esp_err_to_name(ret));
+                    ESP_LOGD(__FUNCTION__, "Turn off wifi failed, but that is to be expected: %s", esp_err_to_name(ret));
                 } else {
-                    ESP_LOGD(__FUNCTION__,"Sent wifi off %s",postData);
+                    ESP_LOGD(__FUNCTION__,"Sent wifi off %s to %s",postData,config->url);
                 }
+                esp_http_client_cleanup(client);
             } else {
-                ESP_LOGE(__FUNCTION__, "KML GET request failed: %s", esp_err_to_name(ret));
+                ESP_LOGW(__FUNCTION__, "Send wifi off request failed: %s", esp_err_to_name(ret));
             }
-            extractClientTar(tarFName);
-            xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)(BIT2|BIT3), tskIDLE_PRIORITY, NULL);
         } else {
-            ESP_LOGW(__FUNCTION__, "\nURL: %s\n\nHTTP GET Status = %d, content_length = %d\n%s",
-                    config->url,
-                    esp_http_client_get_status_code(client),
-                    esp_http_client_get_content_length(client),
-                    esp_err_to_name(err));
+            ESP_LOGW(__FUNCTION__, "Cannot pull: %s",esp_err_to_name(err));
         }
-        esp_http_client_cleanup(client);
+
         ldfree((void*)config->url);
     }
     
     ldfree((void*)config);
     ldfree(pvParameter);
     deinitSPISDCard();
+    } else {
+        ESP_LOGW(__FUNCTION__,"Cannot pull from " IPSTR, IP2STR(ipInfo));
+    }
+    isPulling=false;
+    if (isAllGood) {
+        extractClientTar(tarFName);
+        xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void*)(BIT2|BIT3), tskIDLE_PRIORITY, NULL);
+    }
+
     vTaskDelete(NULL);
 }
 

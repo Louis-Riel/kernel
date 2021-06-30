@@ -2,14 +2,9 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-esp_event_base_t ManagedDevice::eventBase = NULL;
-EventHandlerDescriptor* ManagedDevice::handlerDescriptors = NULL;
-
-ManagedDevice::ManagedDevice(AppConfig* config, char* type):config(config) {
-  if (ManagedDevice::eventBase == NULL) {
-      ManagedDevice::eventBase = (esp_event_base_t)dmalloc(strlen(type)+1);
-      strcpy((char*)ManagedDevice::eventBase,type);
-  }
+ManagedDevice::ManagedDevice(AppConfig* config, char* type):config(config),status(BuildStatus()) {
+  eventBase = (esp_event_base_t)dmalloc(strlen(type)+1);
+  strcpy((char*)eventBase, type);
 }
 
 EventHandlerDescriptor* ManagedDevice::BuildHandlerDescriptors(){
@@ -29,5 +24,12 @@ void ManagedDevice::InitDevice(){
 }
 
 cJSON* ManagedDevice::GetStatus(){
+    return status == NULL ? status = BuildStatus() : status;
+}
+
+cJSON* ManagedDevice::BuildStatus(){
     return cJSON_CreateObject();
+}
+
+void ManagedDevice::HandleEvent(cJSON* params){
 }

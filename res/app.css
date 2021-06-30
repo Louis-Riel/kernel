@@ -1,3 +1,6 @@
+div {
+    float:left;
+}
 table.greyGridTable td,
 table.greyGridTable th {
     border: 1px solid grey;
@@ -125,7 +128,7 @@ label {
 .slider {
     overflow: hidden;
     height: 100%;
-    width: 100%;
+    /* width: 100%; */
     color: chartreuse;
     padding-top: 20px;
 }
@@ -249,8 +252,9 @@ select {
 
 .system-config fieldset input,
 textarea,
-select {
-    background-color: #f0feff0d;
+select,
+option {
+    background-color: #212621;
     color: greenyellow;
 }
 
@@ -295,8 +299,8 @@ button {
     color: #76ff02;
     font: caption;
     border-radius: 42%;
-    padding-left: 15px;
-    padding-right: 15px;
+    /* padding-left: 15px; */
+    /* padding-right: 15px; */
     padding-top: 5px;
     padding-bottom: 5px;
 }
@@ -403,4 +407,8 @@ div.slider>a.active {
     padding-left: 20px;
     padding-right: 20px;
     font-family: system-ui;
+}
+
+.je-modal {
+    background-color: #212621 !important;
 }

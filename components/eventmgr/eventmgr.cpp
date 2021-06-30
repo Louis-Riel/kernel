@@ -49,6 +49,7 @@ cJSON* EventManager::SetConfig(cJSON* config){
 }
 
 void EventManager::RegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {
+    ESP_LOGV(__FUNCTION__,"Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
     ESP_ERROR_CHECK(esp_event_handler_register(eventHandlerDescriptor->GetEventBase(), ESP_EVENT_ANY_ID, EventManager::ProcessEvent, eventHandlerDescriptor));
 }
 
@@ -56,6 +57,7 @@ void EventManager::ProcessEvent(void *handler_args, esp_event_base_t base, int32
     EventHandlerDescriptor* handler = (EventHandlerDescriptor*)handler_args;
     uint8_t idx =0;
     EventInterpretor* interpretor;
+    ESP_LOGV(__FUNCTION__,"Event::::%s",handler->GetName());
     while ((idx < MAX_NUM_EVENTS) && ((interpretor = EventManager::instance->eventInterpretors[idx++])!=NULL)){
         if (interpretor->IsValid(handler,id,event_data)) {
             interpretor->RunIt(handler,id,event_data);

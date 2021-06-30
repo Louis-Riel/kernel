@@ -4,7 +4,7 @@ idf_component_register(
     INCLUDE_DIRS "."
     PRIV_REQUIRES "microtar esp_littlefs"
     EMBED_FILES "../../res/favicon.ico"
-    EMBED_TXTFILES "../../res/index.html" "../../res/app.js" "../../res/app.css"
+    EMBED_TXTFILES "../../res/index.html" "../../res/app.js" "../../res/app.css" "../../res/configschema.json"
     SRCS "rest.cpp" "../../main/log.cpp" "../../main/utils.cpp" "handlers.cpp" "puller.cpp" "websocket.cpp"
 )
 

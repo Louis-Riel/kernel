@@ -27,11 +27,6 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-wifi_config_t wifi_config;
-static the_wifi_config *config;
-static Aper *clients[MAX_NUM_CLIENTS];
-static tcpip_adapter_ip_info_t ipInfo;
-
 uint8_t s_retry_num = 0;
 esp_netif_t *sta_netif = NULL;
 esp_netif_t *ap_netif = NULL;
@@ -40,33 +35,159 @@ wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
 TaskHandle_t restHandle = NULL;
 TaskHandle_t timeHandle = NULL;
 
-Aper **GetClients()
+static TheWifi*  theInstance = NULL;
+
+tcpip_adapter_ip_info_t *TheWifi::GetApIp()
 {
-    return clients;
+    return &staIp;
 }
 
-tcpip_adapter_ip_info_t *GetIpInfo()
+tcpip_adapter_ip_info_t *TheWifi::GetStaIp()
 {
-    return &ipInfo;
+    return &apIp;
 }
 
-the_wifi_config *getWifiConfig()
-{
-    assert(config);
-    return config;
+TheWifi* TheWifi::GetInstance(){
+    return theInstance;
 }
 
-void InferPassword(const char *sid, char *pwd)
+EventGroupHandle_t TheWifi::GetEventGroup(){
+    return theInstance->GetEventGroup();
+}
+
+TheWifi::~TheWifi(){
+    theInstance=NULL;
+}
+
+
+TheWifi::TheWifi(AppConfig* config)
+    :ManagedDevice(config,"Wifi"),
+    status(BuildStatus())
 {
-    AppConfig *cfg = GetAppConfig();
-    cJSON *stations = cfg->GetJSONConfig("/stations");
+    theInstance = this;
+    eventGroup = xEventGroupCreate();
+    esp_pm_config_esp32_t pm_config;
+    pm_config.max_freq_mhz = 240;
+    pm_config.min_freq_mhz = 240;
+    pm_config.light_sleep_enable = false;
+    memset(&apIp, 0, sizeof(apIp));
+    memset(&staIp, 0, sizeof(staIp));
+    memset(clients, 0, sizeof(void *) * MAX_NUM_CLIENTS);
+    memset(&wifi_config,0,sizeof(wifi_config));
+
+    AppConfig *appcfg = AppConfig::GetAppConfig();
+
+    esp_err_t ret;
+    if ((ret = esp_pm_configure(&pm_config)) != ESP_OK)
+    {
+        printf("pm config error %s\n",
+               ret == ESP_ERR_INVALID_ARG ? "ESP_ERR_INVALID_ARG" : "ESP_ERR_NOT_SUPPORTED");
+    }
+
+    xEventGroupClearBits(eventGroup, 0xff);
+
+    ESP_LOGD(__FUNCTION__, "Wifi mode isap:%d issta:%d %s", appcfg->IsAp(), appcfg->IsSta(), appcfg->GetStringProperty("wifitype"));
+
+    ESP_LOGD(__FUNCTION__, "Initializing netif");
+    ESP_ERROR_CHECK(esp_netif_init());
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_LOGD(__FUNCTION__, "Initialized netif");
+    nvs_flash_init();
+
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, this));
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, this));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(appcfg->IsAp() ? appcfg->IsSta() ? WIFI_MODE_APSTA : WIFI_MODE_AP : WIFI_MODE_STA));
+
+    if (appcfg->IsAp())
+    {
+        if (ap_netif == NULL)
+        {
+            ap_netif = esp_netif_create_default_wifi_ap();
+            esp_netif_set_hostname(ap_netif,appcfg->GetStringProperty("devName"));
+            ESP_LOGD(__FUNCTION__, "Created netif %li", (long int)ap_netif);
+            ESP_ERROR_CHECK(esp_netif_dhcps_start(ap_netif));
+            generateSidConfig(&wifi_config, true);
+            ESP_LOGD(__FUNCTION__, "Configured in AP Mode %s", wifi_config.ap.ssid);
+            ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_AP, &wifi_config));
+        }
+    }
+
+    if (appcfg->IsSta())
+    {
+        memset(&wifi_config.sta, 0, sizeof(wifi_sta_config_t));
+        if (sta_netif == NULL)
+        {
+            sta_netif = esp_netif_create_default_wifi_sta();
+            esp_netif_set_hostname(sta_netif,appcfg->GetStringProperty("devName"));
+            ESP_LOGD(__FUNCTION__, "created station netif....");
+            wifi_config.sta.pmf_cfg.capable = true;
+            wifi_config.sta.pmf_cfg.required = false;
+            wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+            ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_STA, &wifi_config));
+        }
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    if (handlerDescriptors == NULL)
+        EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
+
+    ESP_LOGD(__FUNCTION__, "esp_wifi_start finished.");
+}
+
+EventHandlerDescriptor* TheWifi::BuildHandlerDescriptors(){
+  ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
+  EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
+  handler->AddEventDescriptor(IP_EVENT_STA_GOT_IP,"IP_EVENT_STA_GOT_IP");
+  handler->AddEventDescriptor(IP_EVENT_STA_GOT_IP,"IP_EVENT_STA_GOT_IP");
+  handler->AddEventDescriptor(IP_EVENT_STA_LOST_IP,"IP_EVENT_STA_LOST_IP");
+  handler->AddEventDescriptor(IP_EVENT_AP_STAIPASSIGNED,"IP_EVENT_AP_STAIPASSIGNED");
+  handler->AddEventDescriptor(IP_EVENT_GOT_IP6,"IP_EVENT_GOT_IP6");
+  handler->AddEventDescriptor(IP_EVENT_ETH_GOT_IP,"IP_EVENT_ETH_GOT_IP");
+  handler->AddEventDescriptor(IP_EVENT_PPP_GOT_IP,"IP_EVENT_PPP_GOT_IP");
+  handler->AddEventDescriptor(IP_EVENT_PPP_LOST_IP,"IP_EVENT_PPP_LOST_IP");
+
+  handler->AddEventDescriptor(20+WIFI_EVENT_WIFI_READY,"WIFI_EVENT_WIFI_READY");
+  handler->AddEventDescriptor(20+WIFI_EVENT_SCAN_DONE,"WIFI_EVENT_SCAN_DONE");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_START,"WIFI_EVENT_STA_START");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_STOP,"WIFI_EVENT_STA_STOP");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_CONNECTED,"WIFI_EVENT_STA_CONNECTED");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_DISCONNECTED,"WIFI_EVENT_STA_DISCONNECTED");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_AUTHMODE_CHANGE,"WIFI_EVENT_STA_AUTHMODE_CHANGE");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_WPS_ER_SUCCESS,"WIFI_EVENT_STA_WPS_ER_SUCCESS");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_WPS_ER_FAILED,"WIFI_EVENT_STA_WPS_ER_FAILED");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_WPS_ER_TIMEOUT,"WIFI_EVENT_STA_WPS_ER_TIMEOUT");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_WPS_ER_PIN,"WIFI_EVENT_STA_WPS_ER_PIN");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_WPS_ER_PBC_OVERLAP,"WIFI_EVENT_STA_WPS_ER_PBC_OVERLAP");
+  handler->AddEventDescriptor(20+WIFI_EVENT_AP_START,"WIFI_EVENT_AP_START");
+  handler->AddEventDescriptor(20+WIFI_EVENT_AP_STOP,"WIFI_EVENT_AP_STOP");
+  handler->AddEventDescriptor(20+WIFI_EVENT_AP_STACONNECTED,"WIFI_EVENT_AP_STACONNECTED");
+  handler->AddEventDescriptor(20+WIFI_EVENT_AP_STADISCONNECTED,"WIFI_EVENT_AP_STADISCONNECTED");
+  handler->AddEventDescriptor(20+WIFI_EVENT_AP_PROBEREQRECVED,"WIFI_EVENT_AP_PROBEREQRECVED");
+  handler->AddEventDescriptor(20+WIFI_EVENT_FTM_REPORT,"WIFI_EVENT_FTM_REPORT");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_BSS_RSSI_LOW,"WIFI_EVENT_STA_BSS_RSSI_LOW");
+  handler->AddEventDescriptor(20+WIFI_EVENT_ACTION_TX_STATUS,"WIFI_EVENT_ACTION_TX_STATUS");
+  handler->AddEventDescriptor(20+WIFI_EVENT_ROC_DONE,"WIFI_EVENT_ROC_DONE");
+  handler->AddEventDescriptor(20+WIFI_EVENT_STA_BEACON_TIMEOUT,"WIFI_EVENT_STA_BEACON_TIMEOUT");
+  handler->AddEventDescriptor(20+WIFI_EVENT_MAX,"WIFI_EVENT_MAX");
+
+  return handler;
+}
+
+void TheWifi::InferPassword(const char *sid, char *pwd)
+{
+    cJSON *stations = GetAppConfig()->GetJSONConfig("/stations");
     if ((stations != NULL) && (cJSON_IsArray(stations)))
     {
         cJSON *ap = NULL;
         cJSON_ArrayForEach(ap, stations)
         {
             cJSON *jsid = cJSON_GetObjectItem(ap, "ssid");
-            if (strcmp(cJSON_GetObjectItem(jsid, "value")->valuestring, sid) == 0)
+            if (cJSON_HasObjectItem(jsid, "value") &&
+                cJSON_IsString(cJSON_GetObjectItem(jsid, "value")) &&
+                strcmp(cJSON_GetObjectItem(jsid, "value")->valuestring, sid) == 0)
             {
                 cJSON *jpwd = cJSON_GetObjectItem(ap, "password");
                 strcpy(pwd, cJSON_GetObjectItem(jpwd, "value")->valuestring);
@@ -84,30 +205,41 @@ void InferPassword(const char *sid, char *pwd)
     pwd[4 + sidLen] = 0;
 }
 
-bool isSidManaged(const char *sid)
+bool TheWifi::isSidPuller(const char *sid, bool isTracker)
 {
-    AppConfig *cfg = GetAppConfig();
-    cJSON *stations = cfg->GetJSONConfig("/stations");
-    if ((stations != NULL) && (cJSON_IsArray(stations)))
-    {
-        cJSON *ap = NULL;
-        cJSON_ArrayForEach(ap, stations)
-        {
-            cJSON *jsid = cJSON_GetObjectItem(ap, "ssid");
-            if (strcmp(cJSON_GetObjectItem(jsid, "value")->valuestring, sid) == 0)
-            {
-                return true;
-            }
-        }
-    }
-
-    return ((startsWith(sid, "VIDEOETRON ") != 0) ||
+    return isTracker &&
+           ((startsWith(sid, "VIDEOETRON ") != 0) ||
             (startsWith(sid, "BELL ") != 0) ||
             (startsWith(sid, "Cogeco ") != 0) ||
             (startsWith(sid, "Linksys    ") != 0));
 }
 
-void generateSidConfig(wifi_config_t *wc, bool hasGps)
+bool TheWifi::isSidManaged(const char *sid, bool isTracker)
+{
+    if ((sid == NULL) || (strlen(sid)==0)){
+        return false;
+    }
+    AppConfig *cfg = GetAppConfig();
+    cJSON *stations = cfg->GetJSONConfig("/stations");
+    if ((stations != NULL) && (cJSON_IsArray(stations)))
+    {
+        cJSON *ap = NULL;
+        char* csid = NULL;
+        cJSON_ArrayForEach(ap, stations)
+        {
+            if (((csid = cJSON_GetObjectItem(cJSON_GetObjectItem(ap, "ssid"), "value")->valuestring) != NULL) &&
+                (csid != NULL) &&
+                strlen(csid) &&
+                (strcmp(csid, sid) == 0))
+            {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void TheWifi::generateSidConfig(wifi_config_t *wc, bool hasGps)
 {
     ESP_LOGD(__FUNCTION__, "Generating SID %s", hasGps ? "with gps" : "without gps");
     if (hasGps)
@@ -242,38 +374,31 @@ static void print_cipher_type(cJSON* json, int pairwise_cipher, int group_cipher
     }
 }
 
-bool wifiScan()
+bool TheWifi::wifiScan()
 {
-    if (xEventGroupGetBits(config->s_wifi_eg) & WIFI_SCAN_READY_BIT)
-    {
-        wifi_scan_config_t scan_config = {
-            .ssid = 0,
-            .bssid = 0,
-            .channel = 0,
-            .show_hidden = false,
-            .scan_type = WIFI_SCAN_TYPE_ACTIVE,
-            .scan_time = {
-                .active = {
-                    .min = 100,
-                    .max = 500},
-                .passive = 500}};
+    wifi_scan_config_t scan_config = {
+        .ssid = 0,
+        .bssid = 0,
+        .channel = 0,
+        .show_hidden = false,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time = {
+            .active = {
+                .min = 100,
+                .max = 500},
+            .passive = 500}};
 
-        xEventGroupClearBits(config->s_wifi_eg, WIFI_SCAN_READY_BIT);
-        if (esp_wifi_scan_start(&scan_config, false) != ESP_OK)
-        {
-            ESP_LOGW(__FUNCTION__, "Cannot scan");
-            return false;
-        }
-        xEventGroupSetBits(config->s_wifi_eg, WIFI_SCANING_BIT);
-        ESP_LOGD(__FUNCTION__, "Scanning APs");
-        return true;
-    } else {
-        ESP_LOGW(__FUNCTION__,"Not ready to scan the wifi");
+    if (esp_wifi_scan_start(&scan_config, false) != ESP_OK)
+    {
+        ESP_LOGW(__FUNCTION__, "Cannot scan");
         return false;
     }
+    xEventGroupSetBits(eventGroup, WIFI_SCANING_BIT);
+    ESP_LOGD(__FUNCTION__, "Scanning APs");
+    return true;
 }
 
-void ProcessScannedAPs()
+void TheWifi::ProcessScannedAPs()
 {
     uint16_t number = DEFAULT_SCAN_LIST_SIZE;
     uint16_t ap_count = 0;
@@ -282,21 +407,23 @@ void ProcessScannedAPs()
     ESP_LOGD(__FUNCTION__, "Getting Scanned AP");
     if ((ret = esp_wifi_scan_get_ap_records(&number, ap_info)) == ESP_OK)
     {
-        AppConfig* wifi = AppConfig::GetAppStatus()->GetConfig("/wifi");
-        cJSON* json = wifi->GetJSONConfig(NULL);
-        cJSON* APs = wifi->GetJSONConfig("/APs");
-        free(wifi);
+        AppConfig* appStatus = AppConfig::GetAppStatus();
+        AppConfig* appCfg = AppConfig::GetAppConfig();
+        cJSON* wifiCfg = appStatus->GetJSONConfig("/wifi");
+        cJSON* APs = appStatus->GetJSONConfig("/wifi/APs");
         if (APs != NULL) {
-            cJSON_DeleteItemFromObject(json,"APs");
+            cJSON_DeleteItemFromObject(wifiCfg,"APs");
         }
-        APs = cJSON_AddArrayToObject(json,"APs");
+        APs = cJSON_AddArrayToObject(wifiCfg,"APs");
 
         ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
         ESP_LOGD(__FUNCTION__, "Total APs scanned = %u", ap_count);
         int lastWinner=-1;
         int8_t lastRssi=-124;
         uint8_t numWinners=0;
-        for (int i = 0; (i < DEFAULT_SCAN_LIST_SIZE) && (i < ap_count); i++)
+        bool isTracker = appCfg->HasProperty("clienttype") && strcmp(appCfg->GetStringProperty("clienttype"),"tracker")==0;
+        bool hasPuller = false;
+        for (int i = 0; (i < ap_count) ; i++)
         {
             cJSON* AP = cJSON_CreateObject();
             cJSON_AddItemToArray(APs,AP);
@@ -308,8 +435,15 @@ void ProcessScannedAPs()
             {
                 print_cipher_type(AP,ap_info[i].pairwise_cipher, ap_info[i].group_cipher);
             }
-            if (isSidManaged((const char *)ap_info[i].ssid))
+            if (!hasPuller && isSidManaged((const char *)ap_info[i].ssid,isTracker))
             {
+                if(ap_info[i].rssi > lastRssi) {
+                    lastRssi = ap_info[1].rssi;
+                    lastWinner = i;
+                }
+            }
+            if (isSidPuller((const char *)ap_info[i].ssid,true)) {
+                hasPuller=true;
                 if(ap_info[i].rssi > lastRssi) {
                     lastRssi = ap_info[1].rssi;
                     lastWinner = i;
@@ -323,18 +457,17 @@ void ProcessScannedAPs()
                 ESP_LOGW(__FUNCTION__, "Cannot stop scan");
             }
 
+            ESP_LOGD(__FUNCTION__, "Connecting to %s/", ap_info[lastWinner].ssid);
             strcpy((char *)wifi_config.sta.ssid, (char *)ap_info[lastWinner].ssid);
             InferPassword((char *)wifi_config.sta.ssid, (char *)wifi_config.sta.password);
             memcpy(wifi_config.sta.bssid, ap_info[lastWinner].bssid, sizeof(uint8_t) * 6);
             wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-            ESP_LOGD(__FUNCTION__, "Connecting to %s/", ap_info[lastWinner].ssid);
             ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_STA, &wifi_config));
 
             if (esp_wifi_connect() == ESP_OK)
             {
-                ESP_LOGD(__FUNCTION__, "Configured in Station Mode %s/%s", wifi_config.sta.ssid, wifi_config.sta.password);
-                xEventGroupClearBits(config->s_wifi_eg, WIFI_SCAN_READY_BIT);
-                xEventGroupSetBits(config->s_wifi_eg, WIFI_STA_CONFIGURED);
+                ESP_LOGD(__FUNCTION__, "Configured in Station Mode %s", wifi_config.sta.ssid);
+                xEventGroupSetBits(eventGroup, WIFI_STA_CONFIGURED);
                 return;
             }
         }
@@ -346,7 +479,7 @@ void ProcessScannedAPs()
     wifiScan();
 }
 
-Aper *GetAper(uint8_t *mac)
+Aper *TheWifi::GetAper(uint8_t *mac)
 {
     uint8_t freeSlot = 254;
     uint8_t emptySlot = 254;
@@ -387,6 +520,11 @@ void time_sync_notification_cb(struct timeval *tv)
     sntp_set_sync_status(SNTP_SYNC_STATUS_COMPLETED);
 }
 
+cJSON* TheWifi::BuildStatus(){
+    AppConfig* state = AppConfig::GetAppStatus();
+    return state->GetJSONConfig("wifistat");
+}
+
 static void updateTime(void *param)
 {
     ESP_LOGV(__FUNCTION__, "Initializing SNTP");
@@ -410,33 +548,40 @@ static void updateTime(void *param)
     vTaskDelete(NULL);
 }
 
-void static ParseStateBits(AppConfig* state) {
-    EventBits_t bits = xEventGroupGetBits(config->s_wifi_eg);
+
+void TheWifi::ParseStateBits(AppConfig* state) {
+    EventBits_t bits = xEventGroupGetBits(eventGroup);
     state->SetBoolProperty("Connected",bits & WIFI_CONNECTED_BIT);
     state->SetBoolProperty("Scanning",bits & WIFI_SCANING_BIT);
     state->SetBoolProperty("Up",bits & WIFI_UP_BIT);
-    state->SetBoolProperty("Synching",!(bits & WIFI_CLIENT_DONE));
+    state->SetBoolProperty("Station",bits & WIFI_STA_CONFIGURED);
 }
 
-void static RefreshApMembers(AppConfig* state) {
+int TheWifi::RefreshApMembers(AppConfig* state) {
     Aper **clients = GetClients();
     cJSON* json = state->GetJSONConfig(NULL);
     cJSON_DeleteItemFromObject(json,"clients");
     cJSON* jclients = cJSON_AddArrayToObject(json,"clients");
 
     int idx = 0;
+    int ret = 0;
     for (Aper *client = clients[idx++]; idx < MAX_NUM_CLIENTS; client = clients[idx++])
     {
         if (client)
         {
+            if (client->isConnected()) {
+                ret++;
+            }
             cJSON_AddItemToArray(jclients, client->toJson());
         }
     }
     AppConfig::SignalStateChange(state_change_t::WIFI);
+    return ret;
 }
 
-void static network_event(void *handler_arg, esp_event_base_t base, int32_t event_id, void *event_data)
+void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t event_id, void *event_data)
 {
+    TheWifi* theWifi = (TheWifi*) handler_arg;
     Aper *client = NULL;
     AppConfig *cfg = GetAppConfig();
     AppConfig* state = AppConfig::GetAppStatus();
@@ -444,6 +589,7 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
     AppConfig* apStat = state->GetConfig("/wifi/ap");
     if (base == IP_EVENT)
     {
+        theWifi->PostEvent(event_data,sizeof(void*),event_id);
         ESP_LOGV(__FUNCTION__, "ip event %d", event_id);
         ip_event_got_ip_t *event;
         system_event_info_t *evt;
@@ -456,11 +602,12 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
                 break;
             }
             char ipaddr[16];
-            sprintf(ipaddr,IPSTR, IP2STR(&ipInfo.ip));
+            sprintf(ipaddr,IPSTR, IP2STR(&event->ip_info.ip));
             ESP_LOGI(__FUNCTION__, "got ip::%s", ipaddr);
-            memcpy(&ipInfo, &event->ip_info, sizeof(ipInfo));
-            xEventGroupSetBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
-            ParseStateBits(stationStat);
+            memcpy(&theWifi->staIp, &event->ip_info, sizeof(theWifi->staIp));
+            xEventGroupSetBits(eventGroup, WIFI_CONNECTED_BIT);
+            xEventGroupClearBits(eventGroup, WIFI_DISCONNECTED_BIT);
+            theWifi->ParseStateBits(stationStat);
             initSPISDCard();
 
             time_t now;
@@ -474,21 +621,27 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
                 xTaskCreate(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, &timeHandle);
             }
 
-            if (restHandle == NULL)
+            if (!(xEventGroupGetBits(eventGroup) & HTTP_SERVING))
             {
-                xTaskCreate(restSallyForth, "restSallyForth", 4096, getWifiConfig(), tskIDLE_PRIORITY, &restHandle);
+                xTaskCreate(restSallyForth, "restSallyForth", 4096, eventGroup, tskIDLE_PRIORITY, &restHandle);
             }
             break;
         case IP_EVENT_STA_LOST_IP:
             ESP_LOGI(__FUNCTION__, "lost ip");
-            xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
-            ParseStateBits(stationStat);
+
+            if (!cfg->IsAp() || (theWifi->RefreshApMembers(apStat) == 0)) {
+                xEventGroupSetBits(eventGroup, WIFI_DISCONNECTED_BIT);
+                xEventGroupClearBits(eventGroup, WIFI_CONNECTED_BIT);
+            }
+
+            theWifi->wifiScan();
+            theWifi->ParseStateBits(stationStat);
             break;
         case IP_EVENT_AP_STAIPASSIGNED:
             if (station != NULL)
             {
                 evt = (system_event_info_t *)event_data;
-                client = GetAper(station->mac);
+                client = theWifi->GetAper(station->mac);
                 if (evt != NULL)
                 {
                     if (client != NULL)
@@ -529,7 +682,7 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
                         }
                     }
                 }
-                RefreshApMembers(apStat);
+                theWifi->RefreshApMembers(apStat);
             }
             else
             {
@@ -544,66 +697,52 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
     if (base == WIFI_EVENT)
     {
         ESP_LOGV(__FUNCTION__, "wifi event %d", event_id);
+        theWifi->PostEvent(event_data,event_data != NULL ? sizeof(void*) : 0,event_id+20);
         switch (event_id)
         {
         case WIFI_EVENT_STA_START:
             ESP_LOGD(__FUNCTION__, "Wifi Station is up");
-            if (config->s_wifi_eg)
-            {
-                if (xEventGroupGetBits(config->s_wifi_eg) & WIFI_SCAN_READY_BIT)
-                {
-                    wifiScan();
-                }
-                else if ((xEventGroupGetBits(config->s_wifi_eg) & WIFI_STA_CONFIGURED) && esp_wifi_connect() == ESP_OK)
-                {
-                    xEventGroupClearBits(config->s_wifi_eg, WIFI_SCANING_BIT);
-                    ESP_LOGD(__FUNCTION__, "Configured in Station Mode");
-                }
-            }
-            else
-            {
-                ESP_LOGW(__FUNCTION__, "Wifi does not have an event handler, weirdness is afoot");
-            }
-            ParseStateBits(stationStat);
+            xEventGroupSetBits(eventGroup, WIFI_UP_BIT);
+            theWifi->wifiScan();
+            theWifi->ParseStateBits(stationStat);
             break;
         case WIFI_EVENT_STA_STOP:
-            xEventGroupClearBits(config->s_wifi_eg, WIFI_SCANING_BIT);
-            xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
-            xEventGroupClearBits(config->s_wifi_eg, WIFI_SCAN_READY_BIT);
-            ParseStateBits(stationStat);
+            xEventGroupClearBits(eventGroup, WIFI_UP_BIT);
+            theWifi->ParseStateBits(stationStat);
             break;
         case WIFI_EVENT_SCAN_DONE:
-            xEventGroupClearBits(config->s_wifi_eg, WIFI_SCANING_BIT);
-            ParseStateBits(stationStat);
-            ProcessScannedAPs();
+            xEventGroupClearBits(eventGroup, WIFI_SCANING_BIT);
+            theWifi->ParseStateBits(stationStat);
+            theWifi->ProcessScannedAPs();
             break;
         case WIFI_EVENT_AP_START:
             ESP_LOGD(__FUNCTION__, "AP STARTED");
-            xEventGroupSetBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
-            tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_AP, &ipInfo);
+            xEventGroupSetBits(eventGroup, WIFI_UP_BIT);
+            tcpip_adapter_get_ip_info(TCPIP_ADAPTER_IF_AP, &theWifi->staIp);
             char ipaddt[16];
-            sprintf(ipaddt,IPSTR, IP2STR(&ipInfo.ip));
+            sprintf(ipaddt,IPSTR, IP2STR(&theWifi->staIp.ip));
             ESP_LOGD(__FUNCTION__, "AP ip::%s", ipaddt);
-            ParseStateBits(apStat);
+            theWifi->ParseStateBits(apStat);
             apStat->SetStringProperty("Ip", ipaddt);
-            if (restHandle == NULL)
-            {
-                xTaskCreate(restSallyForth, "restSallyForth", 4096, getWifiConfig(), tskIDLE_PRIORITY, &restHandle);
-            }
             break;
         case WIFI_EVENT_AP_STOP:
             ESP_LOGD(__FUNCTION__, "AP STOPPED");
-            xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
-            xEventGroupClearBits(eventGroup, HTTP_SERVING);
-            ParseStateBits(apStat);
+            xEventGroupClearBits(eventGroup, WIFI_UP_BIT);
+            theWifi->ParseStateBits(apStat);
             break;
         case WIFI_EVENT_AP_STACONNECTED:
+            xEventGroupSetBits(eventGroup, WIFI_CONNECTED_BIT);
+            xEventGroupClearBits(eventGroup, WIFI_DISCONNECTED_BIT);
             memcpy((void *)station, (void *)event_data, sizeof(wifi_event_ap_staconnected_t));
             ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x join, AID=%d",
                      MAC2STR(station->mac), station->aid);
-            client = GetAper(station->mac);
+            client = theWifi->GetAper(station->mac);
             if (client != NULL)
             {
+                if (!(xEventGroupGetBits(eventGroup) & HTTP_SERVING))
+                {
+                    xTaskCreate(restSallyForth, "restSallyForth", 4096, eventGroup, tskIDLE_PRIORITY, &restHandle);
+                }
                 client->Associate();
             }
             else
@@ -611,41 +750,48 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
                 ESP_LOGE(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x count not be created, AID=%d",
                          MAC2STR(station->mac), station->aid);
             }
-            RefreshApMembers(apStat);
+            theWifi->RefreshApMembers(apStat);
             initSPISDCard();
             break;
         case WIFI_EVENT_AP_STADISCONNECTED:
             ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x Disconnected, AID=%d",
                      MAC2STR(station->mac), station->aid);
-            client = GetAper(station->mac);
+            client = theWifi->GetAper(station->mac);
             if (client != NULL)
             {
                 client->Dissassociate();
             }
-            RefreshApMembers(apStat);
+            if (!cfg->IsAp() || (theWifi->RefreshApMembers(apStat) == 0)) {
+                xEventGroupSetBits(eventGroup, WIFI_DISCONNECTED_BIT);
+                xEventGroupClearBits(eventGroup, WIFI_CONNECTED_BIT);
+            }
             deinitSPISDCard();
             break;
         case WIFI_EVENT_STA_CONNECTED:
+            xEventGroupSetBits(eventGroup, WIFI_CONNECTED_BIT);
+            xEventGroupClearBits(eventGroup, WIFI_DISCONNECTED_BIT);
             wifi_ap_record_t ap_info;
             esp_wifi_sta_get_ap_info(&ap_info);
             ESP_LOGI(__FUNCTION__, "Wifi Connected to %s", ap_info.ssid);
-            xEventGroupSetBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
-            ParseStateBits(stationStat);
+            theWifi->ParseStateBits(stationStat);
             //esp_netif_dhcpc_start(sta_netif);
             break;
         case WIFI_EVENT_STA_DISCONNECTED:
-            if (xEventGroupGetBits(config->s_wifi_eg) & WIFI_CONNECTED_BIT)
+            if (xEventGroupGetBits(eventGroup) & WIFI_CONNECTED_BIT)
             {
                 ESP_LOGD(__FUNCTION__, "Got disconnected from AP");
                 deinitSPISDCard();
-                xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
-                ParseStateBits(stationStat);
-                ESP_LOGI(__FUNCTION__, "Trying to reconnect");
+
+                if (!cfg->IsAp() || (theWifi->RefreshApMembers(apStat) == 0)) {
+                    xEventGroupSetBits(eventGroup, WIFI_DISCONNECTED_BIT);
+                    xEventGroupClearBits(eventGroup, WIFI_CONNECTED_BIT);
+                }
+                theWifi->ParseStateBits(stationStat);
             }
-            if (!(xEventGroupGetBits(config->s_wifi_eg) & WIFI_CLIENT_DONE) || (cfg->IsAp() && cfg->IsSta()))
+            if (!(xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCED) || (cfg->IsAp() && cfg->IsSta()))
             {
-                ESP_LOGV(__FUNCTION__, "Reconnecting");
-                esp_wifi_connect();
+                ESP_LOGI(__FUNCTION__, "Trying to reconnect");
+                theWifi->wifiScan();
             }
             break;
         default:
@@ -658,99 +804,26 @@ void static network_event(void *handler_arg, esp_event_base_t base, int32_t even
     AppConfig::SignalStateChange(state_change_t::WIFI);
 }
 
-void wifiStop(void *pvParameter)
+void TheWifi::wifiStop(void *pvParameter)
 {
     esp_wifi_disconnect();
     esp_wifi_stop();
     esp_wifi_deinit();
     esp_netif_deinit();
-    xEventGroupClearBits(config->s_wifi_eg, WIFI_UP_BIT);
+    theInstance=NULL;
 }
 
 void wifiSallyForth(void *pvParameter)
 {
-    esp_pm_config_esp32_t pm_config;
-    pm_config.max_freq_mhz = 240;
-    pm_config.min_freq_mhz = 240;
-    pm_config.light_sleep_enable = false;
-    memset(&ipInfo, 0, sizeof(ipInfo));
-    AppConfig *appcfg = AppConfig::GetAppConfig();
-
-    esp_err_t ret;
-    if ((ret = esp_pm_configure(&pm_config)) != ESP_OK)
-    {
-        printf("pm config error %s\n",
-               ret == ESP_ERR_INVALID_ARG ? "ESP_ERR_INVALID_ARG" : "ESP_ERR_NOT_SUPPORTED");
+    if (TheWifi::GetInstance() == NULL) {
+        new TheWifi(AppConfig::GetAppConfig());
     }
-
-    if (config == NULL)
-    {
-        config = (the_wifi_config *)dmalloc(sizeof(the_wifi_config));
-        memset(config, 0, sizeof(the_wifi_config));
-        config->s_wifi_eg = xEventGroupCreate();
-        config->disconnectWaitTime = 2000;
-        config->poolWaitTime = 3000;
-        xEventGroupClearBits(config->s_wifi_eg, WIFI_SCANING_BIT);
-        xEventGroupClearBits(config->s_wifi_eg, WIFI_CONNECTED_BIT);
-        xEventGroupClearBits(config->s_wifi_eg, WIFI_SCAN_READY_BIT);
-
-        ESP_LOGD(__FUNCTION__, "Wifi mode isap:%d issta:%d %s", appcfg->IsAp(), appcfg->IsSta(), appcfg->GetStringProperty("type"));
-        config->wifi_mode = appcfg->IsAp() ? appcfg->IsSta() ? WIFI_MODE_APSTA : WIFI_MODE_AP : WIFI_MODE_STA;
-        memset(clients, 0, sizeof(void *) * MAX_NUM_CLIENTS);
-    }
-
-    ESP_LOGD(__FUNCTION__, "Initializing netif");
-    ESP_ERROR_CHECK(esp_netif_init());
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_LOGD(__FUNCTION__, "Initialized netif");
-    nvs_flash_init();
-
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &network_event, NULL));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(config->wifi_mode));
-
-    if (appcfg->IsAp())
-    {
-        if (ap_netif == NULL)
-        {
-            ap_netif = esp_netif_create_default_wifi_ap();
-            ESP_LOGD(__FUNCTION__, "Created netif %li", (long int)ap_netif);
-            ESP_ERROR_CHECK(esp_netif_dhcps_start(ap_netif));
-            generateSidConfig(&wifi_config, pvParameter != NULL);
-            ESP_LOGD(__FUNCTION__, "Configured in AP Mode %s/%s", wifi_config.ap.ssid, wifi_config.ap.password);
-            ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_AP, &wifi_config));
-        }
-    }
-
-    if (appcfg->IsSta())
-    {
-        memset(&wifi_config.sta, 0, sizeof(wifi_sta_config_t));
-        xEventGroupSetBits(config->s_wifi_eg, WIFI_SCAN_READY_BIT);
-        if (sta_netif == NULL)
-        {
-            sta_netif = esp_netif_create_default_wifi_sta();
-            ESP_LOGD(__FUNCTION__, "created station netif....");
-            wifi_config.sta.pmf_cfg.capable = true;
-            wifi_config.sta.pmf_cfg.required = false;
-            wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-            ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_STA, &wifi_config));
-        }
-    }
-
-    ESP_ERROR_CHECK(esp_wifi_start());
-    xEventGroupSetBits(config->s_wifi_eg, WIFI_UP_BIT);
-
-    EventHandlerDescriptor *handler = new EventHandlerDescriptor(IP_EVENT, "IP_EVENT");
-    handler->SetEventName(IP_EVENT_AP_STAIPASSIGNED, "IP_EVENT_AP_STAIPASSIGNED");
-    handler->SetEventName(IP_EVENT_STA_GOT_IP, "IP_EVENT_STA_GOT_IP");
-    EventManager::RegisterEventHandler(handler);
-
-    s_retry_num = 0;
-    ESP_LOGD(__FUNCTION__, "esp_wifi_start finished.");
-
     vTaskDelete(NULL);
+}
+
+Aper ** TheWifi::GetClients()
+{
+    return clients;
 }
 
 Aper::Aper(uint8_t station[6])

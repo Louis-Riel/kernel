@@ -31,6 +31,8 @@ extern const unsigned char app_css_start[] asm("_binary_app_css_start");
 extern const unsigned char app_css_end[]   asm("_binary_app_css_end");
 extern const unsigned char app_js_start[] asm("_binary_app_js_start");
 extern const unsigned char app_js_end[]   asm("_binary_app_js_end");
+extern const unsigned char jsonschema_start[] asm("_binary_configschema_json_start");
+extern const unsigned char jsonschema_end[]   asm("_binary_configschema_json_end");
 
 struct poiConfig_t {
   float lat;
@@ -119,17 +121,6 @@ struct trip
   uint32_t lastExportedTs = 0;
 };
 
-struct app_config_t {
-  uint32_t devId;
-  cfg_label_t devName;
-//  gps_config_t gps_config;
-  sdcard_config_t sdcard_config;
-  purpose_t purpose;
-  cfg_gpio_t wakePins[10];
-  poiConfig_t pois[MAX_NUM_POIS];
-  gpio_driver_t pins[MAX_NUM_PINS];
-};
-
 class AppConfig {
 public:
   AppConfig(char* filePath);
@@ -167,12 +158,12 @@ public:
   void SetBoolProperty(const char* path,bool value);
   bool IsAp();
   bool IsSta();
+  static cJSON* GetPropertyHolder(cJSON* prop);
 protected:
   cJSON* GetJSONProperty(cJSON* json,const char* path, bool createWhenMissing);
   cJSON* GetJSONProperty(const char* path);
   cJSON* GetJSONConfig(cJSON* json, const char* path,bool createWhenMissing);
   void SaveAppConfig(bool skipMount);
-  cJSON* GetPropertyHolder(cJSON* prop);
   cJSON* json;
   static AppConfig* configInstance;
   static AppConfig* statusInstance;
@@ -202,7 +193,6 @@ FILE * fOpen (const char * _name, const char * _type);
 FILE * fopen (const char * _name, const char * _type,bool createDir);
 FILE * fopen (const char * _name, const char * _type,bool createDir, bool log);
 
-app_config_t* initConfig();
 void commitTripToDisk(void* param);
 trip* getActiveTrip();
 void stopGps();

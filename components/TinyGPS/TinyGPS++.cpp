@@ -1082,7 +1082,10 @@ bool TinyGPSPlus::endOfTermHandler()
     }
 
   // Set custom values as needed
-  for (TinyGPSCustom *p = customCandidates; p != NULL && strcmp(p->sentenceName, customCandidates->sentenceName) == 0 && p->termNumber <= curTermNumber; p = p->next)
+  for (TinyGPSCustom *p = customCandidates; 
+      p != NULL && p->sentenceName != NULL &&
+       strcmp(p->sentenceName, customCandidates->sentenceName) == 0 
+       && p->termNumber <= curTermNumber; p = p->next)
     if (p->termNumber == curTermNumber)
       p->set(term);
 
@@ -1267,8 +1270,8 @@ void TinyGPSDecimal::commit()
   valid = updated = true;
   if ((jval != NULL) && (jval->valueint != val))
   {
-    jval->valueint = val;
-    jver->valueint++;
+    cJSON_SetIntValue(jval, val);
+    cJSON_SetIntValue(jver, jver->valueint+1);
   }
 }
 
@@ -1285,8 +1288,8 @@ void TinyGPSInteger::commit()
   valid = updated = true;
   if ((jval != NULL) && (jval->valueint != val))
   {
-    jval->valueint = val;
-    jver->valueint++;
+    cJSON_SetIntValue(jval, val);
+    cJSON_SetIntValue(jver, jver->valueint+1);
   }
 }
 

@@ -19,7 +19,6 @@ class Pin:ManagedDevice {
 public:
     Pin(AppConfig* config);
     ~Pin();
-    cJSON* GetStatus();
     static void PollPins();
     bool state;
     bool valid;
@@ -40,6 +39,8 @@ protected:
     void RefrestState();
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     EventHandlerDescriptor* BuildHandlerDescriptors();
+    cJSON* BuildStatus();
+    cJSON* status;
 };
 
 #endif

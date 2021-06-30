@@ -6,31 +6,22 @@
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
 #include "esp_wifi.h"
+#include "../eventmgr/eventmgr.h"
 #include "cJSON.h"
 
 #define WIFI_CONNECTED_BIT BIT0
-#define WIFI_SCAN_READY_BIT BIT1
-#define WIFI_SCANING_BIT BIT2
-#define WIFI_UP_BIT BIT3
-#define WIFI_CLIENT_DONE BIT4
-#define WIFI_STA_CONFIGURED BIT5
+#define WIFI_SCANING_BIT BIT1
+#define WIFI_UP_BIT BIT2
+#define WIFI_STA_CONFIGURED BIT3
+#define WIFI_DISCONNECTED_BIT BIT4
 
 #define DEFAULT_SCAN_LIST_SIZE 10
 #define MAX_NUM_CLIENTS 20
 
-typedef	struct {
-                uint32_t                        disconnectWaitTime;
-                uint32_t                        poolWaitTime;
-                EventGroupHandle_t              s_wifi_eg;
-                QueueHandle_t                   s_wf_msgqueue;
-                EventGroupHandle_t              s_bt_eg;
-                wifi_mode_t                     wifi_mode;
-                char                            wname[40];
-                char                            wpdw[40];
-} the_wifi_config;
 
 static void print_auth_mode(cJSON* json, int authmode);
 static void print_cipher_type(cJSON* json, int pairwise_cipher, int group_cipher);
+void wifiSallyForth(void *pvParameter);
 
 class Aper
 {
@@ -56,10 +47,49 @@ public:
     cJSON* toJson();
 };
 
-Aper** GetClients();
-tcpip_adapter_ip_info_t* GetIpInfo();
-void wifiSallyForth(void *pvParameter);
-void wifiStart(void *pvParameter);
-void wifiStop(void *pvParameter);
-the_wifi_config*  getWifiConfig();
+class TheWifi:ManagedDevice {
+public:
+    TheWifi(AppConfig* config);
+    ~TheWifi();
+    bool state;
+    bool valid;
+
+    tcpip_adapter_ip_info_t* GetStaIp();
+    tcpip_adapter_ip_info_t* GetApIp();
+    void wifiStart(void *pvParameter);
+    void wifiStop(void *pvParameter);
+    bool wifiScan();
+    static TheWifi* GetInstance();
+    static EventGroupHandle_t GetEventGroup();
+protected:
+    void ParseStateBits(AppConfig* state);
+
+    Aper** GetClients();
+    static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
+    static void network_event(void *handler_arg, esp_event_base_t base, int32_t event_id, void *event_data);
+
+    void HandleEvent(cJSON* params);
+    EventHandlerDescriptor* BuildHandlerDescriptors();
+    cJSON* BuildStatus();
+
+    Aper *clients[MAX_NUM_CLIENTS];
+    tcpip_adapter_ip_info_t apIp;
+    tcpip_adapter_ip_info_t staIp;
+    wifi_config_t wifi_config;
+    gpio_num_t pinNo;
+    uint32_t flags;
+    char* name;
+    cJSON* status;
+private:
+    int RefreshApMembers(AppConfig* state);
+    void InferPassword(const char *sid, char *pwd);
+    bool isSidPuller(const char *sid, bool isTracker);
+    void generateSidConfig(wifi_config_t *wc, bool hasGps);
+    void ProcessScannedAPs();
+    bool isSidManaged(const char *sid, bool isTracker);
+    Aper *GetAper(uint8_t *mac);
+    
+    EventGroupHandle_t              s_wifi_eg;
+};
+
 #endif

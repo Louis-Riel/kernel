@@ -505,7 +505,6 @@ esp_err_t list_entity_handler(httpd_req_t *req)
     char *jsonbuf = (char *)dmalloc(JSON_BUFFER_SIZE);
     memset(jsonbuf, 0, JSON_BUFFER_SIZE);
     *jsonbuf = '[';
-    xEventGroupClearBits(getWifiConfig()->s_wifi_eg, WIFI_CLIENT_DONE);
     ESP_LOGD(__FUNCTION__, "Getting %s url:%s", req->uri + 11, req->uri);
     if (endsWith(req->uri, "kml"))
     {
@@ -661,11 +660,9 @@ esp_err_t HandleWifiCommand(httpd_req_t *req)
             cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "enabled");
             if (jitem && (strcmp(jitem->valuestring, "no") == 0))
             {
-                xEventGroupSetBits(getWifiConfig()->s_wifi_eg, WIFI_CLIENT_DONE);
-                xEventGroupSetBits(*getAppEG(), app_bits_t::TRIPS_SYNCED);
                 ESP_LOGD(__FUNCTION__, "All done wif wifi");
                 ret = httpd_resp_send(req, "OK", 2);
-                wifiStop(NULL);
+                TheWifi::GetInstance()->wifiStop(NULL);
             }
             cJSON_Delete(jresponse);
         }
@@ -722,7 +719,6 @@ void parseFiles(void *param)
     }
     ldfree(fileName);
     ldfree(folderName);
-    parseFiles((void *)"/lfs/tars");
     xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT2 | BIT3), tskIDLE_PRIORITY, NULL);
     vTaskDelete(NULL);
 }
@@ -876,7 +872,7 @@ void sendTar(void *param)
             }
             else
             {
-                ESP_LOGE(__FUNCTION__, "Chunk won't go: %s", esp_err_to_name(ret));
+                ESP_LOGE(__FUNCTION__, "Chunk len %d won't go: %s", sp.sendLen, esp_err_to_name(ret));
                 xEventGroupSetBits(eventGroup, TAR_SEND_DONE);
                 break;
             }
@@ -1082,6 +1078,12 @@ esp_err_t app_handler(httpd_req_t *req)
         return httpd_resp_send(req, (const char *)app_css_start, app_css_end - app_css_start - 1);
     }
 
+    if (endsWith(req->uri, "configschema.json"))
+    {
+        httpd_resp_set_type(req, "text/json");
+        return httpd_resp_send(req, (const char *)jsonschema_start, jsonschema_end - jsonschema_start - 1);
+    }
+
     if (!endsWith(req->uri, "/"))
     {
         return sendFile(req);
@@ -1092,11 +1094,10 @@ esp_err_t app_handler(httpd_req_t *req)
 esp_err_t tarString(mtar_t *tar, const char *path, const char *data)
 {
     mtar_write_file_header(tar, path, strlen(data));
-    ESP_LOGV(__FUNCTION__, "tarString(%d) %s", strlen(data), data);
     return mtar_write_data(tar, data, strlen(data));
 }
 
-esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, const char *excludeList, uint32_t maxSize)
+esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, const char *excludeList, uint32_t maxSize, bool removeSrc)
 {
     if ((path == NULL) || (strlen(path) == 0))
     {
@@ -1128,7 +1129,7 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
     memset(theFolders, 0, 1024);
     memset(theFName, 0, 300);
 
-    ESP_LOGD(__FUNCTION__, "Parsing %s", path);
+    ESP_LOGV(__FUNCTION__, "Parsing %s", path);
     struct timeval tv_start, tv_end, tv_open, tv_stat, tv_rstart, tv_rend, tv_wstart, tv_wend;
 
     if ((theFolder = opendir(path)) != NULL)
@@ -1141,10 +1142,6 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
             {
                 break;
             }
-            if (tar->pos > maxSize)
-            {
-                break;
-            }
             if (fi->d_type == DT_DIR)
             {
                 if (recursive)
@@ -1153,7 +1150,7 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                     sprintf(kmlFileName, "%s/%s", path, fi->d_name);
                     sprintf(theFolders + fpos, "%s", kmlFileName);
                     fpos += strlen(kmlFileName) + 1;
-                    ESP_LOGD(__FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding dir (%s)%d", path, fcnt, dcnt, fpos, kmlFileName, strlen(kmlFileName));
+                    ESP_LOGV(__FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding dir (%s)%d", path, fcnt, dcnt, fpos, kmlFileName, strlen(kmlFileName));
                 }
             }
             else if ((ext == NULL) || (strlen(ext) == 0) || endsWith(fi->d_name, ext))
@@ -1165,11 +1162,11 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                     if ((theFile = fOpen(theFName, "r")) &&
                         (gettimeofday(&tv_open, NULL) == 0))
                     {
-
                         uint32_t startPos = tar->pos;
                         fcnt++;
                         bool headerWritten = false;
-                        while ((tarStat == MTAR_ESUCCESS) && !feof(theFile))
+                        bool allDone=false;
+                        while ((tarStat == MTAR_ESUCCESS) && !allDone)
                         {
                             gettimeofday(&tv_rstart, NULL);
                             if ((len = fread(buf, 1, F_BUF_SIZE, theFile)) > 0)
@@ -1185,41 +1182,75 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                                         fstat(fileno(theFile), &fileStat);
                                         gettimeofday(&tv_stat, NULL);
                                         tarStat = mtar_write_file_header(tar, theFName + 1, fileStat.st_size);
-                                        ESP_LOGD(__FUNCTION__, "stat %s: %d files. file %s, ram %d len: %li", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), fileStat.st_size);
+                                        ESP_LOGV(__FUNCTION__, "stat %s: %d files. file %s, ram %d len: %li", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), fileStat.st_size);
                                     }
                                     else
                                     {
                                         tv_stat = tv_end;
                                         tarStat = mtar_write_file_header(tar, theFName + 1, len);
-                                        ESP_LOGD(__FUNCTION__, "full %s: %d files. file %s, ram %d len: %d", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), len);
+                                        ESP_LOGV(__FUNCTION__, "full %s: %d files. file %s, ram %d len: %d", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), len);
                                     }
+                                    gettimeofday(&tv_wstart, NULL);
                                 }
 
-                                gettimeofday(&tv_wstart, NULL);
                                 tarStat = mtar_write_data(tar, buf, len);
                                 gettimeofday(&tv_wend, NULL);
+                                allDone=feof(theFile);
+                                if (allDone) {
+                                    fClose(theFile);
+                                    ESP_LOGV(__FUNCTION__,"Closing %s",theFName);
+                                    trip *curTrip = getActiveTrip();
+                                    if ((strlen(curTrip->fname) > 0) && endsWith(curTrip->fname, theFName))
+                                    {
+                                        removeSrc=false;
+                                    }
+
+                                    if (removeSrc && !endsWith(theFName,"json")){
+                                        ESP_LOGD(__FUNCTION__,"Removing %s",theFName);
+                                        int retCode = unlink(theFName);
+                                        if (retCode != 0) {
+                                            ESP_LOGE(__FUNCTION__,"unlink error %s",esp_err_to_name(retCode));
+                                        }
+                                    } else {
+                                        ESP_LOGV(__FUNCTION__,"removeSrc:%d && !endsWith(theFName,'json'):%d",removeSrc,endsWith(theFName,"json"));
+                                    }
+                                }
+                            } else {
+                                fClose(theFile);
+                                allDone=true;
+                                ESP_LOGV(__FUNCTION__,"Closing %s",theFName);
+                                if (removeSrc && !endsWith(theFName,"json")){
+                                    ESP_LOGD(__FUNCTION__,"Removing %s",theFName);
+                                    int retCode = unlink(theFName);
+                                    if (retCode != 0) {
+                                        ESP_LOGE(__FUNCTION__,"unlink error %s",esp_err_to_name(retCode));
+                                    }
+                                } else {
+                                    ESP_LOGD(__FUNCTION__,"removeSrc:%d && !endsWith(theFName,'json'):%d",removeSrc,endsWith(theFName,"json"));
+                                }
                             }
                             gettimeofday(&tv_end, NULL);
-                            int64_t start_time_ms = (int64_t)tv_start.tv_sec * 1000L + ((int64_t)tv_start.tv_usec / 1000);
-                            int64_t end_time_ms = (int64_t)tv_end.tv_sec * 1000L + ((int64_t)tv_end.tv_usec / 1000);
-                            int64_t oend_time_ms = (int64_t)tv_open.tv_sec * 1000L + ((int64_t)tv_open.tv_usec / 1000);
-                            int64_t ostat_time_ms = (int64_t)tv_stat.tv_sec * 1000L + ((int64_t)tv_stat.tv_usec / 1000);
-                            int64_t rstart_time_ms = (int64_t)tv_rstart.tv_sec * 1000L + ((int64_t)tv_rstart.tv_usec / 1000);
-                            int64_t rend_time_ms = (int64_t)tv_rend.tv_sec * 1000L + ((int64_t)tv_rend.tv_usec / 1000);
-                            int64_t wstart_time_ms = (int64_t)tv_wstart.tv_sec * 1000L + ((int64_t)tv_wstart.tv_usec / 1000);
-                            int64_t wend_time_ms = (int64_t)tv_wend.tv_sec * 1000L + ((int64_t)tv_wend.tv_usec / 1000);
-                            ESP_LOGV(__FUNCTION__, "%s: Total Time: %f,Open Time: %f,Stat Time: %f,Read Time: %f,Write Time: %f, Len: %d, Rate %f/s ram %d, ",
-                                     path,
-                                     (end_time_ms - start_time_ms) / 1000.0,
-                                     (oend_time_ms - start_time_ms) / 1000.0,
-                                     (ostat_time_ms - oend_time_ms) / 1000.0,
-                                     (rend_time_ms - rstart_time_ms) / 1000.0,
-                                     (wend_time_ms - wstart_time_ms) / 1000.0,
-                                     tar->pos - startPos,
-                                     (tar->pos - startPos) / ((end_time_ms - start_time_ms) / 1000.0),
-                                     heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
+                            if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG){
+                                int64_t start_time_ms = (int64_t)tv_start.tv_sec * 1000L + ((int64_t)tv_start.tv_usec / 1000);
+                                int64_t end_time_ms = (int64_t)tv_end.tv_sec * 1000L + ((int64_t)tv_end.tv_usec / 1000);
+                                int64_t oend_time_ms = (int64_t)tv_open.tv_sec * 1000L + ((int64_t)tv_open.tv_usec / 1000);
+                                int64_t ostat_time_ms = (int64_t)tv_stat.tv_sec * 1000L + ((int64_t)tv_stat.tv_usec / 1000);
+                                int64_t rstart_time_ms = (int64_t)tv_rstart.tv_sec * 1000L + ((int64_t)tv_rstart.tv_usec / 1000);
+                                int64_t rend_time_ms = (int64_t)tv_rend.tv_sec * 1000L + ((int64_t)tv_rend.tv_usec / 1000);
+                                int64_t wstart_time_ms = (int64_t)tv_wstart.tv_sec * 1000L + ((int64_t)tv_wstart.tv_usec / 1000);
+                                int64_t wend_time_ms = (int64_t)tv_wend.tv_sec * 1000L + ((int64_t)tv_wend.tv_usec / 1000);
+                                ESP_LOGV(__FUNCTION__, "%s: Total Time: %f,Open Time: %f,Stat Time: %f,Read Time: %f,Write Time: %f, Len: %d, Rate %f/s ram %d, ",
+                                        path,
+                                        (end_time_ms - start_time_ms) / 1000.0,
+                                        (oend_time_ms - start_time_ms) / 1000.0,
+                                        (ostat_time_ms - oend_time_ms) / 1000.0,
+                                        (rend_time_ms - rstart_time_ms) / 1000.0,
+                                        (wend_time_ms - wstart_time_ms) / 1000.0,
+                                        tar->pos - startPos,
+                                        (tar->pos - startPos) / ((end_time_ms - start_time_ms) / 1000.0),
+                                        heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
+                            }
                         }
-                        fClose(theFile);
                     }
                     else
                     {
@@ -1229,14 +1260,18 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                     }
                 }
             }
+            if (tar->pos > maxSize)
+            {
+                //break;
+            }
         }
         closedir(theFolder);
-        ESP_LOGD(__FUNCTION__, "%s has %d files and %d folders subfolder len:%d", path, fcnt, dcnt, fpos);
+        ESP_LOGV(__FUNCTION__, "%s had %d files and %d folders subfolder len:%d", path, fcnt, dcnt, fpos);
         uint32_t ctpos = 0;
         while (dcnt-- > 0)
         {
             ESP_LOGV(__FUNCTION__, "%d-%s: Getting sub-folder(%d) %s", dcnt, path, ctpos, theFolders + ctpos);
-            if ((ret = tarFiles(tar, theFolders + ctpos, ext, recursive, excludeList, maxSize)) != ESP_OK)
+            if ((ret = tarFiles(tar, theFolders + ctpos, ext, recursive, excludeList, maxSize,removeSrc)) != ESP_OK)
             {
                 ESP_LOGW(__FUNCTION__, "Error invoking getSdFiles for %s", kmlFileName);
             }
@@ -1255,6 +1290,10 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
     ldfree(kmlFileName);
     deinitSPISDCard();
     return ret;
+}
+
+esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, const char *excludeList, uint32_t maxSize) {
+    return tarFiles(tar,path,ext,recursive,excludeList,maxSize,true);
 }
 
 bool dumpFolder(char *folderName, mtar_t *tar)
@@ -1322,7 +1361,6 @@ bool dumpFolder(char *folderName, mtar_t *tar)
 
 esp_err_t trips_handler(httpd_req_t *req)
 {
-    ESP_LOGD(__FUNCTION__, "Sending Trips");
     mtar_t tar;
     memset(&tar, 0, sizeof(tar));
     tar.read = tarRead;
@@ -1332,9 +1370,11 @@ esp_err_t trips_handler(httpd_req_t *req)
 
     httpd_resp_set_type(req, "application/x-tar");
     httpd_resp_set_hdr(req, "filename", "trips.tar");
+    xEventGroupClearBits(*getAppEG(), app_bits_t::TRIPS_SYNCED);
 
     if (initSPISDCard())
     {
+        ESP_LOGD(__FUNCTION__, "Sending Trips");
         xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
         xEventGroupSetBits(eventGroup, TAR_BUFFER_SENT);
         xEventGroupClearBits(eventGroup, TAR_BUILD_DONE);
@@ -1347,19 +1387,25 @@ esp_err_t trips_handler(httpd_req_t *req)
         sp.len = 0;
 
         cJSON *status = status_json();
+        cJSON *astatus = AppConfig::GetAppStatus()->GetJSONConfig(NULL);
+        cJSON *stat;
+        cJSON_ArrayForEach(stat,astatus) {
+            cJSON_AddItemReferenceToObject(status, stat->string,stat);
+        }
         AppConfig *config = AppConfig::GetAppConfig();
         char *cs = NULL, *ss = NULL;
         if ((tarString(&tar, "status.json", (cs = cJSON_PrintUnformatted(status))) == ESP_OK) &&
             (tarString(&tar, "config.json", (ss = cJSON_PrintUnformatted(config->GetJSONConfig(NULL)))) == ESP_OK) &&
-            (tarFiles(&tar, "/lfs", "", true, "current.bin", 1048576) == ESP_OK) &&
-            (tarFiles(&tar, "/sdcard/logs", "", true, NULL, 1048576) == ESP_OK))
+            (tarFiles(&tar, "/lfs", "", true, "current.bin", 1048576) == ESP_OK))
         {
             ESP_LOGV(__FUNCTION__, "Finalizing tar");
             mtar_finalize(&tar);
             ESP_LOGV(__FUNCTION__, "Closing tar");
             mtar_close(&tar);
             deinitSPISDCard();
-        }
+            xEventGroupSetBits(*getAppEG(), app_bits_t::TRIPS_SYNCED);
+            TheWifi::GetInstance()->wifiStop(NULL);
+       }
         else
         {
             ESP_LOGE(__FUNCTION__, "Error sending trips");
