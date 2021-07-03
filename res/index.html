@@ -3,8 +3,11 @@
 <head>
     <link rel="icon" type="image/png" href="/favicon.ico" />
     <link rel="stylesheet" type="text/css" href="/app.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.5.1/jsoneditor.css" rel="stylesheet" type="text/css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.5.1/jsoneditor.min.js"></script>
+    <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
     <script type="text/javascript" src="/app.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@latest/dist/jsoneditor.min.js"></script>
 </head>
 
 <body>
@@ -36,14 +39,6 @@
                 </div>
             </div>
             <div id="slide-2" class="system-config">
-                <fieldset id="controls">
-                    <legend>Controls</legend>
-                    <label class="editable"><div class="label">Periodic Refresh</div><input onclick="PeriodicRefreshClicked(this)" type="checkbox"></label>
-                    <label class="editable"><div class="label">Freq(sec)</div><input id="refreshFreq" type="number" value=10></label>
-                    <label class="editable"><div class="label">Auto Refresh</div><input id="autoRefresh" onclick="setupWs(this)" type="checkbox"></label>
-                </fieldset>
-                <form action="/status/system" method="post">
-                </form>
             </div>
             <div id="slide-3" class="system-config">
                 <form onsubmit="SaveForm(this);return false;" action="/config" method="post">
@@ -74,9 +69,4 @@
             </script>
         </div>
     </div>
-    <dialog id="jsoneditor">
-        <button onclick="jsoneditorcontrol.value=undefined; jsoneditor.close();">Cancel</button>
-        <button onclick="jsoneditor.close()">Close</button>
-        <div contenteditable="true" class="editorcontor" id="jsoneditorcontrol"></div>
-    </dialog>
 </body>

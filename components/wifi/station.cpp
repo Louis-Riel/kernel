@@ -603,6 +603,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             }
             char ipaddr[16];
             sprintf(ipaddr,IPSTR, IP2STR(&event->ip_info.ip));
+            stationStat->SetStringProperty("Ip", ipaddr);
             ESP_LOGI(__FUNCTION__, "got ip::%s", ipaddr);
             memcpy(&theWifi->staIp, &event->ip_info, sizeof(theWifi->staIp));
             xEventGroupSetBits(eventGroup, WIFI_CONNECTED_BIT);

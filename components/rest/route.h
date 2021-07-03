@@ -31,6 +31,7 @@ class WebsocketManager {
       httpd_handle_t hd;
       int fd;
       bool isLive = false;
+      uint8_t errorCount = 0;
       time_t lastTs;
     } clients[5];
 

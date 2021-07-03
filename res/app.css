@@ -1,6 +1,3 @@
-div {
-    float:left;
-}
 table.greyGridTable td,
 table.greyGridTable th {
     border: 1px solid grey;
@@ -411,4 +408,92 @@ div.slider>a.active {
 
 .je-modal {
     background-color: #212621 !important;
+}
+
+form div.jsoneditor-field,
+div.jsoneditor-value,
+div.jsoneditor td,
+div.jsoneditor th,
+div.jsoneditor textarea,
+pre.jsoneditor-preview,
+.jsoneditor-schema-error,
+.jsoneditor-popover {
+    color: #54b221 !important;
+    ;
+}
+
+form div.jsoneditor-value.jsoneditor-string {
+    color: #9ae89a !important;
+}
+
+form div.jsoneditor-value.jsoneditor-object {
+    color: #b1adfc !important;
+}
+
+form div.jsoneditor-value.jsoneditor-array {
+    color: #fbfcad !important;
+}
+
+form div.jsoneditor-value.jsoneditor-number {
+    color: #ee422e !important;
+}
+
+form div.jsoneditor-value.jsoneditor-boolean {
+    color: #ff8c00 !important;
+}
+
+form div.jsoneditor-value.jsoneditor-null {
+    color: #004ed0 !important;
+}
+
+form div.jsoneditor-value.jsoneditor-color-value {
+    color: #1a1a1a !important;
+}
+
+form div.jsoneditor-value.jsoneditor-invalid {
+    color: #1a1a1a !important;
+}
+
+form div.jsoneditor-field[contenteditable=true]:focus,
+div.jsoneditor-field[contenteditable=true]:hover,
+div.jsoneditor-value[contenteditable=true]:focus,
+div.jsoneditor-value[contenteditable=true]:hover,
+div.jsoneditor-field.jsoneditor-highlight,
+div.jsoneditor-value.jsoneditor-highlight {
+    background-color: #3d4d3b !important;
+    border: 1px solid #ffee00 !important;
+    border-radius: 2px;
+}
+
+form div.jsoneditor-field.jsoneditor-highlight-active,
+div.jsoneditor-field.jsoneditor-highlight-active:focus,
+div.jsoneditor-field.jsoneditor-highlight-active:hover,
+div.jsoneditor-value.jsoneditor-highlight-active,
+div.jsoneditor-value.jsoneditor-highlight-active:focus,
+div.jsoneditor-value.jsoneditor-highlight-active:hover {
+    background-color: #3d4d3b !important;
+    border: 1px solid #ffc700 !important;
+    border-radius: 2px;
+}
+
+form tr.jsoneditor-highlight,
+tr.jsoneditor-selected {
+    background-color: #2e392d !important;
+}
+
+form .jsoneditor-menu {
+    background-color: #2e392d !important;
+    border-bottom: #64ee02 1px
+}
+
+form .jsoneditor-navigation-bar {
+    background-color: #242d23 !important;
+}
+
+form .jsoneditor {
+    border: thin solid #77797c !important;
+}
+
+form .jsoneditor-frame {
+    background-color: #242d23
 }

@@ -531,7 +531,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
       this->gpsResume();
 
       xTaskCreate(TinyGPSPlus::theLoop, "theLoop", 8196, this, tskIDLE_PRIORITY, NULL);
-      ESP_LOGD(__FUNCTION__, "GPS Initialized");
+      ESP_LOGI(__FUNCTION__, "GPS Initialized");
     }
     else
     {

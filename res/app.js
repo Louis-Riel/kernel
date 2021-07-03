@@ -1,3 +1,7 @@
+'use strict';
+
+const e = React.createElement;
+
 var controller = null;
 var ws = null;
 var fileStats = {};
@@ -7,8 +11,289 @@ var activeTab = null;
 var activeInterval = null;
 var logs = null;
 var editor = null;
+var stateViewer = null;
+
+//#region REACTJS
+
+class BoolInput extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            checked: false
+        };
+        this.key = genUUID();
+    }
+
+    toggleChange = (elem) => {
+        this.setState({
+            checked: elem.target.checked
+        });
+        elem.target.checked ?
+            this.props.onOn ? this.props.onOn(elem.target) : null :
+            this.props.onOff ? this.props.onOff(elem.target) : null;
+    }
+
+    render() {
+        return e("label", { className: "editable", id: `lbl${this.id}`, key: this.id },
+            e("div", { className: "label", id: `dlbl${this.id}` }, this.props.label),
+            e("input", { type: "checkbox", onChange: this.toggleChange, id: `in${this.id}` }));
+    }
+}
+class IntInput extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            value: this.props.value
+        };
+        this.key = genUUID();
+    }
+
+    toggleChange = (elem) => {
+        this.setState({
+            value: elem.target.value
+        });
+    }
+
+    render() {
+        return e("label", { className: "editable", id: `lbl${this.id}`, key: this.id },
+            e("div", { className: "label", id: `div${this.id}` }, this.props.label),
+            e("input", { type: "number", value: this.state.value, onChange: this.toggleChange, id: `in${this.id}` }));
+    }
+}
+
+class ControlPannel extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            periodicRefreshed: false,
+            refreshFrequency: 10,
+            autoRefresh: false
+        };
+        this.key = genUUID();
+    }
+
+    render() {
+        return e('fieldset', { id: "controls", key: this.id }, [
+            e('legend', { id: `lg${this.id}` }, 'Controls'),
+            e(BoolInput, { key: genUUID(), label: "Periodic Refresh", onOn: PeriodicRefreshClicked, onOff: PeriodicRefreshClicked, id: `b1${this.id}` }),
+            e(IntInput, { key: genUUID(), label: "Freq(sec)", value: 10, id: "refreshFreq" }),
+            e(BoolInput, { key: genUUID(), label: "Auto Refresh", onOn: setupWs, onOff: setupWs, id: `at${this.id}` })
+        ]);
+    }
+}
+
+class ROProp extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = this.props.json;
+        this.key = genUUID();
+    }
+
+    getValue() {
+        return this.props.json && this.props.json[this.props.name] && this.props.json[this.props.name]["version"] ? this.props.json[this.props.name]["value"] : this.props.json[this.props.name];
+    }
+
+    componentDidMount() {
+        if (IsDatetimeValue(this.props.name)) {
+            renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue());
+        }
+    }
+
+    render() {
+        return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
+            e("div", { className: "label", id: `dlbl${this.id}` }, this.props.label),
+            e("div", { className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue())
+        ]);
+    }
+}
+
+class StateTable extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            json: this.props.json,
+            error: null,
+            stateReqDt: this.props.stateReqDt,
+            cols: []
+        };
+        this.id = `/status/${this.props.name}`;
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.state.lastFetched < this.props.stateReqDt) {
+            console.log("statetable update");
+        }
+    }
+
+    BuildHead(json) {
+        if (json) {
+            return [e("thead", {}, e("tr", {},
+                json.flatMap(row => Object.keys(row))
+                .concat(this.props.cols)
+                .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
+                .map(fld => {
+                    if (!this.state.cols.some(col => fld == col)) {
+                        this.state.cols.push(fld);
+                    }
+                    return e("td", {}, fld);
+                }))), e("caption", {}, this.props.label)];
+        } else {
+            return null;
+        }
+    }
+
+    BuildBody(json) {
+        if (json) {
+            return e("tbody", {},
+                json.map(line => e("tr", {},
+                    this.state.cols.map(fld => e("td", { className: "readonly" }, line[fld] !== undefined ? e("div", { className: "value" }, line[fld]) : null)))));
+        } else {
+            return null;
+        }
+    }
+
+    render() {
+        if (this.props.json === null || this.props.json === undefined) {
+            return e("div", { id: `loading${this.id}` }, "Loading...");
+        }
+
+        return e("label", { id: this.id, className: "table" }, e("table", { className: "greyGridTable" }, [this.BuildHead(this.props.json), this.BuildBody(this.props.json)]));
+    }
+}
+
+class AppState extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            json: this.props.json,
+            error: null,
+            stateReqDt: this.props.stateReqDt
+        };
+        this.key = genUUID();
+    }
+
+    Parse(json) {
+        if (json) {
+            return Object.keys(json)
+                .map(fld => {
+                    if (Array.isArray(json[fld])) {
+                        return e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] });
+                    } else if (typeof json[fld] == 'object') {
+                        return e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld] });
+                    } else {
+                        return e(ROProp, { key: genUUID(), json: json, name: fld, label: fld });
+                    }
+                });
+        } else if (this.state && this.state.error) {
+            return this.state.error;
+        } else {
+            return e("div", { id: `loading${this.id}` }, "Loading...");
+        }
+    }
+
+    render() {
+        if (this.props.json === null || this.props.json === undefined) {
+            return e("div", { id: `loading${this.id}` }, "Loading...");
+        }
+        if (this.props.label != null) {
+            return e("fieldset", { name: `/${this.props.path}`, id: `fs${this.id}` }, [e("legend", {}, this.props.label), this.Parse(this.props.json)]);
+        } else {
+            return e("fieldset", { name: `/${this.props.path}`, id: `fs${this.id}` }, this.Parse(this.props.json));
+        }
+    }
+}
+
+class MainAppState extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            jsons: { json: null, ajson: null },
+            error: null,
+            stateReqDt: this.props.stateReqDt,
+            lastFetched: 0
+        };
+        this.key = genUUID();
+    }
+
+    refreshState() {
+        return new Promise((resolve, reject) => {
+            const timeout1 = new AbortController();
+            const timer1 = setTimeout(() => timeout1.abort(), 1000);
+            fetch('/status/', {
+                    method: 'post',
+                    signal: timeout1.signal
+                }).then(data => data.json())
+                .then(fromVersionedToPlain)
+                .then(jjson => {
+                    const timeout2 = new AbortController();
+                    const timer2 = setTimeout(() => timeout1.abort(), 1000);
+                    fetch('/status/app', {
+                            method: 'post',
+                            signal: timeout2.signal
+                        }).then(data => data.json())
+                        .then(fromVersionedToPlain)
+                        .then(ajson => {
+                            const timeout3 = new AbortController();
+                            const timer3 = setTimeout(() => timeout1.abort(), 1000);
+                            fetch('/status/tasks', {
+                                    method: 'post',
+                                    signal: timeout3.signal
+                                }).then(data => data.json())
+                                .then(fromVersionedToPlain)
+                                .then(tjson => {
+                                    this.setState({ lastFetched: new Date(), jsons: { ajson: ajson, json: jjson, tjson: Object.values(tjson) } });
+                                    resolve(this.state.jsons);
+                                });
+                        });
+                }).catch(err => this.setState({ error: err }));
+        });
+    }
+
+    componentDidMount() {
+        this.refreshState()
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.state.lastFetched < this.props.stateReqDt) {
+            this.refreshState();
+        }
+    }
+
+    render() {
+        return [
+            e(AppState, { name: "main", path: "/status/system", label: null, json: this.state.jsons.json, stateReqDt: this.props.stateReqDt }),
+            e(AppState, { name: "app", path: "/status/app", label: "App", json: this.state.jsons.ajson, stateReqDt: this.props.stateReqDt }),
+            e(StateTable, { key: genUUID(), name: "tasks", path: "/status/tasks", label: "Tasks", json: this.state.jsons.tjson, stateReqDt: this.props.stateReqDt })
+        ];
+    }
+}
+
+class StateViewer extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = { stateReqDt: 0, lastFetched: 0, lastFetched: 0 };
+        this.key = genUUID();
+    }
+
+    render() {
+        return [
+            e(ControlPannel, { key: genUUID() }),
+            e("form", { action: "/status/system", method: "post" }, e(MainAppState, this.state))
+        ];
+    }
+}
+
+//#endregion
 
 //#region utility functions
+function genUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0,
+            v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 function dirname(path) {
     return (path.match(/.*\//) + "").replace(/(.+)\/$/g, "$1");
 }
@@ -424,6 +709,9 @@ function degToRad(degree) {
 }
 
 function renderTime(input, fld, val) {
+    if (input == null) {
+        return;
+    }
     var now = fld.endsWith("_us") ? new Date(val / 1000) : new Date(val);
     if (fld.startsWith("run"))
         now.setTime(now.getTime() + now.getTimezoneOffset() * 60 * 1000);
@@ -446,7 +734,7 @@ function renderTime(input, fld, val) {
     var rect = input.getBoundingClientRect();
 
     //Background
-    gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
+    var gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
     gradient.addColorStop(0, "#03303a");
     gradient.addColorStop(1, "black");
     ctx.fillStyle = gradient;
@@ -678,7 +966,7 @@ function AddLogLine(logLn, logs) {
     var data = logLn.replaceAll(/^[^IDVWE]*/g, "").replaceAll(/(.*)([\x1B].*\n?)/g, "$1");
 
     if (data.match(/^[IDVWE] \([0-9.:]{12}\) [^:]+:.*/)) {
-        log = document.createElement("div");
+        var log = document.createElement("div");
         log.classList.add("log");
         log.classList.add(`LOG${data.substr(0, 1)}`);
 
@@ -697,7 +985,7 @@ function AddLogLine(logLn, logs) {
         lfunc.innerText = data.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
         log.appendChild(lfunc);
 
-        lmsg = document.createElement("div");
+        var lmsg = document.createElement("div");
         lmsg.innerText = data.substr(data.indexOf(lfunc.innerText) + lfunc.innerText.length + 2).replaceAll(/^[\r\n]*/g, "");
         lmsg.classList.add(`LOGLINE`);
         log.appendChild(lmsg);
@@ -725,10 +1013,7 @@ function setupWs(ctrl) {
             ws.onmessage = (event) => {
                 if (event && event.data) {
                     if (event.data[0] == "{") {
-                        jsonifyFormFielset(
-                            "/",
-                            Array.from(form.querySelectorAll("fieldset")).find(fs => fs.id == "") || form.appendChild(document.createElement("fieldset")),
-                            JSON.parse(event.data));
+                        console.log(event.data[0]);
                     } else {
                         AddLogLine(event.data, logs);
                     }
@@ -776,7 +1061,7 @@ function SendCommand(body) {
 }
 
 function SaveForm(form) {
-    getJsonConfig().then(vcfg => fromPlainToVersionned(editor.getValue(), vcfg))
+    getJsonConfig().then(vcfg => fromPlainToVersionned(editor.get(), vcfg))
         .then(cfg => fetch(form.action, {
             method: 'post',
             body: JSON.stringify(cfg)
@@ -803,6 +1088,13 @@ function refreshStatus(clicked) {
         if (controller)
             controller.abort();
     }
+    const domContainer = document.querySelector('#slide-2');
+    if (stateViewer == null) {
+        stateViewer = ReactDOM.render(e(StateViewer), domContainer);
+    } else {
+        stateViewer.setState({ stateReqDt: new Date() });
+    }
+    return;
 
     const timeout1 = new AbortController();
     const timer1 = setTimeout(() => timeout1.abort(), 1000);
@@ -869,6 +1161,7 @@ function jsonifyStatusArray(name, fieldset) {
 function fromVersionedToPlain(obj, level = "") {
     var ret = {};
     var arr = Object.keys(obj);
+    var fldidx;
     for (fldidx in arr) {
         var fld = arr[fldidx];
         if ((typeof obj[fld] == 'object') &&
@@ -902,7 +1195,7 @@ function fromPlainToVersionned(obj, vobj, level = "") {
             ret[fld] = [];
             for (var idx = 0; idx < obj[fld].length; idx++) {
                 var item = obj[fld][idx];
-                var vitem = fromPlainToVersionned(item, pvobj[idx], `${level}/${fld}[${idx}]`);
+                var vitem = fromPlainToVersionned(item, pvobj ? pvobj[idx] : null, `${level}/${fld}[${idx}]`);
                 ret[fld].push(vitem);
                 if (vitem.boper) {
                     ret[fld].push({
@@ -958,19 +1251,11 @@ function refreshConfig(clicked) {
         if (controller)
             controller.abort();
     }
+    if (editor == null) {
+        editor = new JSONEditor(document.getElementById('editor_holder'));
+    }
     getEditableJsonConfig().then(cfg => {
-        if (editor == null) {
-            editor = new JSONEditor(document.getElementById('editor_holder'), {
-                ajax: true,
-                schema: {
-                    $ref: "configschema.json",
-                    format: "grid",
-                },
-                startval: cfg
-            });
-        } else {
-            editor.setValue(cfg);
-        }
+        editor.set(cfg);
     });
 }
 

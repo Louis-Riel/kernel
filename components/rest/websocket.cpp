@@ -40,15 +40,19 @@ void WebsocketManager::QueueHandler(void* instance){
     bool isLive = false;
     for (uint8_t idx = 0; idx < 5; idx++){
       if (me->clients[idx].isLive){
-        //if (ws_pkt.len) printf("\nsending to client %d %d\n",idx, me->clients[idx].fd);
-        isLive |= me->clients[idx].isLive = (ret = httpd_ws_send_frame_async(me->clients[idx].hd, me->clients[idx].fd, &ws_pkt)) == ESP_OK;
-        if (ret != ESP_OK) {
-          if (ret == ESP_ERR_INVALID_ARG) {
-            ESP_LOGD(__FUNCTION__,"Client %d disconnected",idx);
+        if ((ret = httpd_ws_send_frame_async(me->clients[idx].hd, me->clients[idx].fd, &ws_pkt)) != ESP_OK) {
+          if (me->clients[idx].errorCount++ > 4){
+            me->clients[idx].isLive=false;
+            if (ret == ESP_ERR_INVALID_ARG) {
+              ESP_LOGD(__FUNCTION__,"Client %d disconnected",idx);
+            } else {
+              ESP_LOGW(__FUNCTION__,"Client %d Error %s",idx, esp_err_to_name(ret));
+            }
           } else {
-            ESP_LOGW(__FUNCTION__,"Client %d Error %s",idx, esp_err_to_name(ret));
+              ESP_LOGD(__FUNCTION__,"Client %d not responding, retry %d",idx, me->clients[idx].errorCount);
           }
         }
+        isLive |= me->clients[idx].isLive;
         break;
       }
     }

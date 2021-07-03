@@ -58,7 +58,6 @@ RTC_DATA_ATTR uint32_t lastAltitude;
 const uint8_t numWakePins = 3;
 const gpio_num_t wakePins[] = {GPIO_NUM_32, GPIO_NUM_33, GPIO_NUM_34};
 RTC_DATA_ATTR uint8_t wakePinState = 0;
-RTC_DATA_ATTR uint8_t curRate = 0;
 RTC_DATA_ATTR uint8_t lastRate = 0;
 RTC_DATA_ATTR char tripFName[35];
 RTC_DATA_ATTR bool hibernate = false;
@@ -126,7 +125,7 @@ void sampleBatteryVoltage()
   for (int idx = 0; idx < 10; idx++)
   {
     if ((ret=esp_adc_cal_get_voltage(ADC_CHANNEL_7, &characteristics, &tmp))==ESP_OK){
-      voltage += (tmp*2);
+      voltage += (tmp*2.40584138288);
       cnt++;
     } else {
       ESP_LOGW(__FUNCTION__,"Error getting voltage %s",esp_err_to_name(ret));
@@ -157,6 +156,9 @@ float getBatteryVoltage()
 dataPoint *getCurDataPoint()
 {
   time(&lastDpTs);
+  if (lastDpTs < 10000) {
+    return NULL;
+  }
   dto = false;
   return new dataPoint{
     ts : (uint32_t)lastDpTs,
@@ -633,7 +635,7 @@ void addDataPoint()
 {
   dataPoint *curNode = getCurDataPoint();
   if ((curNode == NULL) || (curNode->lng == 0.0)) {
-    ESP_LOGW(__FUNCTION__,"Skipping save of no point data");
+    ESP_LOGW(__FUNCTION__,"Skipping save of no point pr time data");
     return;
   }
   ESP_LOGD(__FUNCTION__, "addDataPoint %d", curTrip.numNodes);
@@ -772,7 +774,6 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     break;
   case TinyGPSPlus::gpsEvent::rateChanged:
     ESP_LOGD(__FUNCTION__, "Rate Changed to %d", *((uint8_t *)event_data));
-    curRate = *((uint8_t *)event_data);
     break;
   case TinyGPSPlus::gpsEvent::msg:
     ESP_LOGV(__FUNCTION__,"msg:%s",(char*)event_data);
@@ -856,16 +857,15 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     AppConfig::GetAppStatus()->SetStateProperty("/gps", item_state_t::ACTIVE);
     break;
   case TinyGPSPlus::gpsEvent::atSyncPoint:
-    ESP_LOGD(__FUNCTION__, "Synching");
-    if ((gps != NULL) && (now > 10000))
-    {
-      xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT3), tskIDLE_PRIORITY, NULL);
-    }
-    xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps, tskIDLE_PRIORITY, NULL);
+    ESP_LOGD(__FUNCTION__, "atSyncPoint");
+    //if ((gps != NULL) && (now > 10000))
+    //{
+    //  xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT3), tskIDLE_PRIORITY, NULL);
+    //}
+    //xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps, tskIDLE_PRIORITY, NULL);
     break;
   case TinyGPSPlus::gpsEvent::outSyncPoint:
     ESP_LOGD(__FUNCTION__, "Leaving Synching");
-    TheWifi::GetInstance()->wifiStop(NULL);
     break;
   default:
     break;

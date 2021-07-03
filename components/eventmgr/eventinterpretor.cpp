@@ -81,6 +81,24 @@ void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *
     int32_t eventId = -1;
     esp_err_t ret;
     esp_event_base_t eventBase;
+    if (strcmp(method, "commitTripToDisk") == 0)
+    {
+        jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "flags"), "value");
+        xTaskCreate(commitTripToDisk, 
+                    "commitTripToDisk", 
+                    8192, 
+                    (void *)(cJSON_HasObjectItem(params, "flags") ? cJSON_GetObjectItem(cJSON_GetObjectItem(params, "flags"), "value")->valueint:BIT3), 
+                    tskIDLE_PRIORITY, 
+                    NULL);
+    }
+    if (strcmp(method, "wifiSallyForth") == 0)
+    {
+        xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, NULL, tskIDLE_PRIORITY, NULL);
+    }
+    if (strcmp(method, "wifioff") == 0)
+    {
+        TheWifi::GetInstance()->wifiStop(NULL);
+    }
     if (strcmp(method, "PullStation") == 0)
     {
         systemEventInfo = (system_event_info_t *)event_data;
