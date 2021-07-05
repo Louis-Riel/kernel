@@ -124,7 +124,7 @@ void TinyGPSPlus::waitOnStop(void *param)
 {
   TinyGPSPlus *gps = (TinyGPSPlus *)param;
   ESP_LOGD(__FUNCTION__, "We are stopped, checking bumps");
-  if (xEventGroupWaitBits(*getAppEG(), gpsEvent::locationChanged, pdFALSE, pdTRUE, 5000 / portTICK_PERIOD_MS) & gpsEvent::locationChanged)
+  if (xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdTRUE, 5000 / portTICK_PERIOD_MS) & gpsEvent::locationChanged)
   {
     ESP_LOGD(__FUNCTION__, "We are not so stopped, not using bump bumps");
   }
@@ -143,9 +143,9 @@ void TinyGPSPlus::waitOnStop(void *param)
         ext_wakeup_pin_mask |= (1ULL << wakePins[idx]);
       }
     }
-    if ((gps->poiState == poiState_t::in) && !(xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCED))
+    if (xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON)
     {
-      ESP_LOGD(__FUNCTION__, "We are stopped, waiting on bumps");
+      ESP_LOGD(__FUNCTION__, "We are stopped with wifi on, waiting on bumps");
       int32_t timeToGo = sleepTimes[gps->curFreqIdx] * 1000;
       while ((timeToGo > 0) && !(xEventGroupWaitBits(gps->eg, gpsEvent::outSyncPoint, pdFALSE, pdTRUE, 500 / portTICK_PERIOD_MS) & gpsEvent::outSyncPoint))
       {
@@ -154,7 +154,6 @@ void TinyGPSPlus::waitOnStop(void *param)
         gpio_set_level(BLINK_GPIO, 1);
         timeToGo -= 804;
       }
-      ESP_LOGD(__FUNCTION__, "In POI so not really");
       gpio_set_level(BLINK_GPIO, 1);
     }
     else
@@ -204,10 +203,10 @@ void TinyGPSPlus::theLoop(void *param)
   {
     if (init)
     {
-      while (!(bits = (xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdTRUE, pdTRUE, 200 / portTICK_PERIOD_MS)) & gpsEvent::locationChanged))
+      while (!(bits = (xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdTRUE, 200 / portTICK_PERIOD_MS)) & gpsEvent::locationChanged))
       {
         gpio_set_level(BLINK_GPIO, 0);
-        bits = xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdTRUE, pdTRUE, 20 / portTICK_PERIOD_MS);
+        bits = xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdTRUE, 20 / portTICK_PERIOD_MS);
         gpio_set_level(BLINK_GPIO, 1);
       }
       gpio_set_level(BLINK_GPIO, 1);
@@ -215,7 +214,7 @@ void TinyGPSPlus::theLoop(void *param)
     }
     else
     {
-      bits = xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged | gpsEvent::msg, pdTRUE, pdTRUE, portMAX_DELAY);
+      bits = xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged | gpsEvent::msg, pdFALSE, pdTRUE, portMAX_DELAY);
     }
 
     if (bits & gpsEvent::msg)
@@ -307,9 +306,6 @@ void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, i
   TinyGPSPlus *gps = (TinyGPSPlus *)handler_args;
   switch (id)
   {
-  case TinyGPSPlus::gpsEvent::go:
-    xEventGroupSetBits(*getAppEG(), BIT0);
-    break;
   case TinyGPSPlus::gpsEvent::stop:
     xTaskCreate(TinyGPSPlus::waitOnStop, "waitonstop", 4096, handler_args, tskIDLE_PRIORITY, NULL);
     break;
@@ -330,7 +326,7 @@ void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, i
       }
     }
     gps->adjustRate();
-    if ((gps->poiState == poiState_t::out) || (xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCED))
+    if ((gps->poiState == poiState_t::out) && !(xEventGroupSetBits(*getAppEG(), app_bits_t::TRIPS_SYNCING)))
     {
       gps->gpsPause();
       ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(sleepTimes[gps->curFreqIdx] * 1000000));
@@ -428,64 +424,6 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
   ESP_LOGD(__FUNCTION__, "Initializing UART");
 
   ESP_ERROR_CHECK(uart_driver_install(UART_NUM_2, BUF_SIZE * 2, BUF_SIZE * 2, 20, &uart_queue, 0));
-
-  AppConfig* state = AppConfig::GetAppStatus()->GetConfig("/gps");
-  state->SetIntProperty("baud", uart_config.baud_rate);
-  switch (uart_config.data_bits)
-  {
-  case uart_word_length_t::UART_DATA_5_BITS:
-  case uart_word_length_t::UART_DATA_6_BITS:
-  case uart_word_length_t::UART_DATA_7_BITS:
-  case uart_word_length_t::UART_DATA_8_BITS:
-    state->SetIntProperty("data_bits", uart_config.data_bits+5);
-    break;
-  
-  default:
-    state->SetStringProperty("data_bits", "Max");
-    break;
-  }
-  switch (uart_config.stop_bits)
-  {
-  case uart_stop_bits_t::UART_STOP_BITS_1:
-    state->SetStringProperty("stop_bits", "1");
-    break;
-  case uart_stop_bits_t::UART_STOP_BITS_1_5:
-    state->SetStringProperty("stop_bits", "1.5");
-    break;
-  case uart_stop_bits_t::UART_STOP_BITS_2:
-    state->SetStringProperty("stop_bits", "2");
-    break;
-  
-  default:
-    state->SetStringProperty("stop_bits", "Max");
-    break;
-  }
-  switch (uart_config.flow_ctrl)
-  {
-  case uart_hw_flowcontrol_t::UART_HW_FLOWCTRL_CTS:
-    state->SetStringProperty("hwflow", "CTS");
-    break;
-  case uart_hw_flowcontrol_t::UART_HW_FLOWCTRL_DISABLE:
-    state->SetStringProperty("hwflow", "Disabled");
-    break;
-  case uart_hw_flowcontrol_t::UART_HW_FLOWCTRL_RTS:
-    state->SetStringProperty("hwflow", "RTS");
-    break;
-  case uart_hw_flowcontrol_t::UART_HW_FLOWCTRL_CTS_RTS:
-    state->SetStringProperty("hwflow", "RTS");
-    break;
-  case uart_hw_flowcontrol_t::UART_HW_FLOWCTRL_MAX:
-    state->SetStringProperty("hwflow", "MAX");
-    break;
-  default:
-    break;
-  }
-  state->SetStringProperty("parity", (char*)(uart_config.parity == uart_parity_t::UART_PARITY_DISABLE ? "Disabled" : 
-                                        uart_config.parity == uart_parity_t::UART_PARITY_EVEN ? "Event" : "Odd"));
-  state->SetIntProperty("rx_fct", uart_config.rx_flow_ctrl_thresh);
-  state->SetBoolProperty("ref_tick", uart_config.use_ref_tick);
-  state->SetIntProperty("source_clk", uart_config.source_clk);
-  free(state);
 
   ESP_ERROR_CHECK(uart_param_config(UART_NUM_2, &uart_config));
   ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, txpin, rxpin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));

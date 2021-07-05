@@ -574,7 +574,7 @@ esp_err_t list_files_handler(httpd_req_t *req)
 
 void UpdateGpioProp(cfg_gpio_t *cfg, gpio_num_t val)
 {
-    if ((val == NULL) || (cfg->value != val))
+    if (cfg->value != val)
     {
         ESP_LOGV(__FUNCTION__, "Updating from %d to %d", cfg->value, val);
         cfg->value = val;
@@ -589,30 +589,6 @@ void UpdateStringProp(cfg_label_t *cfg, char *val)
         strcpy(cfg->value, val == NULL ? "" : val);
         cfg->version++;
     }
-}
-
-esp_err_t eventmgr_handler(httpd_req_t *req)
-{
-    ESP_LOGV(__FUNCTION__, "EventMgr Handler");
-    esp_err_t ret = ESP_OK;
-
-    httpd_resp_set_type(req, "application/json");
-
-    char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
-    int len = httpd_req_recv(req, postData, JSON_BUFFER_SIZE);
-
-    if (len)
-    {
-        *(postData + len) = 0;
-        ESP_LOGV(__FUNCTION__, "postData(%d):%s", len, postData);
-        EventManager::SetConfig(cJSON_Parse(postData));
-    }
-    ldfree(postData);
-
-    char *sjson = cJSON_PrintUnformatted(EventManager::GetConfig());
-    ret = httpd_resp_send(req, sjson, strlen(sjson));
-    ldfree(sjson);
-    return ret;
 }
 
 esp_err_t config_handler(httpd_req_t *req)
@@ -1370,7 +1346,7 @@ esp_err_t trips_handler(httpd_req_t *req)
 
     httpd_resp_set_type(req, "application/x-tar");
     httpd_resp_set_hdr(req, "filename", "trips.tar");
-    xEventGroupClearBits(*getAppEG(), app_bits_t::TRIPS_SYNCED);
+    xEventGroupSetBits(*getAppEG(), app_bits_t::TRIPS_SYNCING);
 
     if (initSPISDCard())
     {
@@ -1403,8 +1379,6 @@ esp_err_t trips_handler(httpd_req_t *req)
             ESP_LOGV(__FUNCTION__, "Closing tar");
             mtar_close(&tar);
             deinitSPISDCard();
-            xEventGroupSetBits(*getAppEG(), app_bits_t::TRIPS_SYNCED);
-            TheWifi::GetInstance()->wifiStop(NULL);
        }
         else
         {
@@ -1419,6 +1393,7 @@ esp_err_t trips_handler(httpd_req_t *req)
         ESP_LOGE(__FUNCTION__, "Cannot mount the fucking sd card");
         httpd_resp_send(req, "No Bueno", 8);
     }
+    xEventGroupClearBits(*getAppEG(), app_bits_t::TRIPS_SYNCING);
     deinitSPISDCard();
     return ESP_FAIL;
 }

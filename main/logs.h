@@ -22,7 +22,8 @@ typedef enum {
  BUMP_BIT = BIT0,
  COMMITTING_TRIPS = BIT1,
  TRIPS_COMMITTED = BIT2,
- TRIPS_SYNCED = BIT3
+ TRIPS_SYNCING = BIT3,
+ WIFI_ON = BIT4
 } app_bits_t;
 
 void initLog();

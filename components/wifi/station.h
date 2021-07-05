@@ -19,8 +19,6 @@
 #define MAX_NUM_CLIENTS 20
 
 
-static void print_auth_mode(cJSON* json, int authmode);
-static void print_cipher_type(cJSON* json, int pairwise_cipher, int group_cipher);
 void wifiSallyForth(void *pvParameter);
 
 class Aper
@@ -68,7 +66,6 @@ protected:
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     static void network_event(void *handler_arg, esp_event_base_t base, int32_t event_id, void *event_data);
 
-    void HandleEvent(cJSON* params);
     EventHandlerDescriptor* BuildHandlerDescriptors();
     cJSON* BuildStatus();
 

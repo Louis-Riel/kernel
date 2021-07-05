@@ -89,7 +89,6 @@ cJSON* EventHandlerDescriptor::GetEventBases(char* filter) {
 }
 
 void EventHandlerDescriptor::SetEventName(int32_t id,char* name){
-    int freeSlot = -1;
     for (uint8_t idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
         if (eventDescriptors[idx].eventName == NULL) {
             ESP_LOGV(__FUNCTION__,"%d:%s set at idx:%d", id, name, idx);
@@ -128,4 +127,93 @@ char* EventHandlerDescriptor::GetEventName(int32_t id){
 
 esp_event_base_t EventHandlerDescriptor::GetEventBase(){
     return this->eventBase;
+}
+
+EventHandlerDescriptor::templateType_t EventHandlerDescriptor::GetTemplateType(char* term) {
+    if (indexOf(term+2,"Status.")==term+2) {
+        return EventHandlerDescriptor::templateType_t::Status;
+    }
+    if (indexOf(term+2,"Config.")==term+2) {
+        return EventHandlerDescriptor::templateType_t::Config;
+    }
+    if (indexOf(term+2,"CurrentDate")==term+2) {
+        return EventHandlerDescriptor::templateType_t::CurrentDate;
+    }
+    return EventHandlerDescriptor::templateType_t::Invalid;
+}
+
+char* EventHandlerDescriptor::GetParsedValue(const char* theValue){
+    if (!theValue || !strlen(theValue)) {
+        return NULL;
+    }
+    ESP_LOGV(__FUNCTION__,"before:%s", theValue);
+    char* value = (char*)dmalloc(strlen(theValue)+1);
+    uint32_t retLen = strlen(value)+200;
+    char* termName = NULL;
+    char* ovalue = value;
+    char* retCursor=(char*)dmalloc(retLen);
+    char* retVal = retCursor;
+    char* openPos=value;
+    char* closePos=NULL;
+    char* lastClosePos=NULL;
+    char strftime_buf[64];
+    struct tm timeinfo;
+    time_t now = 0;
+    EventHandlerDescriptor::templateType_t tt;
+    
+    strcpy(value,theValue);
+
+    AppConfig* cfg = NULL;
+    while ((openPos=indexOf(openPos,"${")) && (closePos=indexOf(openPos,"}"))) {
+        lastClosePos=closePos;
+        if (openPos != value) {
+            memcpy(retCursor,value,openPos-value);
+            ESP_LOGV(__FUNCTION__,"added:%s(%d)", value,openPos-value);
+        }
+        *closePos=0;
+        switch (tt=GetTemplateType(openPos))
+        {
+        case EventHandlerDescriptor::templateType_t::Config:
+        case EventHandlerDescriptor::templateType_t::Status:
+            cfg = tt==EventHandlerDescriptor::templateType_t::Status?AppConfig::GetAppStatus():AppConfig::GetAppConfig();
+            ESP_LOGV(__FUNCTION__,"Getting %s", tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
+            termName=indexOf(openPos,".");
+            if (termName) {
+                termName++;
+                ESP_LOGV(__FUNCTION__,"termname:%s", termName);
+                if (cfg->isItemObject(termName)) {
+                    cJSON_PrintPreallocated(cfg->GetJSONConfig(termName),retCursor,200,false);
+                    ESP_LOGV(__FUNCTION__,"added json:%s", retCursor);
+                } else {
+                    strcpy(retCursor,cfg->GetStringProperty(termName));
+                    ESP_LOGV(__FUNCTION__,"added value:%s", retCursor);
+                }
+            }
+            break;
+        case EventHandlerDescriptor::templateType_t::CurrentDate:
+            time(&now);
+            localtime_r(&now, &timeinfo);
+            strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+            strcpy(retCursor, strftime_buf);
+            ESP_LOGV(__FUNCTION__,"added datetime:%s", retCursor);
+            break;
+        case EventHandlerDescriptor::templateType_t::Invalid:
+            break;
+        }
+        value=openPos=closePos+1;
+        retCursor+=strlen(retCursor);
+        ESP_LOGV(__FUNCTION__,"now at:%s", value);
+    }
+
+    if (lastClosePos != NULL) {
+        strcpy(retCursor,lastClosePos+1);
+        ESP_LOGV(__FUNCTION__,"Added last chunck:%s", lastClosePos+1);
+        ESP_LOGV(__FUNCTION__,"Translated:%s", retVal);
+    } else {
+        strcpy(retVal,ovalue);
+        ESP_LOGV(__FUNCTION__,"Straight copy:%s", retVal);
+    }
+
+    ldfree(ovalue);
+    return retVal;
 }

@@ -58,17 +58,12 @@ void registerLogCallback( LogFunction_t callback, void* param) {
 }
 
 int loggit(const char *fmt, va_list args) {
-    static bool static_fatal_error = false;
-    static const uint32_t WRITE_CACHE_CYCLE = 5;
-    static uint32_t counter_write = 0;
-    int iresult;
     char* curLogLine = logBuff+logBufPos;
     logBufPos+=vsprintf(logBuff+logBufPos,fmt,args);
     for (int idx=0; idx < 5; idx++){
         if (callbacks[idx] != NULL) {
             if (!callbacks[idx](params[idx],curLogLine)){
                 callbacks[idx] = nullptr;
-                //ldfree(params[idx]);
             }
         }
     }

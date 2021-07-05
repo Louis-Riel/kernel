@@ -134,6 +134,7 @@ public:
   static const char* GetActiveStorage();
 
   bool isValid();
+  bool isItemObject(const char* path);
   AppConfig* GetConfig(const char* path);
   cJSON* GetJSONConfig(const char* path);
   cJSON* GetJSONConfig(const char *path, bool createWhenMissing);

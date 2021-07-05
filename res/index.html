@@ -1,45 +1,23 @@
 <!doctype html>
 
 <head>
-    <link rel="icon" type="image/png" href="/favicon.ico" />
-    <link rel="stylesheet" type="text/css" href="/app.css" />
+    <link rel="icon" type="image/png" href="favicon.ico" />
+    <link rel="stylesheet" type="text/css" href="app.css" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.5.1/jsoneditor.css" rel="stylesheet" type="text/css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.5.1/jsoneditor.min.js"></script>
     <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
-    <script type="text/javascript" src="/app.js"></script>
 </head>
 
 <body>
     <div class="slider">
-        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');renderFolder(document.getElementsByClassName('file-table')[0].getElementsByTagName('caption')[0].innerText)" href="#slide-1">SDCard</a>
+        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');renderFolder(true)" href="#slide-1">SDCard</a>
         <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');refreshStatus(true)" href="#slide-2">Status</a>
         <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');refreshConfig(true)" href="#slide-3">Config</a>
-        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');refreshSystem()" href="#slide-4">System</a>
+        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');refreshSystem(true)" href="#slide-4">System</a>
         <div class="slides">
-            <div id="slide-1" class="file_section">
-                <div class="file-table">
-                    <table class="greyGridTable">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Size</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        </tbody>
-                        <tfoot>
-                            <tr>
-                                <td>Total</td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
-                        <caption>%s</caption>
-                    </table>
-                </div>
-            </div>
-            <div id="slide-2" class="system-config">
-            </div>
+            <div id="slide-1" class="file_section"></div>
+            <div id="slide-2" class="system-config"></div>
             <div id="slide-3" class="system-config">
                 <form onsubmit="SaveForm(this);return false;" action="/config" method="post">
                     <fieldset>
@@ -57,16 +35,7 @@
                 </div>
                 <div class="loglines"></div>
             </div>
-            <script>
-                renderFolder("/");
-                logs = document.getElementById("slide-4").getElementsByClassName("loglines")[0];
-                document.querySelectorAll('th').forEach(th => th.addEventListener('click', (() => {
-                    const table = document.getElementsByClassName("file-table")[0].getElementsByTagName("tbody")[0];
-                    Array.from(table.querySelectorAll('tr:nth-child(n+2)'))
-                        .sort(compare(Array.from(th.parentNode.children).indexOf(th), this.asc = !this.asc))
-                        .forEach(tr => table.appendChild(tr));
-                })));
-            </script>
+            <script type="text/javascript" src="app.js"></script>
         </div>
     </div>
 </body>

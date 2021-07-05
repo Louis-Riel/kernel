@@ -61,8 +61,7 @@ TheWifi::~TheWifi(){
 
 
 TheWifi::TheWifi(AppConfig* config)
-    :ManagedDevice(config,"Wifi"),
-    status(BuildStatus())
+    :ManagedDevice("Wifi")
 {
     theInstance = this;
     eventGroup = xEventGroupCreate();
@@ -130,6 +129,7 @@ TheWifi::TheWifi(AppConfig* config)
     }
 
     ESP_ERROR_CHECK(esp_wifi_start());
+    xEventGroupSetBits(*getAppEG(), app_bits_t::WIFI_ON);
 
     if (handlerDescriptors == NULL)
         EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
@@ -420,10 +420,9 @@ void TheWifi::ProcessScannedAPs()
         ESP_LOGD(__FUNCTION__, "Total APs scanned = %u", ap_count);
         int lastWinner=-1;
         int8_t lastRssi=-124;
-        uint8_t numWinners=0;
         bool isTracker = appCfg->HasProperty("clienttype") && strcmp(appCfg->GetStringProperty("clienttype"),"tracker")==0;
         bool hasPuller = false;
-        for (int i = 0; (i < ap_count) ; i++)
+        for (int i = 0; (i < number) ; i++)
         {
             cJSON* AP = cJSON_CreateObject();
             cJSON_AddItemToArray(APs,AP);
@@ -535,7 +534,8 @@ static void updateTime(void *param)
     sntp_init();
 
     time_t now = 0;
-    struct tm timeinfo = {0};
+    struct tm timeinfo;
+    memset(&timeinfo,0,sizeof(timeinfo));
     int retry = 0;
     const int retry_count = 10;
     while (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count)
@@ -587,6 +587,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
     AppConfig* state = AppConfig::GetAppStatus();
     AppConfig* stationStat = state->GetConfig("/wifi/station");
     AppConfig* apStat = state->GetConfig("/wifi/ap");
+    int tmp=-2;
     if (base == IP_EVENT)
     {
         theWifi->PostEvent(event_data,sizeof(void*),event_id);
@@ -629,11 +630,6 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             break;
         case IP_EVENT_STA_LOST_IP:
             ESP_LOGI(__FUNCTION__, "lost ip");
-
-            if (!cfg->IsAp() || (theWifi->RefreshApMembers(apStat) == 0)) {
-                xEventGroupSetBits(eventGroup, WIFI_DISCONNECTED_BIT);
-                xEventGroupClearBits(eventGroup, WIFI_CONNECTED_BIT);
-            }
 
             theWifi->wifiScan();
             theWifi->ParseStateBits(stationStat);
@@ -755,17 +751,17 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             initSPISDCard();
             break;
         case WIFI_EVENT_AP_STADISCONNECTED:
-            ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x Disconnected, AID=%d",
-                     MAC2STR(station->mac), station->aid);
             client = theWifi->GetAper(station->mac);
             if (client != NULL)
             {
                 client->Dissassociate();
+                ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x Disconnected, AID=%d",
+                     MAC2STR(station->mac), station->aid);
+            } else {
+                ESP_LOGW(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x Disconnected but not registerred, AID=%d",
+                     MAC2STR(station->mac), station->aid);
             }
-            if (!cfg->IsAp() || (theWifi->RefreshApMembers(apStat) == 0)) {
-                xEventGroupSetBits(eventGroup, WIFI_DISCONNECTED_BIT);
-                xEventGroupClearBits(eventGroup, WIFI_CONNECTED_BIT);
-            }
+            theWifi->RefreshApMembers(apStat);
             deinitSPISDCard();
             break;
         case WIFI_EVENT_STA_CONNECTED:
@@ -782,14 +778,9 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             {
                 ESP_LOGD(__FUNCTION__, "Got disconnected from AP");
                 deinitSPISDCard();
-
-                if (!cfg->IsAp() || (theWifi->RefreshApMembers(apStat) == 0)) {
-                    xEventGroupSetBits(eventGroup, WIFI_DISCONNECTED_BIT);
-                    xEventGroupClearBits(eventGroup, WIFI_CONNECTED_BIT);
-                }
                 theWifi->ParseStateBits(stationStat);
             }
-            if (!(xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCED) || (cfg->IsAp() && cfg->IsSta()))
+            if (!(xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCING) || (cfg->IsAp() && cfg->IsSta()))
             {
                 ESP_LOGI(__FUNCTION__, "Trying to reconnect");
                 theWifi->wifiScan();
@@ -811,6 +802,10 @@ void TheWifi::wifiStop(void *pvParameter)
     esp_wifi_stop();
     esp_wifi_deinit();
     esp_netif_deinit();
+    ESP_LOGD(__FUNCTION__, "Stoppint");
+    xEventGroupClearBits(*getAppEG(), app_bits_t::WIFI_ON);
+    xEventGroupSetBits(eventGroup, WIFI_DISCONNECTED_BIT);
+    xEventGroupClearBits(eventGroup, WIFI_CONNECTED_BIT);
     theInstance=NULL;
 }
 
@@ -863,17 +858,19 @@ void Aper::Dissassociate()
     time(&disconnectTime);
     connectionTime += (disconnectTime - connectTime);
     connectTime = 0;
+    ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x Disconnected",MAC2STR(station->mac));
 }
 
 void Aper::Associate()
 {
     time(&connectTime);
     disconnectTime = 0;
+    ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x Connected",MAC2STR(station->mac));
 }
 
 bool Aper::isConnected()
 {
-    return ((connectTime != 0) && (disconnectTime == 0));
+    return disconnectTime==0;
 }
 
 bool Aper::isSameDevice(Aper *other)

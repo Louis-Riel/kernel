@@ -61,9 +61,6 @@ bool moveFolder(char* folderName, char* toFolderName) {
         return false;
     }
     FF_DIR theFolder;
-    FILE* theFile;
-    FILE* theDestFile;
-    uint32_t len=0;
     char* fName=(char*)dmalloc(270);
     char* destfName=(char*)dmalloc(270);
     void* buf = dmalloc(F_BUF_SIZE);
@@ -131,7 +128,6 @@ bool GetKmls(ip4_addr_t* ipInfo){
     ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
     esp_http_client_handle_t client = esp_http_client_init(config);
     esp_err_t err;
-    uint8_t retryCnt=0;
     uint32_t kmlFilesPos=0;
     xEventGroupSetBits(eventGroup,GETTING_TRIP_LIST);
     err = esp_http_client_perform(client);
@@ -226,7 +222,7 @@ bool CheckOTA(ip4_addr_t* ipInfo) {
     esp_err_t ret=ESP_OK;
     ESP_LOGD(__FUNCTION__,"Checking Version");
     if ((ret = esp_http_client_perform(client)) == ESP_OK){
-        uint32_t len=0;
+        int len=0;
         if ((len=esp_http_client_read(client,dmd5,36)) >= 0) {
             ESP_LOGV(__FUNCTION__,"Got back (%s)%d char of md5",dmd5,len);
             char ch;
@@ -338,10 +334,8 @@ bool GetLogs(ip4_addr_t* ipInfo,uint32_t devId){
     config->user_data=kmlFiles;
     ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
     esp_http_client_handle_t client = esp_http_client_init(config);
-    uint32_t kmlFilesPos=0;
     xEventGroupSetBits(eventGroup,GETTING_TRIP_LIST);
     esp_err_t err;
-    uint8_t retryCnt=0;
     err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
 
@@ -425,7 +419,6 @@ bool GetLogs(ip4_addr_t* ipInfo,uint32_t devId){
 }
 
 cJSON* GetConfig(ip4_addr_t* ipInfo){
-    bool retVal=true;
     char* kmlFiles = (char*)dmalloc(KML_BUFFER_SIZE);
     esp_http_client_config_t* config = (esp_http_client_config_t*)dmalloc(sizeof(esp_http_client_config_t));
     memset(kmlFiles,0,KML_BUFFER_SIZE);
@@ -443,10 +436,8 @@ cJSON* GetConfig(ip4_addr_t* ipInfo){
     config->user_data=kmlFiles;
     ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
     esp_http_client_handle_t client = esp_http_client_init(config);
-    uint32_t kmlFilesPos=0;
     xEventGroupSetBits(eventGroup,GETTING_TRIP_LIST);
     esp_err_t err;
-    uint8_t retryCnt=0;
     err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
     ldfree((void*)config->url);
@@ -466,7 +457,6 @@ cJSON* GetConfig(ip4_addr_t* ipInfo){
         char* fname = (char*)dmalloc(255);
         sprintf(fname,"/lfs/config/%d.json",cJSON_GetObjectItem(json,"devId")->valueint);
         ESP_LOGV(__FUNCTION__,"Writing %s",fname);
-        int res;
         FILE* destF = fopen(fname,"w",true);
         if (destF != NULL) {
             fputs(kmlFiles,destF);
@@ -474,7 +464,6 @@ cJSON* GetConfig(ip4_addr_t* ipInfo){
             ESP_LOGV(__FUNCTION__,"Wrote %s",fname);
         } else {
             ESP_LOGE(__FUNCTION__,"Cannot open dest %s",fname);
-            retVal = false;
         }
     } else {
         ESP_LOGE(__FUNCTION__,"Error whilst parsing config");
@@ -483,7 +472,6 @@ cJSON* GetConfig(ip4_addr_t* ipInfo){
 }
 
 cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
-    bool retVal=true;
     char* kmlFiles = (char*)dmalloc(KML_BUFFER_SIZE);
     esp_http_client_config_t* config = (esp_http_client_config_t*)dmalloc(sizeof(esp_http_client_config_t));
     memset(kmlFiles,0,KML_BUFFER_SIZE);
@@ -501,10 +489,8 @@ cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
     config->user_data=kmlFiles;
     ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
     esp_http_client_handle_t client = esp_http_client_init(config);
-    uint32_t kmlFilesPos=0;
     xEventGroupSetBits(eventGroup,GETTING_TRIP_LIST);
     esp_err_t err;
-    uint8_t retryCnt=0;
     err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
     ldfree((void*)config->url);
@@ -524,7 +510,6 @@ cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
         char* fname = (char*)dmalloc(255);
         sprintf(fname,"/lfs/status/%d.json",devId);
         ESP_LOGV(__FUNCTION__,"Writing %s",fname);
-        int res;
         FILE* destF = fopen(fname,"w",true);
         if (destF != NULL) {
             fputs(kmlFiles,destF);
@@ -532,7 +517,6 @@ cJSON* GetStatus(ip4_addr_t* ipInfo,uint32_t devId){
             ESP_LOGV(__FUNCTION__,"Wrote %s",fname);
         } else {
             ESP_LOGE(__FUNCTION__,"Cannot open dest %s",fname);
-            retVal = false;
         }
     } else {
         ESP_LOGE(__FUNCTION__,"Error whilst parsing config");
@@ -621,7 +605,6 @@ bool IsTheFuckerUp(esp_ip4_addr_t* ipInfo){
     ESP_LOGV(__FUNCTION__,"Getting %s",config->url);
     client = esp_http_client_init(config);
     esp_err_t err;
-    uint8_t retryCnt=0;
     ret = (err = esp_http_client_perform(client)) == ESP_OK;
     esp_http_client_cleanup(client);
     ldfree((void*)config->url);
@@ -662,7 +645,6 @@ void pullStation(void *pvParameter) {
         ESP_LOGD(__FUNCTION__,"Getting %s",config->url);
         esp_http_client_handle_t client = esp_http_client_init(config);
         esp_err_t err;
-        uint8_t retryCnt=0;
         err = esp_http_client_perform(client);
 
         tarFName[0]='/';

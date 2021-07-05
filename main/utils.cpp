@@ -197,7 +197,7 @@ bool deinitSPISDCard(bool log)
   {
     esp_err_t ret;
     AppConfig* appState = AppConfig::GetAppStatus();
-    if (AppConfig::GetAppStatus()->GetStateProperty("/spiff/state") & item_state_t::ACTIVE)
+    if (appState->GetStateProperty("/spiff/state") & item_state_t::ACTIVE)
     {
       ret = esp_vfs_littlefs_unregister("storage");
       if (ret != ESP_OK)
@@ -205,9 +205,9 @@ bool deinitSPISDCard(bool log)
         if (log)
           ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
       }
-      AppConfig::GetAppStatus()->SetStateProperty("/spiff/state",item_state_t::INACTIVE);
+      appState->SetStateProperty("/spiff/state",item_state_t::INACTIVE);
     }
-    if (AppConfig::GetAppStatus()->GetStateProperty("/sdcard/state") & item_state_t::ACTIVE)
+    if (appState->GetStateProperty("/sdcard/state") & item_state_t::ACTIVE)
     {
       ESP_LOGV(__FUNCTION__, "Using SPI peripheral");
       if (esp_vfs_fat_sdmmc_unmount() == ESP_OK)
@@ -217,13 +217,13 @@ bool deinitSPISDCard(bool log)
       }
       else
       {
-        AppConfig::GetAppStatus()->SetStateProperty("/sdcard/state", item_state_t::ERROR);
+        appState->SetStateProperty("/sdcard/state", item_state_t::ERROR);
         if (log)
           ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
         return false;
       }
       spi_bus_free(SPI2_HOST);
-      AppConfig::GetAppStatus()->SetStateProperty("/sdcard/state", item_state_t::INACTIVE);
+      appState->SetStateProperty("/sdcard/state", item_state_t::INACTIVE);
     }
     return true;
   }

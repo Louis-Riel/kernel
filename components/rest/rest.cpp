@@ -99,7 +99,7 @@ esp_err_t filedownload_event_handler(esp_http_client_event_t *evt)
 bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_t match_upto){
     sampleBatteryVoltage();
     if ((strlen(reference_uri)==1) && (reference_uri[0]=='*')) {
-        ESP_LOGV(__FUNCTION__,"* match for %s",uri_to_match);
+        //ESP_LOGV(__FUNCTION__,"* match for %s",uri_to_match);
         return true;
     }
 
@@ -114,7 +114,7 @@ bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_
     bool eot=false;
     bool eos=false;
 
-    ESP_LOGV(__FUNCTION__,"routing ref:%s uri:%s",reference_uri,uri_to_match);
+    //ESP_LOGV(__FUNCTION__,"routing ref:%s uri:%s",reference_uri,uri_to_match);
     while (matches && (sidx<sLen)) {
         tc=reference_uri[tidx];
         sc=uri_to_match[sidx];
@@ -157,7 +157,6 @@ bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_
     return matches;
 }
 
-
 esp_err_t rest_handler(httpd_req_t *req)
 {
     ESP_LOGV(__FUNCTION__,"rest handling (%d)%s",req->method, req->uri);
@@ -165,7 +164,7 @@ esp_err_t rest_handler(httpd_req_t *req)
     for (const httpd_uri_t &theUri : restUris) {
         idx++;
         if ((req->method == theUri.method) && (routeHttpTraffic(theUri.uri, req->uri, strlen(req->uri)))){
-            ESP_LOGV(__FUNCTION__,"rest handled (%d)%s idx:%d",req->method, req->uri, idx);
+            ESP_LOGV(__FUNCTION__,"rest handled (%d)%s <- %s idx:%d",req->method,theUri.uri, req->uri, idx);
             return theUri.handler(req);
         }
     }
@@ -194,7 +193,7 @@ void restSallyForth(void *pvParameter) {
         xEventGroupWaitBits(weg,WIFI_DISCONNECTED_BIT,pdFALSE,pdFALSE,portMAX_DELAY);
         xEventGroupClearBits(eventGroup,HTTP_SERVING);
         ESP_LOGI(__FUNCTION__, "Stopping server on port %d", config.server_port);
-        httpd_stop(&server);
+        TheWifi::GetInstance()->wifiStop(NULL);
     } else {
         ESP_LOGE(__FUNCTION__, "Error starting server!");
     }

@@ -666,74 +666,66 @@ void addDataPoint()
 
 void doHibernate(void *param)
 {
+  addDataPoint();
+  ESP_LOGD(__FUNCTION__, "Deep Sleeping %d", bumpCnt);
   if (gps != NULL)
   {
-    addDataPoint();
-    ESP_LOGD(__FUNCTION__, "Deep Sleeping %d", bumpCnt);
-    if (gps != NULL)
-    {
-      commitTripToDisk((void *)0);
-    }
-    uint64_t ext_wakeup_pin_mask = 0;
-    int curLvl = 0;
-    for (int idx = 0; idx < numWakePins; idx++)
-    {
-      curLvl = gpio_get_level(wakePins[idx]);
-      ESP_LOGD(__FUNCTION__, "Pin %d is %d", wakePins[idx], curLvl);
-      if (curLvl == 0)
-      {
-        ESP_ERROR_CHECK(rtc_gpio_pulldown_en(wakePins[idx]));
-        ext_wakeup_pin_mask |= (1ULL << wakePins[idx]);
-      }
-    }
-    if (ext_wakeup_pin_mask != 0)
-    {
-      ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
-    }
-    else
-    {
-      ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[0], 0));
-    }
-    gpio_set_level(gps->enPin(), 0);
-    gpio_hold_en(gps->enPin());
-
-    //gpio_deep_sleep_hold_en();
-    lastSpeed = 0;
-    lastCourse = 0;
-    lastAltitude = 0;
-    lastLatDeg = 0;
-    lastLatBil = 0;
-    lastLngDeg = 0;
-    lastLngBil = 0;
-    lastDpTs = 0;
-    bumpCnt = 0;
-    lastRate = 0;
-    lastPoiState = poiState_t::unknown;
-    curTrip.fname[0] = 0;
-    curTrip.lastExportedTs = 0;
-    curTrip.nodesAllocated = 0;
-    curTrip.numNodes = 0;
-    hibernate = true;
-    ESP_LOGD(__FUNCTION__, "Hybernating");
-
-    //xTaskCreate(flash, "flashy", 2048, (void *)10, tskIDLE_PRIORITY, NULL);
-    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-    ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF));
-    ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF));
-    adc_power_off();
-    ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF));
-    ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF));
-    esp_deep_sleep_start();
+    commitTripToDisk((void *)0);
   }
+  uint64_t ext_wakeup_pin_mask = 0;
+  int curLvl = 0;
+  for (int idx = 0; idx < numWakePins; idx++)
+  {
+    curLvl = gpio_get_level(wakePins[idx]);
+    ESP_LOGD(__FUNCTION__, "Pin %d is %d", wakePins[idx], curLvl);
+    if (curLvl == 0)
+    {
+      ESP_ERROR_CHECK(rtc_gpio_pulldown_en(wakePins[idx]));
+      ext_wakeup_pin_mask |= (1ULL << wakePins[idx]);
+    }
+  }
+  if (ext_wakeup_pin_mask != 0)
+  {
+    ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
+  }
+  else
+  {
+    ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[0], 0));
+  }
+  gpio_set_level(gps->enPin(), 0);
+  gpio_hold_en(gps->enPin());
+
+  //gpio_deep_sleep_hold_en();
+  lastSpeed = 0;
+  lastCourse = 0;
+  lastAltitude = 0;
+  lastLatDeg = 0;
+  lastLatBil = 0;
+  lastLngDeg = 0;
+  lastLngBil = 0;
+  lastDpTs = 0;
+  bumpCnt = 0;
+  lastRate = 0;
+  lastPoiState = poiState_t::unknown;
+  curTrip.fname[0] = 0;
+  curTrip.lastExportedTs = 0;
+  curTrip.nodesAllocated = 0;
+  curTrip.numNodes = 0;
+  hibernate = true;
+  ESP_LOGD(__FUNCTION__, "Hybernating");
+
+  //xTaskCreate(flash, "flashy", 2048, (void *)10, tskIDLE_PRIORITY, NULL);
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+  ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF));
+  ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF));
+  ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF));
+  ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF));
+  esp_deep_sleep_start();
 }
 
 void Hibernate()
 {
-  if ((xEventGroupGetBits(gps->eg) & TinyGPSPlus::gpsEvent::gpsRunning) && 
-      (getBatteryVoltage() != 0.0))
-  {
-    xEventGroupClearBits(gps->eg, TinyGPSPlus::gpsEvent::gpsRunning);
-    xEventGroupSetBits(gps->eg, TinyGPSPlus::gpsEvent::gpsStopped);
+  if (!(xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON)) {
     xTaskCreate(doHibernate, "doHibernate", 8192, NULL, tskIDLE_PRIORITY, NULL);
   }
 }
@@ -742,10 +734,6 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
 {
   time(&now);
   sampleBatteryVoltage();
-  if ((id != TinyGPSPlus::gpsEvent::msg) && (id != TinyGPSPlus::gpsEvent::locationChanged)){
-    AppConfig::SignalStateChange(state_change_t::GPS);
-    ESP_LOGV(__FUNCTION__,"gps:%d",id);
-  }
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:
@@ -1224,7 +1212,6 @@ void app_main(void)
 
     initLog();
     sampleBatteryVoltage();
-    EventManager *mgr = new EventManager(appcfg->GetJSONConfig("/events"));
     uint32_t tmp;
     ESP_LOGV(__FUNCTION__, "Pre-Loading Image....");
     loadImage(false, &tmp);
@@ -1292,7 +1279,6 @@ void app_main(void)
           ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::outSyncPoint, gpsEvent, &gps));
           //configureMotionDetector();
           //commitTripToDisk((void*)(BIT1|BIT2));
-          //ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS,TinyGPSPlus::gpsEvent::atSyncPoint,NULL,0,portMAX_DELAY));
         }
         else
         {

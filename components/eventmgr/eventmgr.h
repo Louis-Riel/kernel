@@ -31,17 +31,26 @@ public:
     bool AddEventDescriptor(int32_t id,char* name);
     static cJSON* GetEventBases(char* filter);
     static cJSON* GetEventBaseEvents(char* base, char* filter);
+    static char* GetParsedValue(const char* value);
     char* GetName();
     char* GetEventName(int32_t id);
     int32_t GetEventId(char* name);
     void SetEventName(int32_t id, char* name);
     esp_event_base_t GetEventBase();
+    enum templateType_t {
+        Invalid=0,
+        Status,
+        Config,
+        CurrentDate
+    };
 private:
     EventDescriptor_t* eventDescriptors;
     static EventDescriptor_t* eventDescriptorCache;
     static uint32_t numCacheEntries;
     esp_event_base_t eventBase;
     char* name;
+
+    static EventHandlerDescriptor::templateType_t GetTemplateType(char* term);
 };
 
 enum class compare_operation_t {
@@ -75,8 +84,8 @@ public:
     void PrintState();
 private:
     static compare_operation_t GetCompareOperator(cJSON* json);
-    static compare_entity_type_t GetEntityType(cJSON* json,char* fldName);
-    static compare_origin_t GetOriginType(cJSON* json,char* fldName);
+    static compare_entity_type_t GetEntityType(cJSON* json,const char* fldName);
+    static compare_origin_t GetOriginType(cJSON* json,const char* fldName);
 
     compare_operation_t compareOperation;
     compare_entity_type_t valType;
@@ -111,27 +120,26 @@ class EventManager {
 public:
     EventManager(cJSON*);
     static void RegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor);
+    static void UnRegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor);
     EventInterpretor* eventInterpretors[MAX_NUM_EVENTS];
-    static cJSON* GetConfig();
-    static cJSON* SetConfig(cJSON*);
+    cJSON* GetConfig();
+    cJSON* SetConfig(cJSON*);
+    static EventManager* GetInstance();
 private:
     cJSON* config;
-    static EventManager* instance;
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
 };
 
 class ManagedDevice {
 public:
-    ManagedDevice(AppConfig* config,char* type);
-    void HandleEvent(cJSON* params);
+    ManagedDevice(char* type);
+    ~ManagedDevice();
     cJSON* GetStatus();
     esp_event_base_t eventBase;
-    EventHandlerDescriptor* handlerDescriptors=NULL;
+    EventHandlerDescriptor* handlerDescriptors;
 protected:
-    AppConfig* config;
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     void PostEvent(void* content, size_t len,int32_t event_id);
-    void InitDevice();
     EventHandlerDescriptor* BuildHandlerDescriptors();
     cJSON* BuildStatus();
     cJSON* status;

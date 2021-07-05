@@ -7,23 +7,32 @@ uint8_t Pin::numPins=0;
 QueueHandle_t Pin::eventQueue;
 
 Pin::~Pin(){
+    ldfree((void*)name);
+    for (int idx=0; idx < MAX_NUM_PINS; idx++){
+        if (pins[idx] == this) {
+            pins[idx]=NULL;
+            numPins--;
+        }
+    }
+    if (numPins == 0) {
+        EventManager::UnRegisterEventHandler(handlerDescriptors);
+    }
     ESP_LOGD(__FUNCTION__,"Destructor");
 }
 
 Pin::Pin(AppConfig* config)
-    :ManagedDevice(config,"DigitalPin"),
+    :ManagedDevice("DigitalPin"),
     pinNo(config->GetPinNoProperty("pinNo")),
     flags(config->GetIntProperty("driverFlags")),
-    name(config->GetStringProperty("pinName")),
-    status(BuildStatus())
+    config(config)
 {
-    char* pname = (char*)dmalloc(sizeof(name)+1);
-    strcpy(pname,name);
+    char* pname = config->GetStringProperty("pinName");
     uint32_t sz = strlen(pname)+1;
-    name = (char*) dmalloc(sz);
-    name[0]=0;
-    if (sz > 1)
-        strcpy(name,pname);
+    if (sz > 0){
+        name = (char*) dmalloc(sz);
+        name[0]=0;
+        sz>1?strcpy(name,pname):NULL;
+    }
     ESP_LOGV(__FUNCTION__,"Pin(%d):%s",pinNo,name);
     
     if (numPins == 0) {
@@ -46,7 +55,13 @@ EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
 
 void Pin::InitDevice(){
     ESP_LOGD(__FUNCTION__,"Initializing pin %d as %s",pinNo,name);
-    pins[numPins++]=this;
+    for (int idx=0; idx < MAX_NUM_PINS; idx++) {
+        if (pins[idx] == NULL) {
+            pins[idx] = this;
+            numPins++;
+            break;
+        }
+    }
     gpio_config_t io_conf;
     io_conf.intr_type = GPIO_INTR_ANYEDGE;
     io_conf.pin_bit_mask = 1ULL << pinNo;
@@ -142,7 +157,6 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
         Pin* pin;
         uint8_t idx;
         gpio_num_t pinNo;
-        cJSON* event;
         cJSON* params;
         switch (id)
         {
@@ -151,10 +165,12 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
             if ((params != NULL) && cJSON_HasObjectItem(params,"pinNo")){
                 pin = NULL;
                 idx = 0;
+                uint32_t state = cJSON_GetObjectItem(cJSON_GetObjectItem(params,"state"),"value")->valueint;
                 pinNo = (gpio_num_t)cJSON_GetObjectItem(cJSON_GetObjectItem(params,"pinNo"),"value")->valueint;
                 while((pin=Pin::pins[idx++])!= NULL) {
                     if (pin->pinNo == pinNo) {
-                        pin->HandleEvent(params);
+                        ESP_LOGV(__FUNCTION__,"Turing %d %d",pinNo,state);
+                        gpio_set_level(pinNo,state);
                         return;
                     }
                 }
@@ -166,15 +182,5 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
         default:
             break;
         }
-    }
-}
-
-void Pin::HandleEvent(cJSON* params){
-    if (cJSON_HasObjectItem(params,"state")) {
-        uint32_t state = cJSON_GetObjectItem(cJSON_GetObjectItem(params,"state"),"value")->valueint;
-        ESP_LOGV(__FUNCTION__,"Turing %d %d",pinNo,state);
-        gpio_set_level(pinNo,state);
-    } else {
-        ESP_LOGW(__FUNCTION__,"Missing params");
     }
 }

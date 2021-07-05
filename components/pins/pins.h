@@ -30,7 +30,6 @@ protected:
     static uint8_t numPins;
     static void queuePoller(void *arg);
     static void pinHandler(void *arg);
-    void HandleEvent(cJSON* params);
     static QueueHandle_t eventQueue;
     gpio_num_t pinNo;
     uint32_t flags;
@@ -41,6 +40,8 @@ protected:
     EventHandlerDescriptor* BuildHandlerDescriptors();
     cJSON* BuildStatus();
     cJSON* status;
+private:
+    AppConfig* config;
 };
 
 #endif

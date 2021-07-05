@@ -25,17 +25,14 @@ void WebsocketManager::QueueHandler(void* instance){
   esp_err_t ret;
   uint8_t* emptyString = (uint8_t*)dmalloc(1);
   *emptyString=0;
-  bool isPing = false;
   while(me->isLive){
     if (xQueueReceive(me->rdySem,buf,3000/portTICK_PERIOD_MS)) {
       ws_pkt.payload = (uint8_t*)buf;
       ws_pkt.len = strlen(buf);
       //printf("\nGot a %s(%d) msg",ws_pkt.payload[0] == '{' ? "State" : "Logs\n", ws_pkt.len);
-      isPing=false;
     } else {
       ws_pkt.payload = emptyString;
       ws_pkt.len = 0;
-      isPing=true;
     }
     bool isLive = false;
     for (uint8_t idx = 0; idx < 5; idx++){
@@ -72,7 +69,7 @@ void WebsocketManager::QueueHandler(void* instance){
   vTaskDelete(NULL);
 }
 
-WebsocketManager::WebsocketManager(char* name):
+WebsocketManager::WebsocketManager(const char* name):
     rdySem(xQueueCreate(10, JSON_BUFFER_SIZE)),
     name((char*)dmalloc(strlen(name)+1)),
     isLive(true)
@@ -118,13 +115,10 @@ static bool logCallback(void* instance, char* logData){
 static void statePoller(void *instance){
   WebsocketManager* ws = (WebsocketManager*) instance;
   EventGroupHandle_t stateEg = AppConfig::GetStateGroupHandle();
-  httpd_ws_frame_t ws_pkt;
-  ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-  ws_pkt.final = false;
 
   EventBits_t bits = 0;
   while ((ws!=NULL) && (ws->isLive)) {
-    EventBits_t bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,1000/portTICK_RATE_MS);
+    bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,1000/portTICK_RATE_MS);
     if (bits){
       cJSON* state = status_json();
       if (bits&state_change_t::GPS) {
@@ -135,7 +129,11 @@ static void statePoller(void *instance){
         ESP_LOGV(__FUNCTION__,"wState Changed %d", bits);
         cJSON* item;
         cJSON_ArrayForEach(item,AppConfig::GetAppStatus()->GetJSONConfig(NULL)) {
-          cJSON_AddItemReferenceToObject(state,item->string,AppConfig::GetAppStatus()->GetJSONConfig(item->string));
+          if (state!= NULL){
+            cJSON_AddItemReferenceToObject(state,item->string,AppConfig::GetAppStatus()->GetJSONConfig(item->string));
+          } else {
+            ESP_LOGW(__FUNCTION__, "missing state");
+          }
         }
       } else {
         ESP_LOGV(__FUNCTION__,"State Changed %d", bits);

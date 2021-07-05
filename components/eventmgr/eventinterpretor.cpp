@@ -1,5 +1,6 @@
 #include "./eventmgr.h"
 #include "../rest/rest.h"
+#include "../mfile/mfile.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -80,7 +81,6 @@ void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *
     cJSON *jeventid;
     int32_t eventId = -1;
     esp_err_t ret;
-    esp_event_base_t eventBase;
     if (strcmp(method, "commitTripToDisk") == 0)
     {
         jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "flags"), "value");
@@ -97,6 +97,7 @@ void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *
     }
     if (strcmp(method, "wifioff") == 0)
     {
+        ESP_LOGD(__FUNCTION__, "%s from %s", handler->GetName(), "wifioff");
         TheWifi::GetInstance()->wifiStop(NULL);
     }
     if (strcmp(method, "PullStation") == 0)
@@ -119,14 +120,11 @@ void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *
             ESP_LOGW(__FUNCTION__, "Missing event id or base");
             return;
         }
-        if (strcmp(jeventbase->valuestring, "DigitalPin") == 0)
+        eventId = handler->GetEventId(jeventid->valuestring);
+        if (eventId == -1)
         {
-            eventId = handler->GetEventId(jeventid->valuestring);
-            if (eventId == -1)
-            {
-                ESP_LOGW(__FUNCTION__, "bad event id:%s", jeventid->valuestring);
-                return;
-            }
+            ESP_LOGW(__FUNCTION__, "bad event id:%s", jeventid->valuestring);
+            return;
         }
         ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)", jeventid->valuestring, jeventbase->valuestring, eventId);
         if ((ret = esp_event_post(handler->GetEventBase(), eventId, &params, sizeof(void *), portMAX_DELAY)) != ESP_OK)
@@ -139,7 +137,6 @@ void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *
 EventCondition::EventCondition(cJSON *json)
     : compareOperation(GetCompareOperator(json)), valType(GetEntityType(json, "src")), valOrigin(GetOriginType(json, "src")), compType(GetEntityType(json, "comp")), compOrigin(GetOriginType(json, "comp")), isValid(true), compStrVal(NULL), eventJsonPropName(NULL), compIntValue(0), compDblValue(0.0)
 {
-    char *ctmp;
     cJSON *comp = cJSON_GetObjectItem(json, "comp");
 
     isValid = valType != compare_entity_type_t::Invalid &&
@@ -332,7 +329,7 @@ compare_operation_t EventCondition::GetCompareOperator(cJSON *json)
     return compare_operation_t::Invalid;
 }
 
-compare_entity_type_t EventCondition::GetEntityType(cJSON *json, char *fldName)
+compare_entity_type_t EventCondition::GetEntityType(cJSON *json, const char *fldName)
 {
     if ((json == NULL) || (fldName == NULL) || (strlen(fldName) == 0))
     {
@@ -365,7 +362,7 @@ compare_entity_type_t EventCondition::GetEntityType(cJSON *json, char *fldName)
     return compare_entity_type_t::Invalid;
 }
 
-compare_origin_t EventCondition::GetOriginType(cJSON *json, char *fldName)
+compare_origin_t EventCondition::GetOriginType(cJSON *json, const char *fldName)
 {
     if ((json == NULL) || (fldName == NULL) || (strlen(fldName) == 0))
     {

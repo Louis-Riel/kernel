@@ -223,7 +223,7 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
   }
 
   char *slash = 0;
-  if ((slash = indexOf(path, "/")) > 0)
+  if ((slash = indexOf(path, "/")) != NULL)
   {
     ESP_LOGV(__FUNCTION__, "Getting Child JSON as:%s", slash);
     char *name = (char *)dmalloc((slash - path) + 1);
@@ -255,6 +255,10 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
   }
 }
 
+bool AppConfig::isItemObject(const char* path){
+  return GetPropertyHolder(GetJSONConfig(path)) == NULL;
+}
+
 cJSON *AppConfig::GetPropertyHolder(cJSON *prop)
 {
   if (prop == NULL)
@@ -270,9 +274,7 @@ cJSON *AppConfig::GetPropertyHolder(cJSON *prop)
     }
     else
     {
-      char *sjson = cJSON_Print(prop);
-      ESP_LOGE(__FUNCTION__, "JSon is an object but missing version:%s", sjson);
-      ldfree(sjson);
+      ESP_LOGV(__FUNCTION__, "JSon is an object but missing version");
       return NULL;
     }
   }
@@ -304,7 +306,7 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char* path, bool createWhen
   }
 
   char *lastSlash = lastIndexOf(path, "/");
-  if (lastSlash > 0)
+  if (lastSlash != NULL)
   {
     char *propPath = (char *)dmalloc(strlen(path));
     memcpy(propPath, path, lastSlash - path);
