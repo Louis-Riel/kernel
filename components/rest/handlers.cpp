@@ -10,6 +10,7 @@
 #include "soc/sens_reg.h"
 #include "driver/adc.h"
 #include "../eventmgr/eventmgr.h"
+#include "../mfile/mfile.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -214,25 +215,56 @@ void flashTheThing(void *param)
 esp_err_t stat_handler(httpd_req_t *req)
 {
     char *fname = (char *)(req->uri + 5);
-    ESP_LOGV(__FUNCTION__, "Getting stats on %s", fname);
-    struct stat st;
-    int ret = 0;
+    if (req->method == HTTP_POST){
+        ESP_LOGV(__FUNCTION__, "Getting stats on %s", fname);
+        struct stat st;
+        int ret = 0;
 
-    ret = stat(fname, &st);
+        ret = stat(fname, &st);
 
-    if (ret == 0)
-    {
-        char *res = (char *)dmalloc(JSON_BUFFER_SIZE);
-        char *path = (char *)dmalloc(255);
-        strcpy(path, fname);
-        char *fpos = strrchr(path, '/');
-        *fpos = 0;
-        esp_err_t ret = httpd_resp_send(req, res, sprintf(res, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}", path, fpos + 1, "file", (uint32_t)st.st_size));
-        ldfree(path);
-        ldfree(res);
-        return ret;
+        if (ret == 0)
+        {
+            char *res = (char *)dmalloc(JSON_BUFFER_SIZE);
+            char *path = (char *)dmalloc(255);
+            strcpy(path, fname);
+            char *fpos = strrchr(path, '/');
+            *fpos = 0;
+            esp_err_t ret = httpd_resp_send(req, res, sprintf(res, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}", path, fpos + 1, "file", (uint32_t)st.st_size));
+            ldfree(path);
+            ldfree(res);
+            return ret;
+        }
     }
-    ESP_LOGE(__FUNCTION__, "Cannot stat %s err:%d", fname, ret);
+    if (req->method == HTTP_DELETE){
+        ESP_LOGD(__FUNCTION__, "Deleting %s", fname);
+        size_t tlen = httpd_req_get_hdr_value_len(req,"ftype");
+
+        if (tlen > 0) {
+            char* fileType = (char*)dmalloc(tlen+1);
+            httpd_req_get_hdr_value_str(req,"ftype",fileType,tlen+1);
+
+            if (fileType[0] == 'd') {
+                ESP_LOGD(__FUNCTION__, "%s is a folder", fname);
+                if (rmDashFR(fname)) {
+                    ldfree(fileType);
+                    return httpd_resp_send(req,"OK",3);
+                } else {
+                    ESP_LOGE(__FUNCTION__,"Failed in rm -fr on %s",fname);
+                }
+            } else {
+                ESP_LOGD(__FUNCTION__, "%s is a file", fname);
+                if (deleteFile(fname)) {
+                    ldfree(fileType);
+                    return httpd_resp_send(req,"OK",3);
+                } else {
+                    ESP_LOGE(__FUNCTION__,"Failed to rm -fr %s",fname);
+                }
+            }
+            ldfree(fileType);
+        } else {
+            ESP_LOGE(__FUNCTION__,"Missing type");
+        }
+    }
     return httpd_resp_send_500(req);
 }
 
@@ -629,7 +661,7 @@ esp_err_t HandleWifiCommand(httpd_req_t *req)
     else
     {
         *(postData + rlen) = 0;
-        ESP_LOGV(__FUNCTION__, "Got %s", postData);
+        ESP_LOGD(__FUNCTION__, "Got %s", postData);
         cJSON *jresponse = cJSON_Parse(postData);
         if (jresponse != NULL)
         {
@@ -648,53 +680,46 @@ esp_err_t HandleWifiCommand(httpd_req_t *req)
         }
     }
     ldfree(postData);
+    xEventGroupSetBits(*getAppEG(), app_bits_t::TRIPS_COMMITTED);
+
     return ret;
 }
 
-void parseFiles(void *param)
+void parseFolderForTars(char* folder)
 {
+    ESP_LOGD(__FUNCTION__, "Looking for tars in %s", folder);
     DIR *tarFolder;
-    DIR *childFolder;
     dirent *di;
-    dirent *fi;
-    char *folderName = (char *)dmalloc(300);
     char *fileName = (char *)dmalloc(300);
-    if ((tarFolder = opendir(param == NULL ? "/sdcard/tars" : (char *)param)) != NULL)
+    if ((tarFolder = opendir(folder)))
     {
         while ((di = readdir(tarFolder)) != NULL)
         {
             ESP_LOGV(__FUNCTION__, "tarlist:%s", di->d_name);
             if (di->d_type == DT_DIR)
             {
-                sprintf(folderName, "/sdcard/tars/%s", di->d_name);
-                if ((childFolder = opendir(folderName)) != NULL)
-                {
-                    while ((fi = readdir(childFolder)) != NULL)
-                    {
-                        if (fi->d_type != DT_DIR)
-                        {
-                            sprintf(fileName, "%s/%s", folderName, fi->d_name);
-                            ESP_LOGV(__FUNCTION__, "filelist:%s", fileName);
-                            extractClientTar(fileName);
-                            unlink(fileName);
-                        }
-                    }
-                }
-                else
-                {
-                    ESP_LOGE(__FUNCTION__, "Cannot open %s", folderName);
-                }
-                closedir(childFolder);
+                sprintf(fileName, "%s/%s", folder, di->d_name);
+                ESP_LOGV(__FUNCTION__, "folder:%s", fileName);
+                parseFolderForTars(fileName);
+            } else {
+                sprintf(fileName, "%s/%s", folder, di->d_name);
+                ESP_LOGV(__FUNCTION__, "filelist:%s", fileName);
+                extractClientTar(fileName);
+                unlink(fileName);
             }
         }
         closedir(tarFolder);
     }
     else
     {
-        ESP_LOGE(__FUNCTION__, "Cannot open /sdcard/tars");
+        ESP_LOGE(__FUNCTION__, "Cannot open %s", folder);
     }
     ldfree(fileName);
-    ldfree(folderName);
+}
+
+void parseFiles(void *param)
+{
+    parseFolderForTars("/sdcard/tars");
     xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT2 | BIT3), tskIDLE_PRIORITY, NULL);
     vTaskDelete(NULL);
 }
@@ -712,7 +737,7 @@ esp_err_t HandleSystemCommand(httpd_req_t *req)
     else
     {
         *(postData + rlen) = 0;
-        ESP_LOGV(__FUNCTION__, "Got %s", postData);
+        ESP_LOGD(__FUNCTION__, "Got %s", postData);
         cJSON *jresponse = cJSON_Parse(postData);
         if (jresponse != NULL)
         {
@@ -799,10 +824,11 @@ esp_err_t status_handler(httpd_req_t *req)
         if (endsWith(req->uri, "/wifi"))
         {
             ret = HandleWifiCommand(req);
-        }
-        if (endsWith(req->uri, "/cmd"))
+        } else if (endsWith(req->uri, "/cmd"))
         {
             ret = HandleSystemCommand(req);
+        } else {
+            ESP_LOGW(__FUNCTION__,"Unimplemented methed:%s",req->uri);
         }
     }
 
@@ -1174,12 +1200,19 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                                 allDone=feof(theFile);
                                 if (allDone) {
                                     fClose(theFile);
-                                    ESP_LOGV(__FUNCTION__,"Closing %s",theFName);
-                                    trip *curTrip = getActiveTrip();
-                                    if ((strlen(curTrip->fname) > 0) && endsWith(curTrip->fname, theFName))
+                                    char* strftime_buf = (char*)dmalloc(64);
+                                    struct tm timeinfo;
+                                    time_t now;
+                                    time(&now);
+                                    localtime_r(&now, &timeinfo);
+                                    strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d", &timeinfo);
+
+                                    if (indexOf(theFName,strftime_buf))
                                     {
                                         removeSrc=false;
                                     }
+                                    ldfree(strftime_buf);
+                                    ESP_LOGD(__FUNCTION__,"Closing %s",theFName);
 
                                     if (removeSrc && !endsWith(theFName,"json")){
                                         ESP_LOGD(__FUNCTION__,"Removing %s",theFName);
@@ -1192,11 +1225,24 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                                     }
                                 }
                             } else {
+
                                 fClose(theFile);
                                 allDone=true;
-                                ESP_LOGV(__FUNCTION__,"Closing %s",theFName);
+                                ESP_LOGV(__FUNCTION__,"Closing %s.",theFName);
+                                char* strftime_buf = (char*)dmalloc(64);
+                                struct tm timeinfo;
+                                time_t now;
+                                time(&now);
+                                localtime_r(&now, &timeinfo);
+                                strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d", &timeinfo);
+
+                                if (indexOf(theFName,strftime_buf))
+                                {
+                                    removeSrc=false;
+                                }
+                                ldfree(strftime_buf);
                                 if (removeSrc && !endsWith(theFName,"json")){
-                                    ESP_LOGD(__FUNCTION__,"Removing %s",theFName);
+                                    ESP_LOGD(__FUNCTION__,"Removing %s.",theFName);
                                     int retCode = unlink(theFName);
                                     if (retCode != 0) {
                                         ESP_LOGE(__FUNCTION__,"unlink error %s",esp_err_to_name(retCode));
@@ -1337,15 +1383,20 @@ bool dumpFolder(char *folderName, mtar_t *tar)
 
 esp_err_t trips_handler(httpd_req_t *req)
 {
+    BufferedFile::CloseAll();
+    AppConfig *config = AppConfig::GetAppConfig();
     mtar_t tar;
     memset(&tar, 0, sizeof(tar));
     tar.read = tarRead;
     tar.close = tarClose;
     tar.seek = tarSeek;
     tar.write = tarWrite;
+    char tarFName[50];
+
+    sprintf(tarFName,"%d.tar",config->GetIntProperty("deviceid"));
 
     httpd_resp_set_type(req, "application/x-tar");
-    httpd_resp_set_hdr(req, "filename", "trips.tar");
+    httpd_resp_set_hdr(req, "filename", tarFName);
     xEventGroupSetBits(*getAppEG(), app_bits_t::TRIPS_SYNCING);
 
     if (initSPISDCard())
@@ -1368,7 +1419,6 @@ esp_err_t trips_handler(httpd_req_t *req)
         cJSON_ArrayForEach(stat,astatus) {
             cJSON_AddItemReferenceToObject(status, stat->string,stat);
         }
-        AppConfig *config = AppConfig::GetAppConfig();
         char *cs = NULL, *ss = NULL;
         if ((tarString(&tar, "status.json", (cs = cJSON_PrintUnformatted(status))) == ESP_OK) &&
             (tarString(&tar, "config.json", (ss = cJSON_PrintUnformatted(config->GetJSONConfig(NULL)))) == ESP_OK) &&

@@ -15,7 +15,7 @@
 #include "cJSON.h"
 #include <regex> 
 
-#define MAX_NUM_HANDLERS_PER_BASE 20
+#define MAX_NUM_HANDLERS_PER_BASE 30
 #define MAX_NUM_HANDLERS 100
 #define MAX_NUM_EVENTS 200
 
@@ -29,7 +29,7 @@ class EventHandlerDescriptor {
 public:
     EventHandlerDescriptor(esp_event_base_t base,char* name);
     bool AddEventDescriptor(int32_t id,char* name);
-    static cJSON* GetEventBases(char* filter);
+    static EventDescriptor_t* GetEventDescriptor(char* base,char* eventName);
     static cJSON* GetEventBaseEvents(char* base, char* filter);
     static char* GetParsedValue(const char* value);
     char* GetName();
@@ -41,7 +41,10 @@ public:
         Invalid=0,
         Status,
         Config,
-        CurrentDate
+        CurrentDate,
+        CurrentDateNoSpace,
+        RAM,
+        Battery
     };
 private:
     EventDescriptor_t* eventDescriptors;

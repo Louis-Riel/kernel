@@ -8,6 +8,7 @@ uint32_t EventHandlerDescriptor::numCacheEntries = 0;
 EventHandlerDescriptor::EventHandlerDescriptor(esp_event_base_t eventBase,char* name){
     this->eventBase = eventBase;
     this->eventDescriptors = (EventDescriptor_t*)dmalloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS_PER_BASE);
+    ESP_LOGV(__FUNCTION__,"Event descriptor for base %s with name %s created", eventBase, name);
     memset(this->eventDescriptors,0,sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS_PER_BASE);
     if (EventHandlerDescriptor::eventDescriptorCache == NULL) {
         EventHandlerDescriptor::eventDescriptorCache = (EventDescriptor_t*)dmalloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS);
@@ -27,6 +28,15 @@ bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,char* eventName){
             EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].id = id;
             EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].baseName = name;
             EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries++].eventName = eventName;
+            ESP_LOGV(__FUNCTION__,"Event descriptor %s(%d) registered in %s", eventName,id,this->eventBase);
+            return true;
+        }
+    }
+    ESP_LOGE(__FUNCTION__,"No space left for event descriptor, cannot register %s(%d) for base %s", eventName,id,this->eventBase);
+    for (int idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
+        EventDescriptor_t* descriptor = &this->eventDescriptors[idx];
+        if (descriptor->eventName){
+            ESP_LOGV(__FUNCTION__,"%d Event descriptor %s(%d) registered in %s", idx, eventName,id,this->eventBase);
             return true;
         }
     }
@@ -64,28 +74,21 @@ cJSON* EventHandlerDescriptor::GetEventBaseEvents(char* base, char* filter) {
     return ret;
 }
 
-cJSON* EventHandlerDescriptor::GetEventBases(char* filter) {
-    cJSON* ret = cJSON_CreateArray();
+EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(char* base,char* eventName) {
+    ESP_LOGV(__FUNCTION__,"GetEventDescriptor %s(%s)", eventName, base);
     for (int idx = 0; idx < MAX_NUM_EVENTS; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
-        if ((ei != NULL) || 
-            (filter == NULL) || 
-            (strlen(filter) == 0) || 
-            (indexOf(ei->baseName,filter) != NULL)) {
-            cJSON* curItem = NULL;
-            cJSON_ArrayForEach(curItem,ret) {
-                if (strcmp(cJSON_GetObjectItem(curItem,"name")->valuestring,ei->baseName) == 0) {
-                    break;
-                }
-            };
-            if (curItem == NULL){
-                cJSON* item = cJSON_CreateObject();
-                cJSON_AddStringToObject(item,"name",ei->eventName);
-                cJSON_AddItemToArray(ret,item);
-            }
+        if ((ei != NULL) && 
+            (ei->baseName != NULL) &&
+            (ei->eventName != NULL) &&
+            (base != NULL) && 
+            (eventName != NULL) && 
+            (indexOf(ei->baseName,base) != NULL) &&
+            (indexOf(ei->eventName,eventName) != NULL)) {
+            return ei;
         }
     }
-    return ret;
+    return NULL;
 }
 
 void EventHandlerDescriptor::SetEventName(int32_t id,char* name){
@@ -96,19 +99,18 @@ void EventHandlerDescriptor::SetEventName(int32_t id,char* name){
             eventDescriptors[idx].eventName = (char*)dmalloc(strlen(name)+1);
             strcpy(eventDescriptors[idx].eventName,name);
             return;
-        } else {
-            ESP_LOGV(__FUNCTION__,"%d:%s not set at idx:%d", eventDescriptors[idx].id, name, idx);
         }
     }
 }
 
 int32_t EventHandlerDescriptor::GetEventId(char* name){
     if ((name == NULL) || (strlen(name)==0)) {
+        ESP_LOGW(__FUNCTION__,"Missing name for descriptor");
         return -1;
     }
     for (int idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
         EventDescriptor_t* descriptor = &this->eventDescriptors[idx];
-        if ((descriptor != NULL) && (strcmp(descriptor->eventName,name)==0)){
+        if ((descriptor != NULL) && (descriptor->eventName != NULL) && (strcmp(descriptor->eventName,name)==0)){
             return descriptor->id;
         }
     }
@@ -136,40 +138,55 @@ EventHandlerDescriptor::templateType_t EventHandlerDescriptor::GetTemplateType(c
     if (indexOf(term+2,"Config.")==term+2) {
         return EventHandlerDescriptor::templateType_t::Config;
     }
+    if (indexOf(term+2,"CurrentDateNoSpace")==term+2) {
+        return EventHandlerDescriptor::templateType_t::CurrentDateNoSpace;
+    }
     if (indexOf(term+2,"CurrentDate")==term+2) {
         return EventHandlerDescriptor::templateType_t::CurrentDate;
+    }
+    if (indexOf(term+2,"RAM")==term+2) {
+        return EventHandlerDescriptor::templateType_t::RAM;
+    }
+    if (indexOf(term+2,"Battery")==term+2) {
+        return EventHandlerDescriptor::templateType_t::Battery;
     }
     return EventHandlerDescriptor::templateType_t::Invalid;
 }
 
-char* EventHandlerDescriptor::GetParsedValue(const char* theValue){
-    if (!theValue || !strlen(theValue)) {
+char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
+    if (!sourceValue || !strlen(sourceValue)) {
         return NULL;
     }
-    ESP_LOGV(__FUNCTION__,"before:%s", theValue);
-    char* value = (char*)dmalloc(strlen(theValue)+1);
-    uint32_t retLen = strlen(value)+200;
+    ESP_LOGV(__FUNCTION__,"before:%s", sourceValue);
+    char* sourceShadow = (char*)dmalloc(strlen(sourceValue)+1);
+    uint32_t retLen = strlen(sourceShadow)+200;
     char* termName = NULL;
-    char* ovalue = value;
+    char* srcCursor = sourceShadow;
     char* retCursor=(char*)dmalloc(retLen);
     char* retVal = retCursor;
-    char* openPos=value;
+    char* openPos=sourceShadow;
     char* closePos=NULL;
     char* lastClosePos=NULL;
     char strftime_buf[64];
+    char* tmp=NULL;
+    cJSON* jtmp=NULL;
+    memset(retCursor,0,retLen);
     struct tm timeinfo;
     time_t now = 0;
+    time(&now);
+    localtime_r(&now, &timeinfo);
     EventHandlerDescriptor::templateType_t tt;
     
-    strcpy(value,theValue);
+    strcpy(sourceShadow,sourceValue);
 
     AppConfig* cfg = NULL;
     while ((openPos=indexOf(openPos,"${")) && (closePos=indexOf(openPos,"}"))) {
         lastClosePos=closePos;
-        if (openPos != value) {
-            memcpy(retCursor,value,openPos-value);
-            ESP_LOGV(__FUNCTION__,"added:%s(%d)", value,openPos-value);
+        if (openPos != sourceShadow) {
+            memcpy(retCursor,sourceShadow,openPos-sourceShadow);
+            ESP_LOGV(__FUNCTION__,"added:%s(%d)", retCursor,openPos-sourceShadow);
         }
+        retCursor+=strlen(retCursor);
         *closePos=0;
         switch (tt=GetTemplateType(openPos))
         {
@@ -181,28 +198,56 @@ char* EventHandlerDescriptor::GetParsedValue(const char* theValue){
             if (termName) {
                 termName++;
                 ESP_LOGV(__FUNCTION__,"termname:%s", termName);
-                if (cfg->isItemObject(termName)) {
-                    cJSON_PrintPreallocated(cfg->GetJSONConfig(termName),retCursor,200,false);
-                    ESP_LOGV(__FUNCTION__,"added json:%s", retCursor);
+                if (cfg->HasProperty(termName)){
+                    if (cfg->isItemObject(termName)) {
+                        cJSON_PrintPreallocated(cfg->GetJSONConfig(termName),retCursor,200,false);
+                        ESP_LOGV(__FUNCTION__,"added json:%s", retCursor);
+                    } else {
+                        jtmp = cfg->GetPropertyHolder(cfg->GetJSONConfig(termName));
+                        if (cJSON_IsNumber(jtmp)) {
+                            sprintf(strftime_buf,"%f",cJSON_GetNumberValue(jtmp));
+                            ESP_LOGV(__FUNCTION__,"Number Value %s", strftime_buf);
+                            strcpy(retCursor,strftime_buf);
+                        } else if (cJSON_IsBool(jtmp)) {
+                            *retCursor=cJSON_IsTrue(jtmp)?'Y':'N';
+                            ESP_LOGV(__FUNCTION__,"Bool Value %s", cJSON_IsTrue(jtmp)?"Y":"N");
+                        } else {
+                            tmp = cfg->GetStringProperty(termName);
+                            strcpy(retCursor,cfg->GetStringProperty(termName));
+                            ESP_LOGV(__FUNCTION__,"String Value:%s", retCursor);
+                        }
+                    }
                 } else {
-                    strcpy(retCursor,cfg->GetStringProperty(termName));
-                    ESP_LOGV(__FUNCTION__,"added value:%s", retCursor);
+                    ESP_LOGD(__FUNCTION__,"Cannot find %s in %s", termName, tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
                 }
             }
             break;
         case EventHandlerDescriptor::templateType_t::CurrentDate:
-            time(&now);
-            localtime_r(&now, &timeinfo);
-            strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+            strftime(strftime_buf, sizeof(strftime_buf), "%Y/%m/%d %H:%M:%S", &timeinfo);
+            strcpy(retCursor, strftime_buf);
+            ESP_LOGV(__FUNCTION__,"added datetime:%s", retCursor);
+            break;
+        case EventHandlerDescriptor::templateType_t::RAM:
+            sprintf(strftime_buf, "%d", esp_get_free_heap_size());
+            strcpy(retCursor, strftime_buf);
+            ESP_LOGV(__FUNCTION__,"added RAM:%s", retCursor);
+            break;
+        case EventHandlerDescriptor::templateType_t::Battery:
+            sprintf(strftime_buf, "%f", getBatteryVoltage());
+            strcpy(retCursor, strftime_buf);
+            ESP_LOGV(__FUNCTION__,"added Batterry:%s", retCursor);
+            break;
+        case EventHandlerDescriptor::templateType_t::CurrentDateNoSpace:
+            strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d", &timeinfo);
             strcpy(retCursor, strftime_buf);
             ESP_LOGV(__FUNCTION__,"added datetime:%s", retCursor);
             break;
         case EventHandlerDescriptor::templateType_t::Invalid:
             break;
         }
-        value=openPos=closePos+1;
+        sourceShadow=openPos=closePos+1;
         retCursor+=strlen(retCursor);
-        ESP_LOGV(__FUNCTION__,"now at:%s", value);
+        ESP_LOGV(__FUNCTION__,"now at:%s", sourceShadow);
     }
 
     if (lastClosePos != NULL) {
@@ -210,10 +255,10 @@ char* EventHandlerDescriptor::GetParsedValue(const char* theValue){
         ESP_LOGV(__FUNCTION__,"Added last chunck:%s", lastClosePos+1);
         ESP_LOGV(__FUNCTION__,"Translated:%s", retVal);
     } else {
-        strcpy(retVal,ovalue);
+        strcpy(retVal,srcCursor);
         ESP_LOGV(__FUNCTION__,"Straight copy:%s", retVal);
     }
 
-    ldfree(ovalue);
+    ldfree(srcCursor);
     return retVal;
 }

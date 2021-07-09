@@ -44,7 +44,6 @@ bool EventInterpretor::IsValid(EventHandlerDescriptor *handler, int32_t id, void
         char *eventName = handler->GetEventName(id);
         if (eventName == NULL)
         {
-            ESP_LOGV(__FUNCTION__, "%s-%d No Event Registered", handler->GetName(), id);
             return NULL;
         }
         if ((strcmp(this->eventBase, handler->GetName()) == 0) && (strcmp(eventName, this->eventId) == 0))
@@ -120,17 +119,34 @@ void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *
             ESP_LOGW(__FUNCTION__, "Missing event id or base");
             return;
         }
-        eventId = handler->GetEventId(jeventid->valuestring);
-        if (eventId == -1)
-        {
-            ESP_LOGW(__FUNCTION__, "bad event id:%s", jeventid->valuestring);
-            return;
+        if (strcmp(handler->GetEventBase(),jeventbase->valuestring)==0) {
+            eventId = handler->GetEventId(jeventid->valuestring);
+            if (eventId == -1)
+            {
+                ESP_LOGW(__FUNCTION__, "bad event id:%s(%s) in handler %s", jeventid->valuestring, jeventbase->valuestring, handler->GetEventBase());
+                return;
+            }
+            ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)", jeventid->valuestring, jeventbase->valuestring, eventId);
+            if ((ret = esp_event_post(handler->GetEventBase(), eventId, &params, sizeof(void *), portMAX_DELAY)) != ESP_OK)
+            {
+                ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));
+            }
+        } else if (strcmp(jeventbase->valuestring,"MFile")==0) {
+            EventDescriptor_t* edesc = handler->GetEventDescriptor(jeventbase->valuestring,jeventid->valuestring);
+            BufferedFile::ProcessEvent(NULL,edesc->baseName,edesc->id, &params);
+        } else {
+            EventDescriptor_t* edesc = handler->GetEventDescriptor(jeventbase->valuestring,jeventid->valuestring);
+            if (edesc) {
+                ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)..", edesc->eventName, edesc->baseName, edesc->id);
+                if ((ret = esp_event_post(edesc->baseName, edesc->id, &params, sizeof(void *), portMAX_DELAY)) != ESP_OK)
+                {
+                    ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s..", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));
+                }
+            } else {
+                ESP_LOGW(__FUNCTION__, "Cannot find %s to %s..", jeventid->valuestring, jeventbase->valuestring);
+            }
         }
-        ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)", jeventid->valuestring, jeventbase->valuestring, eventId);
-        if ((ret = esp_event_post(handler->GetEventBase(), eventId, &params, sizeof(void *), portMAX_DELAY)) != ESP_OK)
-        {
-            ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));
-        }
+
     }
 }
 

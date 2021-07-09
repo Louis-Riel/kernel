@@ -297,7 +297,7 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char* path, bool createWhen
     ESP_LOGW(__FUNCTION__, "Invalid os Missing path:%s", path == NULL ? "*null*" : path);
     return NULL;
   }
-  ESP_LOGV(__FUNCTION__, "Getting JSON at %s", path);
+  //ESP_LOGV(__FUNCTION__, "Getting JSON at %s", path);
 
   if (path[0] == '/')
   {
@@ -491,7 +491,7 @@ double AppConfig::GetDoubleProperty(const char* path)
   if (!isValid()){
     return -1;
   }
-  ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == NULL ? "*null*" : path);
+  //ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == NULL ? "*null*" : path);
   cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
   if (prop != NULL)
   {

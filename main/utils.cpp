@@ -245,7 +245,6 @@ bool initSPISDCard(bool log)
   AppConfig* appState = AppConfig::GetAppStatus();
   AppConfig* spiffState = appState->GetConfig("spiff");
   AppConfig* sdcState = appState->GetConfig("sdcard");
-  bool sdon=false;
   if (numSdCallers <= 0)
   {
     numSdCallers = 1;
@@ -390,7 +389,7 @@ bool initSPISDCard(bool log)
     }
   }
   state = sdcState->GetStateProperty("state");
-  if (sdon) {
+  if (state == item_state_t::ACTIVE) {
     FATFS *fs;
     DWORD fre_clust, fre_sect, tot_sect;
 
@@ -412,6 +411,31 @@ bool initSPISDCard(bool log)
 bool initSPISDCard()
 {
   return initSPISDCard(true);
+}
+
+bool deleteFile(char* fileName) {
+  return unlink(fileName) == 0;
+}
+
+
+bool rmDashFR(char* folderName) {
+  DIR *theFolder;
+  struct dirent *fi;
+  char fileName[300];
+  bool isABadDay = false;
+
+  if ((theFolder = opendir(folderName)) != NULL)
+  {
+      while (!isABadDay && ((fi = readdir(theFolder)) != NULL)){
+        sprintf(fileName, "%s/%s", folderName, fi->d_name);
+        if (fi->d_type == DT_DIR) {
+          isABadDay|=!rmDashFR(fileName);
+        } else {
+          isABadDay|=!deleteFile(fileName);
+        }
+      }
+  }
+  return !isABadDay;
 }
 
 bool moveFile(char *src, char *dest)

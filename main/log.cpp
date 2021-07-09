@@ -14,7 +14,9 @@ char* getLogFName(){
     return logfname;
 }
 
-void dumpLogs(){
+static TaskHandle_t dltask = NULL;
+
+void dumpTheLogs(void* params){
     if (initSPISDCard(false)) {
         FILE* fw = NULL;
 
@@ -45,6 +47,13 @@ void dumpLogs(){
         }
         deinitSPISDCard(false);
     }
+    dltask=NULL;
+    vTaskDelete(NULL);
+}
+
+void dumpLogs(){
+    if (!dltask)
+        xTaskCreate(dumpTheLogs, "dumpLogs", 8192, NULL, tskIDLE_PRIORITY, &dltask);
 }
 
 void registerLogCallback( LogFunction_t callback, void* param) {

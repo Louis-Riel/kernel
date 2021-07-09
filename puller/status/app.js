@@ -440,7 +440,7 @@ class StorageViewer extends React.Component {
             folder: dirname(this.state.path),
             ftype: "folder",
             size: 0,
-        })), e("td", { key: genUUID() }), , e("td", { key: genUUID() })])]
+        })), e("td", { key: genUUID() })])]
     }
 
     getFileLink(file) {
@@ -527,27 +527,13 @@ class StorageViewer extends React.Component {
             return this.getSystemFolders()
                 .concat(this.state.files.map(file => e("tr", { key: genUUID(), className: file.ftype }, [
                     e("td", { key: genUUID() }, this.getFileLink(file)),
-                    e("td", { key: genUUID() }, file.ftype != "file" ? "" : file.size),
-                    e("td", { key: genUUID() }, e("a", {
-                        key: genUUID(),
-                        href: "#",
-                        onClick: () => {
-                            fetch(`${httpPrefix}/stat${this.state.path==="/"?"":this.state.path}/${file.name}`, {
-                                    method: 'DELETE',
-                                    headers: { ftype: "d" }
-                                })
-                                .then(this.setState({ loaded: false }))
-                                .catch(err => {
-                                    console.error(err);
-                                });
-                        }
-                    }, "Del"))
+                    e("td", { key: genUUID() }, file.ftype != "file" ? "" : file.size)
                 ])));
         }
     }
 
     getTableHeader() {
-        return e("thead", { key: genUUID() }, e("tr", { key: genUUID() }, this.props.cols.map(col => e("th", { key: genUUID() }, col)).concat(e("th", { key: genUUID() }, "Op"))));
+        return e("thead", { key: genUUID() }, e("tr", { key: genUUID() }, this.props.cols.map(col => e("th", { key: genUUID() }, col))));
     }
 
     render() {

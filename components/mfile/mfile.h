@@ -1,5 +1,5 @@
-#ifndef __pins_h
-#define __pins_h
+#ifndef __mfile_h
+#define __mfile_h
 
 #include <stdio.h>
 #include <string.h>
@@ -50,34 +50,42 @@ public:
     void Write(uint8_t* data, uint32_t len);
     bool IsOpen();
     bool hasContent;
+    esp_event_base_t GetEventBase();
+    cJSON* GetStatus();
 
-protected:
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
+protected:
 
     EventHandlerDescriptor* BuildHandlerDescriptors();
 
     static QueueHandle_t eventQueue;
 
-    FILE *file;
     char* name;
 
     static MFile* openFiles[MAX_OPEN_FILES];
     static uint8_t numOpenFiles;
+private:
+    FILE *file;
 };
 
 class BufferedFile:MFile {
 public:
+    BufferedFile();
     BufferedFile(char* fileName);
     ~BufferedFile();
     static BufferedFile* GetFile(char* fileName);
     void Write(uint8_t* data, uint32_t len);
     void WriteLine(uint8_t* data, uint32_t len);
     void Flush();
+    void Close();
     static void FlushAll();
-protected:
+    static void CloseAll();
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
+    cJSON* GetStatus();
+protected:
 
 private:
+    bool isNewOrEmpty;
     uint8_t* buf = NULL;
     uint32_t maxBufSize = 8092;
     uint32_t pos = 0;

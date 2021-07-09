@@ -31,6 +31,7 @@
 #include "bootloader_random.h"
 #include "../components/eventmgr/eventmgr.h"
 #include "../components/pins/pins.h"
+#include "../components/mfile/mfile.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -124,11 +125,14 @@ void sampleBatteryVoltage()
   adc_power_acquire();
   for (int idx = 0; idx < 10; idx++)
   {
-    if ((ret=esp_adc_cal_get_voltage(ADC_CHANNEL_7, &characteristics, &tmp))==ESP_OK){
-      voltage += (tmp*2.40584138288);
+    if ((ret = esp_adc_cal_get_voltage(ADC_CHANNEL_7, &characteristics, &tmp)) == ESP_OK)
+    {
+      voltage += (tmp * 2.40584138288);
       cnt++;
-    } else {
-      ESP_LOGW(__FUNCTION__,"Error getting voltage %s",esp_err_to_name(ret));
+    }
+    else
+    {
+      ESP_LOGW(__FUNCTION__, "Error getting voltage %s", esp_err_to_name(ret));
     }
   }
   adc_power_release();
@@ -156,7 +160,8 @@ float getBatteryVoltage()
 dataPoint *getCurDataPoint()
 {
   time(&lastDpTs);
-  if (lastDpTs < 10000) {
+  if (lastDpTs < 10000)
+  {
     return NULL;
   }
   dto = false;
@@ -196,6 +201,7 @@ void createTrip()
 
 bool commitTrip(trip *trip)
 {
+  return false;
   if ((trip == NULL) || (trip->numNodes <= 0))
   {
     ESP_LOGW(__FUNCTION__, "commitTrip called without an active trip");
@@ -232,7 +238,7 @@ bool commitTrip(trip *trip)
     trip->lastExportedTs = dp->ts;
     cnt++;
     free(dp);
-    trip->numNodes=0;
+    trip->numNodes = 0;
   }
   fClose(f);
   ESP_LOGD(__FUNCTION__, "%d nodes written", cnt);
@@ -500,33 +506,83 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
   return false;
 }
 
+void parseFolderForCSV(const char *folder)
+{
+  ESP_LOGV(__FUNCTION__, "Opening folder %s", folder);
+  DIR *theFolder;
+  struct dirent *fi;
+  if ((theFolder = opendir(folder)) != NULL)
+  {
+    char *kFName = (char *)dmalloc(300);
+    char *cFName = (char *)dmalloc(300);
+    while ((fi = readdir(theFolder)) != NULL)
+    {
+      if (strlen(fi->d_name) == 0)
+      {
+        continue;
+      }
+      if (fi->d_type == DT_REG)
+      {
+        sprintf(kFName, "%s/kml/%s.kml", AppConfig::GetActiveStorage(), fi->d_name);
+        for (char *theChar = kFName;
+             *theChar != 0;
+             theChar++)
+        {
+          if (*theChar == '_')
+          {
+            *theChar = '/';
+            break;
+          }
+          if (*theChar == '-')
+          {
+            *theChar = '/';
+          }
+        }
+        sprintf(cFName, "%s/%s", folder, fi->d_name);
+        if (bakeKml(cFName, kFName))
+        {
+          sprintf(kFName, "%s/converted/%s", AppConfig::GetActiveStorage(), fi->d_name);
+          if (strcmp(curTrip.fname, cFName) < 0)
+          {
+            if (moveFile(cFName, kFName))
+            {
+              ESP_LOGD(__FUNCTION__, "Moved %s to %s", cFName, kFName);
+            }
+            else
+            {
+              ESP_LOGE(__FUNCTION__, "Failed moving %s to %s", cFName, kFName);
+            }
+          }
+        }
+        else
+        {
+          ESP_LOGD(__FUNCTION__, "Failed in baking %s", cFName);
+        }
+      } else if (fi->d_type == DT_DIR) {
+        sprintf(cFName,"%s/%s",folder,fi->d_name);
+      }
+    }
+    ldfree(kFName);
+    ldfree(cFName);
+    closedir(theFolder);
+  }
+  else
+  {
+    ESP_LOGE(__FUNCTION__, "Failed to %s for cvss", folder);
+  }
+}
+
 void commitTripToDisk(void *param)
 {
   uint32_t theBits = (uint32_t)param;
   if (initSPISDCard())
   {
-    if (xEventGroupWaitBits(app_eg, app_bits_t::COMMITTING_TRIPS, pdFALSE, pdTRUE, 10 / portTICK_RATE_MS) == ESP_OK)
-    {
-      ESP_LOGD(__FUNCTION__, "Waiting for other trip baker");
-      if (xEventGroupWaitBits(app_eg, app_bits_t::TRIPS_COMMITTED, pdFALSE, pdTRUE, 5000 / portTICK_RATE_MS) != ESP_OK)
-      {
-        ESP_LOGW(__FUNCTION__, "Timed out, giving up");
-        deinitSPISDCard();
-        if (theBits & BIT3)
-        {
-          vTaskDelete(NULL);
-        }
-        return;
-      }
-      ESP_LOGD(__FUNCTION__, "Done waiting for other trip baker");
-    }
     xEventGroupSetBits(app_eg, app_bits_t::COMMITTING_TRIPS);
-    xEventGroupClearBits(app_eg, app_bits_t::TRIPS_COMMITTED);
-    char *kFName = (char *)dmalloc(350);
-    char *cFName = (char *)dmalloc(350);
 
     if (commitTrip(&curTrip) && (theBits & BIT1))
     {
+      char *kFName = (char *)dmalloc(350);
+      char *cFName = (char *)dmalloc(350);
       sprintf(kFName, "%s/kml/%s.kml", AppConfig::GetActiveStorage(), &curTrip.fname[8]);
       char *theChar;
       for (theChar = kFName; *theChar != 0; theChar++)
@@ -559,69 +615,13 @@ void commitTripToDisk(void *param)
       {
         ESP_LOGE(__FUNCTION__, "Failed baking %s from %s", curTrip.fname, cFName);
       }
+      ldfree(kFName);
+      ldfree(cFName);
     }
     if (theBits & BIT2)
     {
-      ESP_LOGV(__FUNCTION__, "Opening csv folder");
-      DIR *theFolder;
-      struct dirent *fi;
-      if ((theFolder = opendir("/lfs/csv")) != NULL)
-      {
-        char *kFName = (char *)dmalloc(300);
-        char *cFName = (char *)dmalloc(300);
-        while ((fi = readdir(theFolder)) != NULL)
-        {
-          if (strlen(fi->d_name) == 0)
-          {
-            continue;
-          }
-          if (fi->d_type == DT_REG)
-          {
-            sprintf(kFName, "%s/kml/%s.kml", AppConfig::GetActiveStorage(), fi->d_name);
-            for (char *theChar = kFName;
-                 *theChar != 0;
-                 theChar++)
-            {
-              if (*theChar == '_')
-              {
-                *theChar = '/';
-                break;
-              }
-              if (*theChar == '-')
-              {
-                *theChar = '/';
-              }
-            }
-            sprintf(cFName, "/lfs/csv/%s", fi->d_name);
-            if (bakeKml(cFName, kFName))
-            {
-              sprintf(kFName, "%s/converted/%s", AppConfig::GetActiveStorage(), fi->d_name);
-              if (strcmp(curTrip.fname, cFName) < 0)
-              {
-                if (moveFile(cFName, kFName))
-                {
-                  ESP_LOGD(__FUNCTION__, "Moved %s to %s", cFName, kFName);
-                }
-                else
-                {
-                  ESP_LOGE(__FUNCTION__, "Failed moving %s to %s", cFName, kFName);
-                }
-              }
-            }
-            else
-            {
-              ESP_LOGD(__FUNCTION__, "Failed in baking %s", cFName);
-            }
-          }
-        }
-        ldfree(kFName);
-        ldfree(cFName);
-        closedir(theFolder);
-      }
-      else
-      {
-        ESP_LOGE(__FUNCTION__, "Failed to open cvss");
-      }
+      parseFolderForCSV("/lfs/csv");
+      parseFolderForCSV("/sdcard/csv");
     }
     deinitSPISDCard();
   }
@@ -634,8 +634,9 @@ void commitTripToDisk(void *param)
 void addDataPoint()
 {
   dataPoint *curNode = getCurDataPoint();
-  if ((curNode == NULL) || (curNode->lng == 0.0)) {
-    ESP_LOGW(__FUNCTION__,"Skipping save of no point pr time data");
+  if ((curNode == NULL) || (curNode->lng == 0.0))
+  {
+    ESP_LOGW(__FUNCTION__, "Skipping save of no point pr time data");
     return;
   }
   ESP_LOGD(__FUNCTION__, "addDataPoint %d", curTrip.numNodes);
@@ -672,6 +673,7 @@ void doHibernate(void *param)
   {
     commitTripToDisk((void *)0);
   }
+  BufferedFile::FlushAll();
   uint64_t ext_wakeup_pin_mask = 0;
   int curLvl = 0;
   for (int idx = 0; idx < numWakePins; idx++)
@@ -725,7 +727,8 @@ void doHibernate(void *param)
 
 void Hibernate()
 {
-  if (!(xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON)) {
+  if (!(xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON))
+  {
     xTaskCreate(doHibernate, "doHibernate", 8192, NULL, tskIDLE_PRIORITY, NULL);
   }
 }
@@ -764,7 +767,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     ESP_LOGD(__FUNCTION__, "Rate Changed to %d", *((uint8_t *)event_data));
     break;
   case TinyGPSPlus::gpsEvent::msg:
-    ESP_LOGV(__FUNCTION__,"msg:%s",(char*)event_data);
+    ESP_LOGV(__FUNCTION__, "msg:%s", (char *)event_data);
     boto = (esp_timer_get_time() > timeoutMicro);
     if ((lastLocTs > 0) && (now - lastLocTs > timeout))
     {
@@ -815,9 +818,10 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
 
     if ((lastDpTs > 0) && ((now - lastDpTs) > timeout) && !dto)
     {
-      if ((now - lastDpTs) < 16243936){
+      if ((now - lastDpTs) < 16243936)
+      {
         dto = true;
-        ESP_LOGD(__FUNCTION__, "Timeout on data lastDpTs:%ld timeout:%d diff:%ld", lastDpTs,timeout,now - lastDpTs);
+        ESP_LOGD(__FUNCTION__, "Timeout on data lastDpTs:%ld timeout:%d diff:%ld", lastDpTs, timeout, now - lastDpTs);
         Hibernate();
       }
     }
@@ -846,6 +850,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     break;
   case TinyGPSPlus::gpsEvent::atSyncPoint:
     ESP_LOGD(__FUNCTION__, "atSyncPoint");
+    xEventGroupClearBits(app_eg, app_bits_t::TRIPS_COMMITTED);
     //if ((gps != NULL) && (now > 10000))
     //{
     //  xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT3), tskIDLE_PRIORITY, NULL);
@@ -853,6 +858,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     //xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps, tskIDLE_PRIORITY, NULL);
     break;
   case TinyGPSPlus::gpsEvent::outSyncPoint:
+    xEventGroupClearBits(app_eg, app_bits_t::TRIPS_COMMITTED);
     ESP_LOGD(__FUNCTION__, "Leaving Synching");
     break;
   default:
@@ -995,12 +1001,12 @@ esp_err_t setupLittlefs()
       .dont_mount = false};
 
   esp_err_t ret = esp_vfs_littlefs_register(&conf);
-  AppConfig* appState = AppConfig::GetAppStatus();
+  AppConfig *appState = AppConfig::GetAppStatus();
   ESP_LOGD(__FUNCTION__, "lfs mounted %d", ret);
-  AppConfig* spiffState = appState->GetConfig("/spiff");
+  AppConfig *spiffState = appState->GetConfig("/spiff");
   if (ret != ESP_OK)
   {
-    spiffState->SetStateProperty("state",item_state_t::ERROR);
+    spiffState->SetStateProperty("state", item_state_t::ERROR);
     ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
     return ret;
   }
@@ -1012,10 +1018,10 @@ esp_err_t setupLittlefs()
     ESP_LOGE(__FUNCTION__, "Failed in getting info %s", esp_err_to_name(ret));
     return ret;
   }
-  spiffState->SetStateProperty("state",item_state_t::ACTIVE);
-  spiffState->SetIntProperty("total",total_bytes);
-  spiffState->SetIntProperty("used",used_bytes);
-  spiffState->SetIntProperty("free",total_bytes-used_bytes);
+  spiffState->SetStateProperty("state", item_state_t::ACTIVE);
+  spiffState->SetIntProperty("total", total_bytes);
+  spiffState->SetIntProperty("used", used_bytes);
+  spiffState->SetIntProperty("free", total_bytes - used_bytes);
   free(spiffState);
 
   ESP_LOGD(__FUNCTION__, "Space: %d/%d", used_bytes, total_bytes);
@@ -1124,14 +1130,14 @@ int32_t GenerateDevId()
   return devId;
 }
 
-void ConfigurePins(AppConfig* cfg)
+void ConfigurePins(AppConfig *cfg)
 {
   ESP_LOGD(__FUNCTION__, "Configuring pins");
   cJSON *pin = NULL;
   uint8_t numPins = 0;
   cJSON_ArrayForEach(pin, cfg->GetJSONConfig("pins"))
   {
-    AppConfig *cpin = new AppConfig(pin,cfg);
+    AppConfig *cpin = new AppConfig(pin, cfg);
     gpio_num_t pinNo = cpin->GetPinNoProperty("pinNo");
     if (pinNo > 0)
     {
@@ -1145,30 +1151,41 @@ void ConfigurePins(AppConfig* cfg)
 
 static void check_efuse()
 {
-    //Check TP is burned into eFuse
-    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK) {
-        ESP_LOGD(__FUNCTION__,"eFuse Two Point: Supported\n");
-    } else {
-        ESP_LOGD(__FUNCTION__,"eFuse Two Point: NOT supported\n");
-    }
+  //Check TP is burned into eFuse
+  if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK)
+  {
+    ESP_LOGD(__FUNCTION__, "eFuse Two Point: Supported\n");
+  }
+  else
+  {
+    ESP_LOGD(__FUNCTION__, "eFuse Two Point: NOT supported\n");
+  }
 
-    //Check Vref is burned into eFuse
-    if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK) {
-        ESP_LOGD(__FUNCTION__,"eFuse Vref: Supported\n");
-    } else {
-        ESP_LOGD(__FUNCTION__,"eFuse Vref: NOT supported\n");
-    }
+  //Check Vref is burned into eFuse
+  if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK)
+  {
+    ESP_LOGD(__FUNCTION__, "eFuse Vref: Supported\n");
+  }
+  else
+  {
+    ESP_LOGD(__FUNCTION__, "eFuse Vref: NOT supported\n");
+  }
 }
 
 static void print_char_val_type(esp_adc_cal_value_t val_type)
 {
-    if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
-        ESP_LOGD(__FUNCTION__,"Characterized using Two Point Value\n");
-    } else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        ESP_LOGD(__FUNCTION__,"Characterized using eFuse Vref\n");
-    } else {
-        ESP_LOGD(__FUNCTION__,"Characterized using Default Vref\n");
-    }
+  if (val_type == ESP_ADC_CAL_VAL_EFUSE_TP)
+  {
+    ESP_LOGD(__FUNCTION__, "Characterized using Two Point Value\n");
+  }
+  else if (val_type == ESP_ADC_CAL_VAL_EFUSE_VREF)
+  {
+    ESP_LOGD(__FUNCTION__, "Characterized using eFuse Vref\n");
+  }
+  else
+  {
+    ESP_LOGD(__FUNCTION__, "Characterized using Default Vref\n");
+  }
 }
 
 void app_main(void)
@@ -1191,11 +1208,14 @@ void app_main(void)
     if (root == NULL)
     {
       ESP_LOGE(__FUNCTION__, "Cannot open lfs");
-    } else if (closedir(root) != ESP_OK)
+    }
+    else if (closedir(root) != ESP_OK)
     {
       ESP_LOGE(__FUNCTION__, "failed to close root %s", esp_err_to_name(ret));
-    } else {
-      ESP_LOGD(__FUNCTION__,"Spiff is still spiffy");
+    }
+    else
+    {
+      ESP_LOGD(__FUNCTION__, "Spiff is still spiffy");
     }
 
     if (appcfg->GetStringProperty("wifitype") == NULL)
@@ -1259,7 +1279,7 @@ void app_main(void)
       if (gps != NULL)
       {
         ESP_LOGD(__FUNCTION__, "Waiting for GPS");
-        if (xEventGroupWaitBits(gps->eg, TinyGPSPlus::gpsEvent::gpsRunning, pdFALSE, pdTRUE, 1500 / portTICK_RATE_MS)&TinyGPSPlus::gpsEvent::gpsRunning)
+        if (xEventGroupWaitBits(gps->eg, TinyGPSPlus::gpsEvent::gpsRunning, pdFALSE, pdTRUE, 1500 / portTICK_RATE_MS) & TinyGPSPlus::gpsEvent::gpsRunning)
         {
           createTrip();
           ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::msg, gpsEvent, &gps));
@@ -1300,6 +1320,11 @@ void app_main(void)
       xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps, tskIDLE_PRIORITY, NULL);
     }
     ConfigurePins(appcfg);
+
+    //xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, NULL, tskIDLE_PRIORITY, NULL);
+
+    //Register event managers
+    new BufferedFile();
   }
 }
 

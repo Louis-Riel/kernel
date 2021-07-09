@@ -202,5 +202,7 @@ int64_t getUpTime();
 void cJSON_AddVersionedStringToObject(cfg_label_t* itemToAdd, char* name, cJSON* dest);
 void cJSON_AddVersionedGpioToObject(cfg_gpio_t* itemToAdd, char* name,  cJSON* dest);
 uint32_t GetNumOpenFiles();
+bool rmDashFR(char* folderName);
+bool deleteFile(char* fileName);
 
 #endif
