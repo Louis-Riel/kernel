@@ -47,7 +47,7 @@ void WebsocketManager::QueueHandler(void* instance){
             }
           } else {
               ESP_LOGD(__FUNCTION__,"Client %d not responding, retry %d",idx, me->clients[idx].errorCount);
-              vTaskDelay(200/portTICK_PERIOD_MS);
+              vTaskDelay(1000/portTICK_PERIOD_MS);
           }
         }
         isLive |= me->clients[idx].isLive;

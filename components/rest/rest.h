@@ -40,6 +40,7 @@ static EventGroupHandle_t eventGroup=xEventGroupCreate();
 cJSON* status_json();
 cJSON* tasks_json();
 cJSON* getMemoryStats();
+void loadImage();
 void restSallyForth(void *pvParameter);
 void pullStation(void *pvParameter);
 bool moveFolder(char* folderName, char* toFolderName);

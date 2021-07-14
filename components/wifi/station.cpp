@@ -107,7 +107,7 @@ TheWifi::TheWifi(AppConfig* config)
             esp_netif_set_hostname(ap_netif,appcfg->GetStringProperty("devName"));
             ESP_LOGD(__FUNCTION__, "Created netif %li", (long int)ap_netif);
             ESP_ERROR_CHECK(esp_netif_dhcps_start(ap_netif));
-            generateSidConfig(&wifi_config, true);
+            generateSidConfig(&wifi_config, false);
             ESP_LOGD(__FUNCTION__, "Configured in AP Mode %s", wifi_config.ap.ssid);
             ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_AP, &wifi_config));
         }

@@ -58,7 +58,7 @@ static const httpd_uri_t restUris[] = {
     .supported_subprotocol = NULL
     },
     {
-    .uri       = "/config",
+    .uri       = "/config*",
     .method    = HTTP_POST,
     .handler   = config_handler,
     .user_ctx  = NULL,
@@ -96,6 +96,15 @@ static const httpd_uri_t restUris[] = {
     {
     .uri       = "/stat/*",
     .method    = HTTP_POST,
+    .handler   = stat_handler,
+    .user_ctx  = NULL,
+    .is_websocket = false,
+    .handle_ws_control_frames = false,
+    .supported_subprotocol = NULL
+    },
+    {
+    .uri       = "/stat/*",
+    .method    = HTTP_DELETE,
     .handler   = stat_handler,
     .user_ctx  = NULL,
     .is_websocket = false,

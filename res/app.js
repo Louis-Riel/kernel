@@ -2,7 +2,7 @@
 
 const e = React.createElement;
 
-var pageControler = new AbortController();
+var pageControler = null;
 var ws = null;
 var fileStats = {};
 var fileStatsToFetch = []
@@ -11,11 +11,12 @@ var activeTab = null;
 var activeInterval = null;
 var editor = null;
 var stateManager = null;
+var systemManager = null;
+var configManager = null;
 var stateViewer = null;
 var fileManager = null;
-var logs = document.getElementById("slide-4").getElementsByClassName("loglines")[0];
 
-const httpPrefix = ""; //"http://192.168.1.107";
+const httpPrefix = "";//"http://192.168.1.107";
 
 //#region REACTJS
 
@@ -67,7 +68,44 @@ class IntInput extends React.Component {
     }
 }
 
-class ControlPannel extends React.Component {
+class DeviceList extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            devices: this.props.devices,
+            loaded: false,
+            loading: false
+        };
+    }
+
+    componentDidMount() {
+        if (!this.state.loading && !this.state.loaded && !this.state.devices.length) {
+            this.state.loading = true;
+            fetch(`${httpPrefix}/files/lfs/status`, {
+                method: 'post'
+            }).then(data => data.json().then(statuses => {
+                    this.state.error = null;
+                    this.state.loaded = true;
+                    this.state.loading = false;
+                    this.state.devices = statuses.filter(fentry => fentry.ftype == "file" && fentry.name != "current.json")
+                        .map(fentry => parseInt(fentry.name.substr(0, fentry.name.indexOf("."))));
+                    this.props.onSetDeviceList(this.state.devices);
+                })
+                .catch(err => this.setState({ loaded: false, error: err })));
+        }
+    }
+
+    render() {
+        return e("select", {
+                key: genUUID(),
+                value: this.props.selectedDeviceId,
+                onChange: (elem) => this.props.onSet(elem.target.value)
+            },
+            this.state.devices.concat(this.props.deviceId).map(device => e("option", { key: genUUID(), value: device }, device)));
+    }
+}
+
+class ControlPanel extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
@@ -84,7 +122,15 @@ class ControlPannel extends React.Component {
             e('legend', { key: genUUID(), id: `lg${this.id}` }, 'Controls'),
             e(BoolInput, { key: genUUID(), label: "Periodic Refresh", onOn: PeriodicRefreshClicked, onOff: PeriodicRefreshClicked }),
             e(IntInput, { key: genUUID(), label: "Freq(sec)", value: 10, id: "refreshFreq" }),
-            e(BoolInput, { key: genUUID(), label: "Auto Refresh", onOn: setupWs, onOff: setupWs, id: "autorefresh", initialState: () => { return ws != null } })
+            e(BoolInput, { key: genUUID(), label: "Auto Refresh", onOn: setupWs, onOff: setupWs, id: "autorefresh", initialState: () => { return ws != null } }),
+            e(DeviceList, {
+                key: genUUID(),
+                selectedDeviceId: this.props.selectedDeviceId,
+                deviceId: this.props.deviceId,
+                devices: this.props.devices,
+                onSetDeviceList: this.props.onSetDeviceList,
+                onSet: this.props.onSetDevice
+            })
         ]);
     }
 }
@@ -189,7 +235,6 @@ class StateTable extends React.Component {
         this.state = {
             json: this.props.json,
             error: null,
-            stateReqDt: this.props.stateReqDt,
             cols: []
         };
         this.id = this.props.id || genUUID();
@@ -256,8 +301,7 @@ class AppState extends React.Component {
         super(props);
         this.state = {
             json: this.props.json,
-            error: null,
-            stateReqDt: this.props.stateReqDt
+            error: null
         };
         this.id = this.props.id || genUUID();
     }
@@ -297,11 +341,13 @@ class MainAppState extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            jsons: [],
-            loading: false,
+            statuses: {},
+            devices: [],
+            loading: this.props.loading,
+            loaded: this.props.loaded,
             error: null,
-            stateReqDt: this.props.stateReqDt,
-            lastFetched: 0
+            selectedDeviceId: 0,
+            deviceId: 0
         };
 
         stateViewer = this;
@@ -310,7 +356,7 @@ class MainAppState extends React.Component {
 
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        if ((this.state.stateReqDt > this.state.lastFetched) && !this.state.loading) {
+        if (!this.state.loading && !this.state.loaded) {
             this.state.loading = true;
             this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
         }
@@ -319,7 +365,8 @@ class MainAppState extends React.Component {
     updateStatuses(requests, newState) {
         var abort = new AbortController()
         var timer = setTimeout(() => abort.abort(), 1000);
-        Promise.all(requests.map(request => {
+        if (this.state.selectedDeviceId == (this.state.deviceId || 0)) {
+            Promise.all(requests.map(request => {
                 return new Promise((resolve, reject) => {
                     fetch(`${httpPrefix}${request.url}`, {
                             method: 'post',
@@ -334,6 +381,9 @@ class MainAppState extends React.Component {
                             } else {
                                 Object.assign(newState, jstats);
                             }
+                            if (!this.state.deviceId && jstats.deviceid) {
+                                this.setState({ deviceId: jstats.deviceid, selectedDeviceId: jstats.deviceid });
+                            }
                             resolve({ path: request.path, stat: jstats });
                         }).catch(err => {
                             request.retryCnt = (request.retryCnt | 0) + 1;
@@ -345,27 +395,39 @@ class MainAppState extends React.Component {
             })).then(results => {
                 clearTimeout(timer);
                 this.props.domContainer.style.opacity = 1;
+                this.state.statuses[this.state.deviceId] = this.orderResults(newState)
                 this.setState({
                     error: null,
                     loading: false,
-                    jsons: this.orderResults(newState),
-                    lastFetched: new Date()
+                    loaded: true,
+                    statuses: this.state.statuses
                 });
-            })
-            .catch(err => {
+            }).catch(err => {
                 clearTimeout(timer);
-                var errors = requests.filter(req => req.error);
-                this.props.domContainer.style.opacity = 0.5
-                if (errors[0].waitFor) {
-                    setTimeout(() => {
-                        if (err.message != "Failed to fetch")
-                            console.error(err);
+                if (err.code != 20) {
+                    var errors = requests.filter(req => req.error);
+                    this.props.domContainer.style.opacity = 0.5
+                    if (errors[0].waitFor) {
+                        setTimeout(() => {
+                            if (err.message != "Failed to fetch")
+                                console.error(err);
+                            this.updateStatuses(requests, newState);
+                        }, errors[0].waitFor);
+                    } else {
                         this.updateStatuses(requests, newState);
-                    }, errors[0].waitFor);
-                } else {
-                    this.updateStatuses(requests, newState);
+                    }
                 }
             });
+        } else if (this.state.selectedDeviceId) {
+            fetch(`${httpPrefix}/lfs/status/${this.state.selectedDeviceId}.json`, {
+                    method: 'get',
+                    signal: abort.signal
+                }).then(data => data.json()).then(fromVersionedToPlain)
+                .then(cfg => {
+                    this.state.statuses[this.state.selectedDeviceId] = cfg;
+                    this.setState({ statuses: this.state.statuses, loading: false, loaded: true });
+                })
+        }
     }
 
     orderResults(res) {
@@ -378,8 +440,15 @@ class MainAppState extends React.Component {
 
     render() {
         return [
-            e(ControlPannel, { key: genUUID() }),
-            e(AppState, { key: genUUID(), json: this.state.jsons, stateReqDt: this.props.stateReqDt })
+            e(ControlPanel, {
+                key: genUUID(),
+                deviceId: this.state.deviceId,
+                devices: this.state.devices,
+                selectedDeviceId: this.state.selectedDeviceId,
+                onSetDevice: (val) => this.setState({ selectedDeviceId: val, loaded: false }),
+                onSetDeviceList: (devs) => this.state.devices = devs
+            }),
+            e(AppState, { key: genUUID(), json: this.state.statuses[this.state.selectedDeviceId], deviceId: this.state.selectedDeviceId, devices: this.state.devices })
         ];
     }
 }
@@ -528,13 +597,16 @@ class StorageViewer extends React.Component {
                 .concat(this.state.files.map(file => e("tr", { key: genUUID(), className: file.ftype }, [
                     e("td", { key: genUUID() }, this.getFileLink(file)),
                     e("td", { key: genUUID() }, file.ftype != "file" ? "" : file.size),
-                    e("td", { key: genUUID() }, e("a", {
+                    e("td", { key: genUUID() }, this.state.path == "/" ? null : e("a", {
                         key: genUUID(),
                         href: "#",
                         onClick: () => {
                             fetch(`${httpPrefix}/stat${this.state.path==="/"?"":this.state.path}/${file.name}`, {
-                                    method: 'DELETE',
-                                    headers: { ftype: "d" }
+                                    method: 'post',
+                                    headers: {
+                                        ftype: file.ftype == "file" ? "file" : "directory",
+                                        operation: "delete"
+                                    }
                                 })
                                 .then(this.setState({ loaded: false }))
                                 .catch(err => {
@@ -590,45 +662,6 @@ function degToRad(degree) {
 //#endregion
 
 //#region Logs
-function AddLogLine(logLn, logs) {
-    if (logs == null) {
-        return;
-    }
-    var data = logLn.replaceAll(/^[^IDVWE]*/g, "").replaceAll(/(.*)([\x1B].*\n?)/g, "$1");
-
-    if (data.match(/^[IDVWE] \([0-9.:]{12}\) [^:]+:.*/)) {
-        var log = document.createElement("div");
-        log.classList.add("log");
-        log.classList.add(`LOG${data.substr(0, 1)}`);
-
-        var llevel = document.createElement("div");
-        llevel.classList.add(`LOGLEVEL`);
-        llevel.innerText = data.substr(0, 1);
-        log.appendChild(llevel);
-
-        var ldate = document.createElement("div");
-        ldate.classList.add(`LOGDATE`);
-        ldate.innerText = data.substr(3, 12);
-        log.appendChild(ldate);
-
-        var lfunc = document.createElement("div");
-        lfunc.classList.add(`LOGFUNCTION`);
-        lfunc.innerText = data.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
-        log.appendChild(lfunc);
-
-        var lmsg = document.createElement("div");
-        lmsg.innerText = data.substr(data.indexOf(lfunc.innerText) + lfunc.innerText.length + 2).replaceAll(/^[\r\n]*/g, "");
-        lmsg.classList.add(`LOGLINE`);
-        log.appendChild(lmsg);
-        logs.appendChild(log);
-    } else {
-        if (lmsg)
-            lmsg.innerText += `\n${data}`;
-    }
-    if (activeTab == logs)
-        if (lmsg)
-            lmsg.scrollIntoView();
-}
 
 function setupWs(ctrl) {
     if (ctrl.checked) {
@@ -644,9 +677,10 @@ function setupWs(ctrl) {
             ws.onmessage = (event) => {
                 if (event && event.data) {
                     if (event.data[0] == "{") {
-                        stateViewer.setState({ lastFetched: new Date(), jsons: Object.assign(Object.assign({}, stateViewer.state.jsons), fromVersionedToPlain(JSON.parse(event.data))) });
-                    } else {
-                        AddLogLine(event.data, logs);
+                        stateViewer.state.statuses[stateViewer.state.deviceId] = Object.assign(Object.assign({}, stateViewer.state.statuses[stateViewer.state.deviceId]), fromVersionedToPlain(JSON.parse(event.data)))
+                        stateViewer.setState({ statuses: stateViewer.state.statuses });
+                    } else if (systemManager) {
+                        systemManager.AddLogLine(event.data);
                     }
                 } else {
                     clearTimeout(stopItWithThatShit);
@@ -693,13 +727,114 @@ function setupWs(ctrl) {
     }
 }
 
+class LogLine extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            level: this.props.logln.substr(0, 1),
+            date: this.props.logln.substr(3, 12),
+            function: this.props.logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1"),
+        }
+        this.state.msg = this.props.logln.substr(this.props.logln.indexOf(this.state.function) + this.state.function.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/.\[..\n$/g, "")
+    }
+
+    render() {
+        return e("div", { key: genUUID(), className: `log LOG${this.state.level}` }, [
+            e("div", { key: genUUID(), className: "LOGLEVEL" }, this.state.level),
+            e("div", { key: genUUID(), className: "LOGDATE" }, this.state.date),
+            e("div", { key: genUUID(), className: "LOGFUNCTION" }, this.state.function),
+            e("div", { key: genUUID(), className: "LOGLINE" }, this.state.msg)
+        ]);
+    }
+}
+
+class FirmwarUpdater extends React.Component {
+    UploadFirmware(form) {
+        form.preventDefault();
+        if (this.state.fwdata && this.state.md5) {
+            return fetch(`${httpPrefix}/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
+                method: 'post',
+                body: this.state.fwdata
+            });
+        }
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.state.firmware && !this.state.md5) {
+            var reader = new FileReader();
+            reader.onload = () => {
+                var res = reader.resultString || reader.result;
+                var md5 = CryptoJS.algo.MD5.create();
+                md5.update(CryptoJS.enc.Latin1.parse(reader.result));
+                this.state.fwdata = new Uint8Array(this.state.firmware.size);
+                for (var i = 0; i < res.length; i++) {
+                    this.state.fwdata[i] = res.charCodeAt(i);
+                }
+
+                this.setState({
+                    md5: md5.finalize().toString(CryptoJS.enc.Hex),
+                    fwdata: this.state.fwdata,
+                    len: this.state.firmware.size
+                });
+            };
+            reader.readAsBinaryString(this.state.firmware);
+        }
+    }
+
+    render() {
+        return e("form", { key: genUUID(), onSubmit: this.UploadFirmware.bind(this) },
+            e("fieldset", { key: genUUID() }, [
+                e("input", { key: genUUID(), type: "file", name: "firmware", onChange: event => this.setState({ firmware: event.target.files[0] }) }),
+                e("button", { key: genUUID() }, "Upload")
+            ])
+        );
+    }
+}
+
+class SystemPage extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            logLines: []
+        }
+    }
+
+    AddLogLine(logln) {
+        this.state.logLines.push(e(LogLine, { key: genUUID(), logln: logln }));
+        if (this.loaded)
+            this.setState({ logLines: this.state.logLines });
+    }
+    componentDidMount() {
+        this.loaded = true;
+    }
+
+    render() {
+        return [
+            e("div", { key: genUUID() }, [
+                e("button", { key: genUUID(), onClick: elem => systemManager.setState({ logLines: [] }) }, "Clear Logs"),
+                e("button", { key: genUUID(), onClick: elem => SendCommand({ 'command': 'reboot' }) }, "Reboot"),
+                e("button", { key: genUUID(), onClick: elem => SendCommand({ 'command': 'parseFiles' }) }, "Parse Files"),
+                e("button", { key: genUUID(), onClick: elem => SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
+            ]),
+            e(FirmwarUpdater, { key: genUUID() }),
+            e("div", { key: genUUID(), className: "loglines" }, this.state.logLines)
+        ];
+    }
+}
+
 function refreshSystem(clicked) {
-    activeTab = logs;
+    const domContainer = activeTab = document.querySelector('#slide-4');
     if (clicked) {
-        activeTab = document.querySelector("#slide-4");
+        activeTab = domContainer;
         if (pageControler)
             pageControler.abort();
         pageControler = new AbortController();
+    }
+
+    if (systemManager == null) {
+        systemManager = ReactDOM.render(e(SystemPage, { key: genUUID() }), domContainer);
+    } else {
+        systemManager.setState({ loaded: false });
     }
 }
 //#endregion
@@ -709,16 +844,6 @@ function SendCommand(body) {
         method: 'put',
         body: JSON.stringify(body)
     });
-}
-
-function SaveForm(form) {
-    getJsonConfig().then(vcfg => fromPlainToVersionned(editor.get(), vcfg))
-        .then(cfg => fetch(form.action, {
-            method: 'post',
-            body: JSON.stringify(cfg)
-        }).then(data => {
-            //refreshConfig(true);
-        }));
 }
 
 function PeriodicRefreshClicked(target) {
@@ -741,9 +866,9 @@ function refreshStatus(clicked) {
         pageControler = new AbortController();
     }
     if (stateManager == null) {
-        stateManager = ReactDOM.render(e(MainAppState, { key: genUUID(), stateReqDt: new Date(), domContainer: domContainer }), domContainer);
+        stateManager = ReactDOM.render(e(MainAppState, { key: genUUID(), domContainer: domContainer }), domContainer);
     } else {
-        stateManager.setState({ stateReqDt: new Date() });
+        stateManager.setState({ loaded: false, loading: false });
     }
 }
 
@@ -753,8 +878,9 @@ function fromVersionedToPlain(obj, level = "") {
     var fldidx;
     for (fldidx in arr) {
         var fld = arr[fldidx];
+        var isObj = false;
         if ((typeof obj[fld] == 'object') &&
-            (Object.keys(obj[fld]).filter(cfld => cfld == "version" || cfld == "value").length == 2)) {
+            (Object.keys(obj[fld]).filter(cfld => !(isObj |= !(cfld == "version" || cfld == "value"))).length == 2)) {
             ret[fld] = obj[fld]["value"];
         } else if (Array.isArray(obj[fld])) {
             ret[fld] = [];
@@ -811,6 +937,7 @@ function fromPlainToVersionned(obj, vobj, level = "") {
 
 function getJsonConfig() {
     return new Promise((resolve, reject) => {
+        pageControler = new AbortController();
         const timer = setTimeout(() => pageControler.abort(), 3000);
         fetch(`${httpPrefix}/config`, {
                 method: 'post',
@@ -826,22 +953,133 @@ function getJsonConfig() {
     });
 }
 
+class ConfigEditor extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            loaded: false,
+            deviceId: this.props.deviceId,
+            deviceConfig: this.props.deviceConfig
+        };
+
+        this.id = this.props.id || genUUID();
+    }
+    componentDidMount() {
+        if (this.state.deviceConfig) {
+            this.jsonEditor = new JSONEditor(this.container, {
+                onChangeJSON: json => Object.assign(this.state.deviceConfig, json)
+            });
+            this.jsonEditor.set(this.state.deviceConfig || {});
+        } else {
+            this.container.innerText = "Loading...";
+        }
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.jsonEditor) {
+            this.jsonEditor.set(this.state.deviceConfig);
+        }
+    }
+
+    render() {
+        return e("div", { key: genUUID(), ref: (elem) => this.container = elem, id: `${this.id}`, className: "column col-md-12", "data-theme": "spectre" })
+    }
+}
+
+class ConfigPage extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            loaded: false,
+            deviceConfigs: {}
+        };
+
+        this.id = this.props.id || genUUID();
+        this.componentDidUpdate(null, null, null);
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (!this.state.loaded && !this.state.loading && !this.state.error) {
+            this.state.loading = true;
+            getJsonConfig().then(fromVersionedToPlain).then(cfg => {
+                if (!this.state.currentDeviceId) {
+                    this.state.deviceConfigs[cfg.deviceid] = cfg;
+                    this.setState({
+                        deviceConfigs: this.state.deviceConfigs,
+                        loaded: true,
+                        loading: false,
+                        currentDeviceId: cfg.deviceid,
+                        deviceId: cfg.deviceid,
+                        error: null
+                    });
+                }
+                fetch(`${httpPrefix}/files/lfs/config`, {
+                        method: 'post'
+                    }).then(data => {
+                        data.json().then(cfgs =>
+                            cfgs.filter(fentry => fentry.ftype == "file" && fentry.name != "current.json")
+                            .forEach(fentry => {
+                                fetch(`${httpPrefix}/lfs/config/${fentry.name}`, {
+                                        method: 'get'
+                                    }).then(data => data.json()).then(fromVersionedToPlain)
+                                    .then(json => {
+                                        this.state.deviceConfigs[fentry.name.substr(0, fentry.name.indexOf("."))] = json;
+                                        this.setState({
+                                            deviceConfigs: this.state.deviceConfigs
+                                        });
+                                    })
+                                    .catch((err) => {
+                                        this.setState({ error: err, loaded: false, loading: false });
+                                        console.error(err);
+                                    });
+
+                            }));
+                    })
+                    .catch((err) => {
+                        console.error(err);
+                        this.setState({ error: err, loaded: false, loading: false });
+                    });
+            }).catch(err => {
+                console.error(err);
+                this.setState({ error: err, loaded: false, loading: false });
+            });
+        }
+    }
+
+    SaveForm(form) {
+        getJsonConfig().then(vcfg => fromPlainToVersionned(this.state.deviceConfigs[this.state.deviceId], vcfg))
+            .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + this.state.deviceId, {
+                method: 'post',
+                body: JSON.stringify(cfg)
+            }).then(console.log));
+        form.preventDefault();
+    }
+
+    render() {
+        return e("form", { onSubmit: form => this.SaveForm(form), key: `f${this.id}`, action: "/config", method: "post" }, [
+            e("fieldset", { key: genUUID() }, [
+                e("select", { key: genUUID(), name: "deviceid", value: this.state.deviceId, onChange: (elem) => { this.setState({ deviceId: parseInt(elem.target.value) }); return true; } },
+                    Object.keys(this.state.deviceConfigs).map(devId => e("option", { key: genUUID(), value: devId }, devId))),
+                e(ConfigEditor, { key: genUUID(), deviceId: this.state.deviceId, deviceConfig: this.state.deviceConfigs[this.state.deviceId] })
+            ]),
+            e("button", { key: genUUID() }, "Save")
+        ]);
+    }
+}
+
 function refreshConfig(clicked) {
+    const domContainer = activeTab = document.querySelector('#slide-3');
     if (clicked) {
-        activeTab = document.querySelectorAll(".system-config form")[1];;
+        activeTab = domContainer;
         if (pageControler)
             pageControler.abort();
         pageControler = new AbortController();
     }
-    if (editor == null) {
-        editor = new JSONEditor(document.getElementById('editor_holder'));
+    if (configManager == null) {
+        configManager = ReactDOM.render(e(ConfigPage, { key: genUUID() }), domContainer);
+    } else {
+        configManager.setState({ loaded: false });
     }
-    var retryCnt = 0;
-    getJsonConfig().then(fromVersionedToPlain).then(cfg => {
-        editor.set(cfg);
-    }).catch(err => {
-        setTimeout(() => { refreshConfig(clicked) }, 200);
-    });
 }
 
 const getCellValue = (tr, idx) => tr.children[idx].innerText || tr.children[idx].textContent;
@@ -980,7 +1218,7 @@ function bit_rol(a, b) {
 };
 //#endregion
 
-renderFolder(false);
+renderFolder(true);
 refreshStatus(false);
 refreshConfig(false);
 refreshSystem(false);

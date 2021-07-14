@@ -218,21 +218,33 @@ void TinyGPSPlus::theLoop(void *param)
       gpio_deep_sleep_hold_en();
       gps->gpsPause();
       ESP_LOGD(__FUNCTION__, "Waiting on GPS %d secs ", 10);
-      esp_light_sleep_start();
+      if (xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON)
+        vTaskDelay((GPS_WAIT_PERIOD*1000)/portTICK_PERIOD_MS);
+      else
+        esp_light_sleep_start();
+      
       gps->gpsResume();
 
+      uint8_t retryCnt=0;
       while (!(bits = (xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdTRUE, 200 / portTICK_PERIOD_MS)) & gpsEvent::locationChanged))
       {
+        for (int idx = 0; idx < numWakePins; idx++)
+        {
+          ESP_LOGD(__FUNCTION__, "Pin %d is %d", wakePins[idx], gpio_get_level(wakePins[idx]));
+        }
         gpio_set_level(BLINK_GPIO, 0);
         bits = xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdTRUE, 400 / portTICK_PERIOD_MS);
         gpio_set_level(BLINK_GPIO, 1);
         if (!(bits & gpsEvent::locationChanged)){
           ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(GPS_WAIT_PERIOD * 1000000));
-          ESP_LOGD(__FUNCTION__, "Waiting on GPS %d secs ", GPS_WAIT_PERIOD);
+          ESP_LOGD(__FUNCTION__, "Waiting on GPS %d secs %d", GPS_WAIT_PERIOD, ++retryCnt);
           gpio_hold_en(gps->enpin);
           gpio_deep_sleep_hold_en();
-          gps->gpsPause();
-          esp_light_sleep_start();
+          if (xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON)
+            vTaskDelay((GPS_WAIT_PERIOD*1000)/portTICK_PERIOD_MS);
+          else
+            esp_light_sleep_start();
+          vTaskDelay((GPS_WAIT_PERIOD*1000)/portTICK_PERIOD_MS);
           gps->gpsResume();
         }
       }

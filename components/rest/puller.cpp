@@ -128,7 +128,7 @@ bool moveFolder(char *folderName, char *toFolderName)
     return retval;
 }
 
-bool CheckOTA(ip4_addr_t *ipInfo)
+bool CheckOTA(esp_ip4_addr_t *ipInfo)
 {
     esp_err_t err = ESP_OK;
     bool retCode = true;
@@ -149,14 +149,17 @@ bool CheckOTA(ip4_addr_t *ipInfo)
     if ((ret = esp_http_client_perform(client)) == ESP_OK)
     {
         int len = 0;
-        if ((len = esp_http_client_read(client, dmd5, 36)) >= 0)
+        if ((len = esp_http_client_read(client, &dmd5[0], 33)) >= 0)
         {
-            ESP_LOGV(__FUNCTION__, "Got back (%s)%d char of md5", dmd5, len);
+            if (len == 0){
+                dmd5[0]=0;
+            }
+            ESP_LOGD(__FUNCTION__, "Got back (%s)%d char of md5", len ? dmd5 : "null", len);
             char ch;
-            bool isValid = strcmp(dmd5, "BADMD5") == 0;
-            if (!isValid)
+            bool isValid = (len > 0) && (strcmp(dmd5, "BADMD5") != 0);
+            if (!isValid && (len > 0))
             {
-                for (int idx = 0; idx < 32; idx++)
+                for (int idx = 0; idx < len; idx++)
                 {
                     ch = *(dmd5 + idx);
                     isValid = (((ch >= 'a') && (ch <= 'z')) ||
@@ -169,46 +172,61 @@ bool CheckOTA(ip4_addr_t *ipInfo)
                 }
             }
             FILE *fw = NULL;
-            if (isValid && (fw = fopen("/lfs/firmware/current.bin.md5", "r")) != NULL)
+            if ((fw = fopen("/lfs/firmware/current.bin.md5", "r")) != NULL)
             {
-                char ccmd5[37];
-                if ((len = fread((void *)ccmd5, 1, 36, fw)) >= 0)
+                char ccmd5[33];
+                if ((len = fread((void *)ccmd5, 1, 32, fw)) >= 0)
                 {
-                    ccmd5[36] = 0;
-                    dmd5[36] = 0;
-                    if (strcmp(ccmd5, dmd5) == 0)
+                    fClose(fw);
+                    ccmd5[32] = 0;
+                    dmd5[32] = 0;
+                    if (isValid && strcmp(ccmd5, dmd5) == 0)
                     {
                         ESP_LOGD(__FUNCTION__, "No firmware update needed, is up to date");
                     }
                     else
                     {
-                        ESP_LOGI(__FUNCTION__, "firmware update needed, %s!=%s", dmd5, ccmd5);
+                        ESP_LOGI(__FUNCTION__, "firmware update needed %d, %s!=%s", len, dmd5[0]?dmd5:"N/A", ccmd5);
                         esp_http_client_cleanup(client);
                         memset(config, 0, sizeof(esp_http_client_config_t));
                         fClose(fw);
-                        uint32_t ilen;
-                        uint8_t *img = loadImage(false, &ilen);
-                        if (ilen > 0)
+                        FILE* fw;
+
+                        struct stat st;
+
+                        ldfree((void *)config->url);
+
+                        if ((fw = fopen("/lfs/firmware/current.bin", "r", true)) != NULL)
                         {
-                            ldfree((void *)config->url);
+                            stat("/lfs/firmware/current.bin", &st);
                             memset(config, 0, sizeof(esp_http_client_config_t));
                             config->url = (char *)dmalloc(255);
+                            uint8_t* img = (uint8_t*)dmalloc(st.st_size);
                             memset((void *)config->url, 0, 255);
-                            sprintf((char *)config->url, "http://" IPSTR "/ota/flash?md5=%s&len=%d", IP2STR(ipInfo), ccmd5, ilen);
                             config->method = HTTP_METHOD_POST;
                             config->timeout_ms = 9000;
                             config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
                             config->max_redirection_count = 0;
                             config->port = 80;
-                            client = esp_http_client_init(config);
-                            char dmd5[37];
-                            esp_err_t ret = ESP_OK;
-                            if ((ret = esp_http_client_open(client, ilen)) == ESP_OK)
+
+                            len=0;
+                            while (!feof(fw))
                             {
-                                ESP_LOGD(__FUNCTION__, "Sending firmware %d bytes", ilen);
-                                if (esp_http_client_write(client, (char *)img, ilen) == ilen)
+                                if (((len += fread(img+len, 1, st.st_size, fw)) == 0) || (len >= st.st_size))
                                 {
-                                    ESP_LOGD(__FUNCTION__, "Sent firmware %d bytes", ilen);
+                                    ESP_LOGD(__FUNCTION__,"Read %d bytes from current bin", len);
+                                    break;
+                                }
+                            }
+                            fclose(fw);
+
+                            sprintf((char *)config->url, "http://" IPSTR "/ota/flash?md5=%s&len=%d", IP2STR(ipInfo), ccmd5, (int)st.st_size);
+                            client = esp_http_client_init(config);
+                            if ((ret = esp_http_client_open(client, st.st_size)) == ESP_OK) {
+                                ESP_LOGD(__FUNCTION__,"Sending fw of %d/%d bytes",len,(int)st.st_size);
+                                if ((len = esp_http_client_write(client, (const char*)img, st.st_size)) > 0)
+                                {                                
+                                    ESP_LOGD(__FUNCTION__, "firmware sent %d bytes", len);
                                     esp_http_client_fetch_headers(client);
                                     if ((len = esp_http_client_get_status_code(client)) != 200)
                                     {
@@ -227,35 +245,30 @@ bool CheckOTA(ip4_addr_t *ipInfo)
                                             {
                                                 ESP_LOGE(__FUNCTION__, "Station will not be updated:%s", dmd5);
                                             }
-                                            esp_http_client_close(client);
                                         }
                                         else
                                         {
                                             ESP_LOGE(__FUNCTION__, "Got empty response on flash.");
                                         }
                                     }
+                                } else {
+                                    ESP_LOGE(__FUNCTION__,"Cannot write image:%s",esp_err_to_name(ret));
                                 }
-                                else
-                                {
-                                    ESP_LOGE(__FUNCTION__, "Failed in writing image");
-                                }
+                                esp_http_client_close(client);
+                            } else {
+                                ESP_LOGE(__FUNCTION__,"Cannot open client:%s",esp_err_to_name(ret));
                             }
-                            else
-                            {
-                                ESP_LOGE(__FUNCTION__, "error whilst invoking %s", config->url);
-                            }
-                        }
-                        else
-                        {
-                            ESP_LOGE(__FUNCTION__, "Get a empty image");
+                            esp_http_client_cleanup(client);
+                        } else {
+                            ESP_LOGE(__FUNCTION__,"Cannot open image: /lfs/firmware/current.bin");
                         }
                     }
                 }
                 else
                 {
+                    fClose(fw);
                     ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d", len);
                 }
-                fClose(fw);
             }
             else
             {
@@ -269,11 +282,8 @@ bool CheckOTA(ip4_addr_t *ipInfo)
     }
     else
     {
-        ESP_LOGE(__FUNCTION__, "Version chack request failed: %s", esp_err_to_name(err));
+        ESP_LOGE(__FUNCTION__, "Version check request failed: %s", esp_err_to_name(err));
     }
-    esp_http_client_cleanup(client);
-    ldfree((void *)config->url);
-    ldfree((void *)config);
     return retCode;
 }
 
@@ -432,9 +442,7 @@ void extractClientTar(char *tarFName)
                         }
                         if (devid != NULL)
                         {
-                            header.name[6] = 0;
-                            ESP_LOGV(__FUNCTION__, "%s:%s", header.name, buf);
-                            sprintf(fname, "/lfs/%s/%d.json", header.name, devid->valueint);
+                            sprintf(fname, "/lfs/%s/%d.json", indexOf(header.name,"config") ? "config" : "status", devid->valueint);
                             ESP_LOGD(__FUNCTION__, "Saved as %s (%d bytes)\n", fname, header.size);
                             fw = fopen(fname, "w", true);
                             fwrite(buf, 1, header.size, fw);
@@ -609,6 +617,8 @@ void pullStation(void *pvParameter)
             {
                 esp_http_client_cleanup(client);
                 ldfree((void *)config->url);
+
+                CheckOTA(ipInfo);
                 memset(config, 0, sizeof(esp_http_client_config_t));
                 config->url = (char *)dmalloc(255);
                 sprintf((char *)config->url, "http://" IPSTR "/status/wifi", IP2STR(ipInfo));

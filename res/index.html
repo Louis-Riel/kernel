@@ -3,10 +3,11 @@
 <head>
     <link rel="icon" type="image/png" href="favicon.ico" />
     <link rel="stylesheet" type="text/css" href="app.css" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.5.1/jsoneditor.css" rel="stylesheet" type="text/css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.5.1/jsoneditor.min.css" rel="stylesheet" type="text/css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.5.1/jsoneditor.min.js"></script>
     <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js"></script>
 </head>
 
 <body>
@@ -18,23 +19,8 @@
         <div class="slides">
             <div id="slide-1" class="file_section"></div>
             <div id="slide-2" class="system-config"></div>
-            <div id="slide-3" class="system-config">
-                <form onsubmit="SaveForm(this);return false;" action="/config" method="post">
-                    <fieldset>
-                        <div class="column col-md-12" id="editor_holder" data-theme="spectre"></div>
-                    </fieldset>
-                    <button>Save</button>
-                </form>
-            </div>
-            <div id="slide-4" class="logs">
-                <div>
-                    <button onclick="document.querySelectorAll('.log').forEach(log => log.remove())">Clear Logs</button>
-                    <button onclick="SendCommand({'command':'reboot'})">Reboot</button>
-                    <button onclick="SendCommand({'command':'parseFiles'})">ParseFiles</button>
-                    <button onclick="SendCommand({'command':'factoryReset'})">Factory Reset</button>
-                </div>
-                <div class="loglines"></div>
-            </div>
+            <div id="slide-3" class="system-config"></div>
+            <div id="slide-4" class="logs"></div>
             <script type="text/javascript" src="app.js"></script>
         </div>
     </div>

@@ -172,7 +172,7 @@ bool initSDMMCSDCard()
       return false;
     }
 
-    AppConfig::GetAppStatus()->SetStateProperty("/sdcard/state",item_state_t::ACTIVE);
+    AppConfig::GetAppStatus()->SetStateProperty("/sdcard/state", item_state_t::ACTIVE);
     ESP_LOGD(__FUNCTION__, "SD card mounted %d", (int)card->max_freq_khz);
     if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
       sdmmc_card_print_info(stdout, card);
@@ -196,7 +196,7 @@ bool deinitSPISDCard(bool log)
   if (numSdCallers == 0)
   {
     esp_err_t ret;
-    AppConfig* appState = AppConfig::GetAppStatus();
+    AppConfig *appState = AppConfig::GetAppStatus();
     if (appState->GetStateProperty("/spiff/state") & item_state_t::ACTIVE)
     {
       ret = esp_vfs_littlefs_unregister("storage");
@@ -205,7 +205,7 @@ bool deinitSPISDCard(bool log)
         if (log)
           ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
       }
-      appState->SetStateProperty("/spiff/state",item_state_t::INACTIVE);
+      appState->SetStateProperty("/spiff/state", item_state_t::INACTIVE);
     }
     if (appState->GetStateProperty("/sdcard/state") & item_state_t::ACTIVE)
     {
@@ -242,13 +242,13 @@ bool deinitSPISDCard()
 
 bool initSPISDCard(bool log)
 {
-  AppConfig* appState = AppConfig::GetAppStatus();
-  AppConfig* spiffState = appState->GetConfig("spiff");
-  AppConfig* sdcState = appState->GetConfig("sdcard");
+  AppConfig *appState = AppConfig::GetAppStatus();
+  AppConfig *spiffState = appState->GetConfig("spiff");
+  AppConfig *sdcState = appState->GetConfig("sdcard");
   if (numSdCallers <= 0)
   {
     numSdCallers = 1;
-    log=true;
+    log = true;
     esp_err_t ret;
     const esp_vfs_littlefs_conf_t conf = {
         .base_path = "/lfs",
@@ -268,7 +268,7 @@ bool initSPISDCard(bool log)
       {
         if (log)
           ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
-        numSdCallers=0;
+        numSdCallers = 0;
         free(spiffState);
         free(sdcState);
         return ret;
@@ -277,15 +277,16 @@ bool initSPISDCard(bool log)
     else
     {
       ESP_LOGW(__FUNCTION__, "Cannot mount spiff, already mounted");
-      numSdCallers=1;
+      numSdCallers = 1;
     }
-    spiffState->SetStateProperty("state",item_state_t::ACTIVE);
+    spiffState->SetStateProperty("state", item_state_t::ACTIVE);
 
     AppConfig *cfg = AppConfig::GetAppConfig()->GetConfig("/sdcard");
     if (cfg->HasProperty("MosiPin") &&
         cfg->HasProperty("MisoPin") &&
         cfg->HasProperty("ClkPin") &&
-        cfg->HasProperty("Cspin")) {
+        cfg->HasProperty("Cspin"))
+    {
       spi_bus_config_t bus_cfg = {
           .mosi_io_num = cfg->GetIntProperty("MosiPin"),
           .miso_io_num = cfg->GetIntProperty("MisoPin"),
@@ -303,7 +304,6 @@ bool initSPISDCard(bool log)
           .gpio_wp = SDSPI_SLOT_NO_WP,
           .gpio_int = GPIO_NUM_NC};
 
-
       if (bus_cfg.miso_io_num && bus_cfg.mosi_io_num && bus_cfg.sclk_io_num)
       {
         if ((ret = spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, 1)) == ESP_OK)
@@ -314,54 +314,56 @@ bool initSPISDCard(bool log)
             {
               if (log)
                 ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
-                                      "If you want the card to be formatted, set format_if_mount_failed = true.");
+                                       "If you want the card to be formatted, set format_if_mount_failed = true.");
             }
             else
             {
               if (log)
                 ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
-                                      "Make sure SD card lines have pull-up resistors in place.",
-                        esp_err_to_name(ret));
+                                       "Make sure SD card lines have pull-up resistors in place.",
+                         esp_err_to_name(ret));
             }
-            sdcState->SetStateProperty("state",item_state_t::ERROR);
+            sdcState->SetStateProperty("state", item_state_t::ERROR);
             spi_bus_free(SPI2_HOST);
             free(spiffState);
             free(sdcState);
             free(cfg);
-            return false;
+            return true;
           }
 
           if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
             sdmmc_card_print_info(stdout, card);
           if (log)
             ESP_LOGD(__FUNCTION__, "SD card mounted %d", (int)card);
-          sdcState->SetStateProperty("state",item_state_t::ACTIVE);
+          sdcState->SetStateProperty("state", item_state_t::ACTIVE);
         }
         else if (ret == ESP_ERR_INVALID_STATE)
         {
-          sdcState->SetStateProperty("state",item_state_t::ERROR);
+          sdcState->SetStateProperty("state", item_state_t::ERROR);
           if (log)
             ESP_LOGW(__FUNCTION__, "Error initing SPI bus %s", esp_err_to_name(ret));
         }
         else
         {
-          sdcState->SetStateProperty("state",item_state_t::ERROR);
+          sdcState->SetStateProperty("state", item_state_t::ERROR);
           if (log)
             ESP_LOGE(__FUNCTION__, "Error initing SPI bus %s", esp_err_to_name(ret));
           free(spiffState);
           free(sdcState);
           free(cfg);
-          return false;
+          return true;
         }
       }
       else
       {
         if (log)
         {
-          ESP_LOGW(__FUNCTION__,"No SD Card bus_cfg.miso_io_num:%d bus_cfg.mosi_io_num:%d bus_cfg.sclk_io_num:%d",bus_cfg.miso_io_num, bus_cfg.mosi_io_num, bus_cfg.sclk_io_num);
+          ESP_LOGW(__FUNCTION__, "No SD Card bus_cfg.miso_io_num:%d bus_cfg.mosi_io_num:%d bus_cfg.sclk_io_num:%d", bus_cfg.miso_io_num, bus_cfg.mosi_io_num, bus_cfg.sclk_io_num);
         }
       }
-    } else {
+    }
+    else
+    {
       ESP_LOGW(__FUNCTION__, "Cannot mount SD, Missingparams");
     }
     free(cfg);
@@ -377,29 +379,32 @@ bool initSPISDCard(bool log)
     }
   }
   item_state_t state = spiffState->GetStateProperty("state");
-  if (state == item_state_t::ACTIVE) {
+  if (state == item_state_t::ACTIVE)
+  {
     size_t total_bytes;
     size_t used_bytes;
     esp_err_t ret;
     if ((ret = esp_littlefs_info("storage", &total_bytes, &used_bytes)) == ESP_OK)
     {
-      spiffState->SetIntProperty("total",total_bytes);
-      spiffState->SetIntProperty("used",used_bytes);
-      spiffState->SetIntProperty("free",total_bytes-used_bytes);
+      spiffState->SetIntProperty("total", total_bytes);
+      spiffState->SetIntProperty("used", used_bytes);
+      spiffState->SetIntProperty("free", total_bytes - used_bytes);
     }
   }
   state = sdcState->GetStateProperty("state");
-  if (state == item_state_t::ACTIVE) {
+  if (state == item_state_t::ACTIVE)
+  {
     FATFS *fs;
     DWORD fre_clust, fre_sect, tot_sect;
 
     esp_err_t res = f_getfree("0:", &fre_clust, &fs);
-    if (res == ESP_OK) {
+    if (res == ESP_OK)
+    {
       tot_sect = (fs->n_fatent - 2) * fs->csize;
       fre_sect = fre_clust * fs->csize;
-      sdcState->SetIntProperty("total",tot_sect / 2);
-      sdcState->SetIntProperty("used",(tot_sect-fre_sect) / 2);
-      sdcState->SetIntProperty("free",fre_sect / 2);
+      sdcState->SetIntProperty("total", tot_sect / 2);
+      sdcState->SetIntProperty("used", (tot_sect - fre_sect) / 2);
+      sdcState->SetIntProperty("free", fre_sect / 2);
     }
   }
   free(spiffState);
@@ -413,12 +418,14 @@ bool initSPISDCard()
   return initSPISDCard(true);
 }
 
-bool deleteFile(char* fileName) {
+bool deleteFile(char *fileName)
+{
+  ESP_LOGD(__FUNCTION__, "Deleting file %s", fileName);
   return unlink(fileName) == 0;
 }
 
-
-bool rmDashFR(char* folderName) {
+bool rmDashFR(char *folderName)
+{
   DIR *theFolder;
   struct dirent *fi;
   char fileName[300];
@@ -426,19 +433,33 @@ bool rmDashFR(char* folderName) {
 
   if ((theFolder = opendir(folderName)) != NULL)
   {
-      while (!isABadDay && ((fi = readdir(theFolder)) != NULL)){
-        sprintf(fileName, "%s/%s", folderName, fi->d_name);
-        if (fi->d_type == DT_DIR) {
-          isABadDay|=!rmDashFR(fileName);
-        } else {
-          isABadDay|=!deleteFile(fileName);
-        }
+    while (!isABadDay && ((fi = readdir(theFolder)) != NULL))
+    {
+      sprintf(fileName, "%s/%s", folderName, fi->d_name);
+      if (fi->d_type == DT_DIR)
+      {
+        isABadDay |= !rmDashFR(fileName);
       }
+      else
+      {
+        isABadDay |= !deleteFile(fileName);
+      }
+    }
+    closedir(theFolder);
+    if (!isABadDay)
+    {
+      ESP_LOGD(__FUNCTION__, "Deleting folder %s", folderName);
+      return unlink(folderName) == 0;
+    }
+    else
+    {
+      ESP_LOGE(__FUNCTION__, "Cannot delete %s", folderName);
+    }
   }
-  return !isABadDay;
+  return false;
 }
 
-bool moveFile(char *src, char *dest)
+bool moveFile(const char *src, const char *dest)
 {
   int res;
   FILE *srcF = fOpen(src, "r");
@@ -575,47 +596,6 @@ char *lastIndexOf(const char *str, const char *key)
   }
   ESP_LOGV(__FUNCTION__, "%s not in %s(%d)", key, str, slen);
   return NULL;
-}
-
-static uint8_t *img = NULL;
-static uint32_t ilen = 0;
-
-uint8_t *loadImage(bool reset, uint32_t *iLen)
-{
-  if ((reset || (img == NULL)) && initSPISDCard())
-  {
-    const char *fwf = "/lfs/firmware/current.bin";
-    ESP_LOGV(__FUNCTION__, "Reading %s", fwf);
-    FILE *fw;
-    if ((fw = fopen(fwf, "r", true)) != NULL)
-    {
-      ESP_LOGV(__FUNCTION__, "Opened %s", fwf);
-      img = (uint8_t *)heap_caps_malloc(1500000, MALLOC_CAP_SPIRAM);
-      ESP_LOGV(__FUNCTION__, "Allocated %d SPI RAM", 1500000);
-      uint8_t *buf = (uint8_t *)dmalloc(F_BUF_SIZE);
-      ESP_LOGV(__FUNCTION__, "Allocated %d buffer", F_BUF_SIZE);
-      uint32_t len = 0;
-      *iLen = 0; //fread((void*)img,1,1500000,fw);
-      while (!feof(fw))
-      {
-        if ((len = fread(buf, 1, F_BUF_SIZE, fw)) > 0)
-        {
-          memcpy(img + *iLen, buf, len);
-          *iLen += len;
-          ESP_LOGV(__FUNCTION__, "firmware readin %d bytes", *iLen);
-        }
-      }
-      ilen = *iLen;
-      ESP_LOGV(__FUNCTION__, "firmware read %d bytes", ilen);
-      deinitSPISDCard();
-    }
-    else
-    {
-      ESP_LOGW(__FUNCTION__, "Cannot read %s", fwf);
-    }
-  }
-  *iLen = ilen;
-  return img;
 }
 
 FILE *fopen(const char *_name, const char *_type, bool createDir)

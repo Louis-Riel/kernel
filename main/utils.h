@@ -112,15 +112,6 @@ struct dataPoint
   uint32_t altitude;
 };
 
-struct trip
-{
-  uint32_t numNodes;
-  uint32_t nodesAllocated;
-  dataPoint **nodes;
-  char fname[33];
-  uint32_t lastExportedTs = 0;
-};
-
 class AppConfig {
 public:
   AppConfig(char* filePath);
@@ -139,6 +130,7 @@ public:
   cJSON* GetJSONConfig(const char* path);
   cJSON* GetJSONConfig(const char *path, bool createWhenMissing);
   void SetAppConfig(cJSON* config);
+  static void MergeJSon(cJSON* curConfig, cJSON *newConfig);
 
   bool HasProperty(const char* path);
 
@@ -175,10 +167,9 @@ protected:
 
 AppConfig* GetAppConfig();
 bool startsWith(const char* str,const char* key);
-uint8_t* loadImage(bool reset,uint32_t* iLen);
 void sampleBatteryVoltage();
 float getBatteryVoltage();
-bool moveFile(char* src, char* dest);
+bool moveFile(const char* src, const char* dest);
 bool initSPISDCard();
 bool initSPISDCard(bool);
 bool deinitSPISDCard();
@@ -195,7 +186,6 @@ FILE * fopen (const char * _name, const char * _type,bool createDir);
 FILE * fopen (const char * _name, const char * _type,bool createDir, bool log);
 
 void commitTripToDisk(void* param);
-trip* getActiveTrip();
 void stopGps();
 int64_t getSleepTime();
 int64_t getUpTime();

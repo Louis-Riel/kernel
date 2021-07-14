@@ -30,6 +30,7 @@
 #include "../components/esp_littlefs/include/esp_littlefs.h"
 #include "bootloader_random.h"
 #include "../components/eventmgr/eventmgr.h"
+#include "../components/rest/rest.h"
 #include "../components/pins/pins.h"
 #include "../components/mfile/mfile.h"
 
@@ -42,7 +43,6 @@
 #define TRIP_BLOCK_SIZE 255
 
 static xQueueHandle gpio_evt_queue = NULL;
-static trip curTrip;
 time_t now = 0;
 time_t lastMovement = 0;
 RTC_DATA_ATTR uint32_t bumpCnt = 0;
@@ -103,11 +103,6 @@ extern "C"
   void app_main(void);
 }
 
-trip *getActiveTrip()
-{
-  return &curTrip;
-}
-
 float getBatteryVoltage();
 void sampleBatteryVoltage()
 {
@@ -127,7 +122,7 @@ void sampleBatteryVoltage()
   {
     if ((ret = esp_adc_cal_get_voltage(ADC_CHANNEL_7, &characteristics, &tmp)) == ESP_OK)
     {
-      voltage += (tmp * 2.40584138288);
+      voltage += (tmp * 2);
       cnt++;
     }
     else
@@ -136,8 +131,10 @@ void sampleBatteryVoltage()
     }
   }
   adc_power_release();
-  if (cnt > 0)
+  if (cnt > 0){
     batLvls[batSmplCnt++] = (voltage / cnt);
+    ESP_LOGV(__FUNCTION__, "Voltage::%f", getBatteryVoltage());
+  }
 }
 
 float getBatteryVoltage()
@@ -157,99 +154,12 @@ float getBatteryVoltage()
   return uloop > 0 ? voltage / uloop : 0;
 }
 
-dataPoint *getCurDataPoint()
-{
-  time(&lastDpTs);
-  if (lastDpTs < 10000)
-  {
-    return NULL;
-  }
-  dto = false;
-  return new dataPoint{
-    ts : (uint32_t)lastDpTs,
-    lng : gps->location.lng(),
-    lat : gps->location.lat(),
-    speed : (uint16_t)gps->speed.kmph(),
-    course : (uint16_t)gps->course.deg(),
-    bat : getBatteryVoltage(),
-    freeRam : heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
-    bumpCnt : bumpCnt,
-    altitude : (uint32_t)gps->altitude.meters()
-  };
-}
-
-void addTripBlock()
-{
-  ESP_LOGD(__FUNCTION__, "addTripBlock");
-  curTrip.nodes[curTrip.nodesAllocated] = (dataPoint *)dmalloc(sizeof(dataPoint) * TRIP_BLOCK_SIZE);
-  curTrip.nodesAllocated += TRIP_BLOCK_SIZE;
-}
-
-void createTrip()
-{
-  ESP_LOGD(__FUNCTION__, "createTrip");
-  curTrip.numNodes = 0;
-  curTrip.nodesAllocated = 0;
-  curTrip.nodes = (dataPoint **)dmalloc(sizeof(dataPoint *) * 10240);
-  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED)
-    curTrip.fname[0] = 0;
-  else
-    strcpy(curTrip.fname, tripFName);
-  curTrip.lastExportedTs = 0;
-  addTripBlock();
-}
-
-bool commitTrip(trip *trip)
-{
-  return false;
-  if ((trip == NULL) || (trip->numNodes <= 0))
-  {
-    ESP_LOGW(__FUNCTION__, "commitTrip called without an active trip");
-    return false;
-  }
-  struct tm timeinfo;
-  bool printHeader = false;
-  if (strlen(trip->fname) == 0)
-  {
-    printHeader = true;
-    localtime_r((time_t *)&trip->nodes[0]->ts, &timeinfo);
-    strftime(trip->fname, sizeof(trip->fname), "/lfs/csv/%Y-%m-%d_%H-%M-%S.csv", &timeinfo);
-  }
-  ESP_LOGD(__FUNCTION__, "Saving trip with %d nodes to %s %s", trip->numNodes, trip->fname, curTrip.fname);
-  FILE *f = fOpen(trip->fname, "a");
-  if (f == NULL)
-  {
-    ESP_LOGE(__FUNCTION__, "Failed to open %s for writing", trip->fname);
-    return false;
-  }
-  dataPoint *dp;
-  if (printHeader)
-  {
-    fprintf(f, "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Bumps\n");
-  }
-  char dt[21];
-  uint32_t cnt = 0;
-  for (int idx = 0; idx < trip->numNodes; idx++)
-  {
-    dp = trip->nodes[idx];
-    localtime_r((time_t *)&dp->ts, &timeinfo);
-    strftime(dt, 21, "%Y/%m/%d %H:%M:%S", &timeinfo);
-    fprintf(f, "%s,%3.7f,%3.7f,%d,%d,%d,%d,%f,%d\n", dt, dp->lng, dp->lat, dp->speed, dp->altitude, dp->course, dp->freeRam, dp->bat, bumpCnt);
-    trip->lastExportedTs = dp->ts;
-    cnt++;
-    free(dp);
-    trip->numNodes = 0;
-  }
-  fClose(f);
-  ESP_LOGD(__FUNCTION__, "%d nodes written", cnt);
-  return true;
-}
 
 bool bakeKml(char *cvsFileName, char *kmlFileName)
 {
   if (strlen(cvsFileName) > 1)
   {
-    ESP_LOGV(__FUNCTION__, "Getting Facts from %s for %s", cvsFileName, kmlFileName);
+    ESP_LOGD(__FUNCTION__, "Getting Facts from %s for %s", cvsFileName, kmlFileName);
     FILE *trp = fopen(cvsFileName, "r", true);
     if (trp == NULL)
     {
@@ -387,11 +297,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
 
                         if (fldNo == 4)
                         {
-                          fprintf(kml, pmpt2);
-                          fprintf(kml, ts);
-                          fprintf(kml, "\nSpeed:");
-                          fprintf(kml, speed);
-                          fprintf(kml, pmpt3);
+                          fprintf(kml, "%s%s\nSpeed:%f%s", pmpt2, ts, 1.852*atoi(speed)/100.0, pmpt3);
                           speed[speedLen] = 0;
                         }
                         if (fldNo == 7)
@@ -444,9 +350,9 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
                           fputc(fc, kml);
                         }
                       }
-                      if ((fldNo >= 2) && (fldNo <= 4))
+                      if ((fldNo >= 2) && (fldNo <= 3))
                       {
-                        if ((fldNo < 4) || (fc != ','))
+                        if ((fldNo < 3) || (fc != ','))
                         {
                           fputc(fc, kml);
                         }
@@ -523,35 +429,18 @@ void parseFolderForCSV(const char *folder)
       }
       if (fi->d_type == DT_REG)
       {
-        sprintf(kFName, "%s/kml/%s.kml", AppConfig::GetActiveStorage(), fi->d_name);
-        for (char *theChar = kFName;
-             *theChar != 0;
-             theChar++)
-        {
-          if (*theChar == '_')
-          {
-            *theChar = '/';
-            break;
-          }
-          if (*theChar == '-')
-          {
-            *theChar = '/';
-          }
-        }
         sprintf(cFName, "%s/%s", folder, fi->d_name);
+        sprintf(kFName, "%s/kml/%s/%s.kml", AppConfig::GetActiveStorage(), indexOf(folder,"csv")+4, fi->d_name);
         if (bakeKml(cFName, kFName))
         {
           sprintf(kFName, "%s/converted/%s", AppConfig::GetActiveStorage(), fi->d_name);
-          if (strcmp(curTrip.fname, cFName) < 0)
+          if (moveFile(cFName, kFName))
           {
-            if (moveFile(cFName, kFName))
-            {
-              ESP_LOGD(__FUNCTION__, "Moved %s to %s", cFName, kFName);
-            }
-            else
-            {
-              ESP_LOGE(__FUNCTION__, "Failed moving %s to %s", cFName, kFName);
-            }
+            ESP_LOGD(__FUNCTION__, "Moved %s to %s", cFName, kFName);
+          }
+          else
+          {
+            ESP_LOGE(__FUNCTION__, "Failed moving %s to %s", cFName, kFName);
           }
         }
         else
@@ -560,6 +449,7 @@ void parseFolderForCSV(const char *folder)
         }
       } else if (fi->d_type == DT_DIR) {
         sprintf(cFName,"%s/%s",folder,fi->d_name);
+        parseFolderForCSV(cFName);
       }
     }
     ldfree(kFName);
@@ -579,45 +469,6 @@ void commitTripToDisk(void *param)
   {
     xEventGroupSetBits(app_eg, app_bits_t::COMMITTING_TRIPS);
 
-    if (commitTrip(&curTrip) && (theBits & BIT1))
-    {
-      char *kFName = (char *)dmalloc(350);
-      char *cFName = (char *)dmalloc(350);
-      sprintf(kFName, "%s/kml/%s.kml", AppConfig::GetActiveStorage(), &curTrip.fname[8]);
-      char *theChar;
-      for (theChar = kFName; *theChar != 0; theChar++)
-      {
-        if (*theChar == '_')
-        {
-          *theChar = '/';
-          break;
-        }
-        if (*theChar == '-')
-        {
-          *theChar = '/';
-        }
-      }
-      sprintf(theChar + 1, "%s.kml", &curTrip.fname[8]);
-
-      if (bakeKml(curTrip.fname, kFName))
-      {
-        sprintf(kFName, "%s/converted/%s", AppConfig::GetActiveStorage(), &curTrip.fname[8]);
-        if (moveFile(curTrip.fname, kFName))
-        {
-          ESP_LOGD(__FUNCTION__, "Moved %s to %s.", curTrip.fname, kFName);
-        }
-        else
-        {
-          ESP_LOGE(__FUNCTION__, "Failed moving %s to %s", curTrip.fname, kFName);
-        }
-      }
-      else
-      {
-        ESP_LOGE(__FUNCTION__, "Failed baking %s from %s", curTrip.fname, cFName);
-      }
-      ldfree(kFName);
-      ldfree(cFName);
-    }
     if (theBits & BIT2)
     {
       parseFolderForCSV("/lfs/csv");
@@ -631,43 +482,8 @@ void commitTripToDisk(void *param)
     vTaskDelete(NULL);
 }
 
-void addDataPoint()
-{
-  dataPoint *curNode = getCurDataPoint();
-  if ((curNode == NULL) || (curNode->lng == 0.0))
-  {
-    ESP_LOGW(__FUNCTION__, "Skipping save of no point pr time data");
-    return;
-  }
-  ESP_LOGD(__FUNCTION__, "addDataPoint %d", curTrip.numNodes);
-  curTrip.nodes[curTrip.numNodes++] = curNode;
-  ESP_LOGD(__FUNCTION__, "lng:%3.7f,lat:%3.7f,speed:%d, course:%d,bat:%f,freeRam:%d,bumps:%d,alt:%d",
-           curNode->lng,
-           curNode->lat,
-           curNode->speed,
-           curNode->course,
-           curNode->bat,
-           curNode->freeRam,
-           bumpCnt,
-           curNode->altitude);
-
-  if (curTrip.numNodes == curTrip.nodesAllocated)
-  {
-    addTripBlock();
-  }
-
-  if (curTrip.numNodes % 10 == 0)
-  {
-    if (gps != NULL)
-    {
-      xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT3), tskIDLE_PRIORITY, NULL);
-    }
-  }
-}
-
 void doHibernate(void *param)
 {
-  addDataPoint();
   ESP_LOGD(__FUNCTION__, "Deep Sleeping %d", bumpCnt);
   if (gps != NULL)
   {
@@ -694,8 +510,6 @@ void doHibernate(void *param)
   {
     ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[0], 0));
   }
-  gpio_set_level(gps->enPin(), 0);
-  gpio_hold_en(gps->enPin());
 
   //gpio_deep_sleep_hold_en();
   lastSpeed = 0;
@@ -709,15 +523,14 @@ void doHibernate(void *param)
   bumpCnt = 0;
   lastRate = 0;
   lastPoiState = poiState_t::unknown;
-  curTrip.fname[0] = 0;
-  curTrip.lastExportedTs = 0;
-  curTrip.nodesAllocated = 0;
-  curTrip.numNodes = 0;
   hibernate = true;
   ESP_LOGD(__FUNCTION__, "Hybernating");
 
   //xTaskCreate(flash, "flashy", 2048, (void *)10, tskIDLE_PRIORITY, NULL);
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+  gpio_set_level(BLINK_GPIO, 1);
+  gpio_set_level(gps->enPin(), 0);
+  gpio_hold_dis(gps->enPin());
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF));
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF));
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF));
@@ -752,15 +565,12 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     ESP_LOGI(__FUNCTION__, "System Time: %s", strftime_buf);
     break;
   case TinyGPSPlus::gpsEvent::significantDistanceChange:
-    addDataPoint();
     ESP_LOGD(__FUNCTION__, "Distance Diff: %f", *((double *)event_data));
     break;
   case TinyGPSPlus::gpsEvent::significantSpeedChange:
-    //addDataPoint();
     ESP_LOGD(__FUNCTION__, "Speed Diff: %f %f", gps->speed.kmph(), *((double *)event_data));
     break;
   case TinyGPSPlus::gpsEvent::significantCourseChange:
-    addDataPoint();
     ESP_LOGD(__FUNCTION__, "Course Diff: %f %f", gps->course.deg(), *((double *)event_data));
     break;
   case TinyGPSPlus::gpsEvent::rateChanged:
@@ -831,12 +641,10 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     ESP_LOGV(__FUNCTION__, "Sleep at %lu", (time_t)getSleepTime());
     break;
   case TinyGPSPlus::gpsEvent::go:
-    addDataPoint();
     ESP_LOGD(__FUNCTION__, "Go");
     isStopped = false;
     break;
   case TinyGPSPlus::gpsEvent::stop:
-    addDataPoint();
     ESP_LOGD(__FUNCTION__, "Stop");
     isStopped = true;
     break;
@@ -1192,7 +1000,7 @@ void app_main(void)
 {
   if (setupLittlefs() == ESP_OK)
   {
-    ESP_LOGI(__FUNCTION__, "Starting");
+    ESP_LOGI(__FUNCTION__, "Starting.");
     check_efuse();
     adc1_config_width(ADC_WIDTH_12Bit);
     adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_11db);
@@ -1234,7 +1042,7 @@ void app_main(void)
     sampleBatteryVoltage();
     uint32_t tmp;
     ESP_LOGV(__FUNCTION__, "Pre-Loading Image....");
-    loadImage(false, &tmp);
+    loadImage();
     //initSPISDCard();
     gpio_reset_pin(BLINK_GPIO);
     gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
@@ -1274,6 +1082,7 @@ void app_main(void)
     lng.negative = lastLngNeg;
     if (appcfg->HasProperty("/gps/rxPin") && appcfg->GetIntProperty("/gps/rxPin"))
     {
+      configureMotionDetector();
       ESP_LOGD(__FUNCTION__, "Starting GPS");
       gps = new TinyGPSPlus(appcfg->GetConfig("/gps"));
       if (gps != NULL)
@@ -1281,7 +1090,6 @@ void app_main(void)
         ESP_LOGD(__FUNCTION__, "Waiting for GPS");
         if (xEventGroupWaitBits(gps->eg, TinyGPSPlus::gpsEvent::gpsRunning, pdFALSE, pdTRUE, 1500 / portTICK_RATE_MS) & TinyGPSPlus::gpsEvent::gpsRunning)
         {
-          createTrip();
           ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::msg, gpsEvent, &gps));
           ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::go, gpsEvent, &gps));
           ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::stop, gpsEvent, &gps));

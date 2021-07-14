@@ -20,9 +20,134 @@
 #define JSON_BUFFER_SIZE 8192
 #define KML_BUFFER_SIZE 204600
 
-static httpd_handle_t server = NULL;
 static uint8_t *img = NULL;
 static uint32_t totLen = 0;
+
+esp_err_t sendFile(httpd_req_t *req, const char* path);
+
+void flashTheThing(void *param)
+{
+    esp_ota_handle_t update_handle = 0;
+    const esp_partition_t *update_partition = NULL;
+
+    const esp_partition_t *configured = esp_ota_get_boot_partition();
+    const esp_partition_t *running = esp_ota_get_running_partition();
+
+    if (configured != running)
+    {
+        ESP_LOGW(__FUNCTION__, "Configured OTA boot partition at offset 0x%08x, but running from offset 0x%08x",
+                 configured->address, running->address);
+        ESP_LOGW(__FUNCTION__, "(This can happen if either the OTA boot data or preferred boot image become corrupted somehow.)");
+    }
+    ESP_LOGD(__FUNCTION__, "Running partition type %d subtype %d (offset 0x%08x)",
+             running->type, running->subtype, running->address);
+
+    update_partition = esp_ota_get_next_update_partition(update_partition);
+
+    bool isOnOta = false;
+    if (update_partition->address == configured->address)
+    {
+        isOnOta = true;
+        assert(update_partition != NULL);
+        ESP_LOGD(__FUNCTION__, "Skipping partition subtype %d at offset 0x%x",
+                 update_partition->subtype, update_partition->address);
+    }
+    assert(update_partition != NULL);
+    ESP_LOGD(__FUNCTION__, "Writing to partition subtype %d at offset 0x%x",
+             update_partition->subtype, update_partition->address);
+
+    if (initSPISDCard())
+    {
+        if (isOnOta)
+        {
+            ESP_LOGW(__FUNCTION__, "Wring partition to update from");
+        }
+        else
+        {
+            esp_err_t err = esp_ota_begin(update_partition, totLen, &update_handle);
+            if (err == ESP_OK)
+            {
+                ESP_LOGD(__FUNCTION__, "esp_ota_begin succeeded %d ", totLen);
+                err = esp_ota_write(update_handle, (const void *)img, totLen);
+                if (err == ESP_OK)
+                {
+                    ESP_LOGI(__FUNCTION__, "esp_ota_write succeeded");
+                    err = esp_ota_end(update_handle);
+                    if (err == ESP_OK)
+                    {
+                        err = esp_ota_set_boot_partition(update_partition);
+                        if (err == ESP_OK)
+                        {
+                            ESP_LOGI(__FUNCTION__, "esp_ota_set_boot_partition succeeded");
+                            moveFile("/lfs/firmware/tobe.bin.md5", "/lfs/firmware/current.bin.md5");
+                            deinitSPISDCard();
+                            esp_restart();
+                        }
+                        else
+                        {
+                            ESP_LOGE(__FUNCTION__, "esp_ota_set_boot_partition failed (%s)!", esp_err_to_name(err));
+                        }
+                    }
+                    else
+                    {
+                        ESP_LOGE(__FUNCTION__, "esp_ota_write failed");
+                    }
+                }
+                else
+                {
+                    ESP_LOGE(__FUNCTION__, "esp_ota_write failed");
+                }
+            }
+            else
+            {
+                ESP_LOGE(__FUNCTION__, "esp_ota_begin failed (%s)", esp_err_to_name(err));
+            }
+            ldfree(img);
+        }
+    }
+    else
+    {
+        ESP_LOGE(__FUNCTION__, "Failed in opeing /firmware/current.bin.md5");
+    }
+}
+
+void loadImage()
+{
+    const char *fwf = "/lfs/firmware/current.bin";
+    const char *fmd = "/lfs/firmware/tobe.bin.md5";
+    FILE *fw;
+    struct stat st;
+
+    if (stat(fmd, &st) == 0)
+    {
+        ESP_LOGD(__FUNCTION__, "Applying firmware upgrade");
+        if (stat(fwf, &st) == 0)
+        {
+            ESP_LOGD(__FUNCTION__, "Opened %s", fwf);
+            img = (uint8_t *)dmalloc(st.st_size);
+            uint8_t *buf = (uint8_t *)dmalloc(F_BUF_SIZE);
+            ESP_LOGV(__FUNCTION__, "Allocated %d buffer", F_BUF_SIZE);
+            uint32_t len = 0;
+            totLen = 0;
+            if ((fw = fopen(fwf, "r", true)) != NULL)
+            {
+                while (!feof(fw))
+                {
+                    if ((len = fread(buf, 1, F_BUF_SIZE, fw)) > 0)
+                    {
+                        memcpy(img + totLen, buf, len);
+                        totLen += len;
+                        ESP_LOGV(__FUNCTION__, "firmware readin %d bytes", totLen);
+                    }
+                }
+                fclose(fw);
+                flashTheThing((void *)1);
+            }
+            ESP_LOGD(__FUNCTION__, "firmware read %d bytes", totLen);
+            deinitSPISDCard();
+        }
+    }
+}
 
 //char* kmlFileName=(char*)dmalloc(255);
 float temperatureReadFixed()
@@ -41,7 +166,8 @@ float temperatureReadFixed()
     return temp_c;
 }
 
-cJSON *tasks_json(){
+cJSON *tasks_json()
+{
     volatile UBaseType_t numTasks = uxTaskGetNumberOfTasks();
     uint32_t totalRunTime;
     TaskStatus_t *statuses = (TaskStatus_t *)dmalloc(numTasks * sizeof(TaskStatus_t));
@@ -81,7 +207,7 @@ cJSON *status_json()
     int64_t time_us = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
 
     cJSON *status = cJSON_CreateObject();
-    
+
     cJSON_AddItemToObject(status, "deviceid", cJSON_CreateNumber(appcfg->GetIntProperty("deviceid")));
     cJSON_AddNumberToObject(status, "uptime_sec", getUpTime());
     cJSON_AddNumberToObject(status, "sleeptime_sec", getSleepTime());
@@ -96,176 +222,88 @@ cJSON *status_json()
     return status;
 }
 
-void flashTheThing(void *param)
-{
-    esp_ota_handle_t update_handle = 0;
-    const esp_partition_t *update_partition = NULL;
-
-    const esp_partition_t *configured = esp_ota_get_boot_partition();
-    const esp_partition_t *running = esp_ota_get_running_partition();
-    AppConfig *appcfg = AppConfig::GetAppConfig();
-
-    if (configured != running)
-    {
-        ESP_LOGW(__FUNCTION__, "Configured OTA boot partition at offset 0x%08x, but running from offset 0x%08x",
-                 configured->address, running->address);
-        ESP_LOGW(__FUNCTION__, "(This can happen if either the OTA boot data or preferred boot image become corrupted somehow.)");
-    }
-    ESP_LOGD(__FUNCTION__, "Running partition type %d subtype %d (offset 0x%08x)",
-             running->type, running->subtype, running->address);
-
-    while ((update_partition = esp_ota_get_next_update_partition(update_partition))->address == configured->address)
-    {
-        assert(update_partition != NULL);
-        ESP_LOGV(__FUNCTION__, "Skipping partition subtype %d at offset 0x%x",
-                 update_partition->subtype, update_partition->address);
-    }
-    assert(update_partition != NULL);
-    ESP_LOGD(__FUNCTION__, "Writing to partition subtype %d at offset 0x%x",
-             update_partition->subtype, update_partition->address);
-
-    if (initSPISDCard())
-    {
-        FILE *fw = NULL;
-        if (!appcfg->IsAp() && (fw = fopen("/lfs/firmware/current.bin", "w", true)) != NULL)
-        {
-            if (fwrite((void *)img, 1, totLen, fw) == totLen)
-            {
-                fClose(fw);
-            }
-            else
-            {
-                ESP_LOGE(__FUNCTION__, "Firmware not backedup");
-            }
-        }
-        else
-        {
-            if (!appcfg->IsAp())
-            {
-                ESP_LOGE(__FUNCTION__, "Failed to open /tfs/firmware/current.bin");
-            }
-        }
-        if ((fw = fopen("/lfs/firmware/current.bin.md5", "w", true)) != NULL)
-        {
-            uint8_t md5[16];
-            MD5Context md5_context;
-            MD5Init(&md5_context);
-            MD5Update(&md5_context, img, totLen);
-            MD5Final(md5, &md5_context);
-            char ccmd5[36];
-            for (uint8_t i = 0; i < 16; ++i)
-            {
-                sprintf((char *)&ccmd5[i * 2], "%02x", (unsigned int)md5[i]);
-            }
-            fwrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
-            fClose(fw);
-            ESP_LOGD(__FUNCTION__, "Firmware md5 written");
-        }
-        else
-        {
-            ESP_LOGE(__FUNCTION__, "Failed in opeing /firmware/current.bin.md5");
-        }
-    }
-    else
-    {
-        ESP_LOGE(__FUNCTION__, "Failed to mount the fucking sd card");
-    }
-
-    esp_err_t err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &update_handle);
-    if (err == ESP_OK)
-    {
-        ESP_LOGD(__FUNCTION__, "esp_ota_begin succeeded %d ", totLen);
-        err = esp_ota_write(update_handle, (const void *)img, totLen);
-        if (err == ESP_OK)
-        {
-            ESP_LOGI(__FUNCTION__, "esp_ota_write succeeded");
-            err = esp_ota_end(update_handle);
-            if (err == ESP_OK)
-            {
-                err = esp_ota_set_boot_partition(update_partition);
-                if (err == ESP_OK)
-                {
-                    ESP_LOGI(__FUNCTION__, "esp_ota_set_boot_partition succeeded");
-                    deinitSPISDCard();
-                }
-                else
-                {
-                    ESP_LOGE(__FUNCTION__, "esp_ota_set_boot_partition failed (%s)!", esp_err_to_name(err));
-                }
-            }
-            else
-            {
-                ESP_LOGE(__FUNCTION__, "esp_ota_write failed");
-            }
-        }
-        else
-        {
-            ESP_LOGE(__FUNCTION__, "esp_ota_write failed");
-        }
-    }
-    else
-    {
-        ESP_LOGE(__FUNCTION__, "esp_ota_begin failed (%s)", esp_err_to_name(err));
-    }
-    ldfree(img);
-    totLen = 0;
-    esp_restart();
-}
-
 esp_err_t stat_handler(httpd_req_t *req)
 {
     char *fname = (char *)(req->uri + 5);
-    if (req->method == HTTP_POST){
+    if (req->method == HTTP_POST)
+    {
         ESP_LOGV(__FUNCTION__, "Getting stats on %s", fname);
         struct stat st;
-        int ret = 0;
+        esp_err_t ret = ESP_FAIL;
+        size_t tlen;
+        char *opeartion = NULL;
+        char *fileType = NULL;
 
         ret = stat(fname, &st);
 
         if (ret == 0)
         {
-            char *res = (char *)dmalloc(JSON_BUFFER_SIZE);
-            char *path = (char *)dmalloc(255);
-            strcpy(path, fname);
-            char *fpos = strrchr(path, '/');
-            *fpos = 0;
-            esp_err_t ret = httpd_resp_send(req, res, sprintf(res, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}", path, fpos + 1, "file", (uint32_t)st.st_size));
-            ldfree(path);
-            ldfree(res);
-            return ret;
-        }
-    }
-    if (req->method == HTTP_DELETE){
-        ESP_LOGD(__FUNCTION__, "Deleting %s", fname);
-        size_t tlen = httpd_req_get_hdr_value_len(req,"ftype");
-
-        if (tlen > 0) {
-            char* fileType = (char*)dmalloc(tlen+1);
-            httpd_req_get_hdr_value_str(req,"ftype",fileType,tlen+1);
-
-            if (fileType[0] == 'd') {
-                ESP_LOGD(__FUNCTION__, "%s is a folder", fname);
-                if (rmDashFR(fname)) {
-                    ldfree(fileType);
-                    return httpd_resp_send(req,"OK",3);
-                } else {
-                    ESP_LOGE(__FUNCTION__,"Failed in rm -fr on %s",fname);
+            if ((tlen = httpd_req_get_hdr_value_len(req, "operation")) &&
+                (opeartion = (char *)dmalloc(tlen + 1)) &&
+                (httpd_req_get_hdr_value_str(req, "operation", opeartion, tlen + 1) == ESP_OK) &&
+                (tlen = httpd_req_get_hdr_value_len(req, "ftype")) &&
+                (fileType = (char *)dmalloc(tlen + 1)) &&
+                (httpd_req_get_hdr_value_str(req, "ftype", fileType, tlen + 1) == ESP_OK))
+            {
+                if (opeartion[0] == 'd')
+                {
+                    ESP_LOGD(__FUNCTION__, "Deleting %s", fname);
+                    if (fileType[0] == 'f')
+                    {
+                        ESP_LOGD(__FUNCTION__, "%s is a file", fname);
+                        if (deleteFile(fname))
+                        {
+                            ret = httpd_resp_send(req, "OK", 3);
+                        }
+                        else
+                        {
+                            ret = httpd_resp_send_500(req);
+                            ESP_LOGE(__FUNCTION__, "Failed to rm -fr %s", fname);
+                        }
+                    }
+                    else
+                    {
+                        ESP_LOGD(__FUNCTION__, "%s is a folder", fname);
+                        if (rmDashFR(fname))
+                        {
+                            ret = httpd_resp_send(req, "OK", 3);
+                        }
+                        else
+                        {
+                            ret = httpd_resp_send_500(req);
+                            ESP_LOGE(__FUNCTION__, "Failed in rm -fr on %s", fname);
+                        }
+                    }
                 }
-            } else {
-                ESP_LOGD(__FUNCTION__, "%s is a file", fname);
-                if (deleteFile(fname)) {
-                    ldfree(fileType);
-                    return httpd_resp_send(req,"OK",3);
-                } else {
-                    ESP_LOGE(__FUNCTION__,"Failed to rm -fr %s",fname);
+                else
+                {
+                    ESP_LOGE(__FUNCTION__, "bad operation");
+                    ret = httpd_resp_send_408(req);
                 }
             }
-            ldfree(fileType);
-        } else {
-            ESP_LOGE(__FUNCTION__,"Missing type");
+            else
+            {
+                char *res = (char *)dmalloc(JSON_BUFFER_SIZE);
+                char *path = (char *)dmalloc(255);
+                strcpy(path, fname);
+                char *fpos = strrchr(path, '/');
+                *fpos = 0;
+                ret = httpd_resp_send(req, res, sprintf(res, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}", path, fpos + 1, "file", (uint32_t)st.st_size));
+                ldfree(path);
+                ldfree(res);
+            }
+            if (opeartion)
+                ldfree(opeartion);
+            if (fileType)
+                ldfree(fileType);
+            return ret;
         }
+        return httpd_resp_send_500(req);
     }
-    return httpd_resp_send_500(req);
+    else
+    {
+        return httpd_resp_send_408(req);
+    }
 }
 
 esp_err_t ota_handler(httpd_req_t *req)
@@ -274,21 +312,10 @@ esp_err_t ota_handler(httpd_req_t *req)
     {
         char *buf;
         size_t buf_len;
-        ESP_LOGD(__FUNCTION__, "OTA REQUEST!!!!!");
-
-        buf_len = httpd_req_get_hdr_value_len(req, "Host") + 1;
-        if (buf_len > 1)
-        {
-            buf = (char *)dmalloc(buf_len);
-            if (httpd_req_get_hdr_value_str(req, "Host", buf, buf_len) == ESP_OK)
-            {
-                ESP_LOGV(__FUNCTION__, "Found header => Host: %s", buf);
-            }
-            ldfree(buf);
-        }
+        ESP_LOGD(__FUNCTION__, "OTA REQUEST!!!!! RAM:%d...", esp_get_free_heap_size());
 
         buf_len = httpd_req_get_url_query_len(req) + 1;
-        char md5[36];
+        char md5[33];
         md5[0] = 0;
 
         if (buf_len > 1)
@@ -301,7 +328,7 @@ esp_err_t ota_handler(httpd_req_t *req)
                 if (httpd_query_key_value(buf, "md5", param, sizeof(param)) == ESP_OK)
                 {
                     strcpy(md5, param);
-                    ESP_LOGD(__FUNCTION__, "Found URL query parameter => md5=%s", param);
+                    ESP_LOGD(__FUNCTION__, "Found URL query parameter => md5=%s", md5);
                 }
                 if (httpd_query_key_value(buf, "len", param, sizeof(param)) == ESP_OK)
                 {
@@ -312,19 +339,52 @@ esp_err_t ota_handler(httpd_req_t *req)
             ldfree(buf);
         }
 
+        if (initSPISDCard())
+        {
+            FILE *fw = NULL;
+            esp_err_t ret;
+            if ((fw = fopen("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
+            {
+                char ccmd5[33];
+                uint32_t len = 0;
+                if ((len = fread((void *)ccmd5, 1, 33, fw)) > 0)
+                {
+                    ccmd5[len]=0;
+                    ESP_LOGD(__FUNCTION__,"Sending MD5:%s",ccmd5);
+                    if ((ret = httpd_resp_send(req, ccmd5, 33)) != ESP_OK) {
+                        ESP_LOGE(__FUNCTION__,"Error sending MD5:%s",esp_err_to_name(ret));
+                    }
+                }
+                else
+                {
+                    ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d", len);
+                }
+                fClose(fw);
+                if ((ret == ESP_OK) && (strcmp(ccmd5,md5) == 0)) {
+                    return httpd_resp_send(req,"Not new",8);
+                }
+            }
+            else
+            {
+                ESP_LOGE(__FUNCTION__, "Failed in opeing md5");
+            }
+        } else {
+            ESP_LOGE(__FUNCTION__,"Cannot init the fucking sd card");
+        }
+
         if (totLen && md5[0])
         {
-            ESP_LOGD(__FUNCTION__, "RAM:%d...", esp_get_free_heap_size());
-            img = (uint8_t *)heap_caps_malloc(totLen, MALLOC_CAP_SPIRAM);
+            ESP_LOGD(__FUNCTION__, "RAM:%d...%d md5:%s", esp_get_free_heap_size(), totLen, md5);
+            img = (uint8_t *)dmalloc(totLen); //heap_caps_malloc(totLen, MALLOC_CAP_SPIRAM);
             memset(img, 0, totLen);
             ESP_LOGD(__FUNCTION__, "RAM:%d...", esp_get_free_heap_size());
 
-            int len = 0;
             uint8_t cmd5[16];
-            uint8_t ccmd5[36];
+            uint8_t ccmd5[33];
             MD5Context md5_context;
             MD5Init(&md5_context);
             uint32_t curLen = 0;
+            uint32_t len = 0;
 
             do
             {
@@ -332,42 +392,101 @@ esp_err_t ota_handler(httpd_req_t *req)
                 if (len < 0)
                 {
                     ESP_LOGE(__FUNCTION__, "Error occurred during receiving: errno %d", errno);
+                    break;
                 }
                 else if (len == 0)
                 {
                     ESP_LOGW(__FUNCTION__, "Connection closed...");
+                    break;
+                }
+                else if ((curLen+len) > totLen)
+                {
+                    ESP_LOGW(__FUNCTION__, "Bad len at (curLen(%d+%d) > totLen(%d)", curLen, len, totLen);
+                    break;
                 }
                 else
                 {
                     MD5Update(&md5_context, img + curLen, len);
-                    curLen += len;
+                    curLen+=len;
                 }
-            } while (len > 0);
-            ESP_LOGV(__FUNCTION__, "Total: %d/%d", totLen, curLen);
+            } while (curLen < totLen);
+            ESP_LOGD(__FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
             MD5Final(cmd5, &md5_context);
+            ESP_LOGD(__FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
 
             for (uint8_t i = 0; i < 16; ++i)
             {
                 sprintf((char *)&ccmd5[i * 2], "%02x", (unsigned int)cmd5[i]);
             }
 
-            MD5Init(&md5_context);
-            MD5Update(&md5_context, img, totLen);
-            MD5Final(cmd5, &md5_context);
-            for (uint8_t i = 0; i < 16; ++i)
-            {
-                sprintf((char *)&ccmd5[i * 2], "%02x", (unsigned int)cmd5[i]);
-            }
-
-            if (strcmp((char *)ccmd5, (char *)md5) == 0)
+            FILE* fw;
+            ESP_LOGD(__FUNCTION__, "RAM:%d...%d md5:%s/%s", esp_get_free_heap_size(), totLen, md5,ccmd5);
+            if (strcmp((char *)ccmd5, md5) == 0)
             {
                 ESP_LOGD(__FUNCTION__, "Flashing md5:(%s)%dvs%d", ccmd5, totLen, curLen);
                 ESP_LOGD(__FUNCTION__, "RAM:%d", esp_get_free_heap_size());
-                httpd_resp_send(req, "Flashing", 9);
-                xTaskCreate(&flashTheThing, "flashTheThing", 4096, NULL, 5, NULL);
-                stopGps();
-                esp_wifi_stop();
-                httpd_stop(&server);
+
+                struct stat st;
+
+                if (stat("/lfs/firmware/current.bin", &st) == 0)
+                {
+                    ESP_LOGD(__FUNCTION__,"current bin exists %d bytes",(int)st.st_size);
+                    if (!deleteFile("/lfs/firmware/current.bin")){
+                        ESP_LOGE(__FUNCTION__,"Cannot delete current bin");
+                    }
+                }
+
+                if ((fw = fopen("/lfs/firmware/current.bin", "w", true)) != NULL)
+                {
+                    httpd_resp_send(req, "Flashing", 9);
+                    if (fwrite((void *)img, 1, totLen, fw) == totLen)
+                    {
+                        fClose(fw);
+
+                        if ((fw = fopen("/lfs/firmware/tobe.bin.md5", "w", true)) != NULL)
+                        {
+                            fwrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
+                            fClose(fw);
+                            ESP_LOGD(__FUNCTION__, "Firmware md5 written");
+                        }
+
+                        esp_partition_iterator_t pi;    // Iterator for find
+                        const esp_partition_t *factory; // Factory partition
+                        esp_err_t err;
+
+                        pi = esp_partition_find(ESP_PARTITION_TYPE_APP,            // Get partition iterator for
+                                                ESP_PARTITION_SUBTYPE_APP_FACTORY, // factory partition
+                                                "factory");
+                        if (pi == NULL) // Check result
+                        {
+                            ESP_LOGE(__FUNCTION__, "Failed to find factory partition");
+                        }
+                        else
+                        {
+                            factory = esp_partition_get(pi);           // Get partition struct
+                            esp_partition_iterator_release(pi);        // Release the iterator
+                            err = esp_ota_set_boot_partition(factory); // Set partition for boot
+                            if (err != ESP_OK)                         // Check error
+                            {
+                                ESP_LOGE(__FUNCTION__, "Failed to set boot partition");
+                            }
+                            else
+                            {
+                                esp_restart(); // Restart ESP
+                            }
+                        }
+
+                    }
+                    else
+                    {
+                        ESP_LOGE(__FUNCTION__, "Firmware not backedup");
+                    }
+                }
+                else
+                {
+                    ESP_LOGE(__FUNCTION__, "Failed to open /lfs/firmware/current.bin");
+                }
+                deinitSPISDCard();
             }
             else
             {
@@ -388,14 +507,19 @@ esp_err_t ota_handler(httpd_req_t *req)
             FILE *fw = NULL;
             if ((fw = fopen("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
             {
-                char ccmd5[36];
+                char ccmd5[33];
                 uint32_t len = 0;
-                if ((len = fread((void *)ccmd5, 1, 36, fw)) == 36)
+                if ((len = fread((void *)ccmd5, 1, 33, fw)) > 0)
                 {
-                    httpd_resp_send(req, ccmd5, 36);
+                    ccmd5[len]=0;
+                    esp_err_t ret;
+                    if ((ret = httpd_resp_send(req, ccmd5, 33)) != ESP_OK) {
+                        ESP_LOGE(__FUNCTION__,"Error sending MD5:%s",esp_err_to_name(ret));
+                    }
+                    ESP_LOGD(__FUNCTION__,"Sent MD5:%s",ccmd5);
                     fClose(fw);
                     deinitSPISDCard();
-                    return ESP_OK;
+                    return ret;
                 }
                 else
                 {
@@ -408,6 +532,8 @@ esp_err_t ota_handler(httpd_req_t *req)
                 ESP_LOGE(__FUNCTION__, "Failed in opeing md5");
             }
             deinitSPISDCard();
+        } else {
+            ESP_LOGE(__FUNCTION__,"Cannot init the fucking sd card");
         }
     }
     httpd_resp_send(req, "BADMD5", 6);
@@ -633,18 +759,56 @@ esp_err_t config_handler(httpd_req_t *req)
 
     char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
     int len = httpd_req_recv(req, postData, JSON_BUFFER_SIZE);
+    int devId = appcfg->GetIntProperty("deviceid");
+
+    if (!endsWith(req->uri,"config")){
+        devId = atoi(indexOf(req->uri+1,"/")+1);
+    }
 
     if (len)
     {
         *(postData + len) = 0;
         ESP_LOGD(__FUNCTION__, "postData(%d):%s", len, postData);
-        appcfg->SetAppConfig(cJSON_Parse(postData));
+        cJSON* newCfg = cJSON_Parse(postData);
+        if (newCfg){
+            char* sjson = cJSON_Print(newCfg);
+            if (devId == appcfg->GetIntProperty("deviceid")){
+                appcfg->SetAppConfig(newCfg);
+            } else {
+                char* fname = (char*)dmalloc(255);
+                sprintf(fname,"/lfs/config/%d.json",devId);
+                FILE* cfg = fopen(fname,"w");
+                if (cfg) {
+                    fwrite(sjson,strlen(sjson),sizeof(char),cfg);
+                    ret = httpd_resp_send(req, sjson, strlen(sjson));
+                    fclose(cfg);
+                } else {
+                    httpd_resp_send_err(req,httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot save config");
+                }
+                ldfree(fname);
+            }
+            cJSON_Delete(newCfg);
+            ldfree(sjson);
+        } else {
+            ESP_LOGE(__FUNCTION__,"Cannot parse JSON");
+            ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot parse JSON");
+        }
+    }
+    else
+    {
+        ESP_LOGW(__FUNCTION__, "Empty response from config call");
+        if (devId == appcfg->GetIntProperty("deviceid")){
+            char *sjson = cJSON_PrintUnformatted(appcfg->GetJSONConfig(NULL));
+            ret = httpd_resp_send(req, sjson, strlen(sjson));
+            ldfree(sjson);
+        } else {
+            char* fname = (char*)dmalloc(255);
+            sprintf(fname,"/lfs/config/%d.json", devId);
+            ret = sendFile(req,fname);
+        }
     }
     ldfree(postData);
 
-    char *sjson = cJSON_PrintUnformatted(appcfg->GetJSONConfig("/"));
-    ret = httpd_resp_send(req, sjson, strlen(sjson));
-    ldfree(sjson);
     return ret;
 }
 
@@ -685,7 +849,7 @@ esp_err_t HandleWifiCommand(httpd_req_t *req)
     return ret;
 }
 
-void parseFolderForTars(char* folder)
+void parseFolderForTars(char *folder)
 {
     ESP_LOGD(__FUNCTION__, "Looking for tars in %s", folder);
     DIR *tarFolder;
@@ -701,7 +865,9 @@ void parseFolderForTars(char* folder)
                 sprintf(fileName, "%s/%s", folder, di->d_name);
                 ESP_LOGV(__FUNCTION__, "folder:%s", fileName);
                 parseFolderForTars(fileName);
-            } else {
+            }
+            else
+            {
                 sprintf(fileName, "%s/%s", folder, di->d_name);
                 ESP_LOGV(__FUNCTION__, "filelist:%s", fileName);
                 extractClientTar(fileName);
@@ -748,17 +914,24 @@ esp_err_t HandleSystemCommand(httpd_req_t *req)
             }
             if (jitem && (strcmp(jitem->valuestring, "parseFiles") == 0))
             {
-                xTaskCreate(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
+                xTaskCreate(parseFiles, "parseFiles", 8192, NULL, tskIDLE_PRIORITY, NULL);
+                ret = httpd_resp_send(req, "OK", 2);
             }
-            if (jitem && (strcmp(jitem->valuestring, "factoryReset") == 0))
+            else if (jitem && (strcmp(jitem->valuestring, "factoryReset") == 0))
             {
                 AppConfig::ResetAppConfig(true);
+                ret = httpd_resp_send(req, "OK", 2);
+            }
+            else
+            {
+                ret = httpd_resp_send_408(req);
             }
             cJSON_Delete(jresponse);
         }
         else
         {
             ESP_LOGE(__FUNCTION__, "Error whilst parsing json");
+            ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,"Error whilst parsing json");
         }
     }
     ldfree(postData);
@@ -786,7 +959,7 @@ esp_err_t status_handler(httpd_req_t *req)
             cJSON_Delete(status);
         }
 #ifdef DEBUG_MALLOC
-        else if (strcmp(path,"mallocs") == 0)
+        else if (strcmp(path, "mallocs") == 0)
         {
             status = getMemoryStats();
             ESP_LOGV(__FUNCTION__, "Getting mallocs");
@@ -794,18 +967,18 @@ esp_err_t status_handler(httpd_req_t *req)
             cJSON_Delete(status);
         }
 #endif
-        else if (strcmp(path,"tasks") == 0)
+        else if (strcmp(path, "tasks") == 0)
         {
             status = tasks_json();
             ESP_LOGV(__FUNCTION__, "Getting tasks");
             sjson = cJSON_PrintUnformatted(status);
             cJSON_Delete(status);
-        } 
-        else if (strcmp(path,"app") == 0)
+        }
+        else if (strcmp(path, "app") == 0)
         {
             sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(NULL));
-        } 
-        else 
+        }
+        else
         {
             sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(path));
         }
@@ -824,11 +997,14 @@ esp_err_t status_handler(httpd_req_t *req)
         if (endsWith(req->uri, "/wifi"))
         {
             ret = HandleWifiCommand(req);
-        } else if (endsWith(req->uri, "/cmd"))
+        }
+        else if (endsWith(req->uri, "/cmd"))
         {
             ret = HandleSystemCommand(req);
-        } else {
-            ESP_LOGW(__FUNCTION__,"Unimplemented methed:%s",req->uri);
+        }
+        else
+        {
+            ESP_LOGW(__FUNCTION__, "Unimplemented methed:%s", req->uri);
         }
     }
 
@@ -968,38 +1144,26 @@ int tarClose(mtar_t *tar)
     return ESP_OK;
 }
 
-esp_err_t sendFile(httpd_req_t *req)
+esp_err_t sendFile(httpd_req_t *req, const char* path)
 {
     bool moveTheSucker = false;
     if (httpd_req_get_hdr_value_len(req, "movetosent") > 1)
     {
         moveTheSucker = true;
-        trip *curTrip = getActiveTrip();
+
         if (moveTheSucker)
         {
-            if (endsWith(req->uri, "kml"))
-            {
-                if ((strlen(curTrip->fname) > 0) && endsWith(curTrip->fname, req->uri))
-                {
-                    ESP_LOGD(__FUNCTION__, "Not moving %s as is it active(%s)", req->uri, curTrip->fname);
-                    moveTheSucker = false;
-                }
-                else
-                {
-                    ESP_LOGD(__FUNCTION__, "Will move %s as it is not active trip %s", req->uri, curTrip->fname);
-                }
-            }
-            if (endsWith(req->uri, "log"))
+            if (endsWith(path, "log"))
             {
                 char *clfn = getLogFName();
-                if (!clfn && (strlen(clfn) > 0) && endsWith(clfn, req->uri))
+                if (!clfn && (strlen(clfn) > 0) && endsWith(clfn, path))
                 {
-                    ESP_LOGD(__FUNCTION__, "Not moving %s as is it active(%s)", req->uri, clfn);
+                    ESP_LOGD(__FUNCTION__, "Not moving %s as is it active(%s)", path, clfn);
                     moveTheSucker = false;
                 }
                 else
                 {
-                    ESP_LOGD(__FUNCTION__, "Will move %s as it is not active trip %s", req->uri, clfn);
+                    ESP_LOGD(__FUNCTION__, "Will move %s as it is not active trip %s", path, clfn);
                 }
             }
         }
@@ -1008,15 +1172,15 @@ esp_err_t sendFile(httpd_req_t *req)
     {
         ESP_LOGD(__FUNCTION__, "No move in request");
     }
-    if (endsWith(req->uri, "tar"))
+    if (endsWith(path, "tar"))
         httpd_resp_set_type(req, "application/x-tar");
-    else if (endsWith(req->uri, "kml"))
+    else if (endsWith(path, "kml"))
         httpd_resp_set_type(req, "application/vnd.google-earth.kml+xml");
+    else if (endsWith(path, "json"))
+        httpd_resp_set_type(req, "application/json");
     else
         httpd_resp_set_type(req, "application/octet-stream");
-    char *path = (char *)dmalloc(530);
-    memset(path, 0, 530);
-    sprintf(path, "%s", req->uri);
+
     ESP_LOGD(__FUNCTION__, "Sending %s willmove:%d", path, moveTheSucker);
     httpd_resp_set_hdr(req, "filename", path);
     FILE *theFile;
@@ -1042,7 +1206,7 @@ esp_err_t sendFile(httpd_req_t *req)
             {
                 char *topath = (char *)dmalloc(530);
                 memset(topath, 0, 530);
-                sprintf(topath, "/sdcard/sent%s", req->uri);
+                sprintf(topath, "/sdcard/sent%s", path);
                 if (!moveFile(path, topath))
                 {
                     ESP_LOGE(__FUNCTION__, "Cannot move %s to %s", path, topath);
@@ -1058,7 +1222,6 @@ esp_err_t sendFile(httpd_req_t *req)
     }
     ESP_LOGD(__FUNCTION__, "Sent %s", path);
     deinitSPISDCard();
-    ldfree(path);
     return ESP_OK;
 }
 
@@ -1088,7 +1251,7 @@ esp_err_t app_handler(httpd_req_t *req)
 
     if (!endsWith(req->uri, "/"))
     {
-        return sendFile(req);
+        return sendFile(req,req->uri);
     }
     return httpd_resp_send(req, (const char *)index_html_start, (index_html_end - index_html_start));
 }
@@ -1158,7 +1321,7 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
             else if ((ext == NULL) || (strlen(ext) == 0) || endsWith(fi->d_name, ext))
             {
                 sprintf(theFName, "%s/%s", path, fi->d_name);
-                if ((excludeList == NULL) || (strcmp(fi->d_name, excludeList) != 0))
+                if ((excludeList == NULL) || (indexOf(fi->d_name, excludeList) != 0))
                 {
                     gettimeofday(&tv_start, NULL);
                     if ((theFile = fOpen(theFName, "r")) &&
@@ -1167,7 +1330,7 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                         uint32_t startPos = tar->pos;
                         fcnt++;
                         bool headerWritten = false;
-                        bool allDone=false;
+                        bool allDone = false;
                         while ((tarStat == MTAR_ESUCCESS) && !allDone)
                         {
                             gettimeofday(&tv_rstart, NULL);
@@ -1197,62 +1360,25 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
 
                                 tarStat = mtar_write_data(tar, buf, len);
                                 gettimeofday(&tv_wend, NULL);
-                                allDone=feof(theFile);
-                                if (allDone) {
-                                    fClose(theFile);
-                                    char* strftime_buf = (char*)dmalloc(64);
-                                    struct tm timeinfo;
-                                    time_t now;
-                                    time(&now);
-                                    localtime_r(&now, &timeinfo);
-                                    strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d", &timeinfo);
-
-                                    if (indexOf(theFName,strftime_buf))
-                                    {
-                                        removeSrc=false;
-                                    }
-                                    ldfree(strftime_buf);
-                                    ESP_LOGD(__FUNCTION__,"Closing %s",theFName);
-
-                                    if (removeSrc && !endsWith(theFName,"json")){
-                                        ESP_LOGD(__FUNCTION__,"Removing %s",theFName);
-                                        int retCode = unlink(theFName);
-                                        if (retCode != 0) {
-                                            ESP_LOGE(__FUNCTION__,"unlink error %s",esp_err_to_name(retCode));
-                                        }
-                                    } else {
-                                        ESP_LOGV(__FUNCTION__,"removeSrc:%d && !endsWith(theFName,'json'):%d",removeSrc,endsWith(theFName,"json"));
-                                    }
-                                }
-                            } else {
-
-                                fClose(theFile);
-                                allDone=true;
-                                ESP_LOGV(__FUNCTION__,"Closing %s.",theFName);
-                                char* strftime_buf = (char*)dmalloc(64);
-                                struct tm timeinfo;
-                                time_t now;
-                                time(&now);
-                                localtime_r(&now, &timeinfo);
-                                strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d", &timeinfo);
-
-                                if (indexOf(theFName,strftime_buf))
+                                allDone = feof(theFile);
+                                if (allDone)
                                 {
-                                    removeSrc=false;
-                                }
-                                ldfree(strftime_buf);
-                                if (removeSrc && !endsWith(theFName,"json")){
-                                    ESP_LOGD(__FUNCTION__,"Removing %s.",theFName);
-                                    int retCode = unlink(theFName);
-                                    if (retCode != 0) {
-                                        ESP_LOGE(__FUNCTION__,"unlink error %s",esp_err_to_name(retCode));
-                                    }
-                                } else {
-                                    ESP_LOGD(__FUNCTION__,"removeSrc:%d && !endsWith(theFName,'json'):%d",removeSrc,endsWith(theFName,"json"));
+                                    fClose(theFile);
+                                    ESP_LOGD(__FUNCTION__, "Closing %s", theFName);
+                                    if (removeSrc && !endsWith(theFName,".json"))
+                                        deleteFile(theFName);
                                 }
                             }
+                            else
+                            {
+
+                                fClose(theFile);
+                                allDone = true;
+                                ESP_LOGV(__FUNCTION__, "Closing %s.", theFName);
+                            }
                             gettimeofday(&tv_end, NULL);
-                            if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG){
+                            if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
+                            {
                                 int64_t start_time_ms = (int64_t)tv_start.tv_sec * 1000L + ((int64_t)tv_start.tv_usec / 1000);
                                 int64_t end_time_ms = (int64_t)tv_end.tv_sec * 1000L + ((int64_t)tv_end.tv_usec / 1000);
                                 int64_t oend_time_ms = (int64_t)tv_open.tv_sec * 1000L + ((int64_t)tv_open.tv_usec / 1000);
@@ -1262,15 +1388,15 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                                 int64_t wstart_time_ms = (int64_t)tv_wstart.tv_sec * 1000L + ((int64_t)tv_wstart.tv_usec / 1000);
                                 int64_t wend_time_ms = (int64_t)tv_wend.tv_sec * 1000L + ((int64_t)tv_wend.tv_usec / 1000);
                                 ESP_LOGV(__FUNCTION__, "%s: Total Time: %f,Open Time: %f,Stat Time: %f,Read Time: %f,Write Time: %f, Len: %d, Rate %f/s ram %d, ",
-                                        path,
-                                        (end_time_ms - start_time_ms) / 1000.0,
-                                        (oend_time_ms - start_time_ms) / 1000.0,
-                                        (ostat_time_ms - oend_time_ms) / 1000.0,
-                                        (rend_time_ms - rstart_time_ms) / 1000.0,
-                                        (wend_time_ms - wstart_time_ms) / 1000.0,
-                                        tar->pos - startPos,
-                                        (tar->pos - startPos) / ((end_time_ms - start_time_ms) / 1000.0),
-                                        heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
+                                         path,
+                                         (end_time_ms - start_time_ms) / 1000.0,
+                                         (oend_time_ms - start_time_ms) / 1000.0,
+                                         (ostat_time_ms - oend_time_ms) / 1000.0,
+                                         (rend_time_ms - rstart_time_ms) / 1000.0,
+                                         (wend_time_ms - wstart_time_ms) / 1000.0,
+                                         tar->pos - startPos,
+                                         (tar->pos - startPos) / ((end_time_ms - start_time_ms) / 1000.0),
+                                         heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
                             }
                         }
                     }
@@ -1293,7 +1419,7 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
         while (dcnt-- > 0)
         {
             ESP_LOGV(__FUNCTION__, "%d-%s: Getting sub-folder(%d) %s", dcnt, path, ctpos, theFolders + ctpos);
-            if ((ret = tarFiles(tar, theFolders + ctpos, ext, recursive, excludeList, maxSize,removeSrc)) != ESP_OK)
+            if ((ret = tarFiles(tar, theFolders + ctpos, ext, recursive, excludeList, maxSize, removeSrc)) != ESP_OK)
             {
                 ESP_LOGW(__FUNCTION__, "Error invoking getSdFiles for %s", kmlFileName);
             }
@@ -1312,10 +1438,6 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
     ldfree(kmlFileName);
     deinitSPISDCard();
     return ret;
-}
-
-esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, const char *excludeList, uint32_t maxSize) {
-    return tarFiles(tar,path,ext,recursive,excludeList,maxSize,true);
 }
 
 bool dumpFolder(char *folderName, mtar_t *tar)
@@ -1393,7 +1515,7 @@ esp_err_t trips_handler(httpd_req_t *req)
     tar.write = tarWrite;
     char tarFName[50];
 
-    sprintf(tarFName,"%d.tar",config->GetIntProperty("deviceid"));
+    sprintf(tarFName, "%d.tar", config->GetIntProperty("deviceid"));
 
     httpd_resp_set_type(req, "application/x-tar");
     httpd_resp_set_hdr(req, "filename", tarFName);
@@ -1401,11 +1523,12 @@ esp_err_t trips_handler(httpd_req_t *req)
 
     if (initSPISDCard())
     {
+        dumpLogs();
         ESP_LOGD(__FUNCTION__, "Sending Trips");
         xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
         xEventGroupSetBits(eventGroup, TAR_BUFFER_SENT);
         xEventGroupClearBits(eventGroup, TAR_BUILD_DONE);
-        xTaskCreate(sendTar, "sendTar", 4096, NULL, 5, NULL);
+        xTaskCreate(sendTar, "sendTar", 8196, NULL, 5, NULL);
 
         sp.tarBuf = (uint8_t *)dmalloc(HTTP_BUF_SIZE);
         sp.sendBuf = NULL;
@@ -1416,20 +1539,21 @@ esp_err_t trips_handler(httpd_req_t *req)
         cJSON *status = status_json();
         cJSON *astatus = AppConfig::GetAppStatus()->GetJSONConfig(NULL);
         cJSON *stat;
-        cJSON_ArrayForEach(stat,astatus) {
-            cJSON_AddItemReferenceToObject(status, stat->string,stat);
+        cJSON_ArrayForEach(stat, astatus)
+        {
+            cJSON_AddItemReferenceToObject(status, stat->string, stat);
         }
         char *cs = NULL, *ss = NULL;
         if ((tarString(&tar, "status.json", (cs = cJSON_PrintUnformatted(status))) == ESP_OK) &&
             (tarString(&tar, "config.json", (ss = cJSON_PrintUnformatted(config->GetJSONConfig(NULL)))) == ESP_OK) &&
-            (tarFiles(&tar, "/lfs", "", true, "current.bin", 1048576) == ESP_OK))
+            (tarFiles(&tar, "/lfs", "", true, "current.bin current.bin.md5", 1048576, true) == ESP_OK))
         {
             ESP_LOGV(__FUNCTION__, "Finalizing tar");
             mtar_finalize(&tar);
             ESP_LOGV(__FUNCTION__, "Closing tar");
             mtar_close(&tar);
             deinitSPISDCard();
-       }
+        }
         else
         {
             ESP_LOGE(__FUNCTION__, "Error sending trips");

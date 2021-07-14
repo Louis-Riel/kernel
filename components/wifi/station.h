@@ -54,7 +54,6 @@ public:
 
     tcpip_adapter_ip_info_t* GetStaIp();
     tcpip_adapter_ip_info_t* GetApIp();
-    void wifiStart(void *pvParameter);
     void wifiStop(void *pvParameter);
     bool wifiScan();
     static TheWifi* GetInstance();
