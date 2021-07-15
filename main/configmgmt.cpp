@@ -4,6 +4,7 @@
 #include "esp_log.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "esp_ota_ops.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -103,6 +104,11 @@ AppConfig *AppConfig::GetAppStatus()
   {
     statusInstance = new AppConfig(cJSON_CreateObject(), NULL);
     statusInstance->eg = xEventGroupCreate();
+    const esp_app_desc_t* ad = esp_ota_get_app_description();
+    statusInstance->SetStringProperty("version",ad->version);
+    char bo[50];
+    sprintf(bo,"%s %s",ad->date,ad->time);
+    statusInstance->SetStringProperty("builton",bo);
   }
   return statusInstance;
 }
@@ -130,7 +136,6 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
   cJSON *curArrayItem = NULL;
   cJSON *newArrayItem = NULL;
   bool foundIt = false;
-  cJSON *ret = cJSON_CreateObject();
   uint8_t newIdx = 0, curIdx = 0;
   ESP_LOGD(__FUNCTION__, "Parsing src:%d dest:%d", curConfig == NULL, newConfig == NULL);
 
@@ -519,7 +524,7 @@ char *AppConfig::GetStringProperty(const char *path)
   return NULL;
 }
 
-void AppConfig::SetStringProperty(const char *path, char *value)
+void AppConfig::SetStringProperty(const char *path, const char *value)
 {
   if (!isValid())
   {

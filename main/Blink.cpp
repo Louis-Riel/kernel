@@ -45,6 +45,7 @@
 static xQueueHandle gpio_evt_queue = NULL;
 time_t now = 0;
 time_t lastMovement = 0;
+struct timeval tv_sleep;
 RTC_DATA_ATTR uint32_t bumpCnt = 0;
 RTC_DATA_ATTR bool isStopped = true;
 RTC_DATA_ATTR uint16_t lastLatDeg;
@@ -637,8 +638,15 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     }
     break;
   case TinyGPSPlus::gpsEvent::wakingup:
-    sleepTime += ((uint64_t)event_data) * 1000000;
+    struct timeval curts;
+    gettimeofday(&curts, NULL);
+    sleepTime += ((int64_t)curts.tv_sec * 1000000L + (int64_t)curts.tv_usec) - 
+                 ((int64_t)tv_sleep.tv_sec * 1000000L + (int64_t)tv_sleep.tv_usec);
     ESP_LOGV(__FUNCTION__, "Sleep at %lu", (time_t)getSleepTime());
+    break;
+  case TinyGPSPlus::gpsEvent::sleeping:
+    ESP_LOGV(__FUNCTION__, "Sleep at %lu", (time_t)getSleepTime());
+    gettimeofday(&tv_sleep, NULL);
     break;
   case TinyGPSPlus::gpsEvent::go:
     ESP_LOGD(__FUNCTION__, "Go");
@@ -1000,7 +1008,10 @@ void app_main(void)
 {
   if (setupLittlefs() == ESP_OK)
   {
-    ESP_LOGI(__FUNCTION__, "Starting.");
+    const esp_app_desc_t* ad = esp_ota_get_app_description();
+    ESP_LOGI(__FUNCTION__, "Starting %s v%s %s %s",ad->project_name,ad->version,ad->date, ad->time);
+
+
     check_efuse();
     adc1_config_width(ADC_WIDTH_12Bit);
     adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_11db);
@@ -1011,20 +1022,6 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     AppConfig *appcfg = new AppConfig(CFG_PATH);
     esp_err_t ret = ESP_OK;
-
-    DIR *root = opendir("/lfs");
-    if (root == NULL)
-    {
-      ESP_LOGE(__FUNCTION__, "Cannot open lfs");
-    }
-    else if (closedir(root) != ESP_OK)
-    {
-      ESP_LOGE(__FUNCTION__, "failed to close root %s", esp_err_to_name(ret));
-    }
-    else
-    {
-      ESP_LOGD(__FUNCTION__, "Spiff is still spiffy");
-    }
 
     if (appcfg->GetStringProperty("wifitype") == NULL)
     {
@@ -1040,9 +1037,8 @@ void app_main(void)
 
     initLog();
     sampleBatteryVoltage();
-    uint32_t tmp;
     ESP_LOGV(__FUNCTION__, "Pre-Loading Image....");
-    loadImage();
+    UpgradeFirmware();
     //initSPISDCard();
     gpio_reset_pin(BLINK_GPIO);
     gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);

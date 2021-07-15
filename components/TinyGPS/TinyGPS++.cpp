@@ -174,8 +174,10 @@ void TinyGPSPlus::waitOnStop(void *param)
         xEventGroupWaitBits(*getAppEG(), app_bits_t::TRIPS_COMMITTED, pdFALSE, pdTRUE, 500 / portTICK_PERIOD_MS);
       }
       ESP_LOGD(__FUNCTION__, "Sleeping %d secs on stop", SLEEP_TIMEOUT);
+      ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
       esp_light_sleep_start();
-      gpio_set_level(BLINK_GPIO, 0);
+      ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, NULL, 0, portMAX_DELAY));
+      //gpio_set_level(BLINK_GPIO, 0);
       print_the_wakeup_reason();
     }
     gps->toBeFreqIdx = 0;
@@ -220,9 +222,11 @@ void TinyGPSPlus::theLoop(void *param)
       ESP_LOGD(__FUNCTION__, "Waiting on GPS %d secs ", 10);
       if (xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON)
         vTaskDelay((GPS_WAIT_PERIOD*1000)/portTICK_PERIOD_MS);
-      else
+      else{
+        ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
         esp_light_sleep_start();
-      
+        ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, NULL, 0, portMAX_DELAY));
+      }
       gps->gpsResume();
 
       uint8_t retryCnt=0;
@@ -237,13 +241,16 @@ void TinyGPSPlus::theLoop(void *param)
         gpio_set_level(BLINK_GPIO, 1);
         if (!(bits & gpsEvent::locationChanged)){
           ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(GPS_WAIT_PERIOD * 1000000));
-          ESP_LOGD(__FUNCTION__, "Waiting on GPS %d secs %d", GPS_WAIT_PERIOD, ++retryCnt);
+          ESP_LOGD(__FUNCTION__, "Waiting on GPS %d secs %d.", GPS_WAIT_PERIOD, ++retryCnt);
           gpio_hold_en(gps->enpin);
           gpio_deep_sleep_hold_en();
           if (xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON)
             vTaskDelay((GPS_WAIT_PERIOD*1000)/portTICK_PERIOD_MS);
-          else
+          else{
+            ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
             esp_light_sleep_start();
+            ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, NULL, 0, portMAX_DELAY));
+          }
           vTaskDelay((GPS_WAIT_PERIOD*1000)/portTICK_PERIOD_MS);
           gps->gpsResume();
         }
@@ -384,8 +391,7 @@ void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, i
     {
       gps->gpsPause();
       ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(sleepTimes[gps->curFreqIdx] * 1000000));
-      ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
-      gpio_set_level(BLINK_GPIO, 1);
+      //gpio_set_level(BLINK_GPIO, 1);
       if (xEventGroupGetBits(*getAppEG()) & app_bits_t::COMMITTING_TRIPS)
       {
         ESP_LOGD(__FUNCTION__, "Waiting for trip commit");
@@ -393,6 +399,7 @@ void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, i
       }
       ESP_LOGD(__FUNCTION__, "Napping for %d", sleepTimes[gps->curFreqIdx]);
       ESP_ERROR_CHECK(esp_light_sleep_start());
+      ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
       print_the_wakeup_reason();
       ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, (void *)&sleepTimes[gps->curFreqIdx], sizeof(uint8_t), portMAX_DELAY));
       gps->gpsResume();
@@ -404,13 +411,18 @@ void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, i
     break;
   }
 }
-
+static TinyGPSPlus* instance = NULL;
 TinyGPSPlus::TinyGPSPlus(AppConfig *config) : TinyGPSPlus(
                                                   config->GetPinNoProperty("rxPin"),
                                                   config->GetPinNoProperty("txPin"),
                                                   config->GetPinNoProperty("enPin"))
 {
 }
+
+TinyGPSPlus* TinyGPSPlus::runningInstance(){
+  return instance;
+} 
+
 
 TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
     : location(NULL)
@@ -443,6 +455,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
     , gpsWarmTime(3)
     , toBeFreqIdx(0)
 {
+  instance=this;
   insertCustom(gpTxt, "GPTXT", 4);
   ESP_ERROR_CHECK(esp_event_handler_register(GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEventProcessor, this));
   EventHandlerDescriptor *handler = new EventHandlerDescriptor(GPSPLUS_EVENTS, "GPSPLUS_EVENTS");
@@ -470,8 +483,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
   ESP_ERROR_CHECK(gpio_reset_pin(enpin));
   ESP_ERROR_CHECK(gpio_set_direction(enpin, GPIO_MODE_OUTPUT));
 
-  ESP_LOGV(__FUNCTION__, "Turning on enable pin(%d)", enpin);
-  ESP_ERROR_CHECK(gpio_set_level(enpin, 1));
+  gpsStart();
 
   memset(runners, 0, sizeof(runners));
 
@@ -920,6 +932,16 @@ bool TinyGPSPlus::isSignificant()
   }
 
   return isc;
+}
+
+void TinyGPSPlus::gpsStop(){
+  ESP_LOGV(__FUNCTION__, "Turning off enable pin(%d)", enpin);
+  ESP_ERROR_CHECK(gpio_set_level(enpin, 0));
+}
+
+void TinyGPSPlus::gpsStart(){
+  ESP_LOGV(__FUNCTION__, "Turning on enable pin(%d)", enpin);
+  ESP_ERROR_CHECK(gpio_set_level(enpin, 1));
 }
 
 void TinyGPSPlus::gpsResume()

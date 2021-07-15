@@ -11,6 +11,7 @@
 #include "driver/adc.h"
 #include "../eventmgr/eventmgr.h"
 #include "../mfile/mfile.h"
+#include "../TinyGPS/TinyGPS++.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -20,12 +21,9 @@
 #define JSON_BUFFER_SIZE 8192
 #define KML_BUFFER_SIZE 204600
 
-static uint8_t *img = NULL;
-static uint32_t totLen = 0;
-
 esp_err_t sendFile(httpd_req_t *req, const char* path);
 
-void flashTheThing(void *param)
+void flashTheThing(uint8_t *img,uint32_t totLen)
 {
     esp_ota_handle_t update_handle = 0;
     const esp_partition_t *update_partition = NULL;
@@ -102,7 +100,6 @@ void flashTheThing(void *param)
             {
                 ESP_LOGE(__FUNCTION__, "esp_ota_begin failed (%s)", esp_err_to_name(err));
             }
-            ldfree(img);
         }
     }
     else
@@ -111,7 +108,7 @@ void flashTheThing(void *param)
     }
 }
 
-void loadImage()
+void UpgradeFirmware()
 {
     const char *fwf = "/lfs/firmware/current.bin";
     const char *fmd = "/lfs/firmware/tobe.bin.md5";
@@ -124,11 +121,11 @@ void loadImage()
         if (stat(fwf, &st) == 0)
         {
             ESP_LOGD(__FUNCTION__, "Opened %s", fwf);
-            img = (uint8_t *)dmalloc(st.st_size);
+            uint8_t *img = (uint8_t *)dmalloc(st.st_size);
             uint8_t *buf = (uint8_t *)dmalloc(F_BUF_SIZE);
             ESP_LOGV(__FUNCTION__, "Allocated %d buffer", F_BUF_SIZE);
             uint32_t len = 0;
-            totLen = 0;
+            uint32_t totLen = 0;
             if ((fw = fopen(fwf, "r", true)) != NULL)
             {
                 while (!feof(fw))
@@ -141,7 +138,8 @@ void loadImage()
                     }
                 }
                 fclose(fw);
-                flashTheThing((void *)1);
+                flashTheThing(img, totLen);
+                ldfree(img);
             }
             ESP_LOGD(__FUNCTION__, "firmware read %d bytes", totLen);
             deinitSPISDCard();
@@ -210,7 +208,7 @@ cJSON *status_json()
 
     cJSON_AddItemToObject(status, "deviceid", cJSON_CreateNumber(appcfg->GetIntProperty("deviceid")));
     cJSON_AddNumberToObject(status, "uptime_sec", getUpTime());
-    cJSON_AddNumberToObject(status, "sleeptime_sec", getSleepTime());
+    cJSON_AddNumberToObject(status, "sleeptime_us", getSleepTime());
     cJSON_AddItemToObject(status, "freeram", cJSON_CreateNumber(esp_get_free_heap_size()));
     cJSON_AddItemToObject(status, "totalram", cJSON_CreateNumber(heap_caps_get_total_size(MALLOC_CAP_DEFAULT)));
     cJSON_AddItemToObject(status, "battery", cJSON_CreateNumber(getBatteryVoltage()));
@@ -288,6 +286,7 @@ esp_err_t stat_handler(httpd_req_t *req)
                 strcpy(path, fname);
                 char *fpos = strrchr(path, '/');
                 *fpos = 0;
+                httpd_resp_set_type(req, "application/json");
                 ret = httpd_resp_send(req, res, sprintf(res, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}", path, fpos + 1, "file", (uint32_t)st.st_size));
                 ldfree(path);
                 ldfree(res);
@@ -313,10 +312,15 @@ esp_err_t ota_handler(httpd_req_t *req)
         char *buf;
         size_t buf_len;
         ESP_LOGD(__FUNCTION__, "OTA REQUEST!!!!! RAM:%d...", esp_get_free_heap_size());
+        TinyGPSPlus* gps = TinyGPSPlus::runningInstance();
+        if (gps) {
+            gps->gpsStop();
+        }
 
         buf_len = httpd_req_get_url_query_len(req) + 1;
         char md5[33];
         md5[0] = 0;
+        uint32_t totLen=0;
 
         if (buf_len > 1)
         {
@@ -328,21 +332,34 @@ esp_err_t ota_handler(httpd_req_t *req)
                 if (httpd_query_key_value(buf, "md5", param, sizeof(param)) == ESP_OK)
                 {
                     strcpy(md5, param);
-                    ESP_LOGD(__FUNCTION__, "Found URL query parameter => md5=%s", md5);
+                    ESP_LOGV(__FUNCTION__, "Found URL query parameter => md5=%s", md5);
                 }
                 if (httpd_query_key_value(buf, "len", param, sizeof(param)) == ESP_OK)
                 {
                     totLen = atoi(param);
-                    ESP_LOGD(__FUNCTION__, "Found URL query parameter => len=%s", param);
+                    ESP_LOGV(__FUNCTION__, "Found URL query parameter => len=%s", param);
                 }
+            } else {
+                ESP_LOGE(__FUNCTION__,"Cannot get query");
+                if (gps) {
+                    gps->gpsStart();
+                }
+                return ESP_FAIL;
             }
             ldfree(buf);
+        } else {
+            ESP_LOGE(__FUNCTION__,"Cannot get query len");
+            if (gps) {
+                gps->gpsStart();
+            }
+            return ESP_FAIL;
         }
 
-        if (initSPISDCard())
+        if (md5[0] && initSPISDCard())
         {
             FILE *fw = NULL;
             esp_err_t ret;
+            ESP_LOGD(__FUNCTION__, "Reading MD5 RAM:%d...", esp_get_free_heap_size());
             if ((fw = fopen("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
             {
                 char ccmd5[33];
@@ -350,18 +367,23 @@ esp_err_t ota_handler(httpd_req_t *req)
                 if ((len = fread((void *)ccmd5, 1, 33, fw)) > 0)
                 {
                     ccmd5[len]=0;
-                    ESP_LOGD(__FUNCTION__,"Sending MD5:%s",ccmd5);
-                    if ((ret = httpd_resp_send(req, ccmd5, 33)) != ESP_OK) {
-                        ESP_LOGE(__FUNCTION__,"Error sending MD5:%s",esp_err_to_name(ret));
-                    }
+                    ESP_LOGD(__FUNCTION__,"Local MD5:%s",ccmd5);
                 }
                 else
                 {
                     ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d", len);
+                    httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Error with weird md5 len");
                 }
                 fClose(fw);
                 if ((ret == ESP_OK) && (strcmp(ccmd5,md5) == 0)) {
-                    return httpd_resp_send(req,"Not new",8);
+                    if (gps) {
+                        gps->gpsStart();
+                    }
+
+                    ESP_LOGD(__FUNCTION__, "Firmware is not updated RAM:%d", esp_get_free_heap_size());
+                    return httpd_resp_send(req,"Not new",7);
+                } else {
+                    ESP_LOGD(__FUNCTION__, "Firmware will update RAM:%d...", esp_get_free_heap_size());
                 }
             }
             else
@@ -369,22 +391,21 @@ esp_err_t ota_handler(httpd_req_t *req)
                 ESP_LOGE(__FUNCTION__, "Failed in opeing md5");
             }
         } else {
-            ESP_LOGE(__FUNCTION__,"Cannot init the fucking sd card");
+            ESP_LOGE(__FUNCTION__,"Cannot init the fucking sd card or the md5:%d", md5[0]);
         }
 
         if (totLen && md5[0])
         {
-            ESP_LOGD(__FUNCTION__, "RAM:%d...%d md5:%s", esp_get_free_heap_size(), totLen, md5);
-            img = (uint8_t *)dmalloc(totLen); //heap_caps_malloc(totLen, MALLOC_CAP_SPIRAM);
+            uint8_t *img = (uint8_t *)dmalloc(totLen); //heap_caps_malloc(totLen, MALLOC_CAP_SPIRAM);
             memset(img, 0, totLen);
-            ESP_LOGD(__FUNCTION__, "RAM:%d...", esp_get_free_heap_size());
+            ESP_LOGV(__FUNCTION__, "RAM:%d...%d md5:%s", esp_get_free_heap_size(), totLen, md5);
 
             uint8_t cmd5[16];
             uint8_t ccmd5[33];
             MD5Context md5_context;
             MD5Init(&md5_context);
             uint32_t curLen = 0;
-            uint32_t len = 0;
+            int len = 0;
 
             do
             {
@@ -410,9 +431,8 @@ esp_err_t ota_handler(httpd_req_t *req)
                     curLen+=len;
                 }
             } while (curLen < totLen);
-            ESP_LOGD(__FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
             MD5Final(cmd5, &md5_context);
-            ESP_LOGD(__FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
+            ESP_LOGV(__FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
 
             for (uint8_t i = 0; i < 16; ++i)
             {
@@ -420,17 +440,16 @@ esp_err_t ota_handler(httpd_req_t *req)
             }
 
             FILE* fw;
-            ESP_LOGD(__FUNCTION__, "RAM:%d...%d md5:%s/%s", esp_get_free_heap_size(), totLen, md5,ccmd5);
             if (strcmp((char *)ccmd5, md5) == 0)
             {
                 ESP_LOGD(__FUNCTION__, "Flashing md5:(%s)%dvs%d", ccmd5, totLen, curLen);
-                ESP_LOGD(__FUNCTION__, "RAM:%d", esp_get_free_heap_size());
+                ESP_LOGV(__FUNCTION__, "RAM:%d", esp_get_free_heap_size());
 
                 struct stat st;
 
                 if (stat("/lfs/firmware/current.bin", &st) == 0)
                 {
-                    ESP_LOGD(__FUNCTION__,"current bin exists %d bytes",(int)st.st_size);
+                    ESP_LOGV(__FUNCTION__,"current bin exists %d bytes",(int)st.st_size);
                     if (!deleteFile("/lfs/firmware/current.bin")){
                         ESP_LOGE(__FUNCTION__,"Cannot delete current bin");
                     }
@@ -438,7 +457,8 @@ esp_err_t ota_handler(httpd_req_t *req)
 
                 if ((fw = fopen("/lfs/firmware/current.bin", "w", true)) != NULL)
                 {
-                    httpd_resp_send(req, "Flashing", 9);
+                    ESP_LOGD(__FUNCTION__, "Writing /lfs/firmware/current.bin");
+                    httpd_resp_send(req, "Flashing", 8);
                     if (fwrite((void *)img, 1, totLen, fw) == totLen)
                     {
                         fClose(fw);
@@ -448,6 +468,9 @@ esp_err_t ota_handler(httpd_req_t *req)
                             fwrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
                             fClose(fw);
                             ESP_LOGD(__FUNCTION__, "Firmware md5 written");
+                        } else {
+                            ESP_LOGE(__FUNCTION__, "Cannot open /lfs/firmware/tobe.bin.md5");
+                            httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot open /lfs/firmware/tobe.bin.md5");
                         }
 
                         esp_partition_iterator_t pi;    // Iterator for find
@@ -460,6 +483,7 @@ esp_err_t ota_handler(httpd_req_t *req)
                         if (pi == NULL) // Check result
                         {
                             ESP_LOGE(__FUNCTION__, "Failed to find factory partition");
+                            httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Failed to find factory partition");
                         }
                         else
                         {
@@ -480,23 +504,30 @@ esp_err_t ota_handler(httpd_req_t *req)
                     else
                     {
                         ESP_LOGE(__FUNCTION__, "Firmware not backedup");
+                        httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Firmware not backedup");
                     }
                 }
                 else
                 {
                     ESP_LOGE(__FUNCTION__, "Failed to open /lfs/firmware/current.bin");
+                    httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Failed to open /lfs/firmware/current.bin");
                 }
                 deinitSPISDCard();
+                ldfree(img);
             }
             else
             {
-                ESP_LOGD(__FUNCTION__, "md5:(%s)(%s)", ccmd5, md5);
-                httpd_resp_send(req, "Bad Checksum", 13);
+                ESP_LOGV(__FUNCTION__, "md5:(%s)(%s)", ccmd5, md5);
+                httpd_resp_send(req, "Bad Checksum", 12);
+            }
+            if (gps) {
+                gps->gpsStart();
             }
         }
         else
         {
-            httpd_resp_send(req, "Not OK", 6);
+            ESP_LOGE(__FUNCTION__, "Missing len %d or md5 %d",totLen,md5[0]);
+            httpd_resp_send(req, "Missing len or md5", 18);
         }
         return ESP_OK;
     }
@@ -723,11 +754,11 @@ esp_err_t list_files_handler(httpd_req_t *req)
     {
         sprintf(jsonbuf, "%s", "[]");
     }
-
-    httpd_resp_send_chunk(req, jsonbuf, strlen(jsonbuf));
+    httpd_resp_set_type(req, "application/json");
+    esp_err_t ret = httpd_resp_send(req, jsonbuf, strlen(jsonbuf));
     ESP_LOGV(__FUNCTION__, "Sent final chunck of %d", strlen(jsonbuf));
     ldfree(jsonbuf);
-    return httpd_resp_send_chunk(req, NULL, 0);
+    return ret;
 }
 
 void UpdateGpioProp(cfg_gpio_t *cfg, gpio_num_t val)
@@ -758,7 +789,11 @@ esp_err_t config_handler(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
 
     char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
-    int len = httpd_req_recv(req, postData, JSON_BUFFER_SIZE);
+    int len = 0, curLen=-1;
+    
+    while ((curLen=httpd_req_recv(req, postData+len, JSON_BUFFER_SIZE))>0){
+        len+=curLen;
+    }
     int devId = appcfg->GetIntProperty("deviceid");
 
     if (!endsWith(req->uri,"config")){
@@ -773,10 +808,12 @@ esp_err_t config_handler(httpd_req_t *req)
         if (newCfg){
             char* sjson = cJSON_Print(newCfg);
             if (devId == appcfg->GetIntProperty("deviceid")){
+                ESP_LOGD(__FUNCTION__, "Updating local config");
                 appcfg->SetAppConfig(newCfg);
             } else {
                 char* fname = (char*)dmalloc(255);
                 sprintf(fname,"/lfs/config/%d.json",devId);
+                ESP_LOGD(__FUNCTION__, "Updating %s config", fname);
                 FILE* cfg = fopen(fname,"w");
                 if (cfg) {
                     fwrite(sjson,strlen(sjson),sizeof(char),cfg);
@@ -796,7 +833,6 @@ esp_err_t config_handler(httpd_req_t *req)
     }
     else
     {
-        ESP_LOGW(__FUNCTION__, "Empty response from config call");
         if (devId == appcfg->GetIntProperty("deviceid")){
             char *sjson = cJSON_PrintUnformatted(appcfg->GetJSONConfig(NULL));
             ret = httpd_resp_send(req, sjson, strlen(sjson));
@@ -1249,7 +1285,7 @@ esp_err_t app_handler(httpd_req_t *req)
         return httpd_resp_send(req, (const char *)jsonschema_start, jsonschema_end - jsonschema_start - 1);
     }
 
-    if (!endsWith(req->uri, "/"))
+    if (!endsWith(req->uri, "/") && !indexOf(req->uri,"/?"))
     {
         return sendFile(req,req->uri);
     }
@@ -1514,6 +1550,10 @@ esp_err_t trips_handler(httpd_req_t *req)
     tar.seek = tarSeek;
     tar.write = tarWrite;
     char tarFName[50];
+    TinyGPSPlus* gps = TinyGPSPlus::runningInstance();
+    if (gps) {
+        gps->gpsStop();
+    }
 
     sprintf(tarFName, "%d.tar", config->GetIntProperty("deviceid"));
 
@@ -1524,7 +1564,7 @@ esp_err_t trips_handler(httpd_req_t *req)
     if (initSPISDCard())
     {
         dumpLogs();
-        ESP_LOGD(__FUNCTION__, "Sending Trips");
+        ESP_LOGD(__FUNCTION__, "Sending Trips.");
         xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
         xEventGroupSetBits(eventGroup, TAR_BUFFER_SENT);
         xEventGroupClearBits(eventGroup, TAR_BUILD_DONE);
@@ -1569,5 +1609,8 @@ esp_err_t trips_handler(httpd_req_t *req)
     }
     xEventGroupClearBits(*getAppEG(), app_bits_t::TRIPS_SYNCING);
     deinitSPISDCard();
+    if (gps) {
+        gps->gpsStart();
+    }
     return ESP_FAIL;
 }

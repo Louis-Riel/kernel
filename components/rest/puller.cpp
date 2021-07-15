@@ -142,13 +142,17 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
     config->max_redirection_count = 0;
     config->timeout_ms = 3000;
     config->port = 80;
-    esp_http_client_handle_t client = esp_http_client_init(config);
+    esp_http_client_handle_t client = NULL;
     char dmd5[37];
     esp_err_t ret = ESP_OK;
     ESP_LOGD(__FUNCTION__, "Checking Version");
-    if ((ret = esp_http_client_perform(client)) == ESP_OK)
+    int len=-1;
+    int hrc = 202;
+    if ((client = esp_http_client_init(config)) &&
+        ((err = esp_http_client_open(client,0)) == ESP_OK) && 
+        ((len=esp_http_client_fetch_headers(client))>=0) &&
+        ((hrc=esp_http_client_get_status_code(client)) == 200))
     {
-        int len = 0;
         if ((len = esp_http_client_read(client, &dmd5[0], 33)) >= 0)
         {
             if (len == 0){
@@ -221,8 +225,8 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                             fclose(fw);
 
                             sprintf((char *)config->url, "http://" IPSTR "/ota/flash?md5=%s&len=%d", IP2STR(ipInfo), ccmd5, (int)st.st_size);
-                            client = esp_http_client_init(config);
-                            if ((ret = esp_http_client_open(client, st.st_size)) == ESP_OK) {
+                            if ((client = esp_http_client_init(config)) &&
+                                ((ret = esp_http_client_open(client, st.st_size)) == ESP_OK)) {
                                 ESP_LOGD(__FUNCTION__,"Sending fw of %d/%d bytes",len,(int)st.st_size);
                                 if ((len = esp_http_client_write(client, (const char*)img, st.st_size)) > 0)
                                 {                                
@@ -285,67 +289,6 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
         ESP_LOGE(__FUNCTION__, "Version check request failed: %s", esp_err_to_name(err));
     }
     return retCode;
-}
-
-cJSON *GetConfig(ip4_addr_t *ipInfo)
-{
-    char *kmlFiles = (char *)dmalloc(KML_BUFFER_SIZE);
-    esp_http_client_config_t *config = (esp_http_client_config_t *)dmalloc(sizeof(esp_http_client_config_t));
-    memset(kmlFiles, 0, KML_BUFFER_SIZE);
-    memset(config, 0, sizeof(esp_http_client_config_t));
-    config->url = (char *)dmalloc(255);
-    memset((void *)config->url, 0, 255);
-    sprintf((char *)config->url, "http://" IPSTR "/config", IP2STR(ipInfo));
-    config->method = HTTP_METHOD_POST;
-    config->timeout_ms = 9000;
-    config->event_handler = json_event_handler;
-    config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
-    config->max_redirection_count = 0;
-    config->timeout_ms = 3000;
-    config->port = 80;
-    config->user_data = kmlFiles;
-    ESP_LOGD(__FUNCTION__, "Getting %s", config->url);
-    esp_http_client_handle_t client = esp_http_client_init(config);
-    xEventGroupSetBits(eventGroup, GETTING_TRIP_LIST);
-    esp_err_t err;
-    err = esp_http_client_perform(client);
-    esp_http_client_cleanup(client);
-    ldfree((void *)config->url);
-    ldfree((void *)config);
-
-    if (err != ESP_OK)
-    {
-        ESP_LOGD(__FUNCTION__, "Probably not a tracker but a lurker %s", esp_err_to_name(err));
-        //ldfree(kmlFiles);
-        //deinitSPISDCard();
-        //vTaskDelete(NULL);
-    }
-
-    xEventGroupWaitBits(eventGroup, GETTING_TRIPS, pdFALSE, pdTRUE, portMAX_DELAY);
-    ESP_LOGV(__FUNCTION__, "Got %s", kmlFiles);
-    cJSON *json = cJSON_Parse(kmlFiles);
-    if (json != NULL)
-    {
-        char *fname = (char *)dmalloc(255);
-        sprintf(fname, "/lfs/config/%d.json", cJSON_GetObjectItem(json, "devId")->valueint);
-        ESP_LOGV(__FUNCTION__, "Writing %s", fname);
-        FILE *destF = fopen(fname, "w", true);
-        if (destF != NULL)
-        {
-            fputs(kmlFiles, destF);
-            fClose(destF);
-            ESP_LOGV(__FUNCTION__, "Wrote %s", fname);
-        }
-        else
-        {
-            ESP_LOGE(__FUNCTION__, "Cannot open dest %s", fname);
-        }
-    }
-    else
-    {
-        ESP_LOGE(__FUNCTION__, "Error whilst parsing config");
-    }
-    return json;
 }
 
 cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
@@ -534,30 +477,49 @@ void extractClientTar(char *tarFName)
     ldfree(buf);
 }
 
-bool IsTheFuckerUp(esp_ip4_addr_t *ipInfo)
+cJSON* GetDeviceConfig(esp_ip4_addr_t *ipInfo)
 {
     esp_http_client_handle_t client = NULL;
     esp_http_client_config_t *config = NULL;
-    bool ret = false;
+    cJSON* ret = NULL;
 
     config = (esp_http_client_config_t *)dmalloc(sizeof(esp_http_client_config_t));
     memset(config, 0, sizeof(esp_http_client_config_t));
     config->url = (char *)dmalloc(30);
-    sprintf((char *)config->url, "http://" IPSTR "/files/", IP2STR(ipInfo));
+    sprintf((char *)config->url, "http://" IPSTR "/config", IP2STR(ipInfo));
     config->method = HTTP_METHOD_POST;
     config->timeout_ms = 30000;
     config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
     config->max_redirection_count = 0;
     config->port = 80;
     ESP_LOGV(__FUNCTION__, "Getting %s", config->url);
-    client = esp_http_client_init(config);
-    esp_err_t err;
-    ret = (err = esp_http_client_perform(client)) == ESP_OK;
+    esp_err_t err=ESP_ERR_HW_CRYPTO_BASE;
+    int len=0;
+    int retCode=-1;
+    if ((client = esp_http_client_init(config)) &&
+        ((err = esp_http_client_open(client,0)) == ESP_OK) && 
+        ((len=esp_http_client_fetch_headers(client))>=0) &&
+        ((retCode=esp_http_client_get_status_code(client)) == 200))
+    {
+        ESP_LOGD(__FUNCTION__,"Getting %d bytes of config",len+1);
+        char* sjson = (char*)dmalloc(len+1);
+        if ((len=esp_http_client_read(client,sjson,len+1))>0) {
+            if ((ret = cJSON_Parse(sjson)) == NULL) {
+                ESP_LOGD(__FUNCTION__,"Failed to parse %s(%d)",len?sjson:"null",len);
+            }
+        } else {
+            ESP_LOGE(__FUNCTION__,"Failed reading config response %d", len);
+        }
+        ldfree(sjson);
+    } else {
+        ESP_LOGE(__FUNCTION__,"Failed sending config request. client is %snull, err:%s, len:%d",client?"not ":"",esp_err_to_name(err),len);
+    }
     esp_http_client_cleanup(client);
     ldfree((void *)config->url);
     ldfree((void *)config);
     return ret;
 }
+
 static bool isPulling = false;
 void pullStation(void *pvParameter)
 {
@@ -569,16 +531,18 @@ void pullStation(void *pvParameter)
     isPulling = true;
     esp_ip4_addr_t *ipInfo = (esp_ip4_addr_t *)pvParameter;
     int retryCtn = 10;
-    bool isUp = false;
+    cJSON* jcfg = NULL;
     char tarFName[255];
     bool isAllGood = false;
-    while (!(isUp = IsTheFuckerUp(ipInfo)) && (retryCtn-- >= 0))
+    while (((jcfg = GetDeviceConfig(ipInfo)) == NULL) && (retryCtn-- >= 0))
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
-    if (isUp)
+    char strftime_buf[64];
+    if (jcfg)
     {
+        ESP_LOGD(__FUNCTION__,"Pulling from " IPSTR , IP2STR(ipInfo));
         esp_http_client_config_t *config = (esp_http_client_config_t *)dmalloc(sizeof(esp_http_client_config_t));
         if (initSPISDCard())
         {
@@ -591,7 +555,6 @@ void pullStation(void *pvParameter)
             config->max_redirection_count = 0;
             config->port = 80;
 
-            char strftime_buf[64];
             struct tm timeinfo;
             time_t now = 0;
             time(&now);
@@ -607,18 +570,74 @@ void pullStation(void *pvParameter)
             esp_err_t err;
             err = esp_http_client_perform(client);
 
-            tarFName[0] = '/';
-            tarFName[1] = 's';
-            tarFName[2] = 'd';
-            tarFName[3] = 'c';
-
-            esp_err_t ret;
             if (esp_http_client_get_status_code(client) == 200)
             {
+                isAllGood=true;
                 esp_http_client_cleanup(client);
                 ldfree((void *)config->url);
 
                 CheckOTA(ipInfo);
+                AppConfig* acfg = new AppConfig(jcfg,NULL);
+
+                struct stat st;
+                esp_err_t ret = ESP_FAIL;
+                char fname[255];
+                sprintf(fname,"/lfs/config/%d.json",acfg->GetIntProperty("deviceid"));
+
+                if ((ret = stat(fname, &st)) == 0)
+                {
+                    char* sjson = (char*)dmalloc(st.st_size+1);
+                    FILE* fcfg = fopen(fname,"r");
+                    if (fcfg) {
+                        ESP_LOGD(__FUNCTION__,"Reading %d bytes from %s",(int)st.st_size,fname);
+                        if (fread(sjson,sizeof(char),st.st_size+1,fcfg) > 0) {
+                            cJSON* joldcfg = cJSON_Parse(sjson);
+                            if (sjson && cJSON_Compare(jcfg,joldcfg,true)){
+                                memset(config, 0, sizeof(esp_http_client_config_t));
+                                config->url = (char *)dmalloc(255);
+                                sprintf((char *)config->url, "http://" IPSTR "/config/%d", IP2STR(ipInfo), acfg->GetIntProperty("deviceid"));
+                                config->method = HTTP_METHOD_POST;
+                                config->timeout_ms = 9000;
+                                config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
+                                config->max_redirection_count = 0;
+                                config->port = 80;
+                                client = esp_http_client_init(config);
+                                
+                                ESP_LOGD(__FUNCTION__, "Updating config for %d", acfg->GetIntProperty("deviceid"));
+                                if ((ret = esp_http_client_open(client, strlen(sjson))) == ESP_OK)
+                                {
+                                    if (esp_http_client_write(client, sjson, strlen(sjson)) != strlen(sjson))
+                                    {
+                                        ESP_LOGE(__FUNCTION__, "Failed in updating %d's cfg", acfg->GetIntProperty("deviceid"));
+                                    }
+                                    else
+                                    {
+                                        ESP_LOGD(__FUNCTION__, "updated %d's cfg", acfg->GetIntProperty("deviceid"));
+                                    }
+                                    esp_http_client_cleanup(client);
+                                } else {
+                                    ESP_LOGE(__FUNCTION__,"Cannot open json in %s",fname);
+                                }
+                            }
+                            else if (sjson)
+                            {
+                                ESP_LOGD(__FUNCTION__, "No cfg updated needed for %d", acfg->GetIntProperty("deviceid"));
+                            } 
+                            else 
+                            {
+                                ESP_LOGE(__FUNCTION__,"Cannot parse new cfg for %d",acfg->GetIntProperty("deviceid"));
+                            }
+                        } else {
+                            ESP_LOGE(__FUNCTION__,"Cannot read bits for new cfg %d",acfg->GetIntProperty("deviceid"));
+                        }
+                        fclose(fcfg);
+                    } else {
+                        ESP_LOGE(__FUNCTION__,"Cannot read new cfg for %d",acfg->GetIntProperty("deviceid"));
+                    }
+                } else {
+                    ESP_LOGE(__FUNCTION__,"Cannot open new cfg for %s",fname);
+                }
+
                 memset(config, 0, sizeof(esp_http_client_config_t));
                 config->url = (char *)dmalloc(255);
                 sprintf((char *)config->url, "http://" IPSTR "/status/wifi", IP2STR(ipInfo));
@@ -646,6 +665,7 @@ void pullStation(void *pvParameter)
                 {
                     ESP_LOGW(__FUNCTION__, "Send wifi off request failed: %s", esp_err_to_name(ret));
                 }
+                free(acfg);
             }
             else
             {
@@ -666,6 +686,10 @@ void pullStation(void *pvParameter)
     isPulling = false;
     if (isAllGood)
     {
+        tarFName[0] = '/';
+        tarFName[1] = 's';
+        tarFName[2] = 'd';
+        tarFName[3] = 'c';
         extractClientTar(tarFName);
         xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT2 | BIT3), tskIDLE_PRIORITY, NULL);
     }

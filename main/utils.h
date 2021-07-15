@@ -143,7 +143,7 @@ public:
   static void SignalStateChange(state_change_t state);
   uint32_t version;
 
-  void SetStringProperty(const char* path,char* value);
+  void SetStringProperty(const char* path,const char* value);
   void SetIntProperty(const char* path,int32_t value);
   void SetPinNoProperty(const char* path,gpio_num_t value);
   void SetStateProperty(const char* path,item_state_t value);
