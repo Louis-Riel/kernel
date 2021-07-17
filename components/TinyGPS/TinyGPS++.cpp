@@ -219,7 +219,7 @@ void TinyGPSPlus::theLoop(void *param)
       gpio_hold_en(gps->enpin);
       gpio_deep_sleep_hold_en();
       gps->gpsPause();
-      ESP_LOGD(__FUNCTION__, "Waiting on GPS %d secs ", 10);
+      ESP_LOGD(__FUNCTION__, "Waiting on GPS %d secs ", GPS_WAIT_PERIOD);
       if (xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON)
         vTaskDelay((GPS_WAIT_PERIOD*1000)/portTICK_PERIOD_MS);
       else{
@@ -456,7 +456,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
     , toBeFreqIdx(0)
 {
   instance=this;
-  insertCustom(gpTxt, "GPTXT", 4);
+  insertCustom(gpTxt, "GPTXT", 4); 
   ESP_ERROR_CHECK(esp_event_handler_register(GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEventProcessor, this));
   EventHandlerDescriptor *handler = new EventHandlerDescriptor(GPSPLUS_EVENTS, "GPSPLUS_EVENTS");
   handler->SetEventName(TinyGPSPlus::gpsEvent::go, "go");
@@ -607,32 +607,24 @@ void TinyGPSPlus::processEncoded(void)
     tm.tm_min = time.minute();
     tm.tm_sec = time.second();
 
-    struct timeval now = {.tv_sec = mktime(&tm),
-                          .tv_usec = 0};
-    time_t cutDt;
+    time_t gpsDt = mktime(&tm);
+    time_t curTs;
+    ::time(&curTs);
 
-    ::time(&cutDt);
-    struct timeval tv2;
-    gettimeofday(&tv2, NULL);
-
-    if (abs(tv2.tv_sec - now.tv_sec) > 2)
+    if (abs(gpsDt - curTs) > 2)
     {
-      timezone tz;
-      tz.tz_dsttime = 0;
-      tz.tz_minuteswest = 0;
-      if (cutDt < 10000)
-      {
-        ESP_LOGD(__FUNCTION__, "%d-%d-%d (%d:%d:%d)", date.year(), date.month(), date.day(), time.hour(), time.minute(), time.second());
-        //setenv("TZ", "EST5EDT,M3.2.0/2,M11.1.0", 1);
-        //tzset();
-        settimeofday(&now, &tz);
-      }
-      else
-      {
-        ESP_LOGD(__FUNCTION__, "Time diff::%li gettimeofday:%li gps:%li curDt:%li", abs(tv2.tv_sec - now.tv_sec), tv2.tv_sec, now.tv_sec, cutDt);
-        //adjtime(NULL,&now);
-        settimeofday(&now, &tz);
-      }
+      char strftime_buf[64];
+      struct tm timeinfo;
+      localtime_r(&curTs, &timeinfo);
+      strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+      ESP_LOGI(__FUNCTION__, "System Time: %s", strftime_buf);
+      localtime_r(&gpsDt, &timeinfo);
+      strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+      ESP_LOGI(__FUNCTION__, "GPS Time: %s", strftime_buf);
+
+      struct timeval newTs = {tv_sec:gpsDt,tv_usec:0};
+      settimeofday(&newTs, NULL);
+
       ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::systimeChanged, NULL, 0, portMAX_DELAY));
     }
 
@@ -648,7 +640,7 @@ void TinyGPSPlus::uart_event_task(void *pvParameters)
   size_t buffered_size;
   uint8_t *dtmp = (uint8_t *)dmalloc(RD_BUF_SIZE);
   ESP_LOGV(__FUNCTION__, "uart[%d] starting:", UART_NUM_2);
-  while (xEventGroupGetBits(gps->eg) & gpsEvent::gpsRunning)
+  while (xEventGroupGetBitsFromISR(gps->eg) & gpsEvent::gpsRunning)
   {
     //Waiting for UART event.
     if (gps->uart_queue && xQueueReceive(gps->uart_queue, (void *)&event, (portTickType)portMAX_DELAY))
@@ -935,12 +927,12 @@ bool TinyGPSPlus::isSignificant()
 }
 
 void TinyGPSPlus::gpsStop(){
-  ESP_LOGV(__FUNCTION__, "Turning off enable pin(%d)", enpin);
+  ESP_LOGD(__FUNCTION__, "Turning off enable pin(%d)", enpin);
   ESP_ERROR_CHECK(gpio_set_level(enpin, 0));
 }
 
 void TinyGPSPlus::gpsStart(){
-  ESP_LOGV(__FUNCTION__, "Turning on enable pin(%d)", enpin);
+  ESP_LOGD(__FUNCTION__, "Turning on enable pin(%d)", enpin);
   ESP_ERROR_CHECK(gpio_set_level(enpin, 1));
 }
 
@@ -995,7 +987,6 @@ bool TinyGPSPlus::endOfTermHandler()
       {
       case GPS_SENTENCE_GPRMC:
         date.commit();
-        time.commit();
         if (sentenceHasFix)
         {
           location.commit();

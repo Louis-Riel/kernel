@@ -16,6 +16,7 @@
 #include "esp_log.h"
 #include <stdlib.h>
 #include "cJSON.h"
+#include "esp_littlefs.h"
 
 #define SS TF_CS
 #define MAX_NUM_POIS 10
@@ -179,11 +180,6 @@ char* indexOf(const char* str, const char* key);
 char* lastIndexOf(const char* str, const char* key);
 bool endsWith(const char* str,const char* val) ;
 bool stringContains(const char* str,const char* val) ;
-
-int fClose (FILE * f);
-FILE * fOpen (const char * _name, const char * _type);
-FILE * fopen (const char * _name, const char * _type,bool createDir);
-FILE * fopen (const char * _name, const char * _type,bool createDir, bool log);
 
 void commitTripToDisk(void* param);
 void stopGps();

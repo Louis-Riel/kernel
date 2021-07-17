@@ -1,5 +1,5 @@
 set(COMPONENT_REQUIRES eventmgr )
-set(COMPONENT_PRIV_REQUIRES json )
+set(COMPONENT_PRIV_REQUIRES json esp_littlefs )
 
 set(COMPONENT_ADD_INCLUDEDIRS ".")
 set(COMPONENT_SRCS "TinyGPS++.cpp")

@@ -17,7 +17,11 @@ char* getLogFName(){
 static TaskHandle_t dltask = NULL;
 
 void dumpTheLogs(void* params){
-    if (initSPISDCard(false)) {
+    if (dltask == NULL) {
+        dltask = (TaskHandle_t)1; //Just not null
+    }
+
+    if (logBufPos && initSPISDCard(true)) {
         FILE* fw = NULL;
 
         struct tm timeinfo;
@@ -31,29 +35,28 @@ void dumpTheLogs(void* params){
             strftime(logfname, 254, lpath, &timeinfo);
         }
 
-        if ((fw = fopen(logfname,"a",true,false)) != NULL) {
-            if (fwrite((void*)logBuff,1,logBufPos,fw) == logBufPos) {
-                if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG){
-                    fprintf(stdout,"Written %d into %s",logBufPos,logfname);
-                }
-                *logBuff=0;
-                logBufPos=0;
-            } else if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG) {
-                fprintf(stderr,"Logs not written to %s",logfname);
+        size_t bc = __UINT32_MAX__;
+        if (((fw = fOpenCdL(logfname,"a",true,false)) != NULL) &&
+            ((bc=fWrite((void*)logBuff,1,logBufPos,fw)) == logBufPos)) {
+            if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG){
+                fprintf(stdout,"\nWritten %d into %s\n",logBufPos,logfname);
             }
-            fClose(fw);
+            *logBuff=0;
+            logBufPos=0;
         } else if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG) {
-            fprintf(stderr,"Failed to open %s",logfname);
+            fprintf(stderr,"\nLogs not written to %s fw:%d len:%d",logfname,fw!=NULL,bc);
         }
+        fClose(fw);
         deinitSPISDCard(false);
     }
-    dltask=NULL;
-    vTaskDelete(NULL);
+    if (params)
+        vTaskDelete(NULL);
+    dltask = NULL;
 }
 
 void dumpLogs(){
-    if (!dltask)
-        xTaskCreate(dumpTheLogs, "dumpLogs", 8192, NULL, tskIDLE_PRIORITY, &dltask);
+    if (dltask == NULL)
+        xTaskCreate(dumpTheLogs, "dumpLogs", 8192, (void*)true, tskIDLE_PRIORITY, &dltask);
 }
 
 void registerLogCallback( LogFunction_t callback, void* param) {
@@ -79,7 +82,6 @@ int loggit(const char *fmt, va_list args) {
     if (logBufPos >= LOG_BUF_ULIMIT) {
         dumpLogs();
     }
-
     return vprintf(fmt, args);
 }
 

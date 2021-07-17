@@ -1,7 +1,6 @@
 #include "utils.h"
 #include "esp_sleep.h"
 #include "driver/periph_ctrl.h"
-#include "esp_log.h"
 #include "../components/esp_littlefs/include/esp_littlefs.h"
 #include "esp_vfs_fat.h"
 #include "driver/sdspi_host.h"
@@ -10,8 +9,8 @@
 #include "sdkconfig.h"
 #include "driver/sdmmc_host.h"
 #include "logs.h"
-#include "cJSON.h"
 #include "errno.h"
+#include "freertos/semphr.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -373,10 +372,6 @@ bool initSPISDCard(bool log)
     numSdCallers++;
     if (log)
       ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
-    if (numSdCallers == 1)
-    {
-      dumpLogs();
-    }
   }
   item_state_t state = spiffState->GetStateProperty("state");
   if (state == item_state_t::ACTIVE)
@@ -445,7 +440,7 @@ bool rmDashFR(char *folderName)
         isABadDay |= !deleteFile(fileName);
       }
     }
-    closedir(theFolder);
+    closeDir(theFolder);
     if (!isABadDay)
     {
       ESP_LOGD(__FUNCTION__, "Deleting folder %s", folderName);
@@ -465,7 +460,7 @@ bool moveFile(const char *src, const char *dest)
   FILE *srcF = fOpen(src, "r");
   if (srcF != 0)
   {
-    FILE *destF = fopen(dest, "w", true);
+    FILE *destF = fOpenCd(dest, "w", true);
     if (destF != NULL)
     {
       int ch = 0;
@@ -596,119 +591,6 @@ char *lastIndexOf(const char *str, const char *key)
   }
   ESP_LOGV(__FUNCTION__, "%s not in %s(%d)", key, str, slen);
   return NULL;
-}
-
-FILE *fopen(const char *_name, const char *_type, bool createDir)
-{
-  return fopen(_name, _type, createDir, LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE);
-}
-
-FILE *fopen(const char *_name, const char *_type, bool createDir, bool log)
-{
-  if (!_name || (strlen(_name) == 0))
-  {
-    if (log)
-      ESP_LOGE(__FUNCTION__, "No file name given");
-    return NULL;
-  }
-  char buf[255];
-
-  if (log)
-    ESP_LOGV(__FUNCTION__, "Opening %s's folder with perm %s create folder %d", _name, _type, createDir);
-  if (createDir)
-  {
-    if (log)
-      ESP_LOGV(__FUNCTION__, "Validating %s's folder", _name);
-    DIR *theFolder;
-    char *folderName = (char *)dmalloc(530);
-    strcpy(folderName, _name);
-    char *closingMark = strrchr(folderName, '/');
-    int res;
-    if (closingMark > folderName)
-    {
-      *closingMark = 0;
-      if (log)
-        ESP_LOGV(__FUNCTION__, "Folder is %s", folderName);
-      uint32_t flen = strlen(folderName);
-      if ((theFolder = opendir(folderName)) == NULL)
-      {
-        if (log)
-          ESP_LOGV(__FUNCTION__, "Folder %s does not exist", folderName);
-        closingMark = strchr(folderName + 1, '/');
-        *closingMark = 0;
-        while (strlen(folderName) <= flen)
-        {
-          if (log)
-            ESP_LOGV(__FUNCTION__, "Checking Folder %s", folderName);
-          if ((res = mkdir(folderName, 0755)) != 0)
-          {
-            if (res != EEXIST)
-            {
-              if (log)
-                ESP_LOGV(__FUNCTION__, "Folder %s can not be created,hopefully because it exists %s", folderName, esp_err_to_name_r(res, buf, 255));
-            }
-            else
-            {
-              if (log)
-                ESP_LOGD(__FUNCTION__, "Folder %s created", folderName);
-            }
-          }
-          if (closingMark == NULL)
-          {
-            break;
-          }
-          if (closingMark)
-          {
-            *(closingMark) = '/';
-            closingMark = strchr(closingMark + 1, '/');
-            if (closingMark)
-            {
-              *closingMark = 0;
-            }
-          }
-        }
-      }
-      else
-      {
-        if (log)
-          ESP_LOGV(__FUNCTION__, "Folder %s does exist", folderName);
-        closedir(theFolder);
-      }
-      closingMark = strrchr(folderName, '/');
-    }
-    ldfree(folderName);
-  }
-  return fOpen(_name, _type);
-}
-
-FILE *fOpen(const char *_name, const char *_type)
-{
-  FILE *ret = ::fopen(_name, _type);
-  if (ret != NULL)
-  {
-    AppConfig::SignalStateChange(state_change_t::MAIN);
-    numOpenFiles++;
-  }
-  else
-  {
-    ESP_LOGE(__FUNCTION__, "Error in fopen for %s:%s", _name, esp_err_to_name(errno));
-  }
-  return ret;
-}
-
-int fClose(FILE *f)
-{
-  int ret = EOF;
-  if (f != NULL)
-  {
-    ret = ::fclose(f);
-    if (ret == 0)
-    {
-      AppConfig::SignalStateChange(state_change_t::MAIN);
-      numOpenFiles--;
-    }
-  }
-  return ret;
 }
 
 uint32_t GetNumOpenFiles()

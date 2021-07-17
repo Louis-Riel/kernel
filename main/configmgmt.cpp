@@ -300,7 +300,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   {
     return;
   }
-  ESP_LOGD(__FUNCTION__, "Saving config");
+  ESP_LOGD(__FUNCTION__, "Saving config %s",config->filePath);
   version++;
   if (!skipMount)
   {
@@ -310,12 +310,19 @@ void AppConfig::SaveAppConfig(bool skipMount)
   if (currentCfg != NULL)
   {
     char *sjson = cJSON_Print(config->json);
-    ESP_LOGV(__FUNCTION__, "Config:%s", sjson);
-    size_t wlen = fwrite(sjson, 1, strlen(sjson), currentCfg);
-    ESP_LOGV(__FUNCTION__, "Wrote %d config bytes", wlen);
+    ESP_LOGV(__FUNCTION__, "Config(%d):%s", strlen(sjson),sjson);
+    size_t wlen = fWrite(sjson, 1, strlen(sjson), currentCfg);
     if (fClose(currentCfg) != 0)
     {
       ESP_LOGE(__FUNCTION__, "Failed wo close config");
+    } else {
+      if (wlen != strlen(sjson)) {
+        ESP_LOGE(__FUNCTION__,"Cannot write %d bytes, wrote %d bytes",strlen(sjson),wlen);
+        esp_littlefs_format("storage");
+        esp_restart();
+      } else {
+        ESP_LOGD(__FUNCTION__, "Wrote %d config bytes", wlen);
+      }
     }
     ldfree(sjson);
   }

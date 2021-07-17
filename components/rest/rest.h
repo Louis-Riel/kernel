@@ -47,6 +47,9 @@ bool moveFolder(char* folderName, char* toFolderName);
 char* getPostField(const char* pname, const char* postData,char* dest);
 esp_err_t filedownload_event_handler(esp_http_client_event_t *evt);
 void extractClientTar(char* tarFName);
+void mergeConfig(void* param);
+cJSON* GetDeviceConfig(esp_ip4_addr_t *ipInfo,uint32_t deviceId);
+
 typedef enum{
     TAR_BUFFER_FILLED = BIT0,
     TAR_BUFFER_SENT = BIT1,

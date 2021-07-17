@@ -1,6 +1,7 @@
 #include "./eventmgr.h"
 #include "../rest/rest.h"
 #include "../mfile/mfile.h"
+#include "lwip/inet.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -44,17 +45,21 @@ bool EventInterpretor::IsValid(EventHandlerDescriptor *handler, int32_t id, void
         char *eventName = handler->GetEventName(id);
         if (eventName == NULL)
         {
+            ESP_LOGV(__FUNCTION__,"No name for %s - %d",handler->GetEventBase(),id);
             return NULL;
         }
         if ((strcmp(this->eventBase, handler->GetName()) == 0) && (strcmp(eventName, this->eventId) == 0))
         {
             this->handler = handler;
             this->id = id;
-            ESP_LOGD(__FUNCTION__, "%s-%s Event Registered", handler->GetName(), eventName);
+            ESP_LOGD(__FUNCTION__, "%s-%s-%d Event Registered", handler->GetName(), eventName, id);
+        } else {
+            ESP_LOGV(__FUNCTION__,"base or name mismatch base:%s handler name:%s evtname:%s evtid:%s",this->eventBase, handler->GetName(),eventName, this->eventId);
         }
     }
 
-    bool ret = (this->handler != NULL) && (handler->GetEventBase() == this->handler->GetEventBase()) && (id == this->id);
+
+    bool ret = (handler != NULL) && (this->handler != NULL) && (handler->GetEventBase() == this->handler->GetEventBase()) && (id == this->id);
     if (ret)
     {
         ESP_LOGV(__FUNCTION__, "%s-%d Match", handler->GetName(), id);
@@ -69,6 +74,14 @@ bool EventInterpretor::IsValid(EventHandlerDescriptor *handler, int32_t id, void
                 }
             }
         }
+    } else {
+        ESP_LOGV(__FUNCTION__,"Mismatch (handler != %d) && (this->handler(%d) != NULL) && (handler->GetEventBase(%s) == this->handler->GetEventBase(%s)) && (id%d == this->id%d)",
+            handler != NULL,
+            this->handler != NULL,
+            handler != NULL ? handler->GetEventBase():"",
+            this->handler?this->handler->GetEventBase():"",
+            id, 
+            this->id);
     }
     return ret;
 }
@@ -76,6 +89,7 @@ bool EventInterpretor::IsValid(EventHandlerDescriptor *handler, int32_t id, void
 void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *event_data)
 {
     system_event_info_t *systemEventInfo = NULL;
+    ip_event_got_ip_t* evtGotIp = NULL;
     cJSON *jeventbase;
     cJSON *jeventid;
     int32_t eventId = -1;
@@ -98,6 +112,16 @@ void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *
     {
         ESP_LOGD(__FUNCTION__, "%s from %s", handler->GetName(), "wifioff");
         TheWifi::GetInstance()->wifiStop(NULL);
+    }
+    if (strcmp(method, "mergeconfig") == 0)
+    {
+        AppConfig* cfg = AppConfig::GetAppStatus()->GetConfig("/wifi/station");
+        if (cfg->HasProperty("Gw")) {
+            ESP_LOGD(__FUNCTION__, "From gw:%s", cfg->GetStringProperty("Gw"));
+            uint32_t addr = ipaddr_addr(cfg->GetStringProperty("Gw"));
+            xTaskCreate(mergeConfig, "mergeConfig", 8192, (void*)addr, tskIDLE_PRIORITY, NULL);
+        }
+        free(cfg);
     }
     if (strcmp(method, "PullStation") == 0)
     {

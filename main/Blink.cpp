@@ -161,7 +161,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
   if (strlen(cvsFileName) > 1)
   {
     ESP_LOGD(__FUNCTION__, "Getting Facts from %s for %s", cvsFileName, kmlFileName);
-    FILE *trp = fopen(cvsFileName, "r", true);
+    FILE *trp = fOpenCd(cvsFileName, "r", true);
     if (trp == NULL)
     {
       ESP_LOGE(__FUNCTION__, "Cannot open source");
@@ -199,7 +199,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
       return true;
     }
     ESP_LOGD(__FUNCTION__, "Baking KML from %s %d lines %d chars", kmlFileName, lineCount, pos);
-    FILE *kml = fopen(kmlFileName, "w", true);
+    FILE *kml = fOpenCd(kmlFileName, "w", true);
     if (kml == NULL)
     {
       ESP_LOGE(__FUNCTION__, "Cannot open %s", kmlFileName);
@@ -455,7 +455,7 @@ void parseFolderForCSV(const char *folder)
     }
     ldfree(kFName);
     ldfree(cFName);
-    closedir(theFolder);
+    closeDir(theFolder);
   }
   else
   {
@@ -550,6 +550,7 @@ void Hibernate()
 static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
 {
   time(&now);
+  lastDpTs = now;
   sampleBatteryVoltage();
   switch (id)
   {
@@ -562,7 +563,6 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     struct tm timeinfo;
     localtime_r(&now, &timeinfo);
     strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-    time(&lastDpTs);
     ESP_LOGI(__FUNCTION__, "System Time: %s", strftime_buf);
     break;
   case TinyGPSPlus::gpsEvent::significantDistanceChange:
@@ -881,7 +881,7 @@ esp_err_t setupLittlefs()
       hasStat = true;
     }
   }
-  if ((ret = closedir(root)) != ESP_OK)
+  if ((ret = closeDir(root)) != ESP_OK)
   {
     ESP_LOGE(__FUNCTION__, "failed to close root %s", esp_err_to_name(ret));
     return ret;
@@ -1022,6 +1022,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     AppConfig *appcfg = new AppConfig(CFG_PATH);
     esp_err_t ret = ESP_OK;
+    nvs_flash_init();
 
     if (appcfg->GetStringProperty("wifitype") == NULL)
     {
@@ -1125,7 +1126,8 @@ void app_main(void)
     }
     ConfigurePins(appcfg);
 
-    //xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, NULL, tskIDLE_PRIORITY, NULL);
+    //if (gps)
+    //  ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::atSyncPoint, NULL, 0, portMAX_DELAY));
 
     //Register event managers
     new BufferedFile();

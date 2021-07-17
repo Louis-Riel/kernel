@@ -72,8 +72,6 @@ protected:
     tcpip_adapter_ip_info_t apIp;
     tcpip_adapter_ip_info_t staIp;
     wifi_config_t wifi_config;
-    gpio_num_t pinNo;
-    uint32_t flags;
     char* name;
     cJSON* status;
 private:

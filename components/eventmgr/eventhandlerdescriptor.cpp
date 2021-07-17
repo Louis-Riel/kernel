@@ -91,6 +91,22 @@ EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(char* base,char* e
     return NULL;
 }
 
+EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(esp_event_base_t base,uint32_t id) {
+    ESP_LOGV(__FUNCTION__,"GetEventDescriptor %s(%d)",  base, id);
+    for (int idx = 0; idx < MAX_NUM_EVENTS; idx++) {
+        EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
+        if ((ei != NULL) && 
+            (ei->baseName != NULL) &&
+            (ei->id >= 0) &&
+            (base != NULL) && 
+            (indexOf(ei->baseName,base) != NULL) &&
+            (ei->id == id)) {
+            return ei;
+        }
+    }
+    return NULL;
+}
+
 void EventHandlerDescriptor::SetEventName(int32_t id,char* name){
     for (uint8_t idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
         if (eventDescriptors[idx].eventName == NULL) {
@@ -101,6 +117,7 @@ void EventHandlerDescriptor::SetEventName(int32_t id,char* name){
             return;
         }
     }
+    ESP_LOGE(__FUNCTION__,"No space to set event name for %s-%d",name, id);
 }
 
 int32_t EventHandlerDescriptor::GetEventId(char* name){
@@ -168,7 +185,6 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
     char* closePos=NULL;
     char* lastClosePos=NULL;
     char strftime_buf[64];
-    char* tmp=NULL;
     cJSON* jtmp=NULL;
     memset(retCursor,0,retLen);
     struct tm timeinfo;
@@ -212,7 +228,6 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
                             *retCursor=cJSON_IsTrue(jtmp)?'Y':'N';
                             ESP_LOGV(__FUNCTION__,"Bool Value %s", cJSON_IsTrue(jtmp)?"Y":"N");
                         } else {
-                            tmp = cfg->GetStringProperty(termName);
                             strcpy(retCursor,cfg->GetStringProperty(termName));
                             ESP_LOGV(__FUNCTION__,"String Value:%s", retCursor);
                         }

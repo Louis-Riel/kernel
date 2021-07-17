@@ -30,6 +30,7 @@ public:
     EventHandlerDescriptor(esp_event_base_t base,char* name);
     bool AddEventDescriptor(int32_t id,char* name);
     static EventDescriptor_t* GetEventDescriptor(char* base,char* eventName);
+    static EventDescriptor_t* GetEventDescriptor(esp_event_base_t base,uint32_t id);     
     static cJSON* GetEventBaseEvents(char* base, char* filter);
     static char* GetParsedValue(const char* value);
     char* GetName();

@@ -3,8 +3,10 @@
 
 //#define IS_TRACKER
 
+//#define LOG_BUF_SIZE 10240
+//#define LOG_BUF_ULIMIT 8000
 #define LOG_BUF_SIZE 102400
-#define LOG_BUF_ULIMIT 102300
+#define LOG_BUF_ULIMIT 102000
 #define LOG_FNAME_LEN 100
 
 #include "../build/config/sdkconfig.h"
@@ -28,6 +30,7 @@ typedef enum {
 
 void initLog();
 void dumpLogs();
+void dumpTheLogs(void* params);
 char* getLogFName();
 typedef bool (*LogFunction_t)( void * ,char * );
 void registerLogCallback( LogFunction_t callback, void* param);

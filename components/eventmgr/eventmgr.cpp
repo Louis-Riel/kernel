@@ -59,7 +59,7 @@ cJSON* EventManager::SetConfig(cJSON* config){
 }
 
 void EventManager::RegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {
-    ESP_LOGV(__FUNCTION__,"Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
+    ESP_LOGD(__FUNCTION__,"Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
     ESP_ERROR_CHECK(esp_event_handler_register(eventHandlerDescriptor->GetEventBase(), ESP_EVENT_ANY_ID, EventManager::ProcessEvent, eventHandlerDescriptor));
 }
 

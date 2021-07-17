@@ -46,25 +46,19 @@ class BoolInput extends React.Component {
     }
 }
 class IntInput extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            value: this.props.value
-        };
-
-        this.id = this.props.id || genUUID();
-    }
-
     toggleChange = (elem) => {
         this.setState({
             value: elem.target.value
         });
+        if (this.props.onChange) {
+            this.props.onChange(elem.target.value);
+        }
     }
 
     render() {
         return e("label", { key: genUUID(), className: "editable", id: `lbl${this.id}`, key: this.id },
             e("div", { key: genUUID(), className: "label", id: `div${this.id}` }, this.props.label),
-            e("input", { key: genUUID(), type: "number", value: this.state.value, onChange: this.toggleChange, id: `${this.id}` }));
+            e("input", { key: genUUID(), type: "number", value: this.props.value, onChange: this.toggleChange.bind(this), id: `${this.id}` }));
     }
 }
 
@@ -110,7 +104,7 @@ class ControlPanel extends React.Component {
         super(props);
         this.state = {
             periodicRefreshed: false,
-            refreshFrequency: 10,
+            refreshFrequency: this.props.refreshFrequency,
             autoRefresh: false
         };
 
@@ -130,8 +124,9 @@ class ControlPanel extends React.Component {
             e(IntInput, {
                 key: genUUID(),
                 label: "Freq(sec)", 
-                value: 10, 
-                id: "refreshFreq"
+                value: this.state.refreshFrequency, 
+                id: "refreshFreq",
+                onChange: (val) => this.props.onChangeFreq ? this.props.onChangeFreq(val):null
             }),
             e(BoolInput, {
                 key: genUUID(),
@@ -365,7 +360,8 @@ class MainAppState extends React.Component {
             loaded: this.props.loaded,
             error: null,
             selectedDeviceId: 0,
-            deviceId: 0
+            deviceId: 0,
+            refreshFrequency: 10
         };
 
         stateViewer = this;
@@ -382,7 +378,7 @@ class MainAppState extends React.Component {
 
     updateStatuses(requests, newState) {
         var abort = new AbortController()
-        var timer = setTimeout(() => abort.abort(), 1000);
+        var timer = setTimeout(() => abort.abort(), 2000);
         if (this.state.selectedDeviceId == (this.state.deviceId || 0)) {
             Promise.all(requests.map(request => {
                 return new Promise((resolve, reject) => {
@@ -465,9 +461,11 @@ class MainAppState extends React.Component {
                 selectedDeviceId: this.state.selectedDeviceId,
                 onSetDevice: (val) => this.setState({ selectedDeviceId: val, loaded: false }),
                 onSetDeviceList: (devs) => this.state.devices = devs,
+                refreshFrequency: this.state.refreshFrequency,
+                onChangeFreq: (value) => this.setState({refreshFrequency:value}),
                 periodicOn: (elem) => {
                     if (!this.state?.interval)
-                        this.setState({ interval: setInterval(() => this.setState({ loaded: false, loading: false }),document.getElementById("refreshFreq").value*1000) });
+                        this.setState({ interval: setInterval(() => this.setState({ loaded: false, loading: false }),this.state.refreshFrequency*1000) });
                 },
                 periodicOff: (elem) => {
                     if (this.state?.interval)
@@ -815,12 +813,6 @@ class FirmwarUpdater extends React.Component {
             this.waitForDevFlashing();
         }
 
-        var searchParams = new URLSearchParams(window.location.search);
-        if ((!searchParams || !searchParams.has("loaded")) && this.state.loaded?.startsWith("Loaded version")) {
-            var searchParams = new URLSearchParams(window.location.search);
-            searchParams.set("loaded", this.state.loaded);
-            window.location.search = searchParams.toString();
-        }
         if (this.state.firmware && !this.state.md5) {
             this.state.md5 = "loading";
             var reader = new FileReader();
@@ -926,7 +918,8 @@ function SendCommand(body) {
     return fetch(`${httpPrefix}/status/cmd`, {
         method: 'put',
         body: JSON.stringify(body)
-    });
+    }).then(res => res.text().then(console.log))
+      .catch(console.error);
 }
 
 function PeriodicRefreshClicked(target) {

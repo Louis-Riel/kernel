@@ -81,7 +81,7 @@ MFile* MFile::GetFile(char* fileName){
 }
 
 void MFile::Open(const char* mode){
-    file = fopen(name, mode,true);
+    file = fOpenCd(name, mode,true);
     if (file == NULL)
     {
         ESP_LOGE(__FUNCTION__, "Failed to open %s for %s", name, mode);
@@ -135,7 +135,7 @@ void MFile::Write(uint8_t* data, uint32_t len) {
     if (file != NULL)
     {
         ESP_LOGV(__FUNCTION__,"Writing %d in %s",len,data);
-        fwrite(data,sizeof(uint8_t),len,file);
+        fWrite(data,sizeof(uint8_t),len,file);
     }
     if (!wasOpened){
         Close();

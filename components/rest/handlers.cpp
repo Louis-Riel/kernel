@@ -126,7 +126,7 @@ void UpgradeFirmware()
             ESP_LOGV(__FUNCTION__, "Allocated %d buffer", F_BUF_SIZE);
             uint32_t len = 0;
             uint32_t totLen = 0;
-            if ((fw = fopen(fwf, "r", true)) != NULL)
+            if ((fw = fOpenCd(fwf, "r", true)) != NULL)
             {
                 while (!feof(fw))
                 {
@@ -137,7 +137,7 @@ void UpgradeFirmware()
                         ESP_LOGV(__FUNCTION__, "firmware readin %d bytes", totLen);
                     }
                 }
-                fclose(fw);
+                fClose(fw);
                 flashTheThing(img, totLen);
                 ldfree(img);
             }
@@ -360,7 +360,7 @@ esp_err_t ota_handler(httpd_req_t *req)
             FILE *fw = NULL;
             esp_err_t ret;
             ESP_LOGD(__FUNCTION__, "Reading MD5 RAM:%d...", esp_get_free_heap_size());
-            if ((fw = fopen("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
+            if ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
             {
                 char ccmd5[33];
                 uint32_t len = 0;
@@ -455,17 +455,17 @@ esp_err_t ota_handler(httpd_req_t *req)
                     }
                 }
 
-                if ((fw = fopen("/lfs/firmware/current.bin", "w", true)) != NULL)
+                if ((fw = fOpenCd("/lfs/firmware/current.bin", "w", true)) != NULL)
                 {
                     ESP_LOGD(__FUNCTION__, "Writing /lfs/firmware/current.bin");
                     httpd_resp_send(req, "Flashing", 8);
-                    if (fwrite((void *)img, 1, totLen, fw) == totLen)
+                    if (fWrite((void *)img, 1, totLen, fw) == totLen)
                     {
                         fClose(fw);
 
-                        if ((fw = fopen("/lfs/firmware/tobe.bin.md5", "w", true)) != NULL)
+                        if ((fw = fOpenCd("/lfs/firmware/tobe.bin.md5", "w", true)) != NULL)
                         {
-                            fwrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
+                            fWrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
                             fClose(fw);
                             ESP_LOGD(__FUNCTION__, "Firmware md5 written");
                         } else {
@@ -536,7 +536,7 @@ esp_err_t ota_handler(httpd_req_t *req)
         if (initSPISDCard())
         {
             FILE *fw = NULL;
-            if ((fw = fopen("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
+            if ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
             {
                 char ccmd5[33];
                 uint32_t len = 0;
@@ -663,7 +663,7 @@ esp_err_t findFiles(httpd_req_t *req, char *path, const char *ext, bool recursiv
                                 (uint32_t)st.st_size);
             }
         }
-        closedir(theFolder);
+        closeDir(theFolder);
         ESP_LOGV(__FUNCTION__, "%s has %d files and %d folders subfolder len:%d", path, fcnt, dcnt, fpos);
         uint32_t ctpos = 0;
         while (dcnt-- > 0)
@@ -780,6 +780,27 @@ void UpdateStringProp(cfg_label_t *cfg, char *val)
     }
 }
 
+void mergeConfig(void* param){
+    cJSON* newCfg = GetDeviceConfig((esp_ip4_addr*)&param, AppConfig::GetAppConfig()->GetIntProperty("deviceid"));
+    if (newCfg) {
+        char* tmp = NULL;
+        cJSON* curCfg = AppConfig::GetAppConfig()->GetJSONConfig(NULL);
+        if (!cJSON_Compare(newCfg,curCfg,true)) {
+            AppConfig::GetAppConfig()->SetAppConfig(newCfg);
+            ESP_LOGD(__FUNCTION__,"Updated config from server");
+        } else {
+            ESP_LOGD(__FUNCTION__,"No config update needed from server");
+        }
+        if (tmp) {
+            ldfree(tmp);
+        }
+        ldfree(newCfg);
+    } else {
+        ESP_LOGE(__FUNCTION__,"Cannot get config from " IPSTR " for devid %d", IP2STR((esp_ip4_addr*)&param), AppConfig::GetAppConfig()->GetIntProperty("deviceid"));
+    }
+    vTaskDelete(NULL);
+}
+
 esp_err_t config_handler(httpd_req_t *req)
 {
     ESP_LOGV(__FUNCTION__, "Config Handler");
@@ -803,7 +824,7 @@ esp_err_t config_handler(httpd_req_t *req)
     if (len)
     {
         *(postData + len) = 0;
-        ESP_LOGD(__FUNCTION__, "postData(%d):%s", len, postData);
+        ESP_LOGV(__FUNCTION__, "postData(%d):%s", len, postData);
         cJSON* newCfg = cJSON_Parse(postData);
         if (newCfg){
             char* sjson = cJSON_Print(newCfg);
@@ -814,11 +835,11 @@ esp_err_t config_handler(httpd_req_t *req)
                 char* fname = (char*)dmalloc(255);
                 sprintf(fname,"/lfs/config/%d.json",devId);
                 ESP_LOGD(__FUNCTION__, "Updating %s config", fname);
-                FILE* cfg = fopen(fname,"w");
+                FILE* cfg = fOpen(fname,"w");
                 if (cfg) {
-                    fwrite(sjson,strlen(sjson),sizeof(char),cfg);
+                    fWrite(sjson,strlen(sjson),sizeof(char),cfg);
                     ret = httpd_resp_send(req, sjson, strlen(sjson));
-                    fclose(cfg);
+                    fClose(cfg);
                 } else {
                     httpd_resp_send_err(req,httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot save config");
                 }
@@ -910,7 +931,7 @@ void parseFolderForTars(char *folder)
                 unlink(fileName);
             }
         }
-        closedir(tarFolder);
+        closeDir(tarFolder);
     }
     else
     {
@@ -922,7 +943,7 @@ void parseFolderForTars(char *folder)
 void parseFiles(void *param)
 {
     parseFolderForTars("/sdcard/tars");
-    xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT2 | BIT3), tskIDLE_PRIORITY, NULL);
+    commitTripToDisk((void *)(BIT2 | BIT3));
     vTaskDelete(NULL);
 }
 
@@ -951,7 +972,7 @@ esp_err_t HandleSystemCommand(httpd_req_t *req)
             if (jitem && (strcmp(jitem->valuestring, "parseFiles") == 0))
             {
                 xTaskCreate(parseFiles, "parseFiles", 8192, NULL, tskIDLE_PRIORITY, NULL);
-                ret = httpd_resp_send(req, "OK", 2);
+                ret = httpd_resp_send(req, "parsing", 7);
             }
             else if (jitem && (strcmp(jitem->valuestring, "factoryReset") == 0))
             {
@@ -1449,7 +1470,7 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                 //break;
             }
         }
-        closedir(theFolder);
+        closeDir(theFolder);
         ESP_LOGV(__FUNCTION__, "%s had %d files and %d folders subfolder len:%d", path, fcnt, dcnt, fpos);
         uint32_t ctpos = 0;
         while (dcnt-- > 0)
@@ -1563,7 +1584,7 @@ esp_err_t trips_handler(httpd_req_t *req)
 
     if (initSPISDCard())
     {
-        dumpLogs();
+        dumpTheLogs(NULL);
         ESP_LOGD(__FUNCTION__, "Sending Trips.");
         xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
         xEventGroupSetBits(eventGroup, TAR_BUFFER_SENT);
@@ -1584,8 +1605,8 @@ esp_err_t trips_handler(httpd_req_t *req)
             cJSON_AddItemReferenceToObject(status, stat->string, stat);
         }
         char *cs = NULL, *ss = NULL;
+        dumpTheLogs(NULL);
         if ((tarString(&tar, "status.json", (cs = cJSON_PrintUnformatted(status))) == ESP_OK) &&
-            (tarString(&tar, "config.json", (ss = cJSON_PrintUnformatted(config->GetJSONConfig(NULL)))) == ESP_OK) &&
             (tarFiles(&tar, "/lfs", "", true, "current.bin current.bin.md5", 1048576, true) == ESP_OK))
         {
             ESP_LOGV(__FUNCTION__, "Finalizing tar");

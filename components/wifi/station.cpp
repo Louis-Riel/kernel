@@ -61,7 +61,7 @@ TheWifi::~TheWifi(){
 
 
 TheWifi::TheWifi(AppConfig* config)
-    :ManagedDevice("Wifi")
+    :ManagedDevice("TheWifi")
 {
     theInstance = this;
     eventGroup = xEventGroupCreate();
@@ -91,7 +91,7 @@ TheWifi::TheWifi(AppConfig* config)
     ESP_ERROR_CHECK(esp_netif_init());
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_LOGD(__FUNCTION__, "Initialized netif");
-    nvs_flash_init();
+    //nvs_flash_init();
 
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID, &network_event, this));
@@ -108,7 +108,7 @@ TheWifi::TheWifi(AppConfig* config)
             ESP_LOGD(__FUNCTION__, "Created netif %li", (long int)ap_netif);
             ESP_ERROR_CHECK(esp_netif_dhcps_start(ap_netif));
             generateSidConfig(&wifi_config, false);
-            ESP_LOGD(__FUNCTION__, "Configured in AP Mode %s", wifi_config.ap.ssid);
+            ESP_LOGD(__FUNCTION__, "Configured in AP Mode %s/%s", wifi_config.ap.ssid,wifi_config.ap.password);
             ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_AP, &wifi_config));
         }
     }
@@ -138,40 +138,39 @@ TheWifi::TheWifi(AppConfig* config)
 }
 
 EventHandlerDescriptor* TheWifi::BuildHandlerDescriptors(){
-  ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
-  EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
-  handler->AddEventDescriptor(IP_EVENT_STA_GOT_IP,"IP_EVENT_STA_GOT_IP");
-  handler->AddEventDescriptor(IP_EVENT_STA_GOT_IP,"IP_EVENT_STA_GOT_IP");
-  handler->AddEventDescriptor(IP_EVENT_STA_LOST_IP,"IP_EVENT_STA_LOST_IP");
-  handler->AddEventDescriptor(IP_EVENT_AP_STAIPASSIGNED,"IP_EVENT_AP_STAIPASSIGNED");
-  handler->AddEventDescriptor(IP_EVENT_GOT_IP6,"IP_EVENT_GOT_IP6");
-  handler->AddEventDescriptor(IP_EVENT_ETH_GOT_IP,"IP_EVENT_ETH_GOT_IP");
-  handler->AddEventDescriptor(IP_EVENT_PPP_GOT_IP,"IP_EVENT_PPP_GOT_IP");
-  handler->AddEventDescriptor(IP_EVENT_PPP_LOST_IP,"IP_EVENT_PPP_LOST_IP");
+  ESP_LOGV(__FUNCTION__,"TheWifi(%s) BuildHandlerDescriptors",eventBase);
+  EventHandlerDescriptor *handler = new EventHandlerDescriptor(eventBase, (char*)eventBase);
+  handler->SetEventName(IP_EVENT_STA_GOT_IP,"IP_EVENT_STA_GOT_IP");
+  handler->SetEventName(IP_EVENT_STA_LOST_IP,"IP_EVENT_STA_LOST_IP");
+  handler->SetEventName(IP_EVENT_AP_STAIPASSIGNED,"IP_EVENT_AP_STAIPASSIGNED");
+  handler->SetEventName(IP_EVENT_GOT_IP6,"IP_EVENT_GOT_IP6");
+  handler->SetEventName(IP_EVENT_ETH_GOT_IP,"IP_EVENT_ETH_GOT_IP");
+  handler->SetEventName(IP_EVENT_PPP_GOT_IP,"IP_EVENT_PPP_GOT_IP");
+  handler->SetEventName(IP_EVENT_PPP_LOST_IP,"IP_EVENT_PPP_LOST_IP");
 
-  handler->AddEventDescriptor(20+WIFI_EVENT_WIFI_READY,"WIFI_EVENT_WIFI_READY");
-  handler->AddEventDescriptor(20+WIFI_EVENT_SCAN_DONE,"WIFI_EVENT_SCAN_DONE");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_START,"WIFI_EVENT_STA_START");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_STOP,"WIFI_EVENT_STA_STOP");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_CONNECTED,"WIFI_EVENT_STA_CONNECTED");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_DISCONNECTED,"WIFI_EVENT_STA_DISCONNECTED");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_AUTHMODE_CHANGE,"WIFI_EVENT_STA_AUTHMODE_CHANGE");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_WPS_ER_SUCCESS,"WIFI_EVENT_STA_WPS_ER_SUCCESS");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_WPS_ER_FAILED,"WIFI_EVENT_STA_WPS_ER_FAILED");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_WPS_ER_TIMEOUT,"WIFI_EVENT_STA_WPS_ER_TIMEOUT");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_WPS_ER_PIN,"WIFI_EVENT_STA_WPS_ER_PIN");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_WPS_ER_PBC_OVERLAP,"WIFI_EVENT_STA_WPS_ER_PBC_OVERLAP");
-  handler->AddEventDescriptor(20+WIFI_EVENT_AP_START,"WIFI_EVENT_AP_START");
-  handler->AddEventDescriptor(20+WIFI_EVENT_AP_STOP,"WIFI_EVENT_AP_STOP");
-  handler->AddEventDescriptor(20+WIFI_EVENT_AP_STACONNECTED,"WIFI_EVENT_AP_STACONNECTED");
-  handler->AddEventDescriptor(20+WIFI_EVENT_AP_STADISCONNECTED,"WIFI_EVENT_AP_STADISCONNECTED");
-  handler->AddEventDescriptor(20+WIFI_EVENT_AP_PROBEREQRECVED,"WIFI_EVENT_AP_PROBEREQRECVED");
-  handler->AddEventDescriptor(20+WIFI_EVENT_FTM_REPORT,"WIFI_EVENT_FTM_REPORT");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_BSS_RSSI_LOW,"WIFI_EVENT_STA_BSS_RSSI_LOW");
-  handler->AddEventDescriptor(20+WIFI_EVENT_ACTION_TX_STATUS,"WIFI_EVENT_ACTION_TX_STATUS");
-  handler->AddEventDescriptor(20+WIFI_EVENT_ROC_DONE,"WIFI_EVENT_ROC_DONE");
-  handler->AddEventDescriptor(20+WIFI_EVENT_STA_BEACON_TIMEOUT,"WIFI_EVENT_STA_BEACON_TIMEOUT");
-  handler->AddEventDescriptor(20+WIFI_EVENT_MAX,"WIFI_EVENT_MAX");
+  handler->SetEventName(20+WIFI_EVENT_WIFI_READY,"WIFI_EVENT_WIFI_READY");
+  handler->SetEventName(20+WIFI_EVENT_SCAN_DONE,"WIFI_EVENT_SCAN_DONE");
+  handler->SetEventName(20+WIFI_EVENT_STA_START,"WIFI_EVENT_STA_START");
+  handler->SetEventName(20+WIFI_EVENT_STA_STOP,"WIFI_EVENT_STA_STOP");
+  handler->SetEventName(20+WIFI_EVENT_STA_CONNECTED,"WIFI_EVENT_STA_CONNECTED");
+  handler->SetEventName(20+WIFI_EVENT_STA_DISCONNECTED,"WIFI_EVENT_STA_DISCONNECTED");
+  handler->SetEventName(20+WIFI_EVENT_STA_AUTHMODE_CHANGE,"WIFI_EVENT_STA_AUTHMODE_CHANGE");
+  handler->SetEventName(20+WIFI_EVENT_STA_WPS_ER_SUCCESS,"WIFI_EVENT_STA_WPS_ER_SUCCESS");
+  handler->SetEventName(20+WIFI_EVENT_STA_WPS_ER_FAILED,"WIFI_EVENT_STA_WPS_ER_FAILED");
+  handler->SetEventName(20+WIFI_EVENT_STA_WPS_ER_TIMEOUT,"WIFI_EVENT_STA_WPS_ER_TIMEOUT");
+  handler->SetEventName(20+WIFI_EVENT_STA_WPS_ER_PIN,"WIFI_EVENT_STA_WPS_ER_PIN");
+  handler->SetEventName(20+WIFI_EVENT_STA_WPS_ER_PBC_OVERLAP,"WIFI_EVENT_STA_WPS_ER_PBC_OVERLAP");
+  handler->SetEventName(20+WIFI_EVENT_AP_START,"WIFI_EVENT_AP_START");
+  handler->SetEventName(20+WIFI_EVENT_AP_STOP,"WIFI_EVENT_AP_STOP");
+  handler->SetEventName(20+WIFI_EVENT_AP_STACONNECTED,"WIFI_EVENT_AP_STACONNECTED");
+  handler->SetEventName(20+WIFI_EVENT_AP_STADISCONNECTED,"WIFI_EVENT_AP_STADISCONNECTED");
+  handler->SetEventName(20+WIFI_EVENT_AP_PROBEREQRECVED,"WIFI_EVENT_AP_PROBEREQRECVED");
+  handler->SetEventName(20+WIFI_EVENT_FTM_REPORT,"WIFI_EVENT_FTM_REPORT");
+  handler->SetEventName(20+WIFI_EVENT_STA_BSS_RSSI_LOW,"WIFI_EVENT_STA_BSS_RSSI_LOW");
+  handler->SetEventName(20+WIFI_EVENT_ACTION_TX_STATUS,"WIFI_EVENT_ACTION_TX_STATUS");
+  handler->SetEventName(20+WIFI_EVENT_ROC_DONE,"WIFI_EVENT_ROC_DONE");
+  handler->SetEventName(20+WIFI_EVENT_STA_BEACON_TIMEOUT,"WIFI_EVENT_STA_BEACON_TIMEOUT");
+  handler->SetEventName(20+WIFI_EVENT_MAX,"WIFI_EVENT_MAX");
 
   return handler;
 }
@@ -587,10 +586,9 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
     AppConfig* state = AppConfig::GetAppStatus();
     AppConfig* stationStat = state->GetConfig("/wifi/station");
     AppConfig* apStat = state->GetConfig("/wifi/ap");
-    int tmp=-2;
     if (base == IP_EVENT)
     {
-        theWifi->PostEvent(event_data,sizeof(void*),event_id);
+        theWifi->PostEvent(event_data,event_data != NULL ? sizeof(void*) : 0,event_id);
         ESP_LOGV(__FUNCTION__, "ip event %d", event_id);
         ip_event_got_ip_t *event;
         system_event_info_t *evt;
@@ -606,6 +604,9 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             sprintf(ipaddr,IPSTR, IP2STR(&event->ip_info.ip));
             stationStat->SetStringProperty("Ip", ipaddr);
             ESP_LOGI(__FUNCTION__, "got ip::%s", ipaddr);
+            sprintf(ipaddr,IPSTR, IP2STR(&event->ip_info.gw));
+            stationStat->SetStringProperty("Gw", ipaddr);
+            ESP_LOGI(__FUNCTION__, "got gw::%s", ipaddr);
             memcpy(&theWifi->staIp, &event->ip_info, sizeof(theWifi->staIp));
             xEventGroupSetBits(eventGroup, WIFI_CONNECTED_BIT);
             xEventGroupClearBits(eventGroup, WIFI_DISCONNECTED_BIT);
@@ -693,7 +694,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
     }
     if (base == WIFI_EVENT)
     {
-        ESP_LOGV(__FUNCTION__, "wifi event %d", event_id);
+        ESP_LOGV(__FUNCTION__, "wifi event %d", event_id+20);
         theWifi->PostEvent(event_data,event_data != NULL ? sizeof(void*) : 0,event_id+20);
         switch (event_id)
         {

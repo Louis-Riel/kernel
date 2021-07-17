@@ -54,7 +54,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define RD_BUF_SIZE (BUF_SIZE)
 #define BLINK_GPIO GPIO_NUM_5
 #define GPS_TIMEOUT 300
-#define GPS_WAIT_PERIOD 20
+#define GPS_WAIT_PERIOD 5
 #define SLEEP_TIMEOUT 60
 #define PIO_MIN_DIST 200
 
@@ -411,7 +411,6 @@ public:
   ESP_EVENT_DEFINE_BASE(GPSPLUS_EVENTS);
   static void theLoop(void* param);
   struct timeval lastMsgTs;
-  struct timeval lastMsgTsSent;
   enum gpsEvent {
      locationChanged=BIT0,
      systimeChanged=BIT1,

@@ -58,7 +58,7 @@ esp_err_t filedownload_event_handler(esp_http_client_event_t *evt)
             } else {
                 ESP_LOGE(__FUNCTION__,"Downloader not properly setup");
             }
-            FILE* dfile = fopen(fname,"w",true);
+            FILE* dfile = fOpenCd(fname,"w",true);
             if (dfile == NULL) {
                 ESP_LOGE(__FUNCTION__,"Error whiilst opening %s",evt->header_value);
                 return ESP_FAIL;
@@ -70,7 +70,7 @@ esp_err_t filedownload_event_handler(esp_http_client_event_t *evt)
     case HTTP_EVENT_ON_DATA:
         if ((evt->user_data != NULL) && (*((char*)evt->user_data) != '/')) {
             ESP_LOGV(__FUNCTION__,"%d bytes",evt->data_len);
-            fwrite(evt->data,1,evt->data_len,*((FILE**)evt->user_data));
+            fWrite(evt->data,1,evt->data_len,*((FILE**)evt->user_data));
         } else {
             ESP_LOGW(__FUNCTION__,"Data with no dest file %d bytes",evt->data_len);
             if (evt->data_len < 200) {
