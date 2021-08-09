@@ -900,7 +900,7 @@ static void serviceLoop(void* param) {
       gps = TinyGPSPlus::runningInstance();
       if (xEventGroupWaitBits(gps->eg, TinyGPSPlus::gpsEvent::gpsRunning, pdFALSE, pdTRUE, 1500 / portTICK_RATE_MS) & TinyGPSPlus::gpsEvent::gpsRunning)
       {
-        ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEvent, &gps));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(gps->GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEvent, &gps, NULL));
       }
     } else if (!(serviceBits&(app_bits_t::GPS_ON)) && TinyGPSPlus::runningInstance()) {
       if (TinyGPSPlus* gps = TinyGPSPlus::runningInstance()){

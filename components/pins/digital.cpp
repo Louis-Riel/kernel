@@ -86,7 +86,7 @@ void Pin::InitDevice(){
     if (valid){
         ESP_LOGV(__FUNCTION__,"0x%" PRIXPTR "\n",(uintptr_t)this);
         ESP_ERROR_CHECK(gpio_isr_handler_add(pinNo, pinHandler, this));
-        ESP_ERROR_CHECK(esp_event_handler_register(Pin::eventBase, ESP_EVENT_ANY_ID, ProcessEvent, this));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(Pin::eventBase, ESP_EVENT_ANY_ID, ProcessEvent, this, NULL));
     }
     RefrestState();
 }

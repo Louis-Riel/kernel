@@ -432,7 +432,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
 {
   instance=this;
   insertCustom(gpTxt, "GPTXT", 4); 
-  ESP_ERROR_CHECK(esp_event_handler_register(GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEventProcessor, this));
+  ESP_ERROR_CHECK(esp_event_handler_instance_register(GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEventProcessor, this, NULL));
   EventHandlerDescriptor *handler = new EventHandlerDescriptor(GPSPLUS_EVENTS, "GPSPLUS_EVENTS");
   handler->SetEventName(TinyGPSPlus::gpsEvent::go, "go");
   handler->SetEventName(TinyGPSPlus::gpsEvent::stop, "stop");

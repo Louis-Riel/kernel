@@ -219,7 +219,7 @@ esp_event_base_t MFile::GetEventBase(){
 
 BufferedFile::BufferedFile()
     :MFile(){
-    ESP_ERROR_CHECK(esp_event_handler_register(MFile::GetEventBase(), ESP_EVENT_ANY_ID, ProcessEvent, this));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(MFile::GetEventBase(), ESP_EVENT_ANY_ID, ProcessEvent, this, NULL));
 }
 
 BufferedFile::BufferedFile(char* fileName)
