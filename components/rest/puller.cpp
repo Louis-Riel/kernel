@@ -23,7 +23,7 @@ esp_err_t json_event_handler(esp_http_client_event_t *evt)
         ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
         break;
     case HTTP_EVENT_ON_DATA:
-        if (xEventGroupGetBits(eventGroup) & GETTING_TRIP_LIST)
+        if (xEventGroupGetBits(TheWifi::GetEventGroup()) & GETTING_TRIP_LIST)
         {
             if (evt->data_len < KML_BUFFER_SIZE)
             {
@@ -44,10 +44,10 @@ esp_err_t json_event_handler(esp_http_client_event_t *evt)
         }
         break;
     case HTTP_EVENT_ON_FINISH:
-        if (xEventGroupGetBits(eventGroup) & GETTING_TRIP_LIST)
+        if (xEventGroupGetBits(TheWifi::GetEventGroup()) & GETTING_TRIP_LIST)
         {
-            xEventGroupClearBits(eventGroup, GETTING_TRIP_LIST);
-            xEventGroupSetBits(eventGroup, GETTING_TRIPS);
+            xEventGroupClearBits(TheWifi::GetEventGroup(), GETTING_TRIP_LIST);
+            xEventGroupSetBits(TheWifi::GetEventGroup(), GETTING_TRIPS);
         }
         ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_FINISH");
         break;
@@ -70,27 +70,27 @@ bool moveFolder(char *folderName, char *toFolderName)
         ESP_LOGE(__FUNCTION__, "Empty params passed: foldername len:%d, toFolderName len:%d", strlen(folderName), strlen(toFolderName));
         return false;
     }
-    FF_DIR theFolder;
+    DIR* theFolder;
     char *fName = (char *)dmalloc(270);
     char *destfName = (char *)dmalloc(270);
     void *buf = dmalloc(F_BUF_SIZE);
-    FILINFO *fi = (FILINFO *)dmalloc(sizeof(FILINFO));
+    struct dirent *fi;
     bool retval = true;
 
-    if (f_opendir(&theFolder, folderName) == FR_OK)
+    if ((theFolder = openDir(folderName)) != NULL)
     {
         ESP_LOGD(__FUNCTION__, "reading files in %s", folderName);
-        while (f_readdir(&theFolder, fi) == FR_OK)
+        while ((fi = readDir(theFolder)) != NULL)
         {
-            if (strlen(fi->fname) == 0)
+            if (strlen(fi->d_name) == 0)
             {
                 break;
             }
-            if (!(fi->fattrib & AM_DIR))
+            if (!(fi->d_type & DT_DIR))
             {
-                sprintf(fName, "/sdcard%s/%s", folderName, fi->fname);
-                sprintf(destfName, "/sdcard%s%s/%s", toFolderName, folderName, fi->fname);
-                ESP_LOGD(__FUNCTION__, "Moving %s - %d to %s", fName, fi->fsize, destfName);
+                sprintf(fName, "/sdcard%s/%s", folderName, fi->d_name);
+                sprintf(destfName, "/sdcard%s%s/%s", toFolderName, folderName, fi->d_name);
+                ESP_LOGD(__FUNCTION__, "Moving %s - to %s", fName, destfName);
                 if (moveFile(fName, destfName))
                 {
                     ESP_LOGD(__FUNCTION__, "%s deleted", fName);
@@ -104,12 +104,12 @@ bool moveFolder(char *folderName, char *toFolderName)
             }
             else
             {
-                sprintf(fName, "%s/%s", folderName, fi->fname);
-                ESP_LOGD(__FUNCTION__, "Moving sub folder %s of %s as %s", fi->fname, folderName, fName);
+                sprintf(fName, "%s/%s", folderName, fi->d_name);
+                ESP_LOGD(__FUNCTION__, "Moving sub folder %s of %s as %s", fi->d_name, folderName, fName);
                 moveFolder(fName, "/sent");
             }
         }
-        f_closedir(&theFolder);
+        closeDir(theFolder);
         if (f_unlink(folderName) != 0)
         {
             ESP_LOGE(__FUNCTION__, "Cannot delete folder %s", folderName);
@@ -121,7 +121,6 @@ bool moveFolder(char *folderName, char *toFolderName)
         ESP_LOGE(__FUNCTION__, "Cannot read dir %s", folderName);
         retval = false;
     }
-    ldfree(fi);
     ldfree(fName);
     ldfree(destfName);
     ldfree(buf);
@@ -179,7 +178,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
             if ((fw = fOpen("/lfs/firmware/current.bin.md5", "r")) != NULL)
             {
                 char ccmd5[33];
-                if ((len = fread((void *)ccmd5, 1, 32, fw)) >= 0)
+                if ((len = fRead((void *)ccmd5, 1, 32, fw)) >= 0)
                 {
                     fClose(fw);
                     ccmd5[32] = 0;
@@ -216,7 +215,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                             len=0;
                             while (!feof(fw))
                             {
-                                if (((len += fread(img+len, 1, st.st_size, fw)) == 0) || (len >= st.st_size))
+                                if (((len += fRead(img+len, 1, st.st_size, fw)) == 0) || (len >= st.st_size))
                                 {
                                     ESP_LOGD(__FUNCTION__,"Read %d bytes from current bin", len);
                                     break;
@@ -310,7 +309,7 @@ cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
     config->user_data = kmlFiles;
     ESP_LOGD(__FUNCTION__, "Getting %s", config->url);
     esp_http_client_handle_t client = esp_http_client_init(config);
-    xEventGroupSetBits(eventGroup, GETTING_TRIP_LIST);
+    xEventGroupSetBits(TheWifi::GetEventGroup(), GETTING_TRIP_LIST);
     esp_err_t err;
     err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
@@ -322,10 +321,9 @@ cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
         ESP_LOGD(__FUNCTION__, "Probably not a tracker but a lurker %s", esp_err_to_name(err));
         //ldfree(kmlFiles);
         //deinitSPISDCard();
-        //vTaskDelete(NULL);
     }
 
-    xEventGroupWaitBits(eventGroup, GETTING_TRIPS, pdFALSE, pdTRUE, portMAX_DELAY);
+    xEventGroupWaitBits(TheWifi::GetEventGroup(), GETTING_TRIPS, pdFALSE, pdTRUE, portMAX_DELAY);
     ESP_LOGV(__FUNCTION__, "Got %s", kmlFiles);
     cJSON *json = cJSON_Parse(kmlFiles);
     if (json != NULL)
@@ -344,6 +342,7 @@ cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
         {
             ESP_LOGE(__FUNCTION__, "Cannot open dest %s", fname);
         }
+        cJSON_Delete(json);
     }
     else
     {
@@ -382,6 +381,7 @@ void extractClientTar(char *tarFName)
                         if (devid == NULL){
                             msg = cJSON_Parse(buf);
                             devid = cJSON_GetObjectItemCaseSensitive(msg, "deviceid");
+                            cJSON_Delete(msg);
                         }
                         if (devid != NULL)
                         {
@@ -509,8 +509,8 @@ cJSON* GetDeviceConfig(esp_ip4_addr_t *ipInfo,uint32_t deviceId)
         ((err = esp_http_client_open(client,0)) == ESP_OK) && 
         ((hlen=esp_http_client_fetch_headers(client))>=0) &&
         ((retCode=esp_http_client_get_status_code(client)) == 200) &&
-        ((sjson = (char*)dmalloc(hlen?hlen:HTTP_RECEIVE_BUFFER_SIZE))!=NULL) &&
-        ((len=esp_http_client_read(client,sjson,hlen?hlen:HTTP_RECEIVE_BUFFER_SIZE))>0) &&
+        ((sjson = (char*)dmalloc(hlen?hlen:JSON_BUFFER_SIZE))!=NULL) &&
+        ((len=esp_http_client_read(client,sjson,hlen?hlen:JSON_BUFFER_SIZE))>0) &&
         ((ret = cJSON_Parse(sjson)) != NULL))
     {
         ESP_LOGD(__FUNCTION__,"Parsed %d bytes of config",len);
@@ -535,7 +535,7 @@ void pullStation(void *pvParameter)
     if (isPulling)
     {
         ESP_LOGW(__FUNCTION__, "Not repulling");
-        vTaskDelete(NULL);
+        return;
     }
     isPulling = true;
     esp_ip4_addr_t *ipInfo = (esp_ip4_addr_t *)pvParameter;
@@ -551,7 +551,10 @@ void pullStation(void *pvParameter)
     char strftime_buf[64];
     if (jcfg)
     {
-        ESP_LOGD(__FUNCTION__,"Pulling from " IPSTR , IP2STR(ipInfo));
+        AppConfig* cfg = new AppConfig(jcfg,NULL);
+        ESP_LOGD(__FUNCTION__,"Pulling from " IPSTR "/%d", IP2STR(ipInfo),cfg->GetIntProperty("deviceid"));
+        free(cfg);
+        cJSON_Delete(jcfg);
         esp_http_client_config_t *config = (esp_http_client_config_t *)dmalloc(sizeof(esp_http_client_config_t));
         if (initSPISDCard())
         {
@@ -578,8 +581,9 @@ void pullStation(void *pvParameter)
             esp_http_client_handle_t client = esp_http_client_init(config);
             esp_err_t err;
             err = esp_http_client_perform(client);
+            int respCode=0;
 
-            if (esp_http_client_get_status_code(client) == 200)
+            if ((respCode = esp_http_client_get_status_code(client)) == 200)
             {
                 isAllGood=true;
                 esp_http_client_cleanup(client);
@@ -618,7 +622,7 @@ void pullStation(void *pvParameter)
             }
             else
             {
-                ESP_LOGW(__FUNCTION__, "Cannot pull: %s", esp_err_to_name(err));
+                ESP_LOGW(__FUNCTION__, "Cannot pull:%s retCode:%d", esp_err_to_name(err),respCode);
             }
 
             ldfree((void *)config->url);
@@ -640,10 +644,8 @@ void pullStation(void *pvParameter)
         tarFName[2] = 'd';
         tarFName[3] = 'c';
         extractClientTar(tarFName);
-        xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT2 | BIT3), tskIDLE_PRIORITY, NULL);
+        CreateWokeBackgroundTask(commitTripToDisk, "commitTripToDisk", 4096, NULL, tskIDLE_PRIORITY, NULL);
     }
-
-    vTaskDelete(NULL);
 }
 
 typedef struct

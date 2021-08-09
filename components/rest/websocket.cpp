@@ -67,7 +67,6 @@ void WebsocketManager::QueueHandler(void* instance){
   ldfree(emptyString);
   ldfree(me->name);
   vQueueDelete(me->rdySem);
-  vTaskDelete(NULL);
 }
 
 WebsocketManager::WebsocketManager(const char* name):
@@ -78,7 +77,7 @@ WebsocketManager::WebsocketManager(const char* name):
     strcpy(this->name,name);
     memset(clients,0,sizeof(clients));
     ESP_LOGV(__FUNCTION__,"Created Websocket %s",name);
-    xTaskCreate(QueueHandler,name,4096,this,tskIDLE_PRIORITY,&queueTask);
+    CreateBackgroundTask(QueueHandler,name,4096,this,tskIDLE_PRIORITY,&queueTask);
 };
 
 bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
@@ -139,7 +138,7 @@ static void statePoller(void *instance){
       } else {
         ESP_LOGV(__FUNCTION__,"State Changed %d", bits);
       }
-      char* buf = cJSON_Print(state);
+      char* buf = cJSON_PrintUnformatted(state);
       if (buf){
         xQueueSend(ws->rdySem,buf,portMAX_DELAY);
         ldfree(buf);
@@ -149,11 +148,10 @@ static void statePoller(void *instance){
   }
   ESP_LOGD(__FUNCTION__,"State Poller Done");
   stateHandler=NULL;
-  vTaskDelete(NULL);
 }
 
 
-esp_err_t ws_handler(httpd_req_t *req){
+esp_err_t TheRest::ws_handler(httpd_req_t *req){
     ESP_LOGD(__FUNCTION__, "WEBSOCKET Session");
 
     uint8_t buf[128] = { 0 };
@@ -171,7 +169,7 @@ esp_err_t ws_handler(httpd_req_t *req){
     if (ws_pkt.type == HTTPD_WS_TYPE_TEXT){
       if (stateHandler == NULL) {
         stateHandler = new WebsocketManager("StateWebsocket");
-        xTaskCreate(statePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
+        CreateBackgroundTask(statePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
         registerLogCallback(logCallback,stateHandler);
       }
       if (strcmp((char*)ws_pkt.payload,"Logs") == 0) {

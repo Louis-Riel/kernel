@@ -1,6 +1,6 @@
 #include "pins.h"
 
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 
 Pin* Pin::pins[];
 uint8_t Pin::numPins=0;
@@ -21,20 +21,23 @@ Pin::~Pin(){
 }
 
 Pin::Pin(AppConfig* config)
-    :ManagedDevice("DigitalPin"),
+    :ManagedDevice("DigitalPin","DigitalPin",BuildStatus),
     pinNo(config->GetPinNoProperty("pinNo")),
     flags(config->GetIntProperty("driverFlags")),
-    config(config)
+    config(config),
+    pinStatus(NULL)
 {
     char* pname = config->GetStringProperty("pinName");
+    ldfree(name);
     uint32_t sz = strlen(pname)+1;
+    name = (char*)malloc(200);
     if (sz > 0){
-        name = (char*) dmalloc(sz);
-        name[0]=0;
-        sz>1?strcpy(name,pname):NULL;
+        sprintf(name,"%s pin(%d)",pname,pinNo);
+    } else {
+        sprintf(name,"DigitalPin pin(%d)",pinNo);
     }
     ESP_LOGV(__FUNCTION__,"Pin(%d):%s",pinNo,name);
-    
+    status = BuildStatus(this);
     if (numPins == 0) {
         memset(pins,0,sizeof(void*)*MAX_NUM_PINS);
         PollPins();
@@ -85,43 +88,27 @@ void Pin::InitDevice(){
         ESP_ERROR_CHECK(gpio_isr_handler_add(pinNo, pinHandler, this));
         ESP_ERROR_CHECK(esp_event_handler_register(Pin::eventBase, ESP_EVENT_ANY_ID, ProcessEvent, this));
     }
+    RefrestState();
 }
 
-cJSON* Pin::BuildStatus(){
-    ESP_LOGV(__FUNCTION__,"Pin(%d):%s GetStatus",pinNo,name);
+cJSON* Pin::BuildStatus(void* instance){
+    Pin* pin = (Pin*) instance;
+    ESP_LOGV(__FUNCTION__,"Pin(%d):%s GetStatus",pin->pinNo,pin->name);
 
-    AppConfig* state = AppConfig::GetAppStatus();
-    cJSON* sjson = state->GetJSONConfig(NULL);
-    cJSON* pins = NULL;
-    cJSON* pin = NULL;
-    if ((pins = cJSON_GetObjectItem(sjson,"Pins")) == NULL) {
-        cJSON_AddItemToObject(sjson,"pins", pins = cJSON_CreateArray());
-    }
-    cJSON* item = NULL;
-    cJSON_ArrayForEach(item,pins) {
-        AppConfig* apin = new AppConfig(item,state);
-        if (apin->GetPinNoProperty("pinNo") == pinNo) {
-            pin = AppConfig::GetPropertyHolder(apin->GetJSONConfig("state"));
-            free(apin);
-            break;
-        }
-        free(apin);
-    }
-    if (pin == NULL) {
-        AppConfig* apin = new AppConfig(pin=cJSON_CreateObject(),state);
-        cJSON_AddItemToArray(pins,pin);
-        apin->SetPinNoProperty("pinNo",pinNo);
-        apin->SetStringProperty("name",name);
-        apin->SetBoolProperty("state",state);
-        pin = AppConfig::GetPropertyHolder(apin->GetJSONConfig("state"));
-        free(apin); 
-    }
-    return pin;
+    cJSON* sjson = NULL;
+    AppConfig* apin = new AppConfig(sjson=ManagedDevice::BuildStatus(instance),AppConfig::GetAppStatus());
+    apin->SetPinNoProperty("pinNo",pin->pinNo);
+    apin->SetStringProperty("name",pin->name);
+    apin->SetBoolProperty("state",pin->state);
+    pin->pinStatus = AppConfig::GetPropertyHolder(apin->GetJSONConfig("state"));
+    delete apin;
+    return sjson;
 }
 
 void Pin::RefrestState(){
     bool curState = gpio_get_level(pinNo);
     if (curState != state) {
+        cJSON_SetIntValue(pinStatus,curState);
         state=curState;
         ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, eventBase,state?"On":"Off");
         PostEvent((void*)&pinNo,sizeof(pinNo),state ? eventIds::ON : eventIds::OFF);
@@ -135,7 +122,6 @@ void Pin::queuePoller(void *arg){
         pin->RefrestState();
     }
     ESP_LOGE(__FUNCTION__,"%s","Failed");
-    vTaskDelete(NULL);
 }
 
 void Pin::pinHandler(void *arg)
@@ -146,8 +132,7 @@ void Pin::pinHandler(void *arg)
 void Pin::PollPins(){
   ESP_LOGV(__FUNCTION__, "Configuring Pins.");
   eventQueue = xQueueCreate(10, sizeof(uint32_t));
-  xTaskCreate(queuePoller, "pinsPoller", 4096, NULL, tskIDLE_PRIORITY, NULL);
-  gpio_install_isr_service(0);
+  CreateBackgroundTask(queuePoller, "pinsPoller", 4096, NULL, tskIDLE_PRIORITY, NULL);
   ESP_LOGV(__FUNCTION__, "ISR Service Started");
 }
 

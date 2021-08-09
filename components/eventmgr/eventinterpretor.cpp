@@ -1,20 +1,42 @@
-#include "./eventmgr.h"
-#include "../rest/rest.h"
-#include "../mfile/mfile.h"
+#include "eventmgr.h"
+#include "rest.h"
+#include "route.h"
+#include "mfile.h"
 #include "lwip/inet.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-EventInterpretor::EventInterpretor(cJSON *json)
+EventInterpretor::EventInterpretor(cJSON *json, cJSON* programs)
+:programs(programs)
+,config(json)
+,programName(NULL)
+,method(NULL)
+,params(NULL)
 {
+    AppConfig* cfg = new AppConfig(json,NULL);
     memset(conditions, 0, 5 * sizeof(void *));
     memset(isAnd, 0, 5 * sizeof(bool));
     id = -1;
     handler = NULL;
-    eventBase = cJSON_GetObjectItem(cJSON_GetObjectItem(json, "eventBase"), "value")->valuestring;
-    eventId = cJSON_GetObjectItem(cJSON_GetObjectItem(json, "eventId"), "value")->valuestring;
-    method = cJSON_GetObjectItem(cJSON_GetObjectItem(json, "method"), "value")->valuestring;
-    params = cJSON_GetObjectItem(json, "params");
+    eventBase = cfg->GetStringProperty("eventBase");
+    eventId = cfg->GetStringProperty("eventId");
+    if (cfg->HasProperty("method"))
+        method = cfg->GetStringProperty("method");
+    if (cJSON_HasObjectItem(json,"params")){
+        params = cfg->GetJSONConfig("params");
+    }
+    if (cfg->HasProperty("program") && programs){
+        programName = cfg->GetStringProperty("program");
+    }
+
+    if (!method && !programName) {
+        ESP_LOGE(__FUNCTION__,"Invalid Event, missing both method and program name and programs is %snull", programs?"not ":"");
+        if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
+            char* tmp = cJSON_Print(json);
+            ESP_LOGV(__FUNCTION__,"%s",tmp);
+            ldfree(tmp);
+        }
+    }
     if (cJSON_HasObjectItem(json, "conditions"))
     {
         cJSON *condition = NULL;
@@ -45,16 +67,13 @@ bool EventInterpretor::IsValid(EventHandlerDescriptor *handler, int32_t id, void
         char *eventName = handler->GetEventName(id);
         if (eventName == NULL)
         {
-            ESP_LOGV(__FUNCTION__,"No name for %s - %d",handler->GetEventBase(),id);
             return NULL;
         }
         if ((strcmp(this->eventBase, handler->GetName()) == 0) && (strcmp(eventName, this->eventId) == 0))
         {
             this->handler = handler;
             this->id = id;
-            ESP_LOGD(__FUNCTION__, "%s-%s-%d Event Registered", handler->GetName(), eventName, id);
-        } else {
-            ESP_LOGV(__FUNCTION__,"base or name mismatch base:%s handler name:%s evtname:%s evtid:%s",this->eventBase, handler->GetName(),eventName, this->eventId);
+            ESP_LOGD(__FUNCTION__, "%s %s %s-%s-%d Event Registered", IsProgram()?"Program ":"Method",IsProgram()?programName:method, handler->GetName(), eventName, id);
         }
     }
 
@@ -74,65 +93,189 @@ bool EventInterpretor::IsValid(EventHandlerDescriptor *handler, int32_t id, void
                 }
             }
         }
-    } else {
-        ESP_LOGV(__FUNCTION__,"Mismatch (handler != %d) && (this->handler(%d) != NULL) && (handler->GetEventBase(%s) == this->handler->GetEventBase(%s)) && (id%d == this->id%d)",
-            handler != NULL,
-            this->handler != NULL,
-            handler != NULL ? handler->GetEventBase():"",
-            this->handler?this->handler->GetEventBase():"",
-            id, 
-            this->id);
     }
     return ret;
 }
 
-void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *event_data)
+bool EventInterpretor::IsProgram() {
+    return (programName != NULL);
+}
+
+char* EventInterpretor::GetProgramName() {
+    if (IsProgram()) {
+        return programName;
+    }
+    return NULL;
+}
+
+void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char* programName){
+    AppConfig* program=NULL;
+    cJSON *prog;
+    if (!programs) {
+        ESP_LOGE(__FUNCTION__,"Missing programs, cannot launch %s",programName);
+        return;
+    }
+    cJSON_ArrayForEach(prog,programs) {
+        AppConfig* aprog = new AppConfig(prog,NULL);
+        if (aprog->HasProperty("name") && (strcmp(aprog->GetStringProperty("name"),programName)==0)) {
+            program = aprog;
+            break;
+        }
+        free(aprog);
+    }
+    if (!program) {
+        ESP_LOGE(__FUNCTION__, "Cannot fing a program named %s", programName);
+        return;
+    }
+    ESP_LOGD(__FUNCTION__,"Running program %s", programName);
+    if (program->HasProperty("inLineThreads")) {
+        cJSON* item;
+        ESP_LOGV(__FUNCTION__,"Running inline %s",programName);
+        cJSON_ArrayForEach(item,cJSON_GetObjectItem(program->GetJSONConfig(NULL),"inLineThreads")) {
+            AppConfig* aitem = new AppConfig(item,NULL);
+            if (aitem->HasProperty("method")) {
+                RunMethod(handler,id,event_data,aitem->GetStringProperty("method"),false);
+            } else if (aitem->HasProperty("program")) {
+                if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
+                    char* tmp = cJSON_Print(aitem->GetJSONConfig(NULL));
+                    ESP_LOGV(__FUNCTION__,"running program from %s", tmp);
+                    ldfree(tmp);
+                }
+                RunProgram(handler,id,event_data,aitem->GetStringProperty("program"));
+            } else {
+                char* tmp = cJSON_Print(item);
+                ESP_LOGE(__FUNCTION__,"Nothing to run for %s",tmp);
+                ldfree(tmp);
+            }
+            free(aitem);
+        }
+    } else if (program->HasProperty("parallelThreads")) {
+        cJSON* item;
+        uint32_t threads = 0;
+        ESP_LOGV(__FUNCTION__,"Running parallel %s",programName);
+        cJSON_ArrayForEach(item,cJSON_GetObjectItem(program->GetJSONConfig(NULL),"parallelThreads")) {
+            AppConfig* aitem = new AppConfig(item,NULL);
+            if (aitem->HasProperty("method")) {
+                uint8_t bitno = RunMethod(handler,id,event_data,aitem->GetStringProperty("method"),true);
+                if (bitno != UINT8_MAX) {
+                    threads |= (1<<bitno);
+                } else {
+                    ESP_LOGE(__FUNCTION__,"Cannot get a thread slot for %s",aitem->GetStringProperty("method"));
+                }
+            } else if (aitem->HasProperty("program")) {
+                ESP_LOGW(__FUNCTION__,"Program backgroup task not supported, running inline");
+                RunProgram(handler,id,event_data,aitem->GetStringProperty("program"));
+            } else {
+                char* tmp = cJSON_Print(item);
+                ESP_LOGE(__FUNCTION__,"Nothing to run for %s",tmp);
+                ldfree(tmp);
+            }
+            free(aitem);
+        }
+        if (threads) {
+            managedThreads.WaitForThreads(threads);
+            ESP_LOGD(__FUNCTION__,"Program %s done",programName);
+        } else {
+            ESP_LOGW(__FUNCTION__,"No threads started");
+        }
+    } else {
+        ESP_LOGE(__FUNCTION__,"Missing the thing to run in program %s",programName);
+    }
+}
+
+uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data) {
+    if (!method) {
+        ESP_LOGE(__FUNCTION__,"Missing method.");
+        if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
+            char* tmp = cJSON_Print(config);
+            ESP_LOGV(__FUNCTION__,"%s",tmp);
+            ldfree(tmp);
+        }
+        return UINT8_MAX;
+    }
+    ESP_LOGV(__FUNCTION__,"Running inline method %s", method);
+    return RunMethod(handler,id,event_data,method,true);
+}
+
+uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char* method, bool inBackground)
 {
-    system_event_info_t *systemEventInfo = NULL;
-    ip_event_got_ip_t* evtGotIp = NULL;
     cJSON *jeventbase;
     cJSON *jeventid;
     int32_t eventId = -1;
     esp_err_t ret;
+
+    if (!method) {
+        ESP_LOGE(__FUNCTION__,"Missing method");
+        if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
+            char* tmp = cJSON_Print(config);
+            ESP_LOGV(__FUNCTION__,"%s",tmp);
+            ldfree(tmp);
+        }
+        return UINT8_MAX;
+    }
+
+    ESP_LOGV(__FUNCTION__,"Got method:(%s)",method);
     if (strcmp(method, "commitTripToDisk") == 0)
     {
         jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "flags"), "value");
-        xTaskCreate(commitTripToDisk, 
+        if (inBackground)
+            return CreateWokeBackgroundTask(commitTripToDisk, 
                     "commitTripToDisk", 
-                    8192, 
-                    (void *)(cJSON_HasObjectItem(params, "flags") ? cJSON_GetObjectItem(cJSON_GetObjectItem(params, "flags"), "value")->valueint:BIT3), 
+                    4096, 
+                    NULL, 
                     tskIDLE_PRIORITY, 
                     NULL);
-    }
-    if (strcmp(method, "wifiSallyForth") == 0)
-    {
-        xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, NULL, tskIDLE_PRIORITY, NULL);
+        else
+            CreateWokeInlineTask(commitTripToDisk, "commitTripToDisk", 4096, NULL);
+        return UINT8_MAX;
     }
     if (strcmp(method, "wifioff") == 0)
     {
         ESP_LOGD(__FUNCTION__, "%s from %s", handler->GetName(), "wifioff");
-        TheWifi::GetInstance()->wifiStop(NULL);
+        xEventGroupClearBits(app_eg,app_bits_t::WIFI_ON);
+        return UINT8_MAX;
     }
     if (strcmp(method, "mergeconfig") == 0)
     {
-        AppConfig* cfg = AppConfig::GetAppStatus()->GetConfig("/wifi/station");
-        if (cfg->HasProperty("Gw")) {
-            ESP_LOGD(__FUNCTION__, "From gw:%s", cfg->GetStringProperty("Gw"));
-            uint32_t addr = ipaddr_addr(cfg->GetStringProperty("Gw"));
-            xTaskCreate(mergeConfig, "mergeConfig", 8192, (void*)addr, tskIDLE_PRIORITY, NULL);
-        }
-        free(cfg);
+        if (inBackground)
+            return CreateWokeBackgroundTask(TheRest::MergeConfig, "mergeConfig", 4096, NULL, tskIDLE_PRIORITY, NULL);
+        else
+            CreateWokeInlineTask(TheRest::MergeConfig, "mergeConfig", 4096, NULL);
+        return UINT8_MAX;
     }
-    if (strcmp(method, "PullStation") == 0)
+    if (strcmp(method, "sendstatus") == 0)
     {
-        systemEventInfo = (system_event_info_t *)event_data;
-        if (systemEventInfo != NULL)
-        {
-            ESP_LOGD(__FUNCTION__, "%s running %s", handler->GetName(), "pullStation");
-            esp_ip4_addr_t *addr = (esp_ip4_addr_t *)dmalloc(sizeof(esp_ip4_addr_t));
-            memcpy(addr, &systemEventInfo->ap_staipassigned.ip, sizeof(esp_ip4_addr_t));
-            xTaskCreate(pullStation, "pullStation", 4096, (void *)addr, tskIDLE_PRIORITY, NULL);
+        if (inBackground)
+            return CreateWokeBackgroundTask(TheRest::SendStatus, "sendStatus", 4096, NULL, tskIDLE_PRIORITY, NULL);
+        else
+            CreateWokeInlineTask(TheRest::SendStatus, "sendStatus", 4096, NULL);
+        return UINT8_MAX;
+    }
+    if (strcmp(method, "wifiSallyForth") == 0)
+    {
+        char* bits = (char*)malloc(app_bits_t::MAX_APP_BITS+1);
+        memset(bits,0,app_bits_t::MAX_APP_BITS+1);
+        EventBits_t serviceBits = xEventGroupGetBits(app_eg);
+
+        for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++) {
+            bits[idx] = serviceBits & (1<<idx) ? '1' : '0';
         }
+        ESP_LOGD(__FUNCTION__,"%s",bits);
+        xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
+        serviceBits = xEventGroupGetBits(app_eg);
+        for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++) {
+            bits[idx] = serviceBits & (1<<idx) ? '1' : '0';
+        }
+        ESP_LOGD(__FUNCTION__,"%s",bits);
+        return UINT8_MAX;
+    }
+    if (strcmp(method, "checkupgrade") == 0)
+    {
+        if (inBackground)
+            return CreateWokeBackgroundTask(TheRest::CheckUpgrade, "CheckUpgrade", 8192, NULL, tskIDLE_PRIORITY, NULL);
+        else
+            CreateWokeInlineTask(TheRest::CheckUpgrade, "CheckUpgrade", 8192, NULL);
+        return UINT8_MAX;
     }
     if (strcmp(method, "Post") == 0)
     {
@@ -140,15 +283,18 @@ void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *
         jeventid = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "eventId"), "value");
         if ((jeventbase == NULL) || (jeventid == NULL))
         {
-            ESP_LOGW(__FUNCTION__, "Missing event id or base");
-            return;
+            char* tmp = cJSON_Print(params);
+            ESP_LOGW(__FUNCTION__, "Missing event id or base:%s",tmp == NULL ? "null" : tmp);
+            if (tmp)
+                ldfree(tmp);
+            return UINT8_MAX;
         }
         if (strcmp(handler->GetEventBase(),jeventbase->valuestring)==0) {
             eventId = handler->GetEventId(jeventid->valuestring);
             if (eventId == -1)
             {
                 ESP_LOGW(__FUNCTION__, "bad event id:%s(%s) in handler %s", jeventid->valuestring, jeventbase->valuestring, handler->GetEventBase());
-                return;
+                return UINT8_MAX;
             }
             ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)", jeventid->valuestring, jeventbase->valuestring, eventId);
             if ((ret = esp_event_post(handler->GetEventBase(), eventId, &params, sizeof(void *), portMAX_DELAY)) != ESP_OK)
@@ -170,8 +316,10 @@ void EventInterpretor::RunIt(EventHandlerDescriptor *handler, int32_t id, void *
                 ESP_LOGW(__FUNCTION__, "Cannot find %s to %s..", jeventid->valuestring, jeventbase->valuestring);
             }
         }
-
+    return UINT8_MAX;
     }
+    ESP_LOGW(__FUNCTION__,"Invalid method:%s",method);
+    return UINT8_MAX;
 }
 
 EventCondition::EventCondition(cJSON *json)
@@ -207,7 +355,7 @@ EventCondition::EventCondition(cJSON *json)
     }
     else
     {
-        char *stmp = cJSON_Print(json);
+        char *stmp = cJSON_PrintUnformatted(json);
         ESP_LOGW(__FUNCTION__, "Invalid compare operation in %s", stmp);
         ESP_LOGW(__FUNCTION__, "valType:%d compType:%d compareOperation:%d valOrigin:%d compOrigin:%d", (int)valType, (int)compType, (int)compareOperation, (int)valOrigin, (int)compOrigin);
         ldfree(stmp);
@@ -334,7 +482,7 @@ compare_operation_t EventCondition::GetCompareOperator(cJSON *json)
     cJSON *val = cJSON_GetObjectItem(json, "operator");
     if (val == NULL)
     {
-        char *sjson = cJSON_Print(json);
+        char *sjson = cJSON_PrintUnformatted(json);
         ESP_LOGW(__FUNCTION__, "Invalid operator:%s", sjson);
         ldfree(sjson);
         return compare_operation_t::Invalid;
@@ -363,7 +511,7 @@ compare_operation_t EventCondition::GetCompareOperator(cJSON *json)
     {
         return compare_operation_t::Smaller;
     }
-    char *sjson = cJSON_Print(json);
+    char *sjson = cJSON_PrintUnformatted(json);
     ESP_LOGW(__FUNCTION__, "Invalid operator value:%s", sjson);
     ldfree(sjson);
     return compare_operation_t::Invalid;
@@ -379,7 +527,7 @@ compare_entity_type_t EventCondition::GetEntityType(cJSON *json, const char *fld
     cJSON *val = cJSON_GetObjectItem(cJSON_GetObjectItem(json, fldName), "otype");
     if ((val == NULL) || (val->valuestring == NULL))
     {
-        char *sjson = cJSON_Print(json);
+        char *sjson = cJSON_PrintUnformatted(json);
         ESP_LOGW(__FUNCTION__, "Invalid operator(%s):%s", fldName, sjson);
         ldfree(sjson);
         return compare_entity_type_t::Invalid;
@@ -396,7 +544,7 @@ compare_entity_type_t EventCondition::GetEntityType(cJSON *json, const char *fld
     {
         return compare_entity_type_t::String;
     }
-    char *sjson = cJSON_Print(json);
+    char *sjson = cJSON_PrintUnformatted(json);
     ESP_LOGW(__FUNCTION__, "Invalid value:%s", sjson);
     ldfree(sjson);
     return compare_entity_type_t::Invalid;
@@ -412,7 +560,7 @@ compare_origin_t EventCondition::GetOriginType(cJSON *json, const char *fldName)
     cJSON *val = cJSON_GetObjectItem(json, fldName);
     if (val == NULL)
     {
-        char *sjson = cJSON_Print(json);
+        char *sjson = cJSON_PrintUnformatted(json);
         ESP_LOGW(__FUNCTION__, "Invalid origin:%s", sjson);
         ldfree(sjson);
         return compare_origin_t::Invalid;

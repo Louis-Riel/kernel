@@ -1,13 +1,32 @@
-#include "./eventmgr.h"
+#include "eventmgr.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-ManagedDevice::ManagedDevice(char* type)
+uint8_t ManagedDevice::numDevices=0;
+ManagedDevice* ManagedDevice::runningInstances[MAX_NUM_DEVICES];
+
+ManagedDevice::ManagedDevice(char *type,char* name,cJSON* (*statusFnc)(void*))
 :eventBase((esp_event_base_t)dmalloc(strlen(type)+1))
 ,handlerDescriptors(NULL)
-,status(BuildStatus())
+,statusFnc(statusFnc)
+,status(NULL)
 {
   strcpy((char*)eventBase, type);
+  if (numDevices == 0) {
+    memset(runningInstances,0,sizeof(void*)*MAX_NUM_DEVICES);
+  }
+  runningInstances[numDevices++]=this;
+  this->name = (char*)dmalloc(strlen(name)+1);
+  strcpy(this->name,name);
+}
+
+const char* ManagedDevice::GetName() {
+  return name;
+}
+
+ManagedDevice::ManagedDevice(char* type)
+:ManagedDevice(type,type,&BuildStatus)
+{
 }
 
 ManagedDevice::~ManagedDevice() {
@@ -26,10 +45,22 @@ void ManagedDevice::PostEvent(void* content, size_t len,int32_t event_id){
     esp_event_post(eventBase,event_id,content,len,portMAX_DELAY);
 }
 
-cJSON* ManagedDevice::GetStatus(){
-    return status == NULL ? status = BuildStatus() : status;
+void ManagedDevice::UpdateStatuses(){
+  for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
+    if (runningInstances[idx] && runningInstances[idx]->statusFnc){
+      runningInstances[idx]->status = runningInstances[idx]->statusFnc(runningInstances[idx]);
+    }
+  }
 }
 
-cJSON* ManagedDevice::BuildStatus(){
-    return cJSON_CreateObject();
+cJSON* ManagedDevice::BuildStatus(void* instance){
+  ManagedDevice* md = (ManagedDevice*) instance;
+  if (md && (md->status == NULL)) {
+    md->status = AppConfig::GetAppStatus()->GetJSONConfig(md->GetName());
+    if (md->status && md->GetName())
+      cJSON_AddStringToObject(md->status,"name",md->GetName());
+    else
+      ESP_LOGW(__FUNCTION__,"Missing status for %s", md->GetName()?md->GetName():"null");
+  }
+  return md->status;
 }

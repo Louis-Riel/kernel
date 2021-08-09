@@ -24,6 +24,24 @@
 #define MAX_CONFIG_INSTANCES 20
 #define CFG_PATH "/lfs/config/current.json"
 
+#define MESSAGE_BUFFER_SIZE 4096
+#define NUM_IMG_BUFFERS     512
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+#define F_BUF_SIZE 8192
+#define HTTP_BUF_SIZE 8192
+#define HTTP_CHUNK_SIZE 8192
+#define JSON_BUFFER_SIZE 8192
+#define KML_BUFFER_SIZE 204600
+
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+#define HTTP_BUF_SIZE 8192
+#define HTTP_CHUNK_SIZE 8192
+#define HTTP_RECEIVE_BUFFER_SIZE 4096
+#define HTTP_MAX_RECEIVE_BUFFER_SIZE 3145728
+#define HTTP_MAX_NUM_BUFFER_CHUNCK HTTP_MAX_RECEIVE_BUFFER_SIZE/HTTP_RECEIVE_BUFFER_SIZE
+#define JSON_BUFFER_SIZE 8192
+#define KML_BUFFER_SIZE 204600
+
 extern const unsigned char favicon_ico_start[] asm("_binary_favicon_ico_start");
 extern const unsigned char favicon_ico_end[]   asm("_binary_favicon_ico_end");
 extern const unsigned char index_html_start[] asm("_binary_index_html_start");
@@ -154,18 +172,24 @@ public:
   bool IsSta();
   static cJSON* GetPropertyHolder(cJSON* prop);
 protected:
+  const char *SDPATH = "/sdcard";
+  const char *SPIFFPATH = "/lfs";
+
   cJSON* GetJSONProperty(cJSON* json,const char* path, bool createWhenMissing);
   cJSON* GetJSONProperty(const char* path);
   cJSON* GetJSONConfig(cJSON* json, const char* path,bool createWhenMissing);
   void SaveAppConfig(bool skipMount);
+  int32_t GetIntProperty(const char *path, int32_t defaultValue);
   cJSON* json;
   static AppConfig* configInstance;
   static AppConfig* statusInstance;
   EventGroupHandle_t eg;
   char* filePath;
   AppConfig* root = NULL;
-};  
+  char* activeStorage;
+};
 
+void UpgradeFirmware();
 AppConfig* GetAppConfig();
 bool startsWith(const char* str,const char* key);
 void sampleBatteryVoltage();

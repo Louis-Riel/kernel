@@ -9,7 +9,6 @@
 #include <esp_system.h>
 #include <nvs_flash.h>
 #include <sys/param.h>
-#include "nvs_flash.h"
 #include "esp_eth.h"
 #include <esp_http_server.h>
 #include "freertos/FreeRTOS.h"
@@ -25,29 +24,15 @@
 #include "esp_http_client.h"
 #include "cJSON.h"
 
-#define MESSAGE_BUFFER_SIZE 4096
-#define NUM_IMG_BUFFERS     512
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
-#define F_BUF_SIZE 8192
-#define HTTP_BUF_SIZE 8192
-#define HTTP_CHUNK_SIZE 8192
-#define HTTP_RECEIVE_BUFFER_SIZE 8192
-#define JSON_BUFFER_SIZE 8192
-#define KML_BUFFER_SIZE 204600
-
-static EventGroupHandle_t eventGroup=xEventGroupCreate();
-
 cJSON* status_json();
 cJSON* tasks_json();
 cJSON* getMemoryStats();
-void UpgradeFirmware();
 void restSallyForth(void *pvParameter);
 void pullStation(void *pvParameter);
 bool moveFolder(char* folderName, char* toFolderName);
 char* getPostField(const char* pname, const char* postData,char* dest);
 esp_err_t filedownload_event_handler(esp_http_client_event_t *evt);
 void extractClientTar(char* tarFName);
-void mergeConfig(void* param);
 cJSON* GetDeviceConfig(esp_ip4_addr_t *ipInfo,uint32_t deviceId);
 
 typedef enum{

@@ -6,14 +6,15 @@
 #include "freertos/event_groups.h"
 #include "freertos/queue.h"
 #include "esp_wifi.h"
-#include "../eventmgr/eventmgr.h"
+#include "eventmgr.h"
 #include "cJSON.h"
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_SCANING_BIT BIT1
-#define WIFI_UP_BIT BIT2
-#define WIFI_STA_CONFIGURED BIT3
-#define WIFI_DISCONNECTED_BIT BIT4
+#define WIFI_AP_UP_BIT BIT2
+#define WIFI_STA_UP_BIT BIT3
+#define WIFI_STA_CONFIGURED BIT4
+#define WIFI_DISCONNECTED_BIT BIT5
 
 #define DEFAULT_SCAN_LIST_SIZE 10
 #define MAX_NUM_CLIENTS 20
@@ -51,13 +52,20 @@ public:
     ~TheWifi();
     bool state;
     bool valid;
+    EventGroupHandle_t eventGroup;
 
     tcpip_adapter_ip_info_t* GetStaIp();
     tcpip_adapter_ip_info_t* GetApIp();
-    void wifiStop(void *pvParameter);
     bool wifiScan();
     static TheWifi* GetInstance();
     static EventGroupHandle_t GetEventGroup();
+    AppConfig* cfg;
+    AppConfig* astate;
+    AppConfig* stationStat;
+    AppConfig* apStat;
+    tcpip_adapter_ip_info_t apIp;
+    tcpip_adapter_ip_info_t staIp;
+
 protected:
     void ParseStateBits(AppConfig* state);
 
@@ -69,8 +77,6 @@ protected:
     cJSON* BuildStatus();
 
     Aper *clients[MAX_NUM_CLIENTS];
-    tcpip_adapter_ip_info_t apIp;
-    tcpip_adapter_ip_info_t staIp;
     wifi_config_t wifi_config;
     char* name;
     cJSON* status;

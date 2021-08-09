@@ -16,7 +16,7 @@
 #include "../../main/logs.h"
 #include "../../main/utils.h"
 #include "cJSON.h"
-#include "../eventmgr/eventmgr.h"
+#include "eventmgr.h"
 
 #define MAX_OPEN_FILES 5
 
@@ -51,7 +51,6 @@ public:
     bool IsOpen();
     bool hasContent;
     esp_event_base_t GetEventBase();
-    cJSON* GetStatus();
 
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
 protected:
@@ -81,7 +80,6 @@ public:
     static void FlushAll();
     static void CloseAll();
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
-    cJSON* GetStatus();
 protected:
 
 private:

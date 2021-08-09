@@ -40,7 +40,7 @@ AppConfig *AppConfig::configInstance = NULL;
 AppConfig *AppConfig::statusInstance = NULL;
 
 AppConfig::AppConfig(char *filePath)
-    : version(0), json(NULL), filePath(filePath), root(this)
+    : version(0), json(NULL), filePath(filePath), root(this),activeStorage("lsf")
 {
   if ((configInstance == NULL) && (filePath != NULL))
   {
@@ -59,7 +59,7 @@ AppConfig::AppConfig(char *filePath)
       struct stat fileStat;
       fstat(fileno(currentCfg), &fileStat);
       char *sjson = (char *)dmalloc(fileStat.st_size);
-      fread(sjson, 1, fileStat.st_size, currentCfg);
+      fRead(sjson, 1, fileStat.st_size, currentCfg);
       fClose(currentCfg);
       if (sjson && (strlen(sjson) > 0))
       {
@@ -102,6 +102,7 @@ AppConfig *AppConfig::GetAppStatus()
 {
   if (statusInstance == NULL)
   {
+    ESP_LOGV(__FUNCTION__,"Initializing Status instance");
     statusInstance = new AppConfig(cJSON_CreateObject(), NULL);
     statusInstance->eg = xEventGroupCreate();
     const esp_app_desc_t* ad = esp_ota_get_app_description();
@@ -115,9 +116,7 @@ AppConfig *AppConfig::GetAppStatus()
 
 const char *AppConfig::GetActiveStorage()
 {
-  const char *SDPATH = "/sdcard";
-  const char *SPIFFPATH = "/lfs";
-  return (AppConfig::GetAppStatus()->GetStateProperty("/sdcard/state") & item_state_t::ERROR) == 0 ? SDPATH : SPIFFPATH;
+  return GetAppStatus()->activeStorage;
 }
 
 bool AppConfig::isValid()
@@ -309,7 +308,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   FILE *currentCfg = fOpen(config->filePath, "w");
   if (currentCfg != NULL)
   {
-    char *sjson = cJSON_Print(config->json);
+    char *sjson = cJSON_PrintUnformatted(config->json);
     ESP_LOGV(__FUNCTION__, "Config(%d):%s", strlen(sjson),sjson);
     size_t wlen = fWrite(sjson, 1, strlen(sjson), currentCfg);
     if (fClose(currentCfg) != 0)
@@ -357,7 +356,7 @@ cJSON *AppConfig::GetJSONConfig(const char *path)
 
 cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMissing)
 {
-  if ((path == NULL) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
+  if ((json == NULL) || (path == NULL) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
   {
     return json;
   }
@@ -372,7 +371,6 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
   char *slash = 0;
   if ((slash = indexOf(path, "/")) != NULL)
   {
-    ESP_LOGV(__FUNCTION__, "Getting Child JSON as:%s", slash);
     char *name = (char *)dmalloc((slash - path) + 1);
     memcpy(name, path, slash - path);
     *(name + (slash - path)) = 0;
@@ -397,6 +395,7 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
     }
     else
     {
+      ESP_LOGV(__FUNCTION__, "Got JSON as:%s", path);
       return cJSON_GetObjectItem(json, path);
     }
   }
@@ -466,7 +465,7 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
     {
       ldfree(propPath);
 #if LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE
-      ESP_LOGV(__FUNCTION__, "%s", cJSON_Print(holder));
+      ESP_LOGV(__FUNCTION__, "%s", cJSON_PrintUnformatted(holder));
 #endif
       return cJSON_GetObjectItem(holder, lastSlash + 1);
     }
@@ -578,6 +577,21 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
     cJSON_SetValuestring(holder, value);
     SaveAppConfig();
   }
+}
+
+int32_t AppConfig::GetIntProperty(const char *path, int32_t defaultValue)
+{
+  if (!isValid())
+  {
+    return defaultValue;
+  }
+  //ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == NULL ? "*null*" : path);
+  cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
+  if (prop != NULL)
+  {
+    return prop->valueint;
+  }
+  return defaultValue;
 }
 
 int32_t AppConfig::GetIntProperty(const char *path)
@@ -771,12 +785,18 @@ void AppConfig::SetPinNoProperty(const char *path, gpio_num_t value)
 
 void AppConfig::SetStateProperty(const char *path, item_state_t value)
 {
-  SetIntProperty(path, (int)value);
+  if (strcmp("/sdcard/state",path)==0){
+    activeStorage = (char*)(value == item_state_t::ACTIVE ? SDPATH : SPIFFPATH);
+    SetIntProperty(path, (int)value);
+    ESP_LOGV(__FUNCTION__,"Defined storage as %s", value == item_state_t::ACTIVE ? SDPATH : SPIFFPATH);
+  } else {
+    SetIntProperty(path, (int)value);
+  }
 }
 
 item_state_t AppConfig::GetStateProperty(const char *path)
 {
-  return (item_state_t)GetIntProperty(path);
+  return (item_state_t)GetIntProperty(path,0);
 }
 
 bool AppConfig::IsAp()

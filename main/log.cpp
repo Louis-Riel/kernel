@@ -2,6 +2,7 @@
 #include "utils.h"
 #include "esp_log.h"
 #include "time.h"
+#include "eventmgr.h"
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 char* logBuff = NULL;
@@ -9,6 +10,7 @@ char* logfname = NULL;
 uint32_t logBufPos;
 static LogFunction_t callbacks[5];
 static void* params[5];
+static SemaphoreHandle_t logMutex = xSemaphoreCreateMutex();
 
 char* getLogFName(){
     return logfname;
@@ -17,11 +19,28 @@ char* getLogFName(){
 static TaskHandle_t dltask = NULL;
 
 void dumpTheLogs(void* params){
+    const char* storage = AppConfig::GetActiveStorage();
+    bool isAp = GetAppConfig()->IsAp();
+    if (logBufPos == 0) {
+        ESP_LOGD(__FUNCTION__,"No logs to dump");
+        return;
+    }
     if (dltask == NULL) {
         dltask = (TaskHandle_t)1; //Just not null
     }
 
-    if (logBufPos && initSPISDCard(true)) {
+    xSemaphoreTake(logMutex,portMAX_DELAY);
+    uint8_t* db = (uint8_t*)dmalloc(logBufPos);
+    uint32_t len = logBufPos;
+    if (db) {
+        memccpy(db,logBuff,sizeof(uint8_t),logBufPos);
+        *logBuff=0;
+        logBufPos=0;
+
+    }
+    xSemaphoreGive(logMutex);
+
+    if (len && initSPISDCard(true)) {
         FILE* fw = NULL;
 
         struct tm timeinfo;
@@ -31,32 +50,29 @@ void dumpTheLogs(void* params){
         
         if ((strlen(logfname) == 0) || (indexOf(logfname,"1970") && (timeinfo.tm_year > 1970))){
             char lpath[255];
-            sprintf(lpath,"%s/logs/%s-%%Y-%%m-%%d_%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),GetAppConfig()->IsAp()?"TRACKER":"PULLER");
+            sprintf(lpath,"%s/logs/%s-%%Y-%%m-%%d_%%H-%%M-%%S.log",storage,isAp?"TRACKER":"PULLER");
             strftime(logfname, 254, lpath, &timeinfo);
         }
 
         size_t bc = __UINT32_MAX__;
         if (((fw = fOpenCdL(logfname,"a",true,false)) != NULL) &&
-            ((bc=fWrite((void*)logBuff,1,logBufPos,fw)) == logBufPos)) {
+            ((bc=fWrite((void*)db,1,len,fw)) == len)) {
             if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG){
-                fprintf(stdout,"\nWritten %d into %s\n",logBufPos,logfname);
+                fprintf(stdout,"\nWritten %d into %s\n",len,logfname);
             }
-            *logBuff=0;
-            logBufPos=0;
         } else if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG) {
             fprintf(stderr,"\nLogs not written to %s fw:%d len:%d",logfname,fw!=NULL,bc);
         }
         fClose(fw);
         deinitSPISDCard(false);
     }
-    if (params)
-        vTaskDelete(NULL);
     dltask = NULL;
+    ldfree(db);
 }
 
 void dumpLogs(){
     if (dltask == NULL)
-        xTaskCreate(dumpTheLogs, "dumpLogs", 8192, (void*)true, tskIDLE_PRIORITY, &dltask);
+        CreateWokeBackgroundTask(dumpTheLogs, "dumpLogs", 4096, (void*)true, tskIDLE_PRIORITY, &dltask);
 }
 
 void registerLogCallback( LogFunction_t callback, void* param) {
@@ -71,7 +87,9 @@ void registerLogCallback( LogFunction_t callback, void* param) {
 
 int loggit(const char *fmt, va_list args) {
     char* curLogLine = logBuff+logBufPos;
+    xSemaphoreTake(logMutex,portMAX_DELAY);
     logBufPos+=vsprintf(logBuff+logBufPos,fmt,args);
+    xSemaphoreGive(logMutex);
     for (int idx=0; idx < 5; idx++){
         if (callbacks[idx] != NULL) {
             if (!callbacks[idx](params[idx],curLogLine)){

@@ -438,7 +438,7 @@ class MainAppState extends React.Component {
                 signal: abort.signal
             }).then(data => data.json()).then(fromVersionedToPlain)
                 .then(cfg => {
-                    this.state.statuses[this.state.selectedDeviceId] = cfg;
+                    this.state.statuses[this.state.selectedDeviceId] = this.orderResults(cfg);
                     this.setState({ statuses: this.state.statuses, loading: false, loaded: true });
                 })
         }
@@ -593,7 +593,7 @@ class StorageViewer extends React.Component {
                 }))
                 .then(files => {
                     this.setState({ loaded: true, files: files });
-                    var fileStatsToFetch = files.filter(file => file.ftype == "file");
+                    var fileStatsToFetch = files.filter(file => file.ftype == "file" && file.size==0);
                     for (var idx = 0; idx < Math.min(3, fileStatsToFetch.length); idx++) {
                         if (fileStatsToFetch.length) {
                             this.GetFileStat(fileStatsToFetch.pop(), fileStatsToFetch);
@@ -919,6 +919,7 @@ function SendCommand(body) {
         method: 'put',
         body: JSON.stringify(body)
     }).then(res => res.text().then(console.log))
+      .catch(console.error)
       .catch(console.error);
 }
 
@@ -1125,7 +1126,7 @@ class ConfigPage extends React.Component {
     SaveForm(form) {
         getJsonConfig().then(vcfg => fromPlainToVersionned(this.state.deviceConfigs[this.state.deviceId], vcfg))
             .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + this.state.deviceId, {
-                method: 'post',
+                method: 'put',
                 body: JSON.stringify(cfg)
             }).then(console.log));
         form.preventDefault();

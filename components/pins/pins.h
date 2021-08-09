@@ -14,7 +14,7 @@
 #include "../../main/logs.h"
 #include "../../main/utils.h"
 #include "cJSON.h"
-#include "../eventmgr/eventmgr.h"
+#include "eventmgr.h"
 class Pin:ManagedDevice {
 public:
     Pin(AppConfig* config);
@@ -33,15 +33,15 @@ protected:
     static QueueHandle_t eventQueue;
     gpio_num_t pinNo;
     uint32_t flags;
-    char* name;
     void InitDevice();
     void RefrestState();
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     EventHandlerDescriptor* BuildHandlerDescriptors();
-    cJSON* BuildStatus();
+    static cJSON* BuildStatus(void* instance);
     cJSON* status;
 private:
     AppConfig* config;
+    cJSON* pinStatus;
 };
 
 #endif

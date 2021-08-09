@@ -1,4 +1,4 @@
-#include "./eventmgr.h"
+#include "eventmgr.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 

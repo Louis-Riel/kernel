@@ -81,6 +81,12 @@ MFile* MFile::GetFile(char* fileName){
 }
 
 void MFile::Open(const char* mode){
+    if ((name == NULL) || (strlen(name) == 0)) {
+        ESP_LOGE(__FUNCTION__,"Empty name error");
+        fileStatus = mfile_state_t::MFILE_FAILED;
+        return;
+    }
+
     file = fOpenCd(name, mode,true);
     if (file == NULL)
     {
@@ -89,7 +95,7 @@ void MFile::Open(const char* mode){
         return;
     }
     ESP_LOGV(__FUNCTION__, "Open %s for %s",name, mode);
-        struct stat st;
+    struct stat st;
 
     int ret = 0;
 
@@ -148,9 +154,9 @@ void MFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, 
     AppConfig* params = new AppConfig(*(cJSON**)event_data,NULL);
     //char* name = EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("name"));
     if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-        char* tmp = cJSON_Print(params->GetJSONConfig(NULL));
+        char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
         ESP_LOGW(__FUNCTION__,"Params:%s...",tmp);
-        free(tmp);
+        ldfree(tmp);
     }
 
     switch (id)
@@ -205,14 +211,6 @@ void MFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, 
         break;
     }
     free(params);
-}
-
-cJSON* MFile::GetStatus(){
-    return ManagedDevice::GetStatus();
-}
-
-cJSON* BufferedFile::GetStatus(){
-    return MFile::GetStatus();
 }
 
 esp_event_base_t MFile::GetEventBase(){
@@ -321,16 +319,16 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
         AppConfig* params = new AppConfig(*(cJSON**)event_data,NULL);
         char* name = EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("name"));
         if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-            char* tmp = cJSON_Print(params->GetJSONConfig(NULL));
+            char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
             ESP_LOGW(__FUNCTION__,"Params:%s...",tmp);
-            free(tmp);
+            ldfree(tmp);
         }
         ESP_LOGV(__FUNCTION__,"NAME:%s...",name);
         BufferedFile* efile = (BufferedFile*)GetFile(name);
          if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-            char* tmp = cJSON_Print(params->GetJSONConfig(NULL));
+            char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
             ESP_LOGW(__FUNCTION__,"Params2:%s...",tmp);
-            free(tmp);
+            ldfree(tmp);
         }
         if (!efile) {
             ESP_LOGE(__FUNCTION__,"No files available, no go");
@@ -356,23 +354,23 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
                     } else {
                         ESP_LOGW(__FUNCTION__,"Invalid of empty header line");
                         if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-                            char* tmp = cJSON_Print(params->GetJSONConfig(NULL));
+                            char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
                             ESP_LOGW(__FUNCTION__,"Params:%s.",tmp);
-                            free(tmp);
+                            ldfree(tmp);
                         }
                     }
                 }
                 ESP_LOGV(__FUNCTION__,"value:%s",strbuf);
                 if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-                    char* tmp = cJSON_Print(params->GetJSONConfig(NULL));
+                    char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
                     ESP_LOGW(__FUNCTION__,"Params3:%s...",tmp);
-                    free(tmp);
+                    ldfree(tmp);
                 }
                 id==fileEventIds::WRITE_LINE?efile->WriteLine(strbuf,strlen((char*)strbuf)):efile->Write(strbuf,strlen((char*)strbuf));
                 if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-                    char* tmp = cJSON_Print(params->GetJSONConfig(NULL));
+                    char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
                     ESP_LOGW(__FUNCTION__,"Params4:%s...",tmp);
-                    free(tmp);
+                    ldfree(tmp);
                 }
                 ldfree(strbuf);
             } else {
@@ -387,9 +385,9 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
             break;
         }
         if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-            char* tmp = cJSON_Print(params->GetJSONConfig(NULL));
+            char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
             ESP_LOGW(__FUNCTION__,"Params5:%s...",tmp);
-            free(tmp);
+            ldfree(tmp);
         }
         free(name);
         free(params);

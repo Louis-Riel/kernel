@@ -25,8 +25,16 @@ typedef enum {
  COMMITTING_TRIPS = BIT1,
  TRIPS_COMMITTED = BIT2,
  TRIPS_SYNCING = BIT3,
- WIFI_ON = BIT4
+ WIFI_ON = BIT4,
+ SPIFF_MOUNTED = BIT5,
+ SDCARD_MOUNTED = BIT6,
+ SDCARD_ERROR = BIT7,
+ REST = BIT8,
+ GPS_ON = BIT9,
+ MAX_APP_BITS = 10
 } app_bits_t;
+
+#define APP_SERVICE_BITS (app_bits_t::WIFI_ON|app_bits_t::REST|app_bits_t::GPS_ON)
 
 void initLog();
 void dumpLogs();

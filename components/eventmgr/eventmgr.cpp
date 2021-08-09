@@ -1,23 +1,23 @@
-#include "./eventmgr.h"
+#include "eventmgr.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 static EventManager* runningInstance=NULL;
 
-EventManager::EventManager(cJSON* cfg)
-:config(NULL)
+EventManager::EventManager(cJSON* cfg, cJSON* programs)
+:config(cfg)
+,programs(programs)
 {
-    if (runningInstance == NULL) {
-        runningInstance = this;
-    }
-    ESP_LOGV(__FUNCTION__,"EventManager");
     memset(eventInterpretors,0,sizeof(void*)*MAX_NUM_EVENTS);
-    SetConfig(cfg);
+    if (!ValidateConfig()) {
+        ESP_LOGE(__FUNCTION__,"Event manager is invalid");
+    }
 }
 
 EventManager* EventManager::GetInstance(){
     if (runningInstance == NULL) {
-        runningInstance = new EventManager(AppConfig::GetAppConfig()->GetJSONConfig("/events"));
+        runningInstance = new EventManager(AppConfig::GetAppConfig()->GetJSONConfig("/events"),
+                                           AppConfig::GetAppConfig()->GetJSONConfig("/programs"));
     }
     return runningInstance;
 }
@@ -26,14 +26,10 @@ cJSON* EventManager::GetConfig(){
     return config;
 }
 
-cJSON* EventManager::SetConfig(cJSON* config){
-    if (config != NULL) {
-        cJSON_free(this->config);
-    }
-    this->config = config;
+bool EventManager::ValidateConfig(){
     uint8_t idx=0;
-    cJSON* event;
     bool isValid = true;
+    cJSON* event;
     cJSON_ArrayForEach(event,config) {
         if (!cJSON_HasObjectItem(event,"eventBase")){
             isValid=false;
@@ -43,24 +39,29 @@ cJSON* EventManager::SetConfig(cJSON* config){
             isValid=false;
             ESP_LOGW(__FUNCTION__,"Missing event id");
         }
-        if (!cJSON_HasObjectItem(event,"method")){
+        if (!cJSON_HasObjectItem(event,"method") && !cJSON_HasObjectItem(event,"program")){
             isValid=false;
-            ESP_LOGW(__FUNCTION__,"Missing method");
+            ESP_LOGW(__FUNCTION__,"Missing method..");
+        }
+        if (cJSON_HasObjectItem(event,"program") && !programs) {
+            isValid=false;
+            ESP_LOGW(__FUNCTION__,"Missing programs");
         }
         if (isValid){
-            eventInterpretors[idx++] = new EventInterpretor(event);
+            eventInterpretors[idx++] = new EventInterpretor(event,programs);
         }else{
-            char* json = cJSON_Print(event);
+            char* json = cJSON_PrintUnformatted(event);
             ESP_LOGW(__FUNCTION__,"Event:%s",json);
             free(json);
         }
     }
-    return EventManager::GetInstance()->config;
+    return isValid;
 }
 
 void EventManager::RegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {
     ESP_LOGD(__FUNCTION__,"Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
     ESP_ERROR_CHECK(esp_event_handler_register(eventHandlerDescriptor->GetEventBase(), ESP_EVENT_ANY_ID, EventManager::ProcessEvent, eventHandlerDescriptor));
+    ESP_LOGD(__FUNCTION__,"Done Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
 }
 
 void EventManager::UnRegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {
@@ -72,10 +73,17 @@ void EventManager::ProcessEvent(void *handler_args, esp_event_base_t base, int32
     EventHandlerDescriptor* handler = (EventHandlerDescriptor*)handler_args;
     uint8_t idx =0;
     EventInterpretor* interpretor;
-    ESP_LOGV(__FUNCTION__,"Event::::%s %d",handler->GetName(),EventManager::GetInstance()==NULL);
+    if ((strcmp(handler->GetName(),"GPSPLUS_EVENTS") != 0) || (!(id && BIT7|BIT0))){
+        ESP_LOGV(__FUNCTION__,"Event::::%s-%d",handler->GetName(),id);
+    }
     while ((idx < MAX_NUM_EVENTS) && ((interpretor = EventManager::GetInstance()->eventInterpretors[idx++])!=NULL)){
         if (interpretor->IsValid(handler,id,event_data)) {
-            interpretor->RunIt(handler,id,event_data);
+            if (interpretor->IsProgram()) {
+                interpretor->RunProgram(handler,id,event_data,interpretor->GetProgramName());
+            } else {
+                interpretor->RunMethod(handler,id,event_data);
+            }
         }
     }
 }
+

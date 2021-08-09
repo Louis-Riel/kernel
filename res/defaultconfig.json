@@ -1,188 +1,295 @@
 {
     "sdcard": {
         "MisoPin": {
-            "value": 19,
-            "version": 0
+            "version": 0,
+            "value": 19
         },
         "MosiPin": {
-            "value": 23,
-            "version": 0
+            "version": 0,
+            "value": 23
         },
         "ClkPin": {
-            "value": 18,
-            "version": 0
+            "version": 0,
+            "value": 18
         },
         "Cspin": {
-            "value": 4,
-            "version": 0
+            "version": 0,
+            "value": 4
         }
     },
     "gps": {
         "txPin": {
-            "value": 0,
-            "version": 0
+            "version": 1,
+            "value": 14
         },
         "rxPin": {
-            "value": 0,
-            "version": 0
+            "version": 1,
+            "value": 27
         },
         "enPin": {
-            "value": 0,
-            "version": 0
+            "version": 1,
+            "value": 12
         },
         "pois": []
     },
     "wifitype": {
-        "value": "AP",
-        "version": 0
+        "version": 1,
+        "value": "STA"
     },
     "clienttype": {
-        "value": "Puller",
-        "version": 0
+        "version": 1,
+        "value": "Tracker"
     },
-    "stations": [{
-        "ssid": {
-            "value": "",
-            "version": 0
-        },
-        "password": {
-            "value": "",
-            "version": 0
+    "stations": [
+        {
+            "ssid": {
+                "version": 0,
+                "value": ""
+            },
+            "password": {
+                "version": 0,
+                "value": ""
+            }
         }
-    }],
+    ],
     "devName": {
-        "value": "Puller",
-        "version": 0
+        "version": 1,
+        "value": "Tracker"
     },
-    "pins": [{
-        "pinNo": {
-            "value": 5,
-            "version": 0
+    "pins": [
+        {
+            "pinNo": {
+                "version": 0,
+                "value": 5
+            },
+            "driverFlags": {
+                "version": 0,
+                "value": 2
+            },
+            "pinName": {
+                "version": 0,
+                "value": "led"
+            }
         },
-        "driverFlags": {
-            "value": 2,
-            "version": 0
-        },
-        "pinName": {
-            "value": "led",
-            "version": 0
+        {
+            "pinNo": {
+                "version": 0,
+                "value": 13
+            },
+            "driverFlags": {
+                "version": 0,
+                "value": 1
+            },
+            "pinName": {
+                "version": 0,
+                "value": "Touch"
+            }
         }
-    }, {
-        "pinNo": {
-            "value": 13,
-            "version": 0
-        },
-        "driverFlags": {
-            "value": 1,
-            "version": 0
-        },
-        "pinName": {
-            "value": "Touch",
-            "version": 0
-        }
-    }],
-    "events": [{
+    ],
+    "events": [
+        {
+            "program": {
+                "version": 0,
+                "value": "sync"
+            },
             "eventBase": {
-                "value": "Wifi",
-                "version": 0
+                "version": 1,
+                "value": "TheWifi"
             },
             "eventId": {
-                "value": "IP_EVENT_AP_STAIPASSIGNED",
-                "version": 0
-            },
-            "method": {
-                "value": "PullStation",
-                "version": 0
+                "version": 1,
+                "value": "IP_EVENT_STA_GOT_IP"
             },
             "conditions": [],
             "params": {}
         },
         {
             "eventBase": {
-                "value": "DigitalPin",
-                "version": 0
+                "version": 1,
+                "value": "GPSPLUS_EVENTS"
             },
             "eventId": {
-                "value": "ON",
-                "version": 0
+                "version": 1,
+                "value": "atSyncPoint"
             },
             "method": {
-                "value": "Post",
-                "version": 0
+                "version": 1,
+                "value": "commitTripToDisk"
             },
-            "conditions": [{
-                "src": {
-                    "otype": "integer",
-                    "name": "event"
-                },
-                "operator": "==",
-                "comp": {
-                    "otype": "integer",
-                    "value": 13
-                }
-            }, {
-                "boper": "and"
-            }, {
-                "src": {
-                    "otype": "integer",
-                    "name": "event"
-                },
-                "operator": ">=",
-                "comp": {
-                    "otype": "integer",
-                    "value": 13
-                }
-            }],
+            "conditions": [],
             "params": {
-                "pinNo": {
-                    "value": 5,
-                    "version": 0
-                },
-                "state": {
-                    "value": 1,
-                    "version": 0
-                },
-                "eventId": {
-                    "value": "TRIGGER",
-                    "version": 0
-                },
-                "eventBase": {
-                    "value": "DigitalPin",
-                    "version": 0
+                "flags": {
+                    "version": 0,
+                    "value": 8
                 }
             }
         },
         {
             "eventBase": {
-                "value": "DigitalPin",
-                "version": 0
+                "version": 1,
+                "value": "GPSPLUS_EVENTS"
             },
             "eventId": {
-                "value": "OFF",
-                "version": 0
+                "version": 1,
+                "value": "atSyncPoint"
             },
             "method": {
-                "value": "Post",
-                "version": 0
+                "version": 1,
+                "value": "wifiSallyForth"
             },
+            "conditions": [],
+            "params": {}
+        },
+        {
+            "eventBase": {
+                "version": 0,
+                "value": "GPSPLUS_EVENTS"
+            },
+            "eventId": {
+                "version": 0,
+                "value": "significantCourseChange"
+            },
+            "method": {
+                "version": 0,
+                "value": "Post"
+            },
+            "conditions": [],
             "params": {
-                "pinNo": {
-                    "value": 5,
-                    "version": 0
-                },
-                "state": {
-                    "value": 0,
-                    "version": 0
+                "eventBase": {
+                    "version": 0,
+                    "value": "MFile"
                 },
                 "eventId": {
-                    "value": "TRIGGER",
-                    "version": 0
+                    "version": 0,
+                    "value": "WRITE_LINE"
                 },
-                "eventBase": {
-                    "value": "DigitalPin",
-                    "version": 0
+                "value": "${CurrentDate},${Status.gps/Longitude},${Status.gps/Lattitude},${Status.gps/Speed},${Status.gps/Altitude},${Status.gps/Course},${RAM},${Battery},${Status.gps/Satellites}",
+                "name": "/lfs/csv/${CurrentDateNoSpace}.csv",
+                "header": {
+                    "version": 0,
+                    "value": "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites"
                 }
             }
+        },
+        {
+            "eventBase": {
+                "version": 0,
+                "value": "GPSPLUS_EVENTS"
+            },
+            "eventId": {
+                "version": 0,
+                "value": "significantDistanceChange"
+            },
+            "method": {
+                "version": 0,
+                "value": "Post"
+            },
+            "conditions": [],
+            "params": {
+                "eventBase": {
+                    "version": 0,
+                    "value": "MFile"
+                },
+                "eventId": {
+                    "version": 0,
+                    "value": "WRITE_LINE"
+                },
+                "value": "${CurrentDate},${Status.gps/Longitude},${Status.gps/Lattitude},${Status.gps/Speed},${Status.gps/Altitude},${Status.gps/Course},${RAM},${Battery},${Status.gps/Satellites}",
+                "name": "/lfs/csv/${CurrentDateNoSpace}.csv",
+                "header": {
+                    "version": 0,
+                    "value": "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites"
+                }
+            }
+        },
+        {
+            "eventBase": {
+                "version": 0,
+                "value": "GPSPLUS_EVENTS"
+            },
+            "eventId": {
+                "version": 0,
+                "value": "significantCourseChange"
+            },
+            "method": {
+                "version": 0,
+                "value": "Post"
+            },
+            "conditions": [],
+            "params": {
+                "eventBase": {
+                    "version": 0,
+                    "value": "MFile"
+                },
+                "eventId": {
+                    "version": 0,
+                    "value": "WRITE_LINE"
+                },
+                "value": "${CurrentDate},${Status.gps/Longitude},${Status.gps/Lattitude},${Status.gps/Speed},${Status.gps/Altitude},${Status.gps/Course},${RAM},${Battery},${Status.gps/Satellites}",
+                "name": "/lfs/csv/${CurrentDateNoSpace}.csv",
+                "header": {
+                    "version": 0,
+                    "value": "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites"
+                }
+            }
+        },
+        {
+            "eventBase": {
+                "version": 0,
+                "value": "GPSPLUS_EVENTS"
+            },
+            "eventId": {
+                "version": 0,
+                "value": "outSyncPoint"
+            },
+            "method": {
+                "version": 0,
+                "value": "wifioff"
+            },
+            "conditions": [],
+            "params": {}
+        }
+    ],
+    "programs": [
+        {
+            "inLineThreads": [
+                {
+                    "method": {
+                        "version": 0,
+                        "value": "mergeconfig"
+                    }
+                },
+                {
+                    "method": {
+                        "version": 0,
+                        "value": "sendstatus"
+                    }
+                },
+                {
+                    "method": {
+                        "version": 0,
+                        "value": "checkupgrade"
+                    }
+                }
+            ],
+            "name": "syncdata"
+        },
+        {
+            "inLineThreads": [
+                {
+                    "program": {
+                        "version": 0,
+                        "value": "syncdata"
+                    }
+                },
+                {
+                    "method": {
+                        "version": 0,
+                        "value": "wifioff"
+                    }
+                }
+            ],
+            "name": "sync"
         }
     ]
 }

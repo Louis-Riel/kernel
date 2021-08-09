@@ -358,6 +358,7 @@ class TinyGPSPlus
 public:
   TinyGPSPlus(AppConfig* config);
   TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin);
+  ~TinyGPSPlus();
   static TinyGPSPlus* runningInstance(); 
   bool encode(char c); // process one character received from GPS
   TinyGPSPlus &operator << (char c) {encode(c); return *this;}
@@ -497,5 +498,7 @@ private:
   bool endOfTermHandler();
   bool isSignificant();
 };
+
+void gpsSallyForth(void*);
 
 #endif // def(__TinyGPSPlus_h)

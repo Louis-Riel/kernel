@@ -29,10 +29,11 @@
 #include "../components/wifi/station.h"
 #include "../components/esp_littlefs/include/esp_littlefs.h"
 #include "bootloader_random.h"
-#include "../components/eventmgr/eventmgr.h"
-#include "../components/rest/rest.h"
+#include "eventmgr.h"
+#include "rest.h"
+#include "route.h"
 #include "../components/pins/pins.h"
-#include "../components/mfile/mfile.h"
+#include "mfile.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -418,11 +419,11 @@ void parseFolderForCSV(const char *folder)
   ESP_LOGV(__FUNCTION__, "Opening folder %s", folder);
   DIR *theFolder;
   struct dirent *fi;
-  if ((theFolder = opendir(folder)) != NULL)
+  if ((theFolder = openDir(folder)) != NULL)
   {
     char *kFName = (char *)dmalloc(300);
     char *cFName = (char *)dmalloc(300);
-    while ((fi = readdir(theFolder)) != NULL)
+    while ((fi = readDir(theFolder)) != NULL)
     {
       if (strlen(fi->d_name) == 0)
       {
@@ -465,22 +466,16 @@ void parseFolderForCSV(const char *folder)
 
 void commitTripToDisk(void *param)
 {
-  uint32_t theBits = (uint32_t)param;
   if (initSPISDCard())
   {
     xEventGroupSetBits(app_eg, app_bits_t::COMMITTING_TRIPS);
 
-    if (theBits & BIT2)
-    {
-      parseFolderForCSV("/lfs/csv");
-      parseFolderForCSV("/sdcard/csv");
-    }
+    parseFolderForCSV("/lfs/csv");
+    parseFolderForCSV("/sdcard/csv");
     deinitSPISDCard();
   }
   xEventGroupSetBits(app_eg, app_bits_t::TRIPS_COMMITTED);
   xEventGroupClearBits(app_eg, app_bits_t::COMMITTING_TRIPS);
-  if (theBits & BIT3)
-    vTaskDelete(NULL);
 }
 
 void doHibernate(void *param)
@@ -527,7 +522,7 @@ void doHibernate(void *param)
   hibernate = true;
   ESP_LOGD(__FUNCTION__, "Hybernating");
 
-  //xTaskCreate(flash, "flashy", 2048, (void *)10, tskIDLE_PRIORITY, NULL);
+  //CreateManagedTask(flash, "flashy", 2048, (void *)10, tskIDLE_PRIORITY, NULL);
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
   gpio_set_level(BLINK_GPIO, 1);
   gpio_set_level(gps->enPin(), 0);
@@ -536,6 +531,7 @@ void doHibernate(void *param)
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF));
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF));
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF));
+  WaitToSleep();
   esp_deep_sleep_start();
 }
 
@@ -543,7 +539,7 @@ void Hibernate()
 {
   if (!(xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON))
   {
-    xTaskCreate(doHibernate, "doHibernate", 8192, NULL, tskIDLE_PRIORITY, NULL);
+    CreateBackgroundTask(doHibernate, "doHibernate", 4096, NULL, tskIDLE_PRIORITY, NULL);
   }
 }
 
@@ -667,11 +663,6 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   case TinyGPSPlus::gpsEvent::atSyncPoint:
     ESP_LOGD(__FUNCTION__, "atSyncPoint");
     xEventGroupClearBits(app_eg, app_bits_t::TRIPS_COMMITTED);
-    //if ((gps != NULL) && (now > 10000))
-    //{
-    //  xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT3), tskIDLE_PRIORITY, NULL);
-    //}
-    //xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps, tskIDLE_PRIORITY, NULL);
     break;
   case TinyGPSPlus::gpsEvent::outSyncPoint:
     xEventGroupClearBits(app_eg, app_bits_t::TRIPS_COMMITTED);
@@ -741,7 +732,6 @@ void configureMotionDetector()
   gpio_config(&io_conf);
   ESP_LOGV(__FUNCTION__, "Pins configured");
   xTaskCreate(pollWakePins, "pollWakePins", 2048, NULL, tskIDLE_PRIORITY, NULL);
-  gpio_install_isr_service(0);
   ESP_LOGV(__FUNCTION__, "ISR Service Started");
 
   for (int idx = 0; idx < numWakePins; idx++)
@@ -807,137 +797,6 @@ void print_wakeup_reason()
     break;
   }
 }
-
-esp_err_t setupLittlefs()
-{
-  const esp_vfs_littlefs_conf_t conf = {
-      .base_path = "/lfs",
-      .partition_label = "storage",
-      .format_if_mount_failed = true,
-      .dont_mount = false};
-
-  esp_err_t ret = esp_vfs_littlefs_register(&conf);
-  AppConfig *appState = AppConfig::GetAppStatus();
-  ESP_LOGD(__FUNCTION__, "lfs mounted %d", ret);
-  AppConfig *spiffState = appState->GetConfig("/spiff");
-  if (ret != ESP_OK)
-  {
-    spiffState->SetStateProperty("state", item_state_t::ERROR);
-    ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
-    return ret;
-  }
-
-  size_t total_bytes;
-  size_t used_bytes;
-  if ((ret = esp_littlefs_info("storage", &total_bytes, &used_bytes)) != ESP_OK)
-  {
-    ESP_LOGE(__FUNCTION__, "Failed in getting info %s", esp_err_to_name(ret));
-    return ret;
-  }
-  spiffState->SetStateProperty("state", item_state_t::ACTIVE);
-  spiffState->SetIntProperty("total", total_bytes);
-  spiffState->SetIntProperty("used", used_bytes);
-  spiffState->SetIntProperty("free", total_bytes - used_bytes);
-  free(spiffState);
-
-  ESP_LOGD(__FUNCTION__, "Space: %d/%d", used_bytes, total_bytes);
-  struct dirent *de;
-  bool hasCsv = false;
-  bool hasLogs = false;
-  bool hasFw = false;
-  bool hasCfg = false;
-  bool hasStat = false;
-
-  ESP_LOGD(__FUNCTION__, "Spiff is spiffy");
-
-  DIR *root = opendir("/lfs");
-  if (root == NULL)
-  {
-    ESP_LOGE(__FUNCTION__, "Cannot open lfs");
-    return ESP_FAIL;
-  }
-
-  while ((de = readdir(root)) != NULL)
-  {
-    ESP_LOGD(__FUNCTION__, "%d %s", de->d_type, de->d_name);
-    if (strcmp(de->d_name, "csv") == 0)
-    {
-      hasCsv = true;
-    }
-    if (strcmp(de->d_name, "logs") == 0)
-    {
-      hasLogs = true;
-    }
-    if (strcmp(de->d_name, "firmware") == 0)
-    {
-      hasFw = true;
-    }
-    if (strcmp(de->d_name, "config") == 0)
-    {
-      hasCfg = true;
-    }
-    if (strcmp(de->d_name, "status") == 0)
-    {
-      hasStat = true;
-    }
-  }
-  if ((ret = closeDir(root)) != ESP_OK)
-  {
-    ESP_LOGE(__FUNCTION__, "failed to close root %s", esp_err_to_name(ret));
-    return ret;
-  }
-
-  if (!hasCsv)
-  {
-    if (mkdir("/lfs/csv", 0750) != 0)
-    {
-      ESP_LOGE(__FUNCTION__, "Failed in creating csv folder");
-      return ESP_FAIL;
-    }
-    ESP_LOGD(__FUNCTION__, "csv folder created");
-  }
-  if (!hasLogs)
-  {
-    if (mkdir("/lfs/logs", 0750) != 0)
-    {
-      ESP_LOGE(__FUNCTION__, "Failed in creating logs folder");
-      return ESP_FAIL;
-    }
-    ESP_LOGD(__FUNCTION__, "logs folder created");
-  }
-  if (!hasFw)
-  {
-    if (mkdir("/lfs/firmware", 0750) != 0)
-    {
-      ESP_LOGE(__FUNCTION__, "Failed in creating firmware folder");
-      return ESP_FAIL;
-    }
-    ESP_LOGD(__FUNCTION__, "firmware folder created");
-  }
-
-  if (!hasCfg)
-  {
-    if (mkdir("/lfs/config", 0750) != 0)
-    {
-      ESP_LOGE(__FUNCTION__, "Failed in creating config folder");
-      return ESP_FAIL;
-    }
-    ESP_LOGD(__FUNCTION__, "config folder created");
-  }
-
-  if (!hasStat)
-  {
-    if (mkdir("/lfs/status", 0750) != 0)
-    {
-      ESP_LOGE(__FUNCTION__, "Failed in creating status folder");
-      return ESP_FAIL;
-    }
-    ESP_LOGD(__FUNCTION__, "status folder created");
-  }
-
-  return ESP_OK;
-}
-
 int32_t GenerateDevId()
 {
   bootloader_random_enable();
@@ -1003,14 +862,73 @@ static void print_char_val_type(esp_adc_cal_value_t val_type)
     ESP_LOGD(__FUNCTION__, "Characterized using Default Vref\n");
   }
 }
+esp_err_t setupLittlefs();
+
+static void serviceLoop(void* param) {
+  EventBits_t serviceBits;
+  EventBits_t waitMask = APP_SERVICE_BITS;
+  char* bits = (char*)malloc(app_bits_t::MAX_APP_BITS+1);
+  memset(bits,0,app_bits_t::MAX_APP_BITS+1);
+  for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++) {
+    bits[idx] = waitMask & (1<<idx) ? '1' : '0';
+  }
+  ESP_LOGD(__FUNCTION__,"wait:%s",bits);
+  for (serviceBits=xEventGroupGetBits(app_eg); 
+       true;
+       serviceBits=(APP_SERVICE_BITS&xEventGroupWaitBits(app_eg,waitMask,pdFALSE,pdFALSE,portMAX_DELAY))){
+    for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++) {
+      bits[idx] = serviceBits & (1<<idx) ? '1' : '0';
+    }
+    ESP_LOGD(__FUNCTION__,"curr:%s",bits);
+    if (serviceBits&app_bits_t::WIFI_ON && !TheWifi::GetInstance()) {
+      CreateMainlineTask(wifiSallyForth,"WifiSallyForth",NULL);
+    } else if (!(serviceBits&app_bits_t::WIFI_ON) && TheWifi::GetInstance()) {
+      if (TheWifi* theWifi = TheWifi::GetInstance()){
+        delete theWifi;
+      }
+    }
+    if (((serviceBits&(app_bits_t::REST|app_bits_t::WIFI_ON))==(app_bits_t::REST|app_bits_t::WIFI_ON)) 
+                  && !TheRest::GetServer()) {
+      CreateMainlineTask(restSallyForth,"restSallyForth",TheWifi::GetEventGroup());
+    } else if (!(serviceBits&(app_bits_t::REST|app_bits_t::WIFI_ON)) && TheRest::GetServer()) {
+      if (TheRest* theRest = TheRest::GetServer()){
+        delete theRest;
+      }
+    }
+    if (serviceBits&(app_bits_t::GPS_ON) && !TinyGPSPlus::runningInstance()) {
+      CreateMainlineTask(gpsSallyForth,"gpsSallyForth",AppConfig::GetAppConfig());
+      gps = TinyGPSPlus::runningInstance();
+      if (xEventGroupWaitBits(gps->eg, TinyGPSPlus::gpsEvent::gpsRunning, pdFALSE, pdTRUE, 1500 / portTICK_RATE_MS) & TinyGPSPlus::gpsEvent::gpsRunning)
+      {
+        ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEvent, &gps));
+      }
+    } else if (!(serviceBits&(app_bits_t::GPS_ON)) && TinyGPSPlus::runningInstance()) {
+      if (TinyGPSPlus* gps = TinyGPSPlus::runningInstance()){
+        ESP_LOGI(__FUNCTION__,"Stopping GPS");
+        delete gps;
+      }
+    }
+    waitMask = (APP_SERVICE_BITS ^ serviceBits);
+    for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++) {
+      bits[idx] = waitMask & (1<<idx) ? '1' : '0';
+    }
+    ESP_LOGD(__FUNCTION__,"wait:%s",bits);
+    if (!waitMask) {
+      waitMask = APP_SERVICE_BITS;
+      vTaskDelay(1000/portTICK_PERIOD_MS);
+    }
+  }
+}
 
 void app_main(void)
 {
-  if (setupLittlefs() == ESP_OK)
+  ESP_LOGI(__FUNCTION__,"Starting App...");
+  if (setupLittlefs()==ESP_OK)
   {
+    gpio_install_isr_service(0);
     const esp_app_desc_t* ad = esp_ota_get_app_description();
     ESP_LOGI(__FUNCTION__, "Starting %s v%s %s %s",ad->project_name,ad->version,ad->date, ad->time);
-
+    AppConfig *appcfg = new AppConfig(CFG_PATH);
 
     check_efuse();
     adc1_config_width(ADC_WIDTH_12Bit);
@@ -1020,9 +938,8 @@ void app_main(void)
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, defvref, &characteristics);
     print_char_val_type(val_type);
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    AppConfig *appcfg = new AppConfig(CFG_PATH);
-    esp_err_t ret = ESP_OK;
     nvs_flash_init();
+
 
     if (appcfg->GetStringProperty("wifitype") == NULL)
     {
@@ -1033,14 +950,18 @@ void app_main(void)
     if (appcfg->GetIntProperty("deviceid") <= 0)
     {
       ESP_LOGD(__FUNCTION__, "Seeding device id");
-      appcfg->SetIntProperty("deviceid", GenerateDevId());
+      uint32_t did;
+      appcfg->SetIntProperty("deviceid", (did=GenerateDevId()));
+    }
+    if (appcfg->GetIntProperty("deviceid") > 0) {
+      ESP_LOGD(__FUNCTION__,"Device Id %d",appcfg->GetIntProperty("deviceid"));
     }
 
     initLog();
     sampleBatteryVoltage();
-    ESP_LOGV(__FUNCTION__, "Pre-Loading Image....");
     UpgradeFirmware();
     //initSPISDCard();
+
     gpio_reset_pin(BLINK_GPIO);
     gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
     gpio_set_level(BLINK_GPIO, 1);
@@ -1068,69 +989,24 @@ void app_main(void)
       }
     }
     ESP_LOGD(__FUNCTION__, "Starting bumps:%d, lastMovement:%d", bumpCnt, CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ);
+    configureMotionDetector();
 
-    RawDegrees lat;
-    RawDegrees lng;
-    lat.deg = lastLatDeg;
-    lat.billionths = lastLatBil;
-    lat.negative = lastLatNeg;
-    lng.deg = lastLngDeg;
-    lng.billionths = lastLngBil;
-    lng.negative = lastLngNeg;
-    if (appcfg->HasProperty("/gps/rxPin") && appcfg->GetIntProperty("/gps/rxPin"))
-    {
-      configureMotionDetector();
-      ESP_LOGD(__FUNCTION__, "Starting GPS");
-      gps = new TinyGPSPlus(appcfg->GetConfig("/gps"));
-      if (gps != NULL)
-      {
-        ESP_LOGD(__FUNCTION__, "Waiting for GPS");
-        if (xEventGroupWaitBits(gps->eg, TinyGPSPlus::gpsEvent::gpsRunning, pdFALSE, pdTRUE, 1500 / portTICK_RATE_MS) & TinyGPSPlus::gpsEvent::gpsRunning)
-        {
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::msg, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::go, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::stop, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::rateChanged, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::systimeChanged, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::locationChanged, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantCourseChange, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantDistanceChange, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::significantSpeedChange, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::gpsPaused, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::gpsResumed, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::atSyncPoint, gpsEvent, &gps));
-          ESP_ERROR_CHECK(esp_event_handler_register(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::outSyncPoint, gpsEvent, &gps));
-          //configureMotionDetector();
-          //commitTripToDisk((void*)(BIT1|BIT2));
-        }
-        else
-        {
-          ESP_LOGW(__FUNCTION__, "No GPS Connected");
-          if (gps != NULL)
-            ldfree(gps);
-          gps = NULL;
-        }
-      }
-    }
-    else
-    {
-      xTaskCreate(commitTripToDisk, "commitTripToDisk", 8192, (void *)(BIT2 | BIT3), tskIDLE_PRIORITY, NULL);
-    }
+    CreateWokeBackgroundTask(commitTripToDisk, "commitTripToDisk", 4096, NULL, tskIDLE_PRIORITY, NULL);
 
-    if (indexOf(appcfg->GetStringProperty("wifitype"), "AP") != NULL)
-    {
-      ESP_LOGD(__FUNCTION__, "Starting puller's wifi");
-      xTaskCreate(wifiSallyForth, "wifiSallyForth", 8192, gps, tskIDLE_PRIORITY, NULL);
-    }
     ConfigurePins(appcfg);
+    if (appcfg->GetIntProperty("/gps/rxPin"))
+      xEventGroupSetBits(app_eg,app_bits_t::GPS_ON);
 
-    //if (gps)
-    //  ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::atSyncPoint, NULL, 0, portMAX_DELAY));
+    if (appcfg->IsAp())
+      xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
 
     //Register event managers
     new BufferedFile();
+
+    CreateBackgroundTask(serviceLoop,"ServiceLoop",8192,NULL,tskIDLE_PRIORITY,NULL);
+    vTaskDelay(5000/portTICK_PERIOD_MS);
+    xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
+
   }
 }
 
