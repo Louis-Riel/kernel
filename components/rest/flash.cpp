@@ -72,7 +72,6 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
                             {
                                 fClose(toBeMd5);
                                 ESP_LOGI(__FUNCTION__, "Updated Firmware File");
-                                vTaskDelay(1000/portTICK_PERIOD_MS);
                                 esp_restart();
                             }
                             else
@@ -114,11 +113,11 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
     return false;
 }
 
-void TheRest::CheckUpgrade(void*){
+void TheRest::CheckUpgrade(void* param){
     ESP_LOGD(__FUNCTION__,"Checking firmware");
     char localMd5[33];
     char serverMd5[33];
-    char url[266];
+    char* url =(char*)dmalloc(266);
     bool needsUpgrade = false;
     memset(localMd5,0,33);
     memset(serverMd5,0,33);
@@ -146,4 +145,5 @@ void TheRest::CheckUpgrade(void*){
     } else {
         ESP_LOGI(__FUNCTION__,"No upgrade needed");
     }
+    ldfree(url);
 }

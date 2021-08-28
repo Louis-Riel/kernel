@@ -61,16 +61,19 @@ TheWifi::~TheWifi(){
     esp_wifi_deinit();
     esp_netif_deinit();
     ESP_LOGD(__FUNCTION__, "Stoppint");
-    xEventGroupClearBits(*getAppEG(), app_bits_t::WIFI_ON);
+    xEventGroupClearBits(getAppEG(), app_bits_t::WIFI_ON);
     theInstance=NULL;
 }
 
 
 TheWifi::TheWifi(AppConfig* appcfg)
     :ManagedDevice("TheWifi")
+    ,eventGroup(xEventGroupCreate())
+    ,cfg(appcfg)
+    ,astate(AppConfig::GetAppStatus())
+    ,bitMutex(xSemaphoreCreateMutex())
 {
     theInstance = this;
-    eventGroup = xEventGroupCreate();
     esp_pm_config_esp32_t pm_config;
     pm_config.max_freq_mhz = 240;
     pm_config.min_freq_mhz = 240;
@@ -79,8 +82,6 @@ TheWifi::TheWifi(AppConfig* appcfg)
     memset(&staIp, 0, sizeof(staIp));
     memset(clients, 0, sizeof(void *) * MAX_NUM_CLIENTS);
     memset(&wifi_config,0,sizeof(wifi_config));
-    cfg = appcfg;
-    astate = AppConfig::GetAppStatus();
     stationStat = astate->GetConfig("/wifi/station");
     apStat = astate->GetConfig("/wifi/ap");
 
@@ -140,14 +141,14 @@ TheWifi::TheWifi(AppConfig* appcfg)
             ESP_LOGD(__FUNCTION__, "Created netif %li", (long int)ap_netif);
             ESP_ERROR_CHECK(esp_netif_dhcps_start(ap_netif));
             generateSidConfig(&wifi_config, false);
-            wifi_config.ap.channel = 5;
+            //wifi_config.ap.channel = 5;
             ESP_LOGD(__FUNCTION__, "Configured in AP Mode %s/%s", wifi_config.ap.ssid,wifi_config.ap.password);
             ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_AP, &wifi_config));
         }
     }
 
     ESP_ERROR_CHECK(esp_wifi_start());
-    xEventGroupSetBits(*getAppEG(), app_bits_t::WIFI_ON);
+    xEventGroupSetBits(getAppEG(), app_bits_t::WIFI_ON);
 
     if (handlerDescriptors == NULL)
         EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
@@ -481,11 +482,13 @@ void TheWifi::ProcessScannedAPs()
             wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
             ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_STA, &wifi_config));
 
-            if (esp_wifi_connect() == ESP_OK)
+            if ((ret=esp_wifi_connect()) == ESP_OK)
             {
                 ESP_LOGD(__FUNCTION__, "Configured in Station Mode %s", wifi_config.sta.ssid);
                 xEventGroupSetBits(eventGroup, WIFI_STA_CONFIGURED);
                 return;
+            } else {
+                ESP_LOGE(__FUNCTION__,"Cannot connect to wifi:%s",esp_err_to_name(ret));
             }
         }
     }
@@ -569,13 +572,14 @@ static void updateTime(void *param)
     }
 }
 
-
 void TheWifi::ParseStateBits(AppConfig* state) {
+    xSemaphoreTake(bitMutex,portMAX_DELAY);
     EventBits_t bits = xEventGroupGetBits(eventGroup);
     state->SetBoolProperty("Connected",bits & WIFI_CONNECTED_BIT);
     state->SetBoolProperty("Scanning",bits & WIFI_SCANING_BIT);
     state->SetBoolProperty("Up",bits & WIFI_STA_UP_BIT);
     state->SetBoolProperty("Station",bits & WIFI_STA_CONFIGURED);
+    xSemaphoreGive(bitMutex);
 }
 
 int TheWifi::RefreshApMembers(AppConfig* state) {
@@ -808,7 +812,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
                 deinitSPISDCard();
                 theWifi->ParseStateBits(theWifi->stationStat);
             }
-            if (!(xEventGroupGetBits(*getAppEG()) & app_bits_t::TRIPS_SYNCING))
+            if (!(xEventGroupGetBits(getAppEG()) & app_bits_t::TRIPS_SYNCING))
             {
                 ESP_LOGI(__FUNCTION__, "Trying to reconnect");
                 theWifi->wifiScan();

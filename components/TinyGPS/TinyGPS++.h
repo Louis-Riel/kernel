@@ -492,6 +492,7 @@ private:
   TinyGPSCustom* gpTxt;
   uint8_t gpsWarmTime;
   uint8_t toBeFreqIdx;
+  EventGroupHandle_t app_eg;
 
   // internal utilities
   int fromHex(char a);

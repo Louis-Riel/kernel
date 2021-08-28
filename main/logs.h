@@ -17,8 +17,7 @@
 #include "cJSON.h"
 #include "freertos/event_groups.h"
 
-static EventGroupHandle_t app_eg = xEventGroupCreate();
-EventGroupHandle_t* getAppEG();
+EventGroupHandle_t getAppEG();
 
 typedef enum {
  BUMP_BIT = BIT0,

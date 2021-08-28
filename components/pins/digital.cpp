@@ -1,6 +1,6 @@
 #include "pins.h"
 
-#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 Pin* Pin::pins[];
 uint8_t Pin::numPins=0;

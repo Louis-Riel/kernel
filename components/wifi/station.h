@@ -90,6 +90,7 @@ private:
     Aper *GetAper(uint8_t *mac);
     
     EventGroupHandle_t              s_wifi_eg;
+    SemaphoreHandle_t bitMutex;
 };
 
 #endif

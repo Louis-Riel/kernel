@@ -199,6 +199,7 @@ bool deinitSPISDCard(bool log)
   {
     esp_err_t ret;
     AppConfig *appState = AppConfig::GetAppStatus();
+    EventGroupHandle_t app_eg = getAppEG();
     if (xEventGroupGetBits(app_eg) & SPIFF_MOUNTED)
     {
       ret = esp_vfs_littlefs_unregister("storage");
@@ -285,6 +286,7 @@ esp_err_t setupLittlefs()
   bool hasStat = false;
 
   ESP_LOGD(__FUNCTION__, "Spiff is spiffy");
+  EventGroupHandle_t app_eg = getAppEG();
   xEventGroupSetBits(app_eg, SPIFF_MOUNTED);
   numSdCallers = -1;
 
@@ -384,6 +386,7 @@ bool initSPISDCard(bool log)
     AppConfig *appState = AppConfig::GetAppStatus();
     AppConfig *spiffState = appState->GetConfig("spiff");
     AppConfig *sdcState = appState->GetConfig("sdcard");
+    EventGroupHandle_t app_eg = getAppEG();
     esp_err_t ret = ESP_FAIL;
     if (numSdCallers >= 0)
     {

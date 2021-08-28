@@ -23,6 +23,14 @@ void dumpTheLogs(void* params){
     bool isAp = GetAppConfig()->IsAp();
     if (logBufPos == 0) {
         ESP_LOGD(__FUNCTION__,"No logs to dump");
+        dltask=NULL;
+        return;
+    }
+    if (xEventGroupGetBits(getAppEG())&app_bits_t::TRIPS_SYNCING) {
+        ESP_LOGD(__FUNCTION__,"Not flushing whilst dumping");
+        dltask=NULL;
+        *logBuff=0;
+        logBufPos=0;
         return;
     }
     if (dltask == NULL) {
@@ -36,7 +44,6 @@ void dumpTheLogs(void* params){
         memccpy(db,logBuff,sizeof(uint8_t),logBufPos);
         *logBuff=0;
         logBufPos=0;
-
     }
     xSemaphoreGive(logMutex);
 
@@ -65,6 +72,8 @@ void dumpTheLogs(void* params){
         }
         fClose(fw);
         deinitSPISDCard(false);
+    } else {
+        ESP_LOGD(__FUNCTION__,"No logs to dump I think %d",len);
     }
     dltask = NULL;
     ldfree(db);
@@ -111,7 +120,8 @@ void initLog() {
     logBufPos=0;
     esp_log_set_vprintf(loggit);
 }
+static EventGroupHandle_t app_eg = xEventGroupCreate();
 
-EventGroupHandle_t* getAppEG() {
-  return &app_eg;
+EventGroupHandle_t getAppEG() {
+  return app_eg;
 }

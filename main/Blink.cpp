@@ -466,6 +466,7 @@ void parseFolderForCSV(const char *folder)
 
 void commitTripToDisk(void *param)
 {
+  EventGroupHandle_t app_eg = getAppEG();
   if (initSPISDCard())
   {
     xEventGroupSetBits(app_eg, app_bits_t::COMMITTING_TRIPS);
@@ -508,17 +509,19 @@ void doHibernate(void *param)
   }
 
   //gpio_deep_sleep_hold_en();
-  lastSpeed = 0;
-  lastCourse = 0;
-  lastAltitude = 0;
-  lastLatDeg = 0;
-  lastLatBil = 0;
-  lastLngDeg = 0;
-  lastLngBil = 0;
-  lastDpTs = 0;
-  bumpCnt = 0;
-  lastRate = 0;
-  lastPoiState = poiState_t::unknown;
+  if (gps){
+    lastSpeed = gps->speed.value();
+    lastCourse = gps->course.value();
+    lastAltitude = gps->altitude.value();
+    lastLatDeg = gps->location.rawLat().deg;
+    lastLatBil = gps->location.rawLat().billionths;
+    lastLngDeg = gps->location.rawLng().deg;
+    lastLngBil = gps->location.rawLng().billionths;
+    lastDpTs = gps->time.value();
+    bumpCnt = 0;
+    lastRate = 0;
+    lastPoiState = poiState_t::unknown;
+  }
   hibernate = true;
   ESP_LOGD(__FUNCTION__, "Hybernating");
 
@@ -537,9 +540,9 @@ void doHibernate(void *param)
 
 void Hibernate()
 {
-  if (!(xEventGroupGetBits(*getAppEG()) & app_bits_t::WIFI_ON))
+  if (!(xEventGroupGetBits(getAppEG()) & app_bits_t::WIFI_ON) && (hybernator==NULL))
   {
-    CreateBackgroundTask(doHibernate, "doHibernate", 4096, NULL, tskIDLE_PRIORITY, NULL);
+    CreateBackgroundTask(doHibernate, "doHibernate", 4096, NULL, tskIDLE_PRIORITY, &hybernator);
   }
 }
 
@@ -662,10 +665,10 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     break;
   case TinyGPSPlus::gpsEvent::atSyncPoint:
     ESP_LOGD(__FUNCTION__, "atSyncPoint");
-    xEventGroupClearBits(app_eg, app_bits_t::TRIPS_COMMITTED);
+    xEventGroupClearBits(getAppEG(), app_bits_t::TRIPS_COMMITTED);
     break;
   case TinyGPSPlus::gpsEvent::outSyncPoint:
-    xEventGroupClearBits(app_eg, app_bits_t::TRIPS_COMMITTED);
+    xEventGroupClearBits(getAppEG(), app_bits_t::TRIPS_COMMITTED);
     ESP_LOGD(__FUNCTION__, "Leaving Synching");
     break;
   default:
@@ -692,6 +695,7 @@ static void gpio_isr_handler(void *arg)
 static void pollWakePins(void *arg)
 {
   uint32_t io_num;
+  EventGroupHandle_t app_eg = getAppEG();
   for (;;)
   {
     if (xQueueReceive(gpio_evt_queue, &io_num, portMAX_DELAY))
@@ -873,13 +877,13 @@ static void serviceLoop(void* param) {
     bits[idx] = waitMask & (1<<idx) ? '1' : '0';
   }
   ESP_LOGD(__FUNCTION__,"wait:%s",bits);
-  for (serviceBits=xEventGroupGetBits(app_eg); 
-       true;
-       serviceBits=(APP_SERVICE_BITS&xEventGroupWaitBits(app_eg,waitMask,pdFALSE,pdFALSE,portMAX_DELAY))){
+  EventGroupHandle_t app_eg = getAppEG();
+  while (true){
+    serviceBits=(APP_SERVICE_BITS&xEventGroupWaitBits(app_eg,waitMask,pdFALSE,pdFALSE,portMAX_DELAY));
     for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++) {
       bits[idx] = serviceBits & (1<<idx) ? '1' : '0';
     }
-    ESP_LOGD(__FUNCTION__,"curr:%s",bits);
+    ESP_LOGD(__FUNCTION__,"curr:%s %d",bits, serviceBits);
     if (serviceBits&app_bits_t::WIFI_ON && !TheWifi::GetInstance()) {
       CreateMainlineTask(wifiSallyForth,"WifiSallyForth",NULL);
     } else if (!(serviceBits&app_bits_t::WIFI_ON) && TheWifi::GetInstance()) {
@@ -912,12 +916,14 @@ static void serviceLoop(void* param) {
     for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++) {
       bits[idx] = waitMask & (1<<idx) ? '1' : '0';
     }
-    ESP_LOGD(__FUNCTION__,"wait:%s",bits);
+    ESP_LOGD(__FUNCTION__,"wait:%s %d",bits,waitMask);
     if (!waitMask) {
       waitMask = APP_SERVICE_BITS;
       vTaskDelay(1000/portTICK_PERIOD_MS);
     }
   }
+  ESP_LOGW(__FUNCTION__,"ServiceLoop done");
+  vTaskDelete(NULL);
 }
 
 void app_main(void)
@@ -978,6 +984,8 @@ void app_main(void)
       lastRate = 0;
       bumpCnt = 0;
       lastPoiState = poiState_t::unknown;
+    } else {
+      ESP_LOGD(__FUNCTION__,"Lat:%d %d Lng:%d %d",lastLatDeg,lastLatBil,lastLngDeg,lastLatBil);
     }
     print_wakeup_reason();
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER)
@@ -994,6 +1002,7 @@ void app_main(void)
     CreateWokeBackgroundTask(commitTripToDisk, "commitTripToDisk", 4096, NULL, tskIDLE_PRIORITY, NULL);
 
     ConfigurePins(appcfg);
+    EventGroupHandle_t app_eg = getAppEG();
     if (appcfg->GetIntProperty("/gps/rxPin"))
       xEventGroupSetBits(app_eg,app_bits_t::GPS_ON);
 
@@ -1004,7 +1013,7 @@ void app_main(void)
     new BufferedFile();
 
     CreateBackgroundTask(serviceLoop,"ServiceLoop",8192,NULL,tskIDLE_PRIORITY,NULL);
-    vTaskDelay(5000/portTICK_PERIOD_MS);
+    //vTaskDelay(5000/portTICK_PERIOD_MS);
     xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
 
   }

@@ -1,11 +1,18 @@
 #include "./route.h"
 #include "esp_debug_helpers.h"
 
-#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
 static TheRest *restInstance = NULL;
+
+void restSallyForth(void *pvParameter) {
+    if (TheRest::GetServer() == NULL) {
+        TheRest::GetServer(pvParameter);
+    }
+    deviceId?deviceId:deviceId=AppConfig::GetAppConfig()->GetIntProperty("deviceid");
+}
 
 TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     : ManagedDevice("TheRest","TheRest",&BuildStatus),
@@ -15,7 +22,8 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       wifiEventGroup(evtGrp),
       restConfig(HTTPD_DEFAULT_CONFIG()),
       gwAddr(NULL),
-      ipAddr(NULL)
+      ipAddr(NULL),
+      app_eg(getAppEG())
 {
     if (restInstance == NULL)
     {
@@ -69,7 +77,7 @@ TheRest::~TheRest()
         EventManager::UnRegisterEventHandler((handlerDescriptors = BuildHandlerDescriptors()));
 
     httpd_stop(server);
-    xEventGroupClearBits(*getAppEG(), app_bits_t::REST);
+    xEventGroupClearBits(getAppEG(), app_bits_t::REST);
     restInstance=NULL;
 }
 
@@ -81,7 +89,7 @@ bool TheRest::routeHttpTraffic(const char *reference_uri, const char *uri_to_mat
     sampleBatteryVoltage();
     if ((strlen(reference_uri) == 1) && (reference_uri[0] == '*'))
     {
-        //ESP_LOGV(__FUNCTION__,"* match for %s",uri_to_match);
+        ESP_LOGV(__FUNCTION__,"* match for %s",uri_to_match);
         return true;
     }
 
@@ -96,7 +104,6 @@ bool TheRest::routeHttpTraffic(const char *reference_uri, const char *uri_to_mat
     bool eot = false;
     bool eos = false;
 
-    //ESP_LOGV(__FUNCTION__,"routing ref:%s uri:%s",reference_uri,uri_to_match);
     while (matches && (sidx < sLen))
     {
         tc = reference_uri[tidx];
@@ -148,6 +155,7 @@ bool TheRest::routeHttpTraffic(const char *reference_uri, const char *uri_to_mat
             }
         }
     }
+    ESP_LOGV(__FUNCTION__,"%s ref:%s uri:%s",matches ? "matches" : "no match",reference_uri,uri_to_match);
     return matches;
 }
 
@@ -238,17 +246,18 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
 
         int chunckLen = isPreAllocated ? min(JSON_BUFFER_SIZE, *len) : hlen ? hlen
                                                                             : JSON_BUFFER_SIZE;
-        ESP_LOGV(__FUNCTION__, "Downloading hlen:%d chunckLen:%d buflen:%d len: %d bytes of data for %s", hlen, chunckLen, bufLen, (int)len, url);
         *len = 0;
-        memset(retVal + *len, 0, bufLen);
+        memset(retVal, 0, bufLen);
+        ESP_LOGD(__FUNCTION__, "Downloading isPreAllocated:%d hlen:%d chunckLen:%d buflen:%d len: %d bytes of data for %s", isPreAllocated, hlen, chunckLen, bufLen, (int)*len, url);
         while ((chunckLen = esp_http_client_read(client, retVal + *len, chunckLen)) > 0)
         {
-            *len += chunckLen;
             ESP_LOGV(__FUNCTION__, "Chunck %d bytes of data for %s. Totlen:%d", chunckLen, url, *len);
+            *len += chunckLen;
             if (!isPreAllocated || (isPreAllocated && (*len < totLen)))
                 memset(retVal + *len, 0, chunckLen);
         }
-        ESP_LOGV(__FUNCTION__, "Parsed %d bytes of data for %s", *len, url);
+        ESP_LOGD(__FUNCTION__, "Downloaded %d bytes of data from %s", *len, url);
+        esp_http_client_close(client);
         esp_http_client_cleanup(client);
         ldfree((void *)config);
         return retVal;
@@ -258,9 +267,10 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         ESP_LOGE(__FUNCTION__, "Failed sending request(%s). client is %snull, err:%s, hlen:%d, retCode:%d, len:%d", config->url, client ? "not " : "", esp_err_to_name(err), hlen, retCode, *len);
     }
 
-    if (client)
+    if (client){
+        esp_http_client_close(client);
         esp_http_client_cleanup(client);
-
+    }
     ldfree((void *)config);
     return NULL;
 }
@@ -331,6 +341,7 @@ esp_err_t TheRest::SendConfig(char *addr, cJSON *cfg)
         {
             ESP_LOGD(__FUNCTION__, "Config sent %d bytes to %s", strlen(sjson), config->url);
         }
+        esp_http_client_close(client);
         esp_http_client_cleanup(client);
     }
     else
@@ -373,7 +384,7 @@ void TheRest::MergeConfig(void *param)
     else
     {
         ESP_LOGW(__FUNCTION__, "Cannot get config from " IPSTR " for devid %d", IP2STR((esp_ip4_addr *)&addr), deviceId);
-        //TheRest::SendConfig(rest->gwAddr, curCfg);
+        TheRest::SendConfig(rest->gwAddr, curCfg);
     }
 }
 
@@ -424,6 +435,7 @@ void TheRest::SendStatus(void *param)
         {
             ESP_LOGD(__FUNCTION__, "Status sent to %s", config->url);
         }
+        esp_http_client_close(client);
         esp_http_client_cleanup(client);
     }
     else
@@ -463,6 +475,7 @@ esp_err_t TheRest::rest_handler(httpd_req_t *req)
             return ret;
         }
     }
+    ESP_LOGW(__FUNCTION__,"Cannot route %d %s",req->method,req->uri);
     httpd_resp_send_404(req);
     return ESP_FAIL;
 }

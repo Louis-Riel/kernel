@@ -190,6 +190,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                     else
                     {
                         ESP_LOGI(__FUNCTION__, "firmware update needed %d, %s!=%s", len, dmd5[0]?dmd5:"N/A", ccmd5);
+                        esp_http_client_close(client);
                         esp_http_client_cleanup(client);
                         memset(config, 0, sizeof(esp_http_client_config_t));
                         fClose(fw);
@@ -261,6 +262,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                             } else {
                                 ESP_LOGE(__FUNCTION__,"Cannot open client:%s",esp_err_to_name(ret));
                             }
+                            esp_http_client_close(client);
                             esp_http_client_cleanup(client);
                         } else {
                             ESP_LOGE(__FUNCTION__,"Cannot open image: /lfs/firmware/current.bin");
@@ -312,6 +314,7 @@ cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
     xEventGroupSetBits(TheWifi::GetEventGroup(), GETTING_TRIP_LIST);
     esp_err_t err;
     err = esp_http_client_perform(client);
+    esp_http_client_close(client);
     esp_http_client_cleanup(client);
     ldfree((void *)config->url);
     ldfree((void *)config);
@@ -362,6 +365,7 @@ void extractClientTar(char *tarFName)
     uint32_t chunkLen = 0;
     char fname[255];
     FILE *fw = NULL;
+    struct stat st;
     if (ret == MTAR_ESUCCESS)
     {
         cJSON *msg = NULL;
@@ -382,14 +386,22 @@ void extractClientTar(char *tarFName)
                             msg = cJSON_Parse(buf);
                             devid = cJSON_GetObjectItemCaseSensitive(msg, "deviceid");
                             cJSON_Delete(msg);
+                            msg=NULL;
                         }
                         if (devid != NULL)
                         {
                             sprintf(fname, "/lfs/%s/%d.json", indexOf(header.name,"config") ? "config" : "status", devid->valueint);
-                            ESP_LOGD(__FUNCTION__, "Saved as %s (%d bytes)\n", fname, header.size);
-                            fw = fOpenCd(fname, "w", true);
-                            fWrite(buf, 1, header.size, fw);
-                            fClose(fw);
+                            ret = stat(fname, &st);
+                            if (ret == 0){
+                                if (st.st_size != header.size){
+                                    ESP_LOGD(__FUNCTION__, "Saved as %s (tar %d bytes, file %d bytes)\n", fname, header.size, (int)st.st_size);
+                                    fw = fOpenCd(fname, "w", true);
+                                    fWrite(buf, 1, header.size, fw);
+                                    fClose(fw);
+                                } else {
+                                    ESP_LOGD(__FUNCTION__, "Skippng %s (%d bytes)\n", fname, header.size);
+                                }
+                            }
                         }
                     }
                 }
@@ -435,23 +447,31 @@ void extractClientTar(char *tarFName)
                             }
                         }
                     }
-                    ESP_LOGD(__FUNCTION__, "Saved as %s (%d bytes)\n", fname, header.size);
-                    fw = fOpenCd(fname, "w", true);
-                    if (fw != NULL)
-                    {
-                        while (len < header.size)
-                        {
-                            chunkLen = fmin(header.size - len, 8192);
-                            mtar_read_data(&tar, buf, chunkLen);
-                            fWrite(buf, 1, chunkLen, fw);
-                            len += chunkLen;
+
+                    ret = stat(fname, &st);
+                    if (ret == 0){
+                        if (st.st_size != header.size){
+                            ESP_LOGD(__FUNCTION__, "Saved as %s (tar %d bytes, file %d bytes)\n", fname, header.size, (int)st.st_size);
+                            fw = fOpenCd(fname, "w", true);
+                            if (fw != NULL)
+                            {
+                                while (len < header.size)
+                                {
+                                    chunkLen = fmin(header.size - len, 8192);
+                                    mtar_read_data(&tar, buf, chunkLen);
+                                    fWrite(buf, 1, chunkLen, fw);
+                                    len += chunkLen;
+                                }
+                                fClose(fw);
+                                ESP_LOGV(__FUNCTION__, "end %s (%d bytes)", header.name, len);
+                            }
+                            else
+                            {
+                                ESP_LOGE(__FUNCTION__, "Cannot write %s", fname);
+                            }
+                        } else {
+                            ESP_LOGD(__FUNCTION__, "Skippng %s (%d bytes)\n", fname, header.size);
                         }
-                        fClose(fw);
-                        ESP_LOGV(__FUNCTION__, "end %s (%d bytes)", header.name, len);
-                    }
-                    else
-                    {
-                        ESP_LOGE(__FUNCTION__, "Cannot write %s", fname);
                     }
                 }
             }
@@ -521,9 +541,10 @@ cJSON* GetDeviceConfig(esp_ip4_addr_t *ipInfo,uint32_t deviceId)
     if (sjson)
         ldfree(sjson);
 
-    if (client)
+    if (client){
+        esp_http_client_close(client);
         esp_http_client_cleanup(client);
-
+    }
     ldfree((void *)config->url);
     ldfree((void *)config);
     return ret;
@@ -586,6 +607,7 @@ void pullStation(void *pvParameter)
             if ((respCode = esp_http_client_get_status_code(client)) == 200)
             {
                 isAllGood=true;
+                esp_http_client_close(client);
                 esp_http_client_cleanup(client);
                 ldfree((void *)config->url);
 
@@ -613,6 +635,7 @@ void pullStation(void *pvParameter)
                     {
                         ESP_LOGD(__FUNCTION__, "Sent wifi off %s to %s", postData, config->url);
                     }
+                    esp_http_client_close(client);
                     esp_http_client_cleanup(client);
                 }
                 else

@@ -12,6 +12,7 @@ EventInterpretor::EventInterpretor(cJSON *json, cJSON* programs)
 ,programName(NULL)
 ,method(NULL)
 ,params(NULL)
+,app_eg(getAppEG())
 {
     AppConfig* cfg = new AppConfig(json,NULL);
     memset(conditions, 0, 5 * sizeof(void *));
@@ -214,7 +215,7 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
         return UINT8_MAX;
     }
 
-    ESP_LOGV(__FUNCTION__,"Got method:(%s)",method);
+    ESP_LOGV(__FUNCTION__,"Got %s method:(%s)",inBackground?"backgroung":"foreground",method);
     if (strcmp(method, "commitTripToDisk") == 0)
     {
         jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "flags"), "value");
@@ -253,28 +254,23 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
     }
     if (strcmp(method, "wifiSallyForth") == 0)
     {
-        char* bits = (char*)malloc(app_bits_t::MAX_APP_BITS+1);
-        memset(bits,0,app_bits_t::MAX_APP_BITS+1);
-        EventBits_t serviceBits = xEventGroupGetBits(app_eg);
-
-        for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++) {
-            bits[idx] = serviceBits & (1<<idx) ? '1' : '0';
-        }
-        ESP_LOGD(__FUNCTION__,"%s",bits);
         xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
-        serviceBits = xEventGroupGetBits(app_eg);
-        for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++) {
-            bits[idx] = serviceBits & (1<<idx) ? '1' : '0';
-        }
-        ESP_LOGD(__FUNCTION__,"%s",bits);
         return UINT8_MAX;
     }
-    if (strcmp(method, "checkupgrade") == 0)
+    if (strcmp(method, "checkupgradefixmelater") == 0)
     {
         if (inBackground)
-            return CreateWokeBackgroundTask(TheRest::CheckUpgrade, "CheckUpgrade", 8192, NULL, tskIDLE_PRIORITY, NULL);
+            return CreateWokeBackgroundTask(TheRest::CheckUpgrade, "bCheckUpgrade", 4096, NULL, tskIDLE_PRIORITY, NULL);
         else
-            CreateWokeInlineTask(TheRest::CheckUpgrade, "CheckUpgrade", 8192, NULL);
+            CreateWokeInlineTask(TheRest::CheckUpgrade, "fCheckUpgrade", 4096, NULL);
+        return UINT8_MAX;
+    }
+    if (strcmp(method, "sendtar") == 0)
+    {
+        if (inBackground)
+            return CreateWokeBackgroundTask(TheRest::SendTar, "SendTar", 4096, NULL, tskIDLE_PRIORITY, NULL);
+        else
+            CreateWokeInlineTask(TheRest::SendTar, "SendTar", 4096, NULL);
         return UINT8_MAX;
     }
     if (strcmp(method, "Post") == 0)

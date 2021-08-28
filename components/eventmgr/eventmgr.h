@@ -140,6 +140,7 @@ private:
     cJSON *params;
     EventHandlerDescriptor *handler;
     int32_t id;
+    EventGroupHandle_t app_eg;
 };
 
 class EventManager
@@ -156,6 +157,7 @@ public:
 private:
     cJSON *config;
     cJSON *programs;
+    esp_event_loop_handle_t evtMgrLoopHandle;
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
 };
 
@@ -163,10 +165,10 @@ class ManagedDevice
 {
 public:
     ManagedDevice(char *type);
-    ManagedDevice(char *type,char *name,cJSON* (*statusFnc)(void*));
+    ManagedDevice(char *type, char *name, cJSON *(*statusFnc)(void *));
     ~ManagedDevice();
     static void UpdateStatuses();
-    const char* GetName();
+    const char *GetName();
     esp_event_base_t eventBase;
     EventHandlerDescriptor *handlerDescriptors;
 
@@ -174,12 +176,13 @@ protected:
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     void PostEvent(void *content, size_t len, int32_t event_id);
     EventHandlerDescriptor *BuildHandlerDescriptors();
-    static cJSON *BuildStatus(void* instance);
-    cJSON* (*statusFnc)(void*);
+    static cJSON *BuildStatus(void *instance);
+    cJSON *(*statusFnc)(void *);
     cJSON *status;
-    char* name;
+    char *name;
+
 private:
-    static ManagedDevice* runningInstances[MAX_NUM_DEVICES];
+    static ManagedDevice *runningInstances[MAX_NUM_DEVICES];
     static uint8_t numDevices;
 };
 
@@ -284,7 +287,7 @@ public:
     {
         if (bitsToWaitFor)
         {
-            ESP_LOGD(__FUNCTION__, "Waiting for threads");
+            ESP_LOGD(__FUNCTION__, "Waiting for threads %d", bitsToWaitFor);
             xEventGroupWaitBits(managedThreadBits, bitsToWaitFor, false, true, portMAX_DELAY);
         }
         else
@@ -324,12 +327,26 @@ public:
             xEventGroupClearBits(managedThreadBits, 1 << bitNo);
             ESP_LOGV(__FUNCTION__, "Running %s", pcName);
 
-            BaseType_t ret = xTaskCreate(ManagedThreads::runThread,
-                                         pcName,
-                                         usStackDepth,
-                                         (void *)thread,
-                                         uxPriority,
-                                         &thread->pvCreatedTask);
+            BaseType_t ret = pdPASS;
+            uint8_t retryCtn = 10;
+            uint32_t runningBits = 0;
+            while (retryCtn-- && (ret = xTaskCreate(ManagedThreads::runThread,
+                                                    pcName,
+                                                    usStackDepth,
+                                                    (void *)thread,
+                                                    uxPriority,
+                                                    &thread->pvCreatedTask)) != pdPASS)
+            {
+                if ((runningBits = GetRunningBits()))
+                {
+                    ESP_LOGW(__FUNCTION__, "Error in creating thread for %s, retry %d, waiting on %d. %s", pcName, retryCtn, runningBits, esp_err_to_name(ret));
+                    xEventGroupWaitBits(managedThreadBits, runningBits, pdFALSE, pdFALSE, portMAX_DELAY);
+                }
+                else
+                {
+                    ESP_LOGW(__FUNCTION__, "Error in creating thread for %s, retry %d. %s", pcName, retryCtn, esp_err_to_name(ret));
+                }
+            }
             if (ret != pdPASS)
             {
                 ESP_LOGE(__FUNCTION__, "Failed in creating thread for %s. %s", pcName, esp_err_to_name(ret));
@@ -348,7 +365,8 @@ public:
         return UINT8_MAX;
     };
 
-    void printMemStat(){
+    void printMemStat()
+    {
         return;
         heap_caps_print_heap_info(MALLOC_CAP_EXEC);
         heap_caps_print_heap_info(MALLOC_CAP_SPIRAM);
@@ -362,10 +380,10 @@ public:
         const uint32_t usStackDepth,
         void *const pvParameters,
         const bool canRelanch,
-        const bool waitToSleep) {
+        const bool waitToSleep)
+    {
         return CreateInlineManagedTask(
-            pvTaskCode,pcName,usStackDepth,pvParameters,canRelanch,waitToSleep,false
-        );
+            pvTaskCode, pcName, usStackDepth, pvParameters, canRelanch, waitToSleep, false);
     }
 
     BaseType_t CreateInlineManagedTask(
@@ -398,8 +416,9 @@ public:
             xEventGroupClearBits(managedThreadBits, 1 << bitNo);
             ESP_LOGV(__FUNCTION__, "Running %s", thread->pcName);
             printMemStat();
-            BaseType_t ret=ESP_OK;
-            if (onMainThread) {
+            BaseType_t ret = ESP_OK;
+            if (onMainThread)
+            {
                 ESP_LOGD(__FUNCTION__, "Starting the %s service", thread->pcName);
                 thread->pvTaskCode(thread->pvParameters);
                 ESP_LOGV(__FUNCTION__, "Done initializing the %s service", thread->pcName);
@@ -409,24 +428,30 @@ public:
                     ESP_LOGV(__FUNCTION__, "%s", tmp);
                     ldfree(tmp);
                 }
-            } else if ((ret = xTaskCreate(ManagedThreads::runThread,
-                                         pcName,
-                                         usStackDepth,
-                                         (void *)thread,
-                                         tskIDLE_PRIORITY,
-                                         &thread->pvCreatedTask)) == pdPASS) {
-                ESP_LOGV(__FUNCTION__, "Waiting for %s to finish", thread->pcName);
-                xEventGroupWaitBits(managedThreadBits, 1 << bitNo, pdFALSE, pdTRUE, portMAX_DELAY);
-                printMemStat();
-                heap_caps_check_integrity_all(true);
-                ESP_LOGV(__FUNCTION__, "Done running %s", thread->pcName);
-                thread->isRunning = false;
-                xEventGroupSetBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
-                return ESP_OK;
             }
             else
             {
-                ESP_LOGE(__FUNCTION__, "Error running %s: %s", thread->pcName, esp_err_to_name(ret));
+                uint8_t retryCtn = 10;
+                if ((ret = xTaskCreate(ManagedThreads::runThread,
+                                       pcName,
+                                       usStackDepth,
+                                       (void *)thread,
+                                       tskIDLE_PRIORITY,
+                                       &thread->pvCreatedTask)) == pdPASS)
+                {
+                    ESP_LOGV(__FUNCTION__, "Waiting for %s to finish", thread->pcName);
+                    xEventGroupWaitBits(managedThreadBits, 1 << bitNo, pdFALSE, pdTRUE, portMAX_DELAY);
+                    printMemStat();
+                    heap_caps_check_integrity_all(true);
+                    ESP_LOGV(__FUNCTION__, "Done running %s", thread->pcName);
+                    thread->isRunning = false;
+                    xEventGroupSetBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
+                    return ESP_OK;
+                }
+                else
+                {
+                    ESP_LOGE(__FUNCTION__, "Error running %s: %s stack depth:%d", thread->pcName, esp_err_to_name(ret), usStackDepth);
+                }
             }
         }
         return ESP_ERR_NO_MEM;
@@ -487,6 +512,19 @@ protected:
         return t ? t->isRunning : false;
     }
 
+    uint32_t GetRunningBits()
+    {
+        uint32_t ret = 0;
+        for (uint8_t idx = 0; idx < 32; idx++)
+        {
+            if ((threads[idx] == NULL) || (threads[idx]->started && threads[idx]->isRunning))
+            {
+                ret |= (1 >> idx);
+            }
+        }
+        return ret;
+    }
+
     uint8_t GetFreeBit()
     {
         for (uint8_t idx = 0; idx < 32; idx++)
@@ -522,7 +560,6 @@ static BaseType_t CreateMainlineTask(
 {
     return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, 0, pvParameters, false, false, true);
 };
-
 
 static void WaitToSleep()
 {

@@ -39,11 +39,12 @@ public:
   static void GetServer(void* evtGrp);
   static TheRest* GetServer();
   static EventGroupHandle_t GetEventGroup();
-  static void CheckUpgrade(void*);
+  static void CheckUpgrade(void* param);
   static void MergeConfig(void* param);
   static void SendStatus(void* param);
+  static void SendTar(void* params);
   static esp_err_t SendConfig(char* addr, cJSON* cfg);
-
+  static esp_err_t HandleWifiCommand(httpd_req_t *req);
 
   enum restEvents_t{
     UPDATE_CONFIG,
@@ -70,9 +71,9 @@ protected:
   static bool routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_t match_upto);
 
   static esp_err_t rest_handler(httpd_req_t *req);
-  static esp_err_t trips_handler(httpd_req_t *req);
   static esp_err_t list_files_handler(httpd_req_t *req);
   static esp_err_t status_handler(httpd_req_t *req);
+  static esp_err_t download_handler(httpd_req_t *req);
   static esp_err_t ota_handler(httpd_req_t *req);
   static esp_err_t app_handler(httpd_req_t *req);
   static esp_err_t list_entity_handler(httpd_req_t *req);
@@ -87,18 +88,10 @@ private:
   httpd_handle_t server;
   char* gwAddr;
   char* ipAddr;
-
-  httpd_uri_t const restUris[9] =
+  EventGroupHandle_t app_eg;
+  
+  httpd_uri_t const restUris[10] =
   {
-    {
-    .uri       = "/trips",
-    .method    = HTTP_POST,
-    .handler   = trips_handler,
-    .user_ctx  = NULL,
-    .is_websocket = false,
-    .handle_ws_control_frames = false,
-    .supported_subprotocol = NULL
-    },
     {
     .uri       = "/config*",
     .method    = HTTP_POST,
@@ -166,6 +159,24 @@ private:
     .uri       = "/ota/*",
     .method    = HTTP_POST,
     .handler   = ota_handler,
+    .user_ctx  = NULL,
+    .is_websocket = false,
+    .handle_ws_control_frames = false,
+    .supported_subprotocol = NULL
+    },
+    {
+    .uri       = "/sdcard/*",
+    .method    = HTTP_PUT,
+    .handler   = download_handler,
+    .user_ctx  = NULL,
+    .is_websocket = false,
+    .handle_ws_control_frames = false,
+    .supported_subprotocol = NULL
+    },
+    {
+    .uri       = "/lfs/*",
+    .method    = HTTP_PUT,
+    .handler   = download_handler,
     .user_ctx  = NULL,
     .is_websocket = false,
     .handle_ws_control_frames = false,
