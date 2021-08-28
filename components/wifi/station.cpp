@@ -62,6 +62,7 @@ TheWifi::~TheWifi(){
     esp_netif_deinit();
     ESP_LOGD(__FUNCTION__, "Stoppint");
     xEventGroupClearBits(getAppEG(), app_bits_t::WIFI_ON);
+    xEventGroupSetBits(getAppEG(), app_bits_t::WIFI_OFF);
     theInstance=NULL;
 }
 
@@ -149,6 +150,7 @@ TheWifi::TheWifi(AppConfig* appcfg)
 
     ESP_ERROR_CHECK(esp_wifi_start());
     xEventGroupSetBits(getAppEG(), app_bits_t::WIFI_ON);
+    xEventGroupClearBits(getAppEG(), app_bits_t::WIFI_OFF);
 
     if (handlerDescriptors == NULL)
         EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));

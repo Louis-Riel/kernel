@@ -301,6 +301,7 @@ esp_err_t TheRest::HandleWifiCommand(httpd_req_t *req)
                 ESP_LOGD(__FUNCTION__, "All done wif wifi");
                 ret = httpd_resp_send(req, "OK", 2);
                 xEventGroupClearBits(getAppEG(),app_bits_t::WIFI_ON);
+                xEventGroupSetBits(getAppEG(),app_bits_t::WIFI_OFF);
             }
             cJSON_Delete(jresponse);
         }

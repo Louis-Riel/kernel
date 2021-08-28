@@ -30,10 +30,12 @@ typedef enum {
  SDCARD_ERROR = BIT7,
  REST = BIT8,
  GPS_ON = BIT9,
- MAX_APP_BITS = 10
+ WIFI_OFF = BIT10,
+ GPS_OFF = BIT11,
+ MAX_APP_BITS = 12
 } app_bits_t;
 
-#define APP_SERVICE_BITS (app_bits_t::WIFI_ON|app_bits_t::REST|app_bits_t::GPS_ON)
+#define APP_SERVICE_BITS (app_bits_t::WIFI_ON|app_bits_t::WIFI_OFF|app_bits_t::REST|app_bits_t::GPS_ON)
 
 void initLog();
 void dumpLogs();

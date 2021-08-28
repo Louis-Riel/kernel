@@ -234,6 +234,7 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
     {
         ESP_LOGD(__FUNCTION__, "%s from %s", handler->GetName(), "wifioff");
         xEventGroupClearBits(app_eg,app_bits_t::WIFI_ON);
+        xEventGroupSetBits(app_eg,app_bits_t::WIFI_OFF);
         return UINT8_MAX;
     }
     if (strcmp(method, "mergeconfig") == 0)
@@ -255,6 +256,7 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
     if (strcmp(method, "wifiSallyForth") == 0)
     {
         xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
+        xEventGroupClearBits(app_eg,app_bits_t::WIFI_OFF);
         return UINT8_MAX;
     }
     if (strcmp(method, "checkupgradefixmelater") == 0)

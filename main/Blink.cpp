@@ -886,7 +886,7 @@ static void serviceLoop(void* param) {
     ESP_LOGD(__FUNCTION__,"curr:%s %d",bits, serviceBits);
     if (serviceBits&app_bits_t::WIFI_ON && !TheWifi::GetInstance()) {
       CreateMainlineTask(wifiSallyForth,"WifiSallyForth",NULL);
-    } else if (!(serviceBits&app_bits_t::WIFI_ON) && TheWifi::GetInstance()) {
+    } else if ((serviceBits&app_bits_t::WIFI_OFF) && TheWifi::GetInstance()) {
       if (TheWifi* theWifi = TheWifi::GetInstance()){
         delete theWifi;
       }
@@ -894,7 +894,7 @@ static void serviceLoop(void* param) {
     if (((serviceBits&(app_bits_t::REST|app_bits_t::WIFI_ON))==(app_bits_t::REST|app_bits_t::WIFI_ON)) 
                   && !TheRest::GetServer()) {
       CreateMainlineTask(restSallyForth,"restSallyForth",TheWifi::GetEventGroup());
-    } else if (!(serviceBits&(app_bits_t::REST|app_bits_t::WIFI_ON)) && TheRest::GetServer()) {
+    } else if ((serviceBits&(app_bits_t::REST|app_bits_t::WIFI_OFF)) && TheRest::GetServer()) {
       if (TheRest* theRest = TheRest::GetServer()){
         delete theRest;
       }
@@ -906,7 +906,7 @@ static void serviceLoop(void* param) {
       {
         ESP_ERROR_CHECK(esp_event_handler_instance_register(gps->GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEvent, &gps, NULL));
       }
-    } else if (!(serviceBits&(app_bits_t::GPS_ON)) && TinyGPSPlus::runningInstance()) {
+    } else if ((serviceBits&(app_bits_t::GPS_OFF)) && TinyGPSPlus::runningInstance()) {
       if (TinyGPSPlus* gps = TinyGPSPlus::runningInstance()){
         ESP_LOGI(__FUNCTION__,"Stopping GPS");
         delete gps;
@@ -1006,15 +1006,17 @@ void app_main(void)
     if (appcfg->GetIntProperty("/gps/rxPin"))
       xEventGroupSetBits(app_eg,app_bits_t::GPS_ON);
 
-    if (appcfg->IsAp())
+    if (appcfg->IsAp()){
       xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
-
+      xEventGroupClearBits(app_eg,app_bits_t::WIFI_OFF);
+    }
     //Register event managers
     new BufferedFile();
 
     CreateBackgroundTask(serviceLoop,"ServiceLoop",8192,NULL,tskIDLE_PRIORITY,NULL);
     //vTaskDelay(5000/portTICK_PERIOD_MS);
     xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
+    xEventGroupClearBits(app_eg,app_bits_t::WIFI_OFF);
 
   }
 }
