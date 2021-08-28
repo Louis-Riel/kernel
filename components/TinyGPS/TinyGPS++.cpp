@@ -601,7 +601,7 @@ void TinyGPSPlus::processEncoded(void)
       struct tm timeinfo;
       localtime_r(&curTs, &timeinfo);
       strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-      if (indexOf((char*)&strftime[0]," 00:")) {
+      if (indexOf(strftime_buf," 00:")) {
         ESP_LOGW(__FUNCTION__, "Invalid System Time: %s", strftime_buf);
         return;
       }
