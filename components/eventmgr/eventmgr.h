@@ -127,6 +127,7 @@ public:
     void RunProgram(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char *progName);
     bool IsProgram();
     char *GetProgramName();
+    char* ToString();
 
 private:
     cJSON *programs;
@@ -190,9 +191,11 @@ class ManagedThreads
 {
 public:
     ManagedThreads()
-        : managedThreadBits(xEventGroupCreate()), threads((ManagedThreads::mThread_t **)dmalloc(32 * sizeof(void *))), numThreadSlot(0)
+        : managedThreadBits(xEventGroupCreate()) 
+        ,threads((ManagedThreads::mThread_t **)dmalloc(32 * sizeof(void *))), numThreadSlot(0)
     {
         memset(&threads[0], 0, 32 * sizeof(void *));
+        xEventGroupSetBits(managedThreadBits,0xffff);
     }
 
     uint8_t NumAllocatedThreads()
@@ -265,22 +268,50 @@ public:
         return stat;
     }
 
+    void PrintState() {
+        if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
+        {
+            for (uint8_t idx = 0; idx < 32; idx++)
+            {
+                mThread_t *thread = threads[idx];
+                if (thread)
+                {
+                    ESP_LOGV(__FUNCTION__,"%d %s:isRunning:%d started:%d waitToSleep:%d",idx,thread->pcName,thread->isRunning, thread->started, thread->waitToSleep);
+                }
+            }
+        }
+    }
+
     void WaitToSleep()
     {
         uint32_t bitsToWaitFor = 0;
+        PrintState();
         for (uint8_t idx = 0; idx < 32; idx++)
         {
             mThread_t *thread = threads[idx];
             if (thread && thread->waitToSleep && thread->isRunning)
             {
+                ESP_LOGD(__FUNCTION__,"%s is sleep blocked running", thread->pcName);
                 bitsToWaitFor += (1 << idx);
             }
         }
-        if (bitsToWaitFor)
+        WaitForThreads(bitsToWaitFor);
+    }
+
+    void WaitToSleepExceptFor(char* name)
+    {
+        uint32_t bitsToWaitFor = 0;
+        PrintState();
+        for (uint8_t idx = 0; idx < 32; idx++)
         {
-            ESP_LOGD(__FUNCTION__, "Waiting for threads");
-            xEventGroupWaitBits(managedThreadBits, bitsToWaitFor, false, true, portMAX_DELAY);
+            mThread_t *thread = threads[idx];
+            if (thread && thread->waitToSleep && thread->isRunning && !startsWith(thread->pcName,name))
+            {
+                ESP_LOGD(__FUNCTION__,"%s is sleep blocked running", thread->pcName);
+                bitsToWaitFor += (1 << idx);
+            }
         }
+        WaitForThreads(bitsToWaitFor);
     }
 
     void WaitForThreads(uint32_t bitsToWaitFor)
@@ -292,7 +323,7 @@ public:
         }
         else
         {
-            ESP_LOGD(__FUNCTION__, "No threads to wait for");
+            ESP_LOGV(__FUNCTION__, "No threads to wait for");
         }
     }
 
@@ -350,6 +381,7 @@ public:
             if (ret != pdPASS)
             {
                 ESP_LOGE(__FUNCTION__, "Failed in creating thread for %s. %s", pcName, esp_err_to_name(ret));
+                esp_restart();
             }
             if (pvCreatedTask != NULL)
             {
@@ -432,6 +464,9 @@ public:
             else
             {
                 uint8_t retryCtn = 10;
+                if (!heap_caps_check_integrity_all(true)) {
+                    ESP_LOGE(__FUNCTION__,"bcaps integrity error");
+                }
                 if ((ret = xTaskCreate(ManagedThreads::runThread,
                                        pcName,
                                        usStackDepth,
@@ -442,10 +477,11 @@ public:
                     ESP_LOGV(__FUNCTION__, "Waiting for %s to finish", thread->pcName);
                     xEventGroupWaitBits(managedThreadBits, 1 << bitNo, pdFALSE, pdTRUE, portMAX_DELAY);
                     printMemStat();
-                    heap_caps_check_integrity_all(true);
+                    if (!heap_caps_check_integrity_all(true)) {
+                        ESP_LOGE(__FUNCTION__,"caps integrity error");
+                    }
                     ESP_LOGV(__FUNCTION__, "Done running %s", thread->pcName);
                     thread->isRunning = false;
-                    xEventGroupSetBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
                     return ESP_OK;
                 }
                 else
@@ -478,12 +514,13 @@ protected:
     static void runThread(void *param)
     {
         mThread_t *thread = (mThread_t *)param;
-        ESP_LOGD(__FUNCTION__, "Running the %s thread", thread->pcName);
+        ESP_LOGV(__FUNCTION__, "Running the %s thread", thread->pcName);
+        xEventGroupClearBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
         thread->started = true;
         thread->isRunning = true;
         thread->pvTaskCode(thread->pvParameters);
         thread->isRunning = false;
-        ESP_LOGD(__FUNCTION__, "Done running the %s thread", thread->pcName);
+        ESP_LOGV(__FUNCTION__, "Done running the %s thread", thread->pcName);
         if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
         {
             char *tmp = cJSON_Print(thread->parent->GetStatus());
@@ -558,8 +595,13 @@ static BaseType_t CreateMainlineTask(
     const char *const pcName,
     void *const pvParameters)
 {
-    return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, 0, pvParameters, false, false, true);
+    return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, 8192, pvParameters, false, false, false);
 };
+
+static void WaitToSleepExceptFor(char* name)
+{
+    managedThreads.WaitToSleepExceptFor(name);
+}
 
 static void WaitToSleep()
 {

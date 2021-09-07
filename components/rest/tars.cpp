@@ -11,7 +11,7 @@
 #include "driver/adc.h"
 #include "mfile.h"
 
-#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 
 typedef struct
@@ -53,6 +53,7 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
     uint32_t fcnt = 0;
     uint32_t dcnt = 0;
     uint32_t len = 0;
+    uint32_t totlen = 0;
     uint32_t tarStat = MTAR_ESUCCESS;
 
     char *theFolders = (char *)dmalloc(1024);
@@ -111,78 +112,59 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                         fcnt++;
                         bool headerWritten = false;
                         bool allDone = false;
-                        ESP_LOGV(__FUNCTION__, "Reading %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
-                        while ((tarStat == MTAR_ESUCCESS) && !allDone)
+                        ESP_LOGV(__FUNCTION__, "Adding %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
+                        tarStat = mtar_write_file_header(tar, theFName + 1, fileStat.st_size);
+                        ESP_LOGV(__FUNCTION__, "stat %s: %d files. file %s, ram %d len: %li", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), fileStat.st_size);
+                        while ((tarStat == MTAR_ESUCCESS) && !feof(theFile))
                         {
                             gettimeofday(&tv_rstart, NULL);
                             if ((len = fRead(buf, 1, F_BUF_SIZE, theFile)) > 0)
                             {
+                                totlen+=len;
                                 gettimeofday(&tv_rend, NULL);
                                 ESP_LOGV(__FUNCTION__, "%d read", len);
 
-                                if (!headerWritten)
-                                {
-                                    headerWritten = true;
-                                    if (len == F_BUF_SIZE)
-                                    {
-                                        fstat(fileno(theFile), &fileStat);
-                                        gettimeofday(&tv_stat, NULL);
-                                        tarStat = mtar_write_file_header(tar, theFName + 1, fileStat.st_size);
-                                        ESP_LOGV(__FUNCTION__, "stat %s: %d files. file %s, ram %d len: %li", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), fileStat.st_size);
-                                    }
-                                    else
-                                    {
-                                        tv_stat = tv_end;
-                                        tarStat = mtar_write_file_header(tar, theFName + 1, len);
-                                        ESP_LOGV(__FUNCTION__, "full %s: %d files. file %s, ram %d len: %d", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), len);
-                                    }
-                                    gettimeofday(&tv_wstart, NULL);
-                                }
-
                                 tarStat = mtar_write_data(tar, buf, len);
                                 gettimeofday(&tv_wend, NULL);
-                                allDone = feof(theFile);
-                                if (allDone)
-                                {
-                                    fClose(theFile);
-                                    ESP_LOGV(__FUNCTION__, "Closing %s", theFName);
-                                    if (removeSrc && !endsWith(theFName, ".json") && !endsWith(theFName, ".md5")){
-                                        deleteFile(theFName);
-                                        ESP_LOGV(__FUNCTION__, "Deleted %s", theFName);
-                                    }
-                                }
                             }
                             else
                             {
-
-                                fClose(theFile);
-                                allDone = true;
-                                ESP_LOGV(__FUNCTION__, "Closing %s.", theFName);
-                            }
-                            gettimeofday(&tv_end, NULL);
-                            if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
-                            {
-                                int64_t start_time_ms = (int64_t)tv_start.tv_sec * 1000L + ((int64_t)tv_start.tv_usec / 1000);
-                                int64_t end_time_ms = (int64_t)tv_end.tv_sec * 1000L + ((int64_t)tv_end.tv_usec / 1000);
-                                int64_t oend_time_ms = (int64_t)tv_open.tv_sec * 1000L + ((int64_t)tv_open.tv_usec / 1000);
-                                int64_t ostat_time_ms = (int64_t)tv_stat.tv_sec * 1000L + ((int64_t)tv_stat.tv_usec / 1000);
-                                int64_t rstart_time_ms = (int64_t)tv_rstart.tv_sec * 1000L + ((int64_t)tv_rstart.tv_usec / 1000);
-                                int64_t rend_time_ms = (int64_t)tv_rend.tv_sec * 1000L + ((int64_t)tv_rend.tv_usec / 1000);
-                                int64_t wstart_time_ms = (int64_t)tv_wstart.tv_sec * 1000L + ((int64_t)tv_wstart.tv_usec / 1000);
-                                int64_t wend_time_ms = (int64_t)tv_wend.tv_sec * 1000L + ((int64_t)tv_wend.tv_usec / 1000);
-                                ESP_LOGV(__FUNCTION__, "%s: Total Time: %f,Open Time: %f,Stat Time: %f,Read Time: %f,Write Time: %f, Len: %d, Rate %f/s ram %d, ",
-                                         path,
-                                         (end_time_ms - start_time_ms) / 1000.0,
-                                         (oend_time_ms - start_time_ms) / 1000.0,
-                                         (ostat_time_ms - oend_time_ms) / 1000.0,
-                                         (rend_time_ms - rstart_time_ms) / 1000.0,
-                                         (wend_time_ms - wstart_time_ms) / 1000.0,
-                                         tar->pos - startPos,
-                                         (tar->pos - startPos) / ((end_time_ms - start_time_ms) / 1000.0),
-                                         heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
+                                ESP_LOGW(__FUNCTION__, "Error reading %s totlen:%d len:%d.", theFName, totlen, len);
                             }
                         }
-                        ESP_LOGV(__FUNCTION__, "Read %d bytes from %s %s/%s", len, fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
+                        gettimeofday(&tv_end, NULL);
+                        if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
+                        {
+                            int64_t start_time_ms = (int64_t)tv_start.tv_sec * 1000L + ((int64_t)tv_start.tv_usec / 1000);
+                            int64_t end_time_ms = (int64_t)tv_end.tv_sec * 1000L + ((int64_t)tv_end.tv_usec / 1000);
+                            int64_t oend_time_ms = (int64_t)tv_open.tv_sec * 1000L + ((int64_t)tv_open.tv_usec / 1000);
+                            int64_t ostat_time_ms = (int64_t)tv_stat.tv_sec * 1000L + ((int64_t)tv_stat.tv_usec / 1000);
+                            int64_t rstart_time_ms = (int64_t)tv_rstart.tv_sec * 1000L + ((int64_t)tv_rstart.tv_usec / 1000);
+                            int64_t rend_time_ms = (int64_t)tv_rend.tv_sec * 1000L + ((int64_t)tv_rend.tv_usec / 1000);
+                            int64_t wstart_time_ms = (int64_t)tv_wstart.tv_sec * 1000L + ((int64_t)tv_wstart.tv_usec / 1000);
+                            int64_t wend_time_ms = (int64_t)tv_wend.tv_sec * 1000L + ((int64_t)tv_wend.tv_usec / 1000);
+                            ESP_LOGV(__FUNCTION__, "%s: Total Time: %f,Open Time: %f,Stat Time: %f,Read Time: %f,Write Time: %f, Len: %d, Rate %f/s ram %d, ",
+                                        path,
+                                        (end_time_ms - start_time_ms) / 1000.0,
+                                        (oend_time_ms - start_time_ms) / 1000.0,
+                                        (ostat_time_ms - oend_time_ms) / 1000.0,
+                                        (rend_time_ms - rstart_time_ms) / 1000.0,
+                                        (wend_time_ms - wstart_time_ms) / 1000.0,
+                                        tar->pos - startPos,
+                                        (tar->pos - startPos) / ((end_time_ms - start_time_ms) / 1000.0),
+                                        heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
+                        }
+                        fClose(theFile);
+                        ESP_LOGV(__FUNCTION__, "Closing %s", theFName);
+                        if (removeSrc && 
+                            !endsWith(theFName, ".json") && 
+                            !endsWith(theFName, ".md5") &&
+                            !endsWith(theFName,getLogFName())){
+                            deleteFile(theFName);
+                        } else {
+                            ESP_LOGV(__FUNCTION__,"Not deleting %s",theFName);
+                        }
+                        ESP_LOGD(__FUNCTION__, "Added %d bytes from %s %s/%s", len, fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
                     }
                     else
                     {
@@ -237,6 +219,7 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
     ldfree(buf);
     ldfree(kmlFileName);
     deinitSPISDCard();
+    ESP_LOGV(__FUNCTION__,"Done reading %s",path);
     return ret;
 }
 
@@ -313,24 +296,17 @@ int tarCountClose(mtar_t *tar){
 
 int tarClose(mtar_t *tar)
 {
-    ESP_LOGV(__FUNCTION__, "Closing Tar, waiting for final chunck");
     EventGroupHandle_t eventGroup = TheRest::GetEventGroup();
-    xEventGroupWaitBits(eventGroup, TAR_BUFFER_SENT, pdTRUE, pdTRUE, portMAX_DELAY);
-    xEventGroupSetBits(eventGroup, TAR_BUILD_DONE);
-    ESP_LOGV(__FUNCTION__, "tar done");
-    sp.sendLen = sp.bufLen;
-    if (sp.sendLen > 0)
-    {
-        ESP_LOGV(__FUNCTION__, "Sending final chunck of %d",sp.sendLen);
-        if (sp.sendBuf == NULL)
-        {
-            sp.sendBuf = (uint8_t *)dmalloc(HTTP_BUF_SIZE);
-        }
+    if (sp.bufLen > 0){
+        ESP_LOGD(__FUNCTION__, "Closing Tar, waiting for final chunck");
+        sp.sendLen = sp.bufLen;
         memcpy(sp.sendBuf, (const void *)sp.tarBuf, sp.bufLen);
-        ESP_LOGV(__FUNCTION__, "Sending final chunk of %d", sp.bufLen);
+        sp.bufLen = 0;
+        xEventGroupSetBits(eventGroup, TAR_BUFFER_FILLED);
+        xEventGroupWaitBits(eventGroup, TAR_BUFFER_SENT, pdTRUE, pdTRUE, portMAX_DELAY);
     }
-    xEventGroupSetBits(eventGroup, TAR_BUFFER_FILLED);
-    ESP_LOGV(__FUNCTION__, "Closing Tar, waiting for final chunck to be sent");
+    xEventGroupSetBits(eventGroup, TAR_BUILD_DONE);
+    ESP_LOGD(__FUNCTION__, "Closing Tar");
     xEventGroupWaitBits(eventGroup, TAR_SEND_DONE, pdFALSE, pdTRUE, portMAX_DELAY);
     ESP_LOGD(__FUNCTION__, "Wrote %d bytes", sp.len);
     if (sp.sendBuf != NULL)
@@ -348,7 +324,7 @@ void BuildTar(void* param){
     tar.seek = tarSeek;
     tar.write = tarWrite;
     tarFiles(&tar,"/lfs",NULL,true,"current.bin",1024000,true);
-    xEventGroupSetBits(TheRest::GetEventGroup(), TAR_BUILD_DONE);
+    mtar_close(&tar);
 }
 
 void MeasureTar(void* param){
@@ -407,17 +383,18 @@ void TheRest::SendTar(void* param)
     uint32_t totLen = sp.len;
     sp.bufLen = 0;
     sp.len = 0;
-    CreateBackgroundTask(BuildTar,"BuildTar",4096, NULL, tskIDLE_PRIORITY,NULL);
+    CreateBackgroundTask(BuildTar,"BuildTar",8192, NULL, tskIDLE_PRIORITY,NULL);
     xEventGroupWaitBits(eventGroup, TAR_BUFFER_FILLED, pdFALSE, pdFALSE, portMAX_DELAY);
     
-    ESP_LOGD(__FUNCTION__, "Sending %d bytes tar to %s", totLen, url);
+    ESP_LOGV(__FUNCTION__, "Sending %d bytes tar to %s", totLen, url);
     if ((client = esp_http_client_init(config)) &&
         ((err = esp_http_client_set_header(client, "Content-Type","application/x-tar")) == ESP_OK) &&
         ((err = esp_http_client_open(client, 20000000) == ESP_OK))) {
         
         ESP_LOGD(__FUNCTION__, "Connected to %s", url);
+        EventBits_t theBits = 0;
 
-        while (xEventGroupWaitBits(eventGroup, TAR_BUFFER_FILLED|TAR_BUILD_DONE, pdFALSE, pdFALSE, portMAX_DELAY))
+        while ((theBits=xEventGroupWaitBits(eventGroup, TAR_BUFFER_FILLED|TAR_BUILD_DONE, pdFALSE, pdFALSE, portMAX_DELAY)))
         {
             if (sp.sendLen > 0)
             {
@@ -436,10 +413,9 @@ void TheRest::SendTar(void* param)
                 else
                 {
                     ESP_LOGE(__FUNCTION__, "Chunk len %d won't go, sent: %d", sp.sendLen, sentLen);
-                    xEventGroupSetBits(eventGroup, TAR_SEND_DONE);
                     break;
                 }
-            } else {
+            } else if (theBits&TAR_BUFFER_FILLED) {
                 ESP_LOGW(__FUNCTION__,"Got an empty chunck");
             }
             if (xEventGroupGetBits(eventGroup) & TAR_BUILD_DONE)
@@ -447,8 +423,11 @@ void TheRest::SendTar(void* param)
                 break;
             }
         }
+        char buf[20];
+        esp_http_client_read(client,buf,20);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
+        xEventGroupSetBits(eventGroup, TAR_SEND_DONE);
         ldfree(config);
         ESP_LOGD(__FUNCTION__, "Sent %d to %s", len, url);
         ldfree(url);

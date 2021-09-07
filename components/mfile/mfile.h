@@ -56,7 +56,9 @@ public:
 protected:
 
     EventHandlerDescriptor* BuildHandlerDescriptors();
+    static cJSON* BuildStatus(void*);
 
+    cJSON* status;
     static QueueHandle_t eventQueue;
 
     char* name;

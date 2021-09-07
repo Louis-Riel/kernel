@@ -15,7 +15,16 @@ ManagedDevice::ManagedDevice(char *type,char* name,cJSON* (*statusFnc)(void*))
   if (numDevices == 0) {
     memset(runningInstances,0,sizeof(void*)*MAX_NUM_DEVICES);
   }
-  runningInstances[numDevices++]=this;
+  bool foundEmptySpot=false;
+  for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
+    if (runningInstances[idx] == NULL){
+      runningInstances[idx] = this;
+      foundEmptySpot=true;
+      break;
+    }
+  }
+  if (!foundEmptySpot)
+    runningInstances[numDevices++]=this;
   this->name = (char*)dmalloc(strlen(name)+1);
   strcpy(this->name,name);
 }
@@ -30,6 +39,12 @@ ManagedDevice::ManagedDevice(char* type)
 }
 
 ManagedDevice::~ManagedDevice() {
+  for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
+    if (runningInstances[idx] == this){
+      ESP_LOGV(__FUNCTION__,"Removing %s from idx %d",GetName(),idx);
+      runningInstances[idx]=NULL;
+    }
+  }
   ldfree((void*)eventBase);
 }
 
@@ -48,7 +63,9 @@ void ManagedDevice::PostEvent(void* content, size_t len,int32_t event_id){
 void ManagedDevice::UpdateStatuses(){
   for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
     if (runningInstances[idx] && runningInstances[idx]->statusFnc){
+      ESP_LOGV(__FUNCTION__,"Refreshing %s",runningInstances[idx]->GetName());
       runningInstances[idx]->status = runningInstances[idx]->statusFnc(runningInstances[idx]);
+      ESP_LOGV(__FUNCTION__,"Refreshed %s",runningInstances[idx]->GetName());
     }
   }
 }

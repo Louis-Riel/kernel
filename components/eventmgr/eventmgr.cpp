@@ -32,7 +32,7 @@ EventManager::EventManager(cJSON* cfg, cJSON* programs)
     if (!ValidateConfig()) {
         ESP_LOGE(__FUNCTION__,"Event manager is invalid");
     }
-    ESP_LOGD(__FUNCTION__,"Event Manager Running");
+    ESP_LOGV(__FUNCTION__,"Event Manager Running");
 }
 
 EventManager* EventManager::GetInstance(){
@@ -80,12 +80,12 @@ bool EventManager::ValidateConfig(){
 }
 
 void EventManager::RegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {
-    ESP_LOGD(__FUNCTION__,"Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
+    ESP_LOGV(__FUNCTION__,"Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
     if (runningInstance == NULL) {
         runningInstance = EventManager::GetInstance();
     }
     ESP_ERROR_CHECK(esp_event_handler_instance_register(eventHandlerDescriptor->GetEventBase(), ESP_EVENT_ANY_ID, EventManager::ProcessEvent, eventHandlerDescriptor, NULL));
-    ESP_LOGD(__FUNCTION__,"Done Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
+    ESP_LOGV(__FUNCTION__,"Done Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
 }
 
 void EventManager::UnRegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {

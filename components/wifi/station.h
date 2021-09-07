@@ -89,8 +89,10 @@ private:
     bool isSidManaged(const char *sid, bool isTracker);
     Aper *GetAper(uint8_t *mac);
     
-    EventGroupHandle_t              s_wifi_eg;
+    EventGroupHandle_t              s_app_eg;
     SemaphoreHandle_t bitMutex;
+    esp_event_handler_instance_t wifiEvtHandler;
+    esp_event_handler_instance_t ipEvtHandler;
 };
 
 #endif

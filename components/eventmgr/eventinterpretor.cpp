@@ -129,6 +129,11 @@ void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, v
         return;
     }
     ESP_LOGD(__FUNCTION__,"Running program %s", programName);
+    if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE) {
+        char* ctmp = cJSON_Print(programs);
+        ESP_LOGV(__FUNCTION__,"%s",ctmp);
+        ldfree(ctmp);
+    }
     if (program->HasProperty("inLineThreads")) {
         cJSON* item;
         ESP_LOGV(__FUNCTION__,"Running inline %s",programName);
@@ -143,7 +148,7 @@ void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, v
                     ldfree(tmp);
                 }
                 RunProgram(handler,id,event_data,aitem->GetStringProperty("program"));
-            } else {
+            } else if (item != NULL) {
                 char* tmp = cJSON_Print(item);
                 ESP_LOGE(__FUNCTION__,"Nothing to run for %s",tmp);
                 ldfree(tmp);
@@ -175,7 +180,7 @@ void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, v
         }
         if (threads) {
             managedThreads.WaitForThreads(threads);
-            ESP_LOGD(__FUNCTION__,"Program %s done",programName);
+            ESP_LOGD(__FUNCTION__,"Program %s done %d",programName, threads);
         } else {
             ESP_LOGW(__FUNCTION__,"No threads started");
         }
@@ -196,6 +201,10 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
     }
     ESP_LOGV(__FUNCTION__,"Running inline method %s", method);
     return RunMethod(handler,id,event_data,method,true);
+}
+
+char* EventInterpretor::ToString() {
+    return cJSON_Print(config);
 }
 
 uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char* method, bool inBackground)
@@ -259,8 +268,13 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
         xEventGroupClearBits(app_eg,app_bits_t::WIFI_OFF);
         return UINT8_MAX;
     }
-    if (strcmp(method, "checkupgradefixmelater") == 0)
+    if (strcmp(method, "checkupgrade") == 0)
     {
+        if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
+            char* ctmp = ToString();
+            ESP_LOGD(__FUNCTION__,"%s",ctmp);
+            ldfree(ctmp);
+        }
         if (inBackground)
             return CreateWokeBackgroundTask(TheRest::CheckUpgrade, "bCheckUpgrade", 4096, NULL, tskIDLE_PRIORITY, NULL);
         else

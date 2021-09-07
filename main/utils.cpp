@@ -14,6 +14,7 @@
 #include "esp32/rom/md5_hash.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
+#include "/home/riell/esp-4.3/esp-idf/components/pthread/include/esp_pthread.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -194,10 +195,10 @@ bool deinitSPISDCard(bool log)
   if (numSdCallers >= 0)
     numSdCallers--;
   if (log)
-    ESP_LOGD(__FUNCTION__, "SD callers %d", numSdCallers);
+    ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   if (numSdCallers == 0)
   {
-    esp_err_t ret;
+    esp_err_t ret = ESP_OK;
     AppConfig *appState = AppConfig::GetAppStatus();
     EventGroupHandle_t app_eg = getAppEG();
     if (xEventGroupGetBits(app_eg) & SPIFF_MOUNTED)
@@ -207,6 +208,8 @@ bool deinitSPISDCard(bool log)
       {
         if (log)
           ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
+      } else {
+          ESP_LOGD(__FUNCTION__, "lfs unmounted");
       }
       appState->SetStateProperty("/spiff/state", item_state_t::INACTIVE);
       xEventGroupClearBits(app_eg, SPIFF_MOUNTED);
@@ -235,7 +238,7 @@ bool deinitSPISDCard(bool log)
   else
   {
     if (log)
-      ESP_LOGD(__FUNCTION__, "Postponing SD card umount");
+      ESP_LOGV(__FUNCTION__, "Postponing SD card umount");
     return ESP_OK;
   }
 }
@@ -255,7 +258,7 @@ esp_err_t setupLittlefs()
 
   esp_err_t ret = esp_vfs_littlefs_register(&conf);
   AppConfig *appState = AppConfig::GetAppStatus();
-  ESP_LOGD(__FUNCTION__, "lfs mounted %d", ret);
+  ESP_LOGV(__FUNCTION__, "lfs mounted %d", ret);
   AppConfig *spiffState = appState->GetConfig("/spiff");
   if (ret != ESP_OK)
   {
@@ -277,7 +280,7 @@ esp_err_t setupLittlefs()
   spiffState->SetIntProperty("free", total_bytes - used_bytes);
   free(spiffState);
 
-  ESP_LOGD(__FUNCTION__, "Space: %d/%d", used_bytes, total_bytes);
+  ESP_LOGV(__FUNCTION__, "Space: %d/%d", used_bytes, total_bytes);
   struct dirent *de;
   bool hasCsv = false;
   bool hasLogs = false;
@@ -285,7 +288,7 @@ esp_err_t setupLittlefs()
   bool hasCfg = false;
   bool hasStat = false;
 
-  ESP_LOGD(__FUNCTION__, "Spiff is spiffy");
+  ESP_LOGV(__FUNCTION__, "Spiff is spiffy");
   EventGroupHandle_t app_eg = getAppEG();
   xEventGroupSetBits(app_eg, SPIFF_MOUNTED);
   numSdCallers = -1;
@@ -299,7 +302,7 @@ esp_err_t setupLittlefs()
 
   while ((de = readDir(root)) != NULL)
   {
-    ESP_LOGD(__FUNCTION__, "%d %s", de->d_type, de->d_name);
+    ESP_LOGV(__FUNCTION__, "%d %s", de->d_type, de->d_name);
     if (strcmp(de->d_name, "csv") == 0)
     {
       hasCsv = true;
@@ -380,7 +383,7 @@ esp_err_t setupLittlefs()
 
 bool initSPISDCard(bool log)
 {
-  ESP_LOGD(__FUNCTION__, "SD callers %d", numSdCallers);
+  ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   if (numSdCallers <= 0)
   {
     AppConfig *appState = AppConfig::GetAppStatus();
@@ -411,7 +414,7 @@ bool initSPISDCard(bool log)
           return ret;
         }
         if (log)
-          ESP_LOGD(__FUNCTION__, "lfs mounted %d", ret);
+          ESP_LOGV(__FUNCTION__, "lfs mounted %d", ret);
       }
       else
       {
@@ -553,7 +556,7 @@ bool initSPISDCard(bool log)
   {
     numSdCallers++;
     if (log)
-      ESP_LOGD(__FUNCTION__, "SD callers %d", numSdCallers);
+      ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   }
   return true;
 }
@@ -803,6 +806,9 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
             {
               ESP_LOGI(__FUNCTION__, "esp_ota_set_boot_partition succeeded");
               moveFile("/lfs/firmware/tobe.bin.md5", "/lfs/firmware/current.bin.md5");
+              if (strcmp(AppConfig::GetAppConfig()->GetStringProperty("clienttype"),"Tracker") == 0){
+                deleteFile("/lfs/firmware/current.bin");
+              }
               deinitSPISDCard();
               esp_restart();
             }
@@ -842,13 +848,16 @@ void UpgradeFirmware()
   size_t md5len = 0;
   if ((stat(md5fName, &md5St) == 0) && (stat(fwfName, &fwSt) == 0))
   {
+    ESP_LOGD(__FUNCTION__, "We have a pending upgrade to process");
     char srvrmd5[33], localmd5[33];
+    memset(srvrmd5,0,33);
+    memset(localmd5,0,33);
     FILE *fmd5 = fOpen(md5fName, "r");
     FILE *ffw = NULL;
     size_t chunckLen = 0, fwlen = 0;
     if (fmd5)
     {
-      if ((md5len = fRead(srvrmd5, sizeof(uint8_t), 33, fmd5)) == 33)
+      if (((md5len = fRead(srvrmd5, sizeof(uint8_t), 33, fmd5)) >= 32) && (md5len <=33))
       {
         ESP_LOGD(__FUNCTION__, "FW MD5 %d bits read", md5len);
         if ((ffw = fOpen(fwfName, "r")) != NULL)
@@ -901,7 +910,7 @@ void UpgradeFirmware()
       }
       else
       {
-        ESP_LOGE(__FUNCTION__, "Bad md5 len:%d", md5len);
+        ESP_LOGE(__FUNCTION__, "Bad md5 len:%d.", md5len);
       }
       fClose(fmd5);
     }
@@ -914,4 +923,37 @@ void UpgradeFirmware()
   {
     ESP_LOGD(__FUNCTION__, "No FW to update");
   }
+}
+
+void DisplayMemInfo(){
+  return;
+	ESP_LOGD(__FUNCTION__,"heap_caps_get_free_size: %d", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+	ESP_LOGD(__FUNCTION__,"heap_caps_get_minimum_free_size: %d", heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
+	ESP_LOGD(__FUNCTION__,"heap_caps_get_largest_free_block: %d", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+	ESP_LOGD(__FUNCTION__,"heap total size: %zu, heap free head %d, can use minimum is %d\n",heap_caps_get_total_size(MALLOC_CAP_DEFAULT), esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
+  volatile UBaseType_t numTasks = uxTaskGetNumberOfTasks();
+  uint32_t totalRunTime;
+  TaskStatus_t *statuses = (TaskStatus_t *)dmalloc(numTasks * sizeof(TaskStatus_t));
+  numTasks = uxTaskGetSystemState(statuses, numTasks, &totalRunTime);
+  char* tname = pcTaskGetTaskName(NULL);
+
+  if (totalRunTime > 0)
+  {
+      for (uint32_t taskNo = 0; taskNo < numTasks; taskNo++)
+      {
+        if (strcmp(tname,statuses[taskNo].pcTaskName)==0){
+          ESP_LOGD(__FUNCTION__, "TaskNumber:%d,Name:%s,Prio:%d,Runtime:%d,Core:%d,State:%d, StackFree:%d,Pct:%f", 
+                statuses[taskNo].xTaskNumber,
+                statuses[taskNo].pcTaskName,
+                statuses[taskNo].uxCurrentPriority,
+                statuses[taskNo].ulRunTimeCounter,
+                statuses[taskNo].xCoreID > 100 ? -1 : statuses[taskNo].xCoreID,
+                statuses[taskNo].eCurrentState,
+                statuses[taskNo].usStackHighWaterMark * 4,
+                ((double)statuses[taskNo].ulRunTimeCounter / totalRunTime) * 100.0);
+          break;
+        }
+      }
+  }
+  ldfree(statuses);
 }

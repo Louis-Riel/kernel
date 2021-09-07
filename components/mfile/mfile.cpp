@@ -8,25 +8,23 @@ uint8_t MFile::numOpenFiles=0;
 QueueHandle_t MFile::eventQueue;
 
 MFile::~MFile(){
-    
-    ESP_LOGD(__FUNCTION__,"Destructor");
+    ESP_LOGV(__FUNCTION__,"Destructor %s",name);
     if (file && IsOpen()) {
         Close();
     }
 }
 
 MFile::MFile()
-    :ManagedDevice("MFile")
+    :ManagedDevice("MFile","MFile",BuildStatus)
     ,fileStatus(mfile_state_t::MFILE_INIT)
     ,hasContent(false)
     ,name(NULL)
     ,file(NULL)
 {
+    ESP_LOGV(__FUNCTION__,"Building MFile");
     if (numOpenFiles == 0) {
         memset(openFiles,0,sizeof(void*)*MAX_OPEN_FILES);
     }
-
-    cJSON_AddNumberToObject(status,"status",fileStatus);
 
     if (handlerDescriptors == NULL){
         EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
@@ -42,9 +40,8 @@ MFile::MFile(char* fileName):MFile()
         name[0]=0;
         strcpy(name, fileName);
         ESP_LOGV(__FUNCTION__,"file %s(%d)...",name, sz);
-        cJSON_AddStringToObject(status,"name",name);
-        ESP_LOGV(__FUNCTION__,"MFile %s-%s",name,fileName);
     } 
+    status = BuildStatus(this);
 }
 
 EventHandlerDescriptor* MFile::BuildHandlerDescriptors(){
@@ -80,6 +77,20 @@ MFile* MFile::GetFile(char* fileName){
     return openFiles[numOpenFiles++]=new MFile(fileName);
 }
 
+cJSON* MFile::BuildStatus(void* instance){
+    MFile* theFile = (MFile*)instance;
+
+    cJSON* sjson = NULL;
+    AppConfig* apin = new AppConfig(sjson=ManagedDevice::BuildStatus(instance),AppConfig::GetAppStatus());
+    if (theFile->name)
+        apin->SetStringProperty("name",theFile->name);
+    apin->SetIntProperty("status",theFile->fileStatus);
+    apin->SetBoolProperty("open",theFile->IsOpen());
+    apin->SetBoolProperty("hasContent",theFile->hasContent);
+    delete apin;
+    return sjson;
+}
+
 void MFile::Open(const char* mode){
     if ((name == NULL) || (strlen(name) == 0)) {
         ESP_LOGE(__FUNCTION__,"Empty name error");
@@ -111,7 +122,6 @@ void MFile::Open(const char* mode){
     fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_CLOSED_PENDING_WRITE);
     fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_INIT);
     fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_FAILED);
-    cJSON_SetNumberValue(cJSON_GetObjectItem(status,"status"),fileStatus);
 }
 
 void MFile::Close(){
@@ -125,7 +135,6 @@ void MFile::Close(){
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_CLOSED_PENDING_WRITE);
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_INIT);
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_FAILED);
-        cJSON_SetNumberValue(cJSON_GetObjectItem(status,"status"),fileStatus);
     }
 }
 
@@ -315,7 +324,7 @@ void BufferedFile::Write(uint8_t* data, uint32_t len) {
 
 void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
     if (strcmp(base,"MFile") == 0) {
-        ESP_LOGV(__FUNCTION__,"Event %s-%d-------",base,id);
+        ESP_LOGV(__FUNCTION__,"Event %s-%d",base,id);
         AppConfig* params = new AppConfig(*(cJSON**)event_data,NULL);
         char* name = EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("name"));
         if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){

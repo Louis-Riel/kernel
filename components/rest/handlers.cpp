@@ -14,7 +14,6 @@
 #include "../TinyGPS/TinyGPS++.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
-
 esp_err_t sendFile(httpd_req_t *req, const char *path);
 
 //char* kmlFileName=(char*)dmalloc(255);
@@ -88,6 +87,7 @@ cJSON *status_json()
     cJSON_AddItemToObject(status, "openfiles", cJSON_CreateNumber(GetNumOpenFiles()));
     cJSON_AddItemToObject(status, "runtime_ms", cJSON_CreateNumber(xTaskGetTickCount() * portTICK_PERIOD_MS));
     cJSON_AddItemToObject(status, "systemtime_us", cJSON_CreateNumber(time_us));
+    cJSON_AddItemToObject(status, "activestorage", cJSON_CreateString(AppConfig::GetActiveStorage()));
     return status;
 }
 
@@ -95,6 +95,7 @@ esp_err_t findFiles(httpd_req_t *req, char *path, const char *ext, bool recursiv
 {
     if ((path == NULL) || (strlen(path) == 0))
     {
+        ESP_LOGE(__FUNCTION__,"Missing path");
         return ESP_FAIL;
     }
     if (strcmp(path, "/") == 0)
@@ -104,6 +105,7 @@ esp_err_t findFiles(httpd_req_t *req, char *path, const char *ext, bool recursiv
     }
     if (!initSPISDCard())
     {
+        ESP_LOGE(__FUNCTION__,"Cannot init storage");
         return ESP_FAIL;
     }
     esp_err_t ret = ESP_OK;
@@ -292,7 +294,7 @@ esp_err_t TheRest::HandleWifiCommand(httpd_req_t *req)
     {
         *(postData + rlen) = 0;
         ESP_LOGD(__FUNCTION__, "Got %s", postData);
-        cJSON *jresponse = cJSON_Parse(postData);
+        cJSON *jresponse = cJSON_ParseWithLength(postData,JSON_BUFFER_SIZE);
         if (jresponse != NULL)
         {
             cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "enabled");
@@ -370,7 +372,7 @@ esp_err_t HandleSystemCommand(httpd_req_t *req)
     {
         *(postData + rlen) = 0;
         ESP_LOGD(__FUNCTION__, "Got %s", postData);
-        cJSON *jresponse = cJSON_Parse(postData);
+        cJSON *jresponse = cJSON_ParseWithLength(postData,JSON_BUFFER_SIZE);
         if (jresponse != NULL)
         {
             cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
@@ -445,19 +447,24 @@ esp_err_t sendFile(httpd_req_t *req, const char *path)
     ESP_LOGV(__FUNCTION__, "Sending %s willmove:%d", path, moveTheSucker);
     httpd_resp_set_hdr(req, "filename", path);
     FILE *theFile;
+    uint32_t len = 0;
     if (initSPISDCard())
     {
         if ((theFile = fOpen(path, "r")) != NULL)
         {
             ESP_LOGV(__FUNCTION__, "%s opened", path);
             uint8_t *buf = (uint8_t *)dmalloc(F_BUF_SIZE);
-            uint32_t len = 0;
+            uint32_t chunckLen = 0;
             while (!feof(theFile))
             {
-                if ((len = fRead(buf, 1, F_BUF_SIZE, theFile)) > 0)
+                if ((chunckLen = fRead(buf, 1, F_BUF_SIZE, theFile)) > 0)
                 {
-                    ESP_LOGV(__FUNCTION__, "%d read", len);
-                    httpd_resp_send_chunk(req, (char *)buf, len);
+                    len += chunckLen;
+                    ESP_LOGV(__FUNCTION__, "%d read", chunckLen);
+                    httpd_resp_send_chunk(req, (char *)buf, chunckLen);
+                } else {
+                    ESP_LOGW(__FUNCTION__,"Failed in reading %s", path);
+                    break;
                 }
             }
             httpd_resp_send_chunk(req, NULL, 0);
@@ -481,7 +488,7 @@ esp_err_t sendFile(httpd_req_t *req, const char *path)
             httpd_resp_send(req, "Not Found", 9);
         }
     }
-    ESP_LOGD(__FUNCTION__, "Sent %s", path);
+    ESP_LOGD(__FUNCTION__, "Sent %s(%d)", path, len);
     deinitSPISDCard();
     return ESP_OK;
 }
@@ -584,7 +591,8 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                 char *fpos = strrchr(path, '/');
                 *fpos = 0;
                 httpd_resp_set_type(req, "application/json");
-                ret = httpd_resp_send(req, res, sprintf(res, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}", path, fpos + 1, "file", (uint32_t)st.st_size));
+                sprintf(res, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}", path, fpos + 1, "file", (uint32_t)st.st_size);
+                ret = httpd_resp_send(req, res, strlen(res));
                 ldfree(path);
                 ldfree(res);
             }
@@ -632,7 +640,7 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
         {
             postData[len] = 0;
             ESP_LOGV(__FUNCTION__, "postData(%d):%s", len, postData);
-            cJSON *newCfg = cJSON_Parse(postData);
+            cJSON *newCfg = cJSON_ParseWithLength(postData,len);
             if (newCfg)
             {
                 if (devId == deviceId)
@@ -707,7 +715,7 @@ esp_err_t TheRest::list_files_handler(httpd_req_t *req)
     char *jsonbuf = (char *)dmalloc(JSON_BUFFER_SIZE);
     memset(jsonbuf, 0, JSON_BUFFER_SIZE);
     *jsonbuf = '[';
-    ESP_LOGV(__FUNCTION__, "Getting %s url:%s", req->uri + 6, req->uri);
+    ESP_LOGD(__FUNCTION__, "Getting %s url:%s", req->uri + 6, req->uri);
     if (findFiles(req, (char *)(req->uri + 6), NULL, false, jsonbuf, JSON_BUFFER_SIZE - 1) != ESP_OK)
     {
         ESP_LOGE(__FUNCTION__, "Error wilst sending file list");
@@ -743,8 +751,8 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         char *sjson = NULL;
         if (strlen(path) == 0)
         {
-            status = status_json();
             ESP_LOGV(__FUNCTION__, "Getting root");
+            status = status_json();
             sjson = cJSON_PrintUnformatted(status);
             cJSON_Delete(status);
         }
@@ -759,18 +767,20 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
 #endif
         else if (strcmp(path, "tasks") == 0)
         {
-            status = tasks_json();
             ESP_LOGV(__FUNCTION__, "Getting tasks");
+            status = tasks_json();
             sjson = cJSON_PrintUnformatted(status);
             cJSON_Delete(status);
         }
         else if (strcmp(path, "app") == 0)
         {
+            ESP_LOGV(__FUNCTION__, "Getting app");
             ManagedDevice::UpdateStatuses();
             sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(NULL));
         }
         else
         {
+            ESP_LOGV(__FUNCTION__, "Getting %s status",path);
             sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(path));
         }
         if ((sjson != NULL) && (strlen(sjson) > 0))
@@ -813,7 +823,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
             {
                 postData[len] = 0;
                 ESP_LOGV(__FUNCTION__, "postData(%d):%s", len, postData);
-                cJSON *newState = cJSON_Parse(postData);
+                cJSON *newState = cJSON_ParseWithLength(postData,len);
 
                 if (newState)
                 {
@@ -945,7 +955,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                 }
                 else
                 {
-                    ESP_LOGD(__FUNCTION__, "Firmware will update RAM:%d...", esp_get_free_heap_size());
+                    ESP_LOGD(__FUNCTION__, "Firmware will update RAM:%d....", esp_get_free_heap_size());
                 }
             }
             else
@@ -1108,9 +1118,9 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                 uint32_t len = 0;
                 if ((len = fRead((void *)ccmd5, 1, 32, fw)) > 0)
                 {
-                    ccmd5[len] = 0;
+                    ccmd5[32] = 0;
                     esp_err_t ret;
-                    if ((ret = httpd_resp_send(req, ccmd5, 33)) != ESP_OK)
+                    if ((ret = httpd_resp_send(req, ccmd5, 32)) != ESP_OK)
                     {
                         ESP_LOGE(__FUNCTION__, "Error sending MD5:%s", esp_err_to_name(ret));
                     }

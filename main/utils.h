@@ -186,7 +186,7 @@ protected:
   EventGroupHandle_t eg;
   char* filePath;
   AppConfig* root = NULL;
-  char* activeStorage;
+  const char* activeStorage;
 };
 
 void UpgradeFirmware();
@@ -214,5 +214,6 @@ void cJSON_AddVersionedGpioToObject(cfg_gpio_t* itemToAdd, char* name,  cJSON* d
 uint32_t GetNumOpenFiles();
 bool rmDashFR(char* folderName);
 bool deleteFile(char* fileName);
+void DisplayMemInfo();
 
 #endif
