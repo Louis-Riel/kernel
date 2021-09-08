@@ -311,7 +311,8 @@ public:
                 bitsToWaitFor += (1 << idx);
             }
         }
-        WaitForThreads(bitsToWaitFor);
+        if (bitsToWaitFor)
+            WaitForThreads(bitsToWaitFor);
     }
 
     void WaitForThreads(uint32_t bitsToWaitFor)
@@ -381,6 +382,7 @@ public:
             if (ret != pdPASS)
             {
                 ESP_LOGE(__FUNCTION__, "Failed in creating thread for %s. %s", pcName, esp_err_to_name(ret));
+                dumpTheLogs(NULL);
                 esp_restart();
             }
             if (pvCreatedTask != NULL)

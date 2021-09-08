@@ -14,6 +14,7 @@
 
 extern const uint8_t defaultconfig_json_start[] asm("_binary_defaultconfig_json_start");
 extern const uint8_t defaultconfig_json_end[] asm("_binary_defaultconfig_json_end");
+char* emptyString="";
 
 void cJSON_AddVersionedStringToObject(cfg_label_t *itemToAdd, char *name, cJSON *dest)
 {
@@ -112,9 +113,9 @@ AppConfig *AppConfig::GetAppStatus()
     const esp_app_desc_t* ad = esp_ota_get_app_description();
     char bo[50];
     sprintf(bo,"%s %s",ad->date,ad->time);
-    statusInstance->SetStringProperty("builton",bo);
-    statusInstance->SetStringProperty("version",ad->version);
-    ESP_LOGV(__FUNCTION__,"Initializing Status instance %s builton:%s",ad->version,bo);
+    statusInstance->SetStringProperty("/build/date",bo);
+    statusInstance->SetStringProperty("/build/ver",ad->version);
+    ESP_LOGD(__FUNCTION__,"Initializing Status instance %s builton:%s",statusInstance->GetStringProperty("/build/ver"),statusInstance->GetStringProperty("/build/date"));
   }
   return statusInstance;
 }
@@ -398,7 +399,7 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
     ESP_LOGV(__FUNCTION__, "Getting JSON as:%s", path);
     if (createWhenMissing && !cJSON_HasObjectItem(json, path))
     {
-      ESP_LOGV(__FUNCTION__, "%s was missing", path);
+      ESP_LOGV(__FUNCTION__, "%s was missing, creating as object", path);
       return cJSON_AddObjectToObject(json, path);
     }
     else
@@ -430,7 +431,7 @@ cJSON *AppConfig::GetPropertyHolder(cJSON *prop)
     else
     {
       ESP_LOGV(__FUNCTION__, "JSon is an object but missing version");
-      return NULL;
+      return prop;
     }
   }
   return prop;
@@ -529,15 +530,16 @@ char *AppConfig::GetStringProperty(const char *path)
 {
   if (!isValid())
   {
+    ESP_LOGW(__FUNCTION__,"%s is invalid",path);
     return NULL;
   }
-  ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == NULL ? "*null*" : path);
+  ESP_LOGV(__FUNCTION__, "Getting string value at %s", path == NULL ? "*null*" : path);
   cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
-  if (prop != NULL)
+  if ((prop != NULL) && (prop->valuestring != NULL))
   {
     return prop->valuestring;
   }
-  return NULL;
+  return emptyString;
 }
 
 void AppConfig::SetStringProperty(const char *path, const char *value)
@@ -559,6 +561,7 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
 
   if (cJSON_IsObject(holder))
   {
+    ESP_LOGV(__FUNCTION__, "holder exists for %s", path);
     if (filePath != NULL)
     {
       if (version == NULL)
@@ -574,10 +577,13 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
         cJSON_SetValuestring(holder, value);
         cJSON_SetIntValue(version, version->valueint + 1);
         SaveAppConfig();
+      } else {
+        ESP_LOGV(__FUNCTION__, "No change for %s to %s", path, value);
       }
     }
     else
     {
+      ESP_LOGV(__FUNCTION__, "Straight up string for %s to %s", path, value);
       cJSON_SetValuestring(holder, value);
     }
   }

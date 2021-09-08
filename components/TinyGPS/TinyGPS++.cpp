@@ -319,7 +319,7 @@ void TinyGPSPlus::theLoop(void *param)
           }
           break;
         case poiState_t::in:
-          if (dist >= (PIO_MIN_DIST * 2))
+          if (dist >= PIO_MIN_DIST)
           {
             ESP_LOGD(__FUNCTION__, "Out of PIO %f", dist);
             gps->poiState = poiState_t::out;
@@ -327,7 +327,7 @@ void TinyGPSPlus::theLoop(void *param)
           }
           break;
         case poiState_t::out:
-          if (dist <= (PIO_MIN_DIST * 2))
+          if (dist <= PIO_MIN_DIST)
           {
             ESP_LOGD(__FUNCTION__, "In of PIO %f", dist);
             gps->poiState = poiState_t::in;
@@ -518,6 +518,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
       else
       {
         ESP_LOGW(__FUNCTION__, "GPS Timed out");
+        esp_restart();
       }
     }
   }
@@ -602,7 +603,7 @@ void TinyGPSPlus::processEncoded(void)
       struct tm timeinfo;
       localtime_r(&gpsDt, &timeinfo);
       strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-      if (indexOf(strftime_buf," 00:")) {
+      if (indexOf(strftime_buf," 00:00")) {
         ESP_LOGW(__FUNCTION__, "Invalid GPS Time: %s", strftime_buf);
         return;
       }
@@ -936,7 +937,7 @@ void TinyGPSPlus::gpsResume()
   xEventGroupClearBits(eg, gpsEvent::locationChanged);
   int bw = uart_write_bytes(UART_NUM_2, (const char *)active_tracking, sizeof(active_tracking));
   ESP_ERROR_CHECK(uart_flush(UART_NUM_2));
-  ESP_LOGD(__FUNCTION__, "Resumed GPS Output(%d)", bw);
+  ESP_LOGV(__FUNCTION__, "Resumed GPS Output(%d)", bw);
   ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::gpsResumed, NULL, 0, portMAX_DELAY));
 }
 
@@ -947,7 +948,7 @@ void TinyGPSPlus::gpsPause()
   int bw = uart_write_bytes(UART_NUM_2, (const char *)silent_tracking, sizeof(silent_tracking) / sizeof(uint8_t));
   ESP_ERROR_CHECK(uart_flush(UART_NUM_2));
   ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::gpsPaused, NULL, 0, portMAX_DELAY));
-  ESP_LOGD(__FUNCTION__, "Paused GPS Output(%d)", bw);
+  ESP_LOGV(__FUNCTION__, "Paused GPS Output(%d)", bw);
 }
 
 void TinyGPSPlus::adjustRate()

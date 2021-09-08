@@ -810,6 +810,7 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
                 deleteFile("/lfs/firmware/current.bin");
               }
               deinitSPISDCard();
+              dumpTheLogs(NULL);
               esp_restart();
             }
             else
@@ -883,18 +884,17 @@ void UpgradeFirmware()
               sprintf(&localmd5[i * 2], "%02x", (unsigned int)fmd[i]);
             }
 
+            fClose(fmd5);
+            fClose(ffw);
             if (strcmp(localmd5, srvrmd5) == 0)
             {
-              fClose(fmd5);
               flashTheThing(fwbits, fwlen);
             }
             else
             {
               ESP_LOGE(__FUNCTION__, "MD5 Missmatch, no bueno %s!=%s", localmd5, srvrmd5);
             }
-
             ldfree(fwbits);
-            fClose(ffw);
           }
           else
           {
@@ -921,7 +921,8 @@ void UpgradeFirmware()
   }
   else
   {
-    ESP_LOGD(__FUNCTION__, "No FW to update");
+    AppConfig* stat = AppConfig::GetAppStatus();
+    ESP_LOGD(__FUNCTION__, "No FW to update, running %s built on %s", stat->GetStringProperty("/build/ver"), stat->GetStringProperty("/build/date"));
   }
 }
 

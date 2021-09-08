@@ -206,7 +206,6 @@ bool endsWith(const char* str,const char* val) ;
 bool stringContains(const char* str,const char* val) ;
 
 void commitTripToDisk(void* param);
-void stopGps();
 int64_t getSleepTime();
 int64_t getUpTime();
 void cJSON_AddVersionedStringToObject(cfg_label_t* itemToAdd, char* name, cJSON* dest);

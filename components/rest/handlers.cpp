@@ -378,6 +378,7 @@ esp_err_t HandleSystemCommand(httpd_req_t *req)
             cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
             if (jitem && (strcmp(jitem->valuestring, "reboot") == 0))
             {
+                dumpTheLogs(NULL);
                 esp_restart();
             }
             if (jitem && (strcmp(jitem->valuestring, "parseFiles") == 0))
@@ -715,7 +716,6 @@ esp_err_t TheRest::list_files_handler(httpd_req_t *req)
     char *jsonbuf = (char *)dmalloc(JSON_BUFFER_SIZE);
     memset(jsonbuf, 0, JSON_BUFFER_SIZE);
     *jsonbuf = '[';
-    ESP_LOGD(__FUNCTION__, "Getting %s url:%s", req->uri + 6, req->uri);
     if (findFiles(req, (char *)(req->uri + 6), NULL, false, jsonbuf, JSON_BUFFER_SIZE - 1) != ESP_OK)
     {
         ESP_LOGE(__FUNCTION__, "Error wilst sending file list");
@@ -729,8 +729,10 @@ esp_err_t TheRest::list_files_handler(httpd_req_t *req)
         sprintf(jsonbuf, "%s", "[]");
     }
     httpd_resp_set_type(req, "application/json");
-    esp_err_t ret = httpd_resp_send(req, jsonbuf, strlen(jsonbuf));
+    ESP_LOGV(__FUNCTION__, "Getting %s url:%s(%d)", req->uri + 6, req->uri,strlen(jsonbuf));
+    esp_err_t ret = httpd_resp_send_chunk(req, jsonbuf, strlen(jsonbuf));
     ESP_LOGV(__FUNCTION__, "Sent final chunck of %d", strlen(jsonbuf));
+    ret = httpd_resp_send_chunk(req, NULL, 0);
     ldfree(jsonbuf);
     return ret;
 }
@@ -881,6 +883,8 @@ esp_err_t TheRest::download_handler(httpd_req_t *req) {
     dest->Close();
     delete dest;
     ESP_LOGV(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
+    if (endsWith(req->uri,"tar"))
+        CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
     return httpd_resp_send(req,"OK",2);
 }
 
@@ -1070,6 +1074,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                     dumpLogs();
                                     WaitToSleep();
                                     vTaskDelay(1000 / portTICK_PERIOD_MS);
+                                    dumpTheLogs(NULL);
                                     esp_restart(); // Restart ESP
                                 }
                             }

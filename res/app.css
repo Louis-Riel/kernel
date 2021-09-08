@@ -22,11 +22,12 @@ table.greyGridTable tfoot {
 
 table.greyGridTable caption {
     position: sticky;
-    top: 0;
+    top: -10px;
     height: 30px;
     font-family: monospace;
     font-size: x-large;
     background: linear-gradient(to left, #040404, #222b21);
+    width: max-content;
 }
 
 .file {

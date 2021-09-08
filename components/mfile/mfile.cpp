@@ -238,8 +238,11 @@ BufferedFile::BufferedFile(char* fileName)
     int ret = 0;
     ret = stat(fileName, &st);
     isNewOrEmpty = (ret != 0) || (st.st_size==0);
-
-    ESP_LOGD(__FUNCTION__,"Opening file %s is new:%s or empty:%d",fileName,esp_err_to_name(ret), isNewOrEmpty);
+    if (ret == ESP_OK) {
+        ESP_LOGD(__FUNCTION__,"Opening file %s is new or empty:%d, size:%li",fileName, isNewOrEmpty, st.st_size);
+    } else {
+        ESP_LOGD(__FUNCTION__,"Creating file %s is new or empty:%d",fileName, isNewOrEmpty);
+    }
 }
 
 
@@ -266,6 +269,26 @@ void BufferedFile::CloseAll() {
             ((BufferedFile*)openFiles[idx])->Close();
         }
     }
+}
+
+BufferedFile* BufferedFile::GetOpenedFile(char* fileName){
+    if ((fileName == NULL) || !strlen(fileName)) {
+        return NULL;
+    }
+
+    if (numOpenFiles > MAX_OPEN_FILES) {
+        ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
+        return NULL;
+    }
+
+    for (uint idx=0; idx < numOpenFiles; idx++) {
+        BufferedFile* file = (BufferedFile*)openFiles[idx];
+        if (strcmp(file->name,fileName) == 0) {
+            return file;
+        }
+    }
+    ESP_LOGV(__FUNCTION__,"No open file %s",fileName);
+    return NULL;
 }
 
 BufferedFile* BufferedFile::GetFile(char* fileName){

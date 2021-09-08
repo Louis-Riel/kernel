@@ -157,6 +157,7 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                         fClose(theFile);
                         ESP_LOGV(__FUNCTION__, "Closing %s", theFName);
                         if (removeSrc && 
+                            (BufferedFile::GetOpenedFile(theFName) == NULL) &&
                             !endsWith(theFName, ".json") && 
                             !endsWith(theFName, ".md5") &&
                             !endsWith(theFName,getLogFName())){

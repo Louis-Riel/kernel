@@ -19,21 +19,21 @@
   },
   "gps": {
     "txPin": {
-      "version": 1,
+      "version": 0,
       "value": 14
     },
     "rxPin": {
-      "version": 1,
+      "version": 0,
       "value": 27
     },
     "enPin": {
-      "version": 1,
+      "version": 0,
       "value": 12
     },
     "pois": []
   },
   "wifitype": {
-    "version": 8,
+    "version": 0,
     "value": "STA"
   },
   "clienttype": {
@@ -42,7 +42,7 @@
   },
   "stations": [],
   "devName": {
-    "version": 1,
+    "version": 0,
     "value": "Tracmer"
   },
   "pins": [
@@ -82,11 +82,11 @@
         "value": "sync"
       },
       "eventBase": {
-        "version": 1,
+        "version": 0,
         "value": "TheWifi"
       },
       "eventId": {
-        "version": 1,
+        "version": 0,
         "value": "IP_EVENT_STA_GOT_IP"
       },
       "conditions": [],
@@ -94,11 +94,11 @@
     },
     {
       "eventBase": {
-        "version": 1,
+        "version": 0,
         "value": "GPSPLUS_EVENTS"
       },
       "eventId": {
-        "version": 1,
+        "version": 0,
         "value": "atSyncPoint"
       },
       "method": {
@@ -108,11 +108,11 @@
       "conditions": [],
       "params": {
         "eventBase": {
-          "version": 1,
+          "version": 0,
           "value": "MFile"
         },
         "eventId": {
-          "version": 1,
+          "version": 0,
           "value": "WRITE_LINE"
         },
         "value": "${CurrentDate},${Status.gps/Longitude},${Status.gps/Lattitude},${Status.gps/Speed},${Status.gps/Altitude},${Status.gps/Course},${RAM},${Battery},${Status.gps/Satellites}",
@@ -120,27 +120,6 @@
         "header": {
           "version": 0,
           "value": "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites"
-        }
-      }
-    },
-    {
-      "eventBase": {
-        "version": 1,
-        "value": "GPSPLUS_EVENTS"
-      },
-      "eventId": {
-        "version": 1,
-        "value": "atSyncPoint"
-      },
-      "method": {
-        "version": 1,
-        "value": "commitTripToDisk"
-      },
-      "conditions": [],
-      "params": {
-        "flags": {
-          "version": 0,
-          "value": 8
         }
       }
     },
@@ -280,7 +259,7 @@
       },
       "method": {
         "version": 0,
-        "value": "wifioff"
+        "value": "post"
       },
       "conditions": [],
       "params": {

@@ -75,6 +75,7 @@ public:
     BufferedFile(char* fileName);
     ~BufferedFile();
     static BufferedFile* GetFile(char* fileName);
+    static BufferedFile* GetOpenedFile(char* fileName);
     void Write(uint8_t* data, uint32_t len);
     void WriteLine(uint8_t* data, uint32_t len);
     void Flush();

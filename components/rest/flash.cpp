@@ -131,7 +131,7 @@ void TheRest::CheckUpgrade(void* param){
         sprintf(url,"http://%s/ota/getmd5",theRest->gwAddr);
         theRest->SendRequest(url,HTTP_METHOD_POST,&len,serverMd5);
         if (strlen(serverMd5) == strlen(localMd5)) {
-            ESP_LOGW(__FUNCTION__,"local:%s server:%s",localMd5,serverMd5);
+            ESP_LOGD(__FUNCTION__,"local:%s server:%s",localMd5,serverMd5);
             needsUpgrade = strcmp(localMd5,serverMd5)!=0;
         } else {
             ESP_LOGW(__FUNCTION__,"Weird MD5s, local:%s server:%s",localMd5,serverMd5);

@@ -801,11 +801,11 @@ class FirmwarUpdater extends React.Component {
             clearTimeout(stopAbort);
             return res.json()
         })
-            .then(state => this.setState({ waiter: null, loaded: `Loaded version ${state.version.value} built on ${state.builton.value}` }))
-            .catch(err => {
-                clearTimeout(stopAbort);
-                this.setState({ waiter: setTimeout(() => this.waitForDevFlashing(), 500) });
-            });
+        .then(state => this.setState({ waiter: null, loaded: `Loaded version ${state.build.ver} built on ${state.build.ver}` }))
+        .catch(err => {
+            clearTimeout(stopAbort);
+            this.setState({ waiter: setTimeout(() => this.waitForDevFlashing(), 500) });
+        });
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {

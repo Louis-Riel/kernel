@@ -421,7 +421,7 @@ bool TheWifi::wifiScan()
         return false;
     }
     xEventGroupSetBits(eventGroup, WIFI_SCANING_BIT);
-    ESP_LOGD(__FUNCTION__, "Scanning APs");
+    ESP_LOGV(__FUNCTION__, "Scanning APs");
     return true;
 }
 
@@ -431,7 +431,7 @@ void TheWifi::ProcessScannedAPs()
     uint16_t ap_count = 0;
     esp_err_t ret;
     memset(ap_info, 0, sizeof(ap_info));
-    ESP_LOGD(__FUNCTION__, "Getting Scanned AP");
+    ESP_LOGV(__FUNCTION__, "Getting Scanned AP");
     if ((ret = esp_wifi_scan_get_ap_records(&number, ap_info)) == ESP_OK)
     {
         AppConfig* appStatus = AppConfig::GetAppStatus();
@@ -444,7 +444,7 @@ void TheWifi::ProcessScannedAPs()
         APs = cJSON_AddArrayToObject(wifiCfg,"APs");
 
         ESP_ERROR_CHECK(esp_wifi_scan_get_ap_num(&ap_count));
-        ESP_LOGD(__FUNCTION__, "Total APs scanned = %u", ap_count);
+        ESP_LOGV(__FUNCTION__, "Total APs scanned = %u", ap_count);
         int lastWinner=-1;
         int8_t lastRssi=-124;
         bool isTracker = appCfg->HasProperty("clienttype") && strcmp(appCfg->GetStringProperty("clienttype"),"tracker")==0;

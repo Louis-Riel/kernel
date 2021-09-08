@@ -74,7 +74,7 @@ bool buto = false;
 bool sito = false;
 bool boto = false;
 bool dto = false;
-char cctmp[7];
+char cctmp[70];
 float batLvls[NUM_VOLT_CYCLE];
 uint8_t batSmplCnt = NUM_VOLT_CYCLE + 1;
 bool balFullSet = false;
@@ -522,6 +522,7 @@ void doHibernate(void *param)
     lastPoiState = poiState_t::unknown;
   }
   hibernate = true;
+  ESP_LOGV(__FUNCTION__, "Waiting for sleepers");
   WaitToSleepExceptFor("doHibernate");
 
   //CreateManagedTask(flash, "flashy", 2048, (void *)10, tskIDLE_PRIORITY, NULL);
@@ -533,6 +534,7 @@ void doHibernate(void *param)
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF));
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF));
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF));
+  dumpTheLogs(NULL);
   ESP_LOGD(__FUNCTION__, "Hybernating");
   esp_deep_sleep_start();
 }
@@ -543,8 +545,8 @@ void Hibernate()
   WaitToSleep();
   if (!(bits & app_bits_t::WIFI_ON) && (hybernator==NULL))
   {
-    ESP_LOGD(__FUNCTION__,"Hibernating wifion:%d hybnull:%d",bits & app_bits_t::WIFI_ON,hybernator==NULL);
-    CreateWokeBackgroundTask(doHibernate, "doHibernate", 4096, NULL, tskIDLE_PRIORITY+5, &hybernator);
+    ESP_LOGV(__FUNCTION__,"Hibernating wifion:%d hybnull:%d",bits & app_bits_t::WIFI_ON,hybernator==NULL);
+    CreateWokeBackgroundTask(doHibernate, "doHibernate", 4096, NULL, tskIDLE_PRIORITY+25, &hybernator);
   } else {
     ESP_LOGV(__FUNCTION__,"Not hibernating wifion:%d hybnull:%d",bits & app_bits_t::WIFI_ON,hybernator==NULL);
   }
@@ -558,7 +560,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:
-    ESP_LOGV(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters());
+    ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters());
     lastLocTs = now;
     if (lastSLocTs == 0) {
       lastSLocTs=now;
@@ -641,11 +643,11 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     {
       sito = false;
     }
-    char ccctmp[7];
-    sprintf(ccctmp,"%d%d%d%d%d%d",gpsto,sgpsto,buto,sito,boto,dto);
+    char ccctmp[70];
+    sprintf(ccctmp,"gps:%d sig change:%d bump:%d signal:%d boto:%d dto:%d",gpsto,sgpsto,buto,sito,boto,dto);
     if (strcmp(ccctmp,cctmp) != 0) {
       ESP_LOGV(__FUNCTION__,"States: %s lastSLocTs:%ld now - lastSLocTs:%ld timeout:%d",ccctmp,lastSLocTs,now - lastSLocTs, timeout);
-      ESP_LOGV(__FUNCTION__, "Bumps:%d, lastMovement:%ld", bumpCnt, lastMovement);
+      ESP_LOGV(__FUNCTION__, "Bumps:%d, lastMovement:%ld state:%s", bumpCnt, lastMovement,ccctmp);
       strcpy(cctmp,ccctmp);
     }
 
@@ -667,6 +669,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     break;
   case TinyGPSPlus::gpsEvent::sleeping:
     ESP_LOGV(__FUNCTION__, "Sleep at %lu", (time_t)getSleepTime());
+    WaitToSleep();
     gettimeofday(&tv_sleep, NULL);
     break;
   case TinyGPSPlus::gpsEvent::go:
@@ -679,11 +682,9 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     break;
   case TinyGPSPlus::gpsEvent::gpsPaused:
     ESP_LOGV(__FUNCTION__, "Battery %f", getBatteryVoltage());
-    AppConfig::GetAppStatus()->SetStateProperty("/gps", (item_state_t)(item_state_t::ACTIVE | item_state_t::PAUSED));
     break;
   case TinyGPSPlus::gpsEvent::gpsResumed:
     ESP_LOGV(__FUNCTION__, "Battery %f", getBatteryVoltage());
-    AppConfig::GetAppStatus()->SetStateProperty("/gps", item_state_t::ACTIVE);
     break;
   case TinyGPSPlus::gpsEvent::atSyncPoint:
     ESP_LOGD(__FUNCTION__, "atSyncPoint");
@@ -930,9 +931,13 @@ static void serviceLoop(void* param) {
         (appCfg->HasProperty("/gps/rxPin"))) {
       CreateMainlineTask(gpsSallyForth,"gpsSallyForth",appCfg);
       gps = TinyGPSPlus::runningInstance();
+      ESP_LOGV(__FUNCTION__,"Waiting on GPS to start");
       if (xEventGroupWaitBits(gps->eg, TinyGPSPlus::gpsEvent::gpsRunning, pdFALSE, pdTRUE, 1500 / portTICK_RATE_MS) & TinyGPSPlus::gpsEvent::gpsRunning)
       {
+        ESP_LOGV(__FUNCTION__,"Got a GPS, registering");
         ESP_ERROR_CHECK(esp_event_handler_instance_register(gps->GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEvent, &gps, NULL));
+      } else {
+        ESP_LOGE(__FUNCTION__,"No GPS, weirdness is afoot");
       }
     } else if ((serviceBits&(app_bits_t::GPS_OFF)) && TinyGPSPlus::runningInstance()) {
       if (TinyGPSPlus* gps = TinyGPSPlus::runningInstance()){
@@ -1056,19 +1061,5 @@ void app_main(void)
   }
   if (!heap_caps_check_integrity_all(true)) {
       ESP_LOGE(__FUNCTION__,"caps integrity error");
-  }
-}
-
-void stopGps()
-{
-  ESP_LOGD(__FUNCTION__, "Stopping GPS");
-  if (gps != NULL)
-  {
-    ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::gpsStopped, NULL, 0, portMAX_DELAY));
-    xEventGroupWaitBits(gps->eg, TinyGPSPlus::gpsEvent::gpsStopped, pdFALSE, pdTRUE, portMAX_DELAY);
-  }
-  else
-  {
-    ESP_LOGD(__FUNCTION__, "No gps to stop");
   }
 }
