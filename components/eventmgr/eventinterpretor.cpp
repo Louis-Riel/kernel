@@ -2,6 +2,7 @@
 #include "rest.h"
 #include "route.h"
 #include "mfile.h"
+#include "pins.h"
 #include "lwip/inet.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
@@ -74,7 +75,7 @@ bool EventInterpretor::IsValid(EventHandlerDescriptor *handler, int32_t id, void
         {
             this->handler = handler;
             this->id = id;
-            ESP_LOGD(__FUNCTION__, "%s %s %s-%s-%d Event Registered", IsProgram()?"Program ":"Method",IsProgram()?programName:method, handler->GetName(), eventName, id);
+            ESP_LOGV(__FUNCTION__, "%s %s %s-%s-%d Event Registered", IsProgram()?"Program ":"Method",IsProgram()?programName:method, handler->GetName(), eventName, id);
         }
     }
 
@@ -129,18 +130,34 @@ void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, v
         return;
     }
     ESP_LOGD(__FUNCTION__,"Running program %s", programName);
-    if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE) {
-        char* ctmp = cJSON_Print(programs);
-        ESP_LOGV(__FUNCTION__,"%s",ctmp);
-        ldfree(ctmp);
-    }
     if (program->HasProperty("inLineThreads")) {
         cJSON* item;
+        cJSON* jprog = program->GetJSONConfig(NULL);
         ESP_LOGV(__FUNCTION__,"Running inline %s",programName);
-        cJSON_ArrayForEach(item,cJSON_GetObjectItem(program->GetJSONConfig(NULL),"inLineThreads")) {
+        if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE) {
+            char* ctmp = cJSON_Print(jprog);
+            ESP_LOGV(__FUNCTION__,"jprog:%s",ctmp);
+            ldfree(ctmp);
+        }
+        cJSON_ArrayForEach(item,cJSON_GetObjectItem(jprog,"inLineThreads")) {
+            if ((item == NULL) || cJSON_IsInvalid(item)) {
+                ESP_LOGV(__FUNCTION__,"Unparsable JSON");
+                continue;
+            }
+            if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE) {
+                char* ctmp = cJSON_Print(item);
+                ESP_LOGV(__FUNCTION__,"item:%s",ctmp);
+                ldfree(ctmp);
+            }
             AppConfig* aitem = new AppConfig(item,NULL);
             if (aitem->HasProperty("method")) {
-                RunMethod(handler,id,event_data,aitem->GetStringProperty("method"),false);
+                cJSON* mParams = aitem->HasProperty("params") ? aitem->GetJSONConfig("params") : NULL;
+                if ((mParams != NULL) && (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE)) {
+                    char* ctmp = cJSON_Print(mParams);
+                    ESP_LOGV(__FUNCTION__,"mParams:%s",ctmp);
+                    ldfree(ctmp);
+                }
+                RunMethod(handler,id, mParams ? &mParams : NULL, aitem->GetStringProperty("method"),false);
             } else if (aitem->HasProperty("program")) {
                 if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
                     char* tmp = cJSON_Print(aitem->GetJSONConfig(NULL));
@@ -224,7 +241,19 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
         return UINT8_MAX;
     }
 
-    ESP_LOGV(__FUNCTION__,"Got %s method:(%s)",inBackground?"backgroung":"foreground",method);
+    ESP_LOGV(__FUNCTION__,"Got %s method:(%s) with id %d",inBackground?"backgroung":"foreground",method,id);
+
+    cJSON* mParams = event_data == NULL ? params : *(cJSON**)event_data;
+    if (mParams && cJSON_HasObjectItem(mParams,"params")) {
+        ESP_LOGV(__FUNCTION__,"Passing method params");
+        mParams = cJSON_GetObjectItem(mParams,"params");
+    } 
+    if ((mParams) && (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)) {
+        char* tmp = cJSON_Print(mParams);
+        ESP_LOGV(__FUNCTION__,"%s",tmp);
+        ldfree(tmp);
+    }
+
     if (strcmp(method, "commitTripToDisk") == 0)
     {
         jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "flags"), "value");
@@ -237,100 +266,74 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
                     NULL);
         else
             CreateWokeInlineTask(commitTripToDisk, "commitTripToDisk", 4096, NULL);
-        return UINT8_MAX;
-    }
-    if (strcmp(method, "wifioff") == 0)
+    } else if (strcmp(method, "wifioff") == 0)
     {
         ESP_LOGD(__FUNCTION__, "%s from %s", handler->GetName(), "wifioff");
         xEventGroupClearBits(app_eg,app_bits_t::WIFI_ON);
         xEventGroupSetBits(app_eg,app_bits_t::WIFI_OFF);
-        return UINT8_MAX;
-    }
-    if (strcmp(method, "mergeconfig") == 0)
+    } else if (strcmp(method, "mergeconfig") == 0)
     {
         if (inBackground)
             return CreateWokeBackgroundTask(TheRest::MergeConfig, "mergeConfig", 4096, NULL, tskIDLE_PRIORITY, NULL);
         else
             CreateWokeInlineTask(TheRest::MergeConfig, "mergeConfig", 4096, NULL);
-        return UINT8_MAX;
-    }
-    if (strcmp(method, "sendstatus") == 0)
+    } else if (strcmp(method, "sendstatus") == 0)
     {
         if (inBackground)
             return CreateWokeBackgroundTask(TheRest::SendStatus, "sendStatus", 4096, NULL, tskIDLE_PRIORITY, NULL);
         else
             CreateWokeInlineTask(TheRest::SendStatus, "sendStatus", 4096, NULL);
-        return UINT8_MAX;
-    }
-    if (strcmp(method, "wifiSallyForth") == 0)
+    } else if (strcmp(method, "wifiSallyForth") == 0)
     {
         xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
         xEventGroupClearBits(app_eg,app_bits_t::WIFI_OFF);
-        return UINT8_MAX;
-    }
-    if (strcmp(method, "checkupgrade") == 0)
+    } else if (strcmp(method, "checkupgrade") == 0)
     {
-        if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-            char* ctmp = ToString();
-            ESP_LOGD(__FUNCTION__,"%s",ctmp);
-            ldfree(ctmp);
-        }
         if (inBackground)
             return CreateWokeBackgroundTask(TheRest::CheckUpgrade, "bCheckUpgrade", 4096, NULL, tskIDLE_PRIORITY, NULL);
         else
             CreateWokeInlineTask(TheRest::CheckUpgrade, "fCheckUpgrade", 4096, NULL);
-        return UINT8_MAX;
-    }
-    if (strcmp(method, "sendtar") == 0)
+    } else if (strcmp(method, "sendtar") == 0)
     {
         if (inBackground)
             return CreateWokeBackgroundTask(TheRest::SendTar, "SendTar", 4096, NULL, tskIDLE_PRIORITY, NULL);
         else
             CreateWokeInlineTask(TheRest::SendTar, "SendTar", 4096, NULL);
-        return UINT8_MAX;
-    }
-    if (strcmp(method, "Post") == 0)
-    {
-        jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "eventBase"), "value");
-        jeventid = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "eventId"), "value");
+    } else if (strcmp(method,"Sleep")==0) {
+        cJSON* jtime = cJSON_GetObjectItem(mParams, "time");
+        if (jtime && (jtime = cJSON_GetObjectItem(jtime,"value"))) {
+            ESP_LOGV(__FUNCTION__,"Sleeping for %dms", jtime->valueint);
+            vTaskDelay(pdMS_TO_TICKS(jtime->valueint));
+            ESP_LOGV(__FUNCTION__,"Wokeup after %dms", jtime->valueint);
+        } else {
+            ESP_LOGW(__FUNCTION__,"Missing param sleep");
+        }
+    } else if (strcmp(method, "Post") == 0) {
+        jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(mParams, "eventBase"), "value");
+        jeventid = cJSON_GetObjectItem(cJSON_GetObjectItem(mParams, "eventId"), "value");
         if ((jeventbase == NULL) || (jeventid == NULL))
         {
-            char* tmp = cJSON_Print(params);
+            char* tmp = cJSON_Print(mParams);
             ESP_LOGW(__FUNCTION__, "Missing event id or base:%s",tmp == NULL ? "null" : tmp);
             if (tmp)
                 ldfree(tmp);
             return UINT8_MAX;
         }
-        if (strcmp(handler->GetEventBase(),jeventbase->valuestring)==0) {
-            eventId = handler->GetEventId(jeventid->valuestring);
-            if (eventId == -1)
+        EventDescriptor_t* edesc = handler->GetEventDescriptor(jeventbase->valuestring,jeventid->valuestring);
+        if (strcmp(jeventbase->valuestring,"MFile")==0) {
+            BufferedFile::ProcessEvent(NULL,edesc->baseName,edesc->id, &mParams);
+        } else if (strcmp(jeventbase->valuestring,"DigitalPin")==0) {
+            Pin::ProcessEvent(NULL,edesc->baseName,edesc->id, &mParams);
+        } else if (edesc) {
+            ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)..", edesc->eventName, edesc->baseName, edesc->id);
+            if ((ret = esp_event_post(edesc->baseName, edesc->id, &mParams, sizeof(void *), portMAX_DELAY)) != ESP_OK)
             {
-                ESP_LOGW(__FUNCTION__, "bad event id:%s(%s) in handler %s", jeventid->valuestring, jeventbase->valuestring, handler->GetEventBase());
-                return UINT8_MAX;
+                ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s..", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));
             }
-            ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)", jeventid->valuestring, jeventbase->valuestring, eventId);
-            if ((ret = esp_event_post(handler->GetEventBase(), eventId, &params, sizeof(void *), portMAX_DELAY)) != ESP_OK)
-            {
-                ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));
-            }
-        } else if (strcmp(jeventbase->valuestring,"MFile")==0) {
-            EventDescriptor_t* edesc = handler->GetEventDescriptor(jeventbase->valuestring,jeventid->valuestring);
-            BufferedFile::ProcessEvent(NULL,edesc->baseName,edesc->id, &params);
         } else {
-            EventDescriptor_t* edesc = handler->GetEventDescriptor(jeventbase->valuestring,jeventid->valuestring);
-            if (edesc) {
-                ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)..", edesc->eventName, edesc->baseName, edesc->id);
-                if ((ret = esp_event_post(edesc->baseName, edesc->id, &params, sizeof(void *), portMAX_DELAY)) != ESP_OK)
-                {
-                    ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s..", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));
-                }
-            } else {
-                ESP_LOGW(__FUNCTION__, "Cannot find %s to %s..", jeventid->valuestring, jeventbase->valuestring);
-            }
+            ESP_LOGW(__FUNCTION__, "Cannot find %s to %s..", jeventid->valuestring, jeventbase->valuestring);
         }
-    return UINT8_MAX;
     }
-    ESP_LOGW(__FUNCTION__,"Invalid method:%s",method);
     return UINT8_MAX;
 }
 

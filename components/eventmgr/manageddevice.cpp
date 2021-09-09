@@ -56,8 +56,8 @@ void ManagedDevice::ProcessEvent(void *handler_args, esp_event_base_t base, int3
 
 }
 
-void ManagedDevice::PostEvent(void* content, size_t len,int32_t event_id){
-    esp_event_post(eventBase,event_id,content,len,portMAX_DELAY);
+esp_err_t ManagedDevice::PostEvent(void* content, size_t len,int32_t event_id){
+    return esp_event_post(eventBase,event_id,content,len,portMAX_DELAY);
 }
 
 void ManagedDevice::UpdateStatuses(){

@@ -213,7 +213,6 @@ void TinyGPSPlus::theLoop(void *param)
       gpio_hold_en(gps->enpin);
       gpio_deep_sleep_hold_en();
       ESP_LOGV(__FUNCTION__, "Waiting on GPS %d secs ", GPS_WAIT_PERIOD);
-      vTaskDelay((GPS_WAIT_PERIOD*1000)/portTICK_PERIOD_MS);
 
       uint8_t retryCnt=0;
       while (!(bits = (xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdTRUE, 200 / portTICK_PERIOD_MS)) & gpsEvent::locationChanged))
@@ -908,15 +907,16 @@ bool TinyGPSPlus::isSignificant()
   //  isc= true;
   //}
 
-  if (isc)
-  {
-    lastLocation = location;
-  }
-
   val = distanceTo(lastLocation);
   if (val > fmax(250, speed.kmph() * 50))
   {
     ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::significantDistanceChange, &val, sizeof(val), portMAX_DELAY));
+    lastLocation = location;
+  }
+
+  if (isc)
+  {
+    lastLocation = location;
   }
 
   return isc;
@@ -928,7 +928,7 @@ void TinyGPSPlus::gpsStop(){
 }
 
 void TinyGPSPlus::gpsStart(){
-  ESP_LOGD(__FUNCTION__, "Turning on enable pin(%d)", enpin);
+  ESP_LOGV(__FUNCTION__, "Turning on enable pin(%d)", enpin);
   ESP_ERROR_CHECK(gpio_set_level(enpin, 1));
 }
 

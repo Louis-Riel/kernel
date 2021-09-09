@@ -103,9 +103,9 @@ void EventManager::ProcessEvent(void *handler_args, esp_event_base_t base, int32
     while ((idx < MAX_NUM_EVENTS) && ((interpretor = EventManager::GetInstance()->eventInterpretors[idx++])!=NULL)){
         if (interpretor->IsValid(handler,id,event_data)) {
             if (interpretor->IsProgram()) {
-                interpretor->RunProgram(handler,id,event_data,interpretor->GetProgramName());
+                interpretor->RunProgram(handler,id,NULL,interpretor->GetProgramName());
             } else {
-                interpretor->RunMethod(handler,id,event_data);
+                interpretor->RunMethod(handler,id,NULL);
             }
         }
     }

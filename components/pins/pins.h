@@ -20,13 +20,13 @@ public:
     Pin(AppConfig* config);
     ~Pin();
     static void PollPins();
+    static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     bool state;
-    bool valid;
+    bool isRtcGpio;
     enum eventIds {
         ON,OFF,TRIGGER
     };
 protected:
-    static Pin* pins[MAX_NUM_PINS];
     static uint8_t numPins;
     static void queuePoller(void *arg);
     static void pinHandler(void *arg);
@@ -35,7 +35,6 @@ protected:
     uint32_t flags;
     void InitDevice();
     void RefrestState();
-    static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     EventHandlerDescriptor* BuildHandlerDescriptors();
     static cJSON* BuildStatus(void* instance);
     cJSON* status;

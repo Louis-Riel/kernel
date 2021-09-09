@@ -627,7 +627,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
     EventGroupHandle_t evtGrp = TheWifi::GetEventGroup();
     if (base == IP_EVENT)
     {
-        theWifi->PostEvent(event_data,event_data != NULL ? sizeof(void*) : 0,event_id);
+        ESP_ERROR_CHECK(theWifi->PostEvent(event_data,event_data != NULL ? sizeof(void*) : 0,event_id));
         ESP_LOGV(__FUNCTION__, "ip event %d", event_id);
         ip_event_got_ip_t *event;
         system_event_info_t *evt;
@@ -699,11 +699,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
                 else
                 {
                     ESP_LOGD(__FUNCTION__, "No ip, reconnected, re-trigger on all");
-                    if ((client != NULL) && (((uint32_t)client->ip.addr) != 0))
-                    {
-                        //CreateManagedTask(pullStation, "pullStation", 4096, &client->ip , tskIDLE_PRIORITY+5, NULL);
-                    }
-                    else
+                    if ((client == NULL) || (((uint32_t)client->ip.addr) == 0))
                     {
                         wifi_sta_list_t wifi_sta_list;
                         tcpip_adapter_sta_list_t tcp_sta_list;
@@ -738,7 +734,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
     if (base == WIFI_EVENT)
     {
         ESP_LOGV(__FUNCTION__, "wifi event %d", event_id+20);
-        theWifi->PostEvent(event_data,event_data != NULL ? sizeof(void*) : 0,event_id+20);
+        ESP_ERROR_CHECK(theWifi->PostEvent(event_data,event_data != NULL ? sizeof(void*) : 0,event_id+20));
         switch (event_id)
         {
         case WIFI_EVENT_STA_START:
@@ -775,7 +771,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             xEventGroupSetBits(evtGrp, WIFI_CONNECTED_BIT);
             xEventGroupClearBits(evtGrp, WIFI_DISCONNECTED_BIT);
             memcpy((void *)station, (void *)event_data, sizeof(wifi_event_ap_staconnected_t));
-            ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x join, AID=%d",
+            ESP_LOGD(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x join, AID=%d",
                      MAC2STR(station->mac), station->aid);
             client = theWifi->GetAper(station->mac);
             if (client != NULL)

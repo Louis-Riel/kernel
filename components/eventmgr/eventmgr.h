@@ -175,7 +175,7 @@ public:
 
 protected:
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
-    void PostEvent(void *content, size_t len, int32_t event_id);
+    esp_err_t PostEvent(void *content, size_t len, int32_t event_id);
     EventHandlerDescriptor *BuildHandlerDescriptors();
     static cJSON *BuildStatus(void *instance);
     cJSON *(*statusFnc)(void *);

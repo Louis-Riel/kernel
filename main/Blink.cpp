@@ -44,8 +44,10 @@
 #define TRIP_BLOCK_SIZE 255
 
 static xQueueHandle gpio_evt_queue = NULL;
-time_t now = 0;
-time_t lastMovement = 0;
+uint64_t now = 0;
+uint64_t lastMovement = 0;
+uint64_t lastLocTs = 0;
+uint64_t lastSLocTs = 0;
 struct timeval tv_sleep;
 RTC_DATA_ATTR uint32_t bumpCnt = 0;
 RTC_DATA_ATTR bool isStopped = true;
@@ -66,8 +68,6 @@ RTC_DATA_ATTR char tripFName[35];
 RTC_DATA_ATTR bool hibernate = false;
 RTC_DATA_ATTR time_t lastDpTs;
 RTC_DATA_ATTR poiState_t lastPoiState;
-time_t lastLocTs = 0;
-time_t lastSLocTs = 0;
 bool gpsto = false;
 bool sgpsto = false;
 bool buto = false;
@@ -554,7 +554,7 @@ void Hibernate()
 
 static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
 {
-  time(&now);
+  now = esp_timer_get_time();
   lastDpTs = now;
   sampleBatteryVoltage();
   switch (id)
@@ -562,6 +562,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   case TinyGPSPlus::gpsEvent::locationChanged:
     ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters());
     lastLocTs = now;
+    gpsto=false;
     if (lastSLocTs == 0) {
       lastSLocTs=now;
     }
@@ -569,20 +570,25 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   case TinyGPSPlus::gpsEvent::systimeChanged:
     char strftime_buf[64];
     struct tm timeinfo;
-    localtime_r(&now, &timeinfo);
+    time_t cdate;
+    time(&cdate);
+    localtime_r(&cdate, &timeinfo);
     strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
     ESP_LOGI(__FUNCTION__, "System Time: %s", strftime_buf);
     break;
   case TinyGPSPlus::gpsEvent::significantDistanceChange:
     ESP_LOGD(__FUNCTION__, "Distance Diff: %f", *((double *)event_data));
     lastSLocTs=now;
+    sgpsto=false;
     break;
   case TinyGPSPlus::gpsEvent::significantSpeedChange:
     ESP_LOGD(__FUNCTION__, "Speed Diff: %f %f", gps->speed.kmph(), *((double *)event_data));
     lastSLocTs=now;
+    sgpsto=false;
     break;
   case TinyGPSPlus::gpsEvent::significantCourseChange:
     lastSLocTs=now;
+    sgpsto=false;
     ESP_LOGD(__FUNCTION__, "Course Diff: %f %f", gps->course.deg(), *((double *)event_data));
     break;
   case TinyGPSPlus::gpsEvent::rateChanged:
@@ -590,8 +596,8 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     break;
   case TinyGPSPlus::gpsEvent::msg:
     ESP_LOGV(__FUNCTION__, "msg:%s", (char *)event_data);
-    boto = (esp_timer_get_time() > timeoutMicro);
-    if ((lastLocTs > 0) && (now - lastLocTs > timeout))
+    boto = (now > timeoutMicro);
+    if ((lastLocTs > 0) && (now - lastLocTs > timeoutMicro))
     {
       if (!gpsto)
       {
@@ -599,11 +605,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
         ESP_LOGD(__FUNCTION__, "Timeout on GPS Location");
       }
     }
-    else
-    {
-      gpsto = false;
-    }
-    if ((lastSLocTs > 0) && ((now - lastSLocTs) > timeout))
+    if ((lastSLocTs > 0) && ((now - lastSLocTs) > timeoutMicro))
     {
       if (!sgpsto)
       {
@@ -611,11 +613,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
         ESP_LOGD(__FUNCTION__, "Timeout on GPS Significant Change");
       }
     }
-    else
-    {
-      sgpsto = false;
-    }
-    if (((lastMovement > 0) && (now - lastMovement > timeout)) || ((lastMovement == 0) && boto))
+    if (((lastMovement > 0) && (now - lastMovement > timeoutMicro)) || ((lastMovement == 0) && boto))
     {
       if (!buto)
       {
@@ -646,8 +644,8 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     char ccctmp[70];
     sprintf(ccctmp,"gps:%d sig change:%d bump:%d signal:%d boto:%d dto:%d",gpsto,sgpsto,buto,sito,boto,dto);
     if (strcmp(ccctmp,cctmp) != 0) {
-      ESP_LOGV(__FUNCTION__,"States: %s lastSLocTs:%ld now - lastSLocTs:%ld timeout:%d",ccctmp,lastSLocTs,now - lastSLocTs, timeout);
-      ESP_LOGV(__FUNCTION__, "Bumps:%d, lastMovement:%ld state:%s", bumpCnt, lastMovement,ccctmp);
+      ESP_LOGV(__FUNCTION__,"States: %s lastSLocTs:%" PRIx64 " now - lastSLocTs:%" PRIx64 " timeout:%d",ccctmp,lastSLocTs,now - lastSLocTs, timeout);
+      ESP_LOGV(__FUNCTION__, "Bumps:%d, lastMovement:%" PRIx64 " state:%s", bumpCnt, lastMovement,ccctmp);
       strcpy(cctmp,ccctmp);
     }
 
@@ -733,7 +731,7 @@ static void pollWakePins(void *arg)
           {
             ESP_LOGV(__FUNCTION__, "GPIO[%d] intr, val: %d\n", io_num, curLvl);
             bumpCnt++;
-            time(&lastMovement);
+            lastMovement=esp_timer_get_time();
             wakePinState = (wakePinState & ~(1U << (idx + 1))) | (curLvl << (idx + 1));
             xEventGroupSetBits(app_eg, BUMP_BIT);
             break;
@@ -859,21 +857,21 @@ static void check_efuse()
   //Check TP is burned into eFuse
   if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_TP) == ESP_OK)
   {
-    ESP_LOGD(__FUNCTION__, "eFuse Two Point: Supported\n");
+    ESP_LOGV(__FUNCTION__, "eFuse Two Point: Supported\n");
   }
   else
   {
-    ESP_LOGD(__FUNCTION__, "eFuse Two Point: NOT supported\n");
+    ESP_LOGV(__FUNCTION__, "eFuse Two Point: NOT supported\n");
   }
 
   //Check Vref is burned into eFuse
   if (esp_adc_cal_check_efuse(ESP_ADC_CAL_VAL_EFUSE_VREF) == ESP_OK)
   {
-    ESP_LOGD(__FUNCTION__, "eFuse Vref: Supported\n");
+    ESP_LOGV(__FUNCTION__, "eFuse Vref: Supported\n");
   }
   else
   {
-    ESP_LOGD(__FUNCTION__, "eFuse Vref: NOT supported\n");
+    ESP_LOGV(__FUNCTION__, "eFuse Vref: NOT supported\n");
   }
 }
 
