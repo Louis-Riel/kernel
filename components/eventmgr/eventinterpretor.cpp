@@ -110,6 +110,10 @@ char* EventInterpretor::GetProgramName() {
     return NULL;
 }
 
+void EventInterpretor::RunProgram(const char* programName){
+    RunProgram(NULL,0,NULL,programName);
+}
+
 void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char* programName){
     AppConfig* program=NULL;
     cJSON *prog;
@@ -129,7 +133,7 @@ void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, v
         ESP_LOGE(__FUNCTION__, "Cannot fing a program named %s", programName);
         return;
     }
-    ESP_LOGD(__FUNCTION__,"Running program %s", programName);
+    ESP_LOGV(__FUNCTION__,"Running program %s", programName);
     if (program->HasProperty("inLineThreads")) {
         cJSON* item;
         cJSON* jprog = program->GetJSONConfig(NULL);
@@ -201,9 +205,39 @@ void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, v
         } else {
             ESP_LOGW(__FUNCTION__,"No threads started");
         }
+    } else if (program->HasProperty("program")) {
+        if (program->HasProperty("period")) {
+            LoopyArgs* args = (LoopyArgs*)dmalloc(sizeof(LoopyArgs));
+            args->interpretor=this;
+            args->program=program->GetJSONConfig(NULL);
+            xTaskCreate(RunLooper,program->GetStringProperty("program"),4096,(void*)args,tskIDLE_PRIORITY,NULL);
+        } else {
+            ESP_LOGE(__FUNCTION__,"Missing Period");
+        }
     } else {
         ESP_LOGE(__FUNCTION__,"Missing the thing to run in program %s",programName);
     }
+}
+
+void EventInterpretor::RunLooper(void* param) {
+    if (param == NULL){
+        ESP_LOGE(__FUNCTION__,"Missing Looper Params");
+        vTaskDelete(NULL);
+    }
+    LoopyArgs* la = (LoopyArgs*)param;
+    EventInterpretor* interpretor = la->interpretor;
+    AppConfig* program = new AppConfig(la->program,NULL);
+    ldfree(la);
+    uint32_t period = program->GetIntProperty("period");
+    TickType_t ticks;
+    bool done = false;
+    char* progName = program->GetStringProperty("program");
+    ESP_LOGV(__FUNCTION__,"Looping %s every %dms",progName,period);
+    while (!done) {
+        interpretor->RunProgram(progName);
+        vTaskDelayUntil(&ticks, pdMS_TO_TICKS( period ));
+    }
+    ldfree(program);
 }
 
 uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data) {
@@ -254,51 +288,38 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
         ldfree(tmp);
     }
 
+    TaskFunction_t theFunc = NULL;
+    
     if (strcmp(method, "commitTripToDisk") == 0)
     {
+        theFunc = commitTripToDisk;
         jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "flags"), "value");
-        if (inBackground)
-            return CreateWokeBackgroundTask(commitTripToDisk, 
-                    "commitTripToDisk", 
-                    4096, 
-                    NULL, 
-                    tskIDLE_PRIORITY, 
-                    NULL);
-        else
-            CreateWokeInlineTask(commitTripToDisk, "commitTripToDisk", 4096, NULL);
     } else if (strcmp(method, "wifioff") == 0)
     {
         ESP_LOGD(__FUNCTION__, "%s from %s", handler->GetName(), "wifioff");
         xEventGroupClearBits(app_eg,app_bits_t::WIFI_ON);
         xEventGroupSetBits(app_eg,app_bits_t::WIFI_OFF);
+        return UINT8_MAX;
     } else if (strcmp(method, "mergeconfig") == 0)
     {
-        if (inBackground)
-            return CreateWokeBackgroundTask(TheRest::MergeConfig, "mergeConfig", 4096, NULL, tskIDLE_PRIORITY, NULL);
-        else
-            CreateWokeInlineTask(TheRest::MergeConfig, "mergeConfig", 4096, NULL);
+        theFunc = TheRest::MergeConfig;
     } else if (strcmp(method, "sendstatus") == 0)
     {
-        if (inBackground)
-            return CreateWokeBackgroundTask(TheRest::SendStatus, "sendStatus", 4096, NULL, tskIDLE_PRIORITY, NULL);
-        else
-            CreateWokeInlineTask(TheRest::SendStatus, "sendStatus", 4096, NULL);
+        theFunc = TheRest::SendStatus;
+    } else if (strcmp(method, "healthcheck") == 0)
+    {
+        theFunc = ManagedDevice::RunHealthCheck;
     } else if (strcmp(method, "wifiSallyForth") == 0)
     {
         xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
         xEventGroupClearBits(app_eg,app_bits_t::WIFI_OFF);
+        return UINT8_MAX;
     } else if (strcmp(method, "checkupgrade") == 0)
     {
-        if (inBackground)
-            return CreateWokeBackgroundTask(TheRest::CheckUpgrade, "bCheckUpgrade", 4096, NULL, tskIDLE_PRIORITY, NULL);
-        else
-            CreateWokeInlineTask(TheRest::CheckUpgrade, "fCheckUpgrade", 4096, NULL);
+        theFunc = TheRest::CheckUpgrade;
     } else if (strcmp(method, "sendtar") == 0)
     {
-        if (inBackground)
-            return CreateWokeBackgroundTask(TheRest::SendTar, "SendTar", 4096, NULL, tskIDLE_PRIORITY, NULL);
-        else
-            CreateWokeInlineTask(TheRest::SendTar, "SendTar", 4096, NULL);
+        theFunc = TheRest::SendTar;
     } else if (strcmp(method,"Sleep")==0) {
         cJSON* jtime = cJSON_GetObjectItem(mParams, "time");
         if (jtime && (jtime = cJSON_GetObjectItem(jtime,"value"))) {
@@ -308,6 +329,7 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
         } else {
             ESP_LOGW(__FUNCTION__,"Missing param sleep");
         }
+        return UINT8_MAX;
     } else if (strcmp(method, "Post") == 0) {
         jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(mParams, "eventBase"), "value");
         jeventid = cJSON_GetObjectItem(cJSON_GetObjectItem(mParams, "eventId"), "value");
@@ -333,7 +355,12 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
         } else {
             ESP_LOGW(__FUNCTION__, "Cannot find %s to %s..", jeventid->valuestring, jeventbase->valuestring);
         }
+        return UINT8_MAX;
     }
+    if (inBackground)
+        return CreateWokeBackgroundTask(theFunc, method, 4096, NULL, tskIDLE_PRIORITY, NULL);
+    else
+        CreateWokeInlineTask(theFunc, method, 4096, NULL);
     return UINT8_MAX;
 }
 

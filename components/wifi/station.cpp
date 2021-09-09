@@ -86,6 +86,10 @@ TheWifi::TheWifi(AppConfig* appcfg)
     theInstance = this;
     stationStat = astate->GetConfig("/wifi/station");
     apStat = astate->GetConfig("/wifi/ap");
+
+    if (handlerDescriptors == NULL)
+        EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
+
     esp_pm_config_esp32_t pm_config;
     pm_config.max_freq_mhz = 240;
     pm_config.min_freq_mhz = 240;
@@ -154,9 +158,6 @@ TheWifi::TheWifi(AppConfig* appcfg)
     ESP_ERROR_CHECK(esp_wifi_start());
     xEventGroupSetBits(s_app_eg, app_bits_t::WIFI_ON);
     xEventGroupClearBits(s_app_eg, app_bits_t::WIFI_OFF);
-
-    if (handlerDescriptors == NULL)
-        EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
 
     ESP_LOGD(__FUNCTION__, "esp_wifi_start finished.");
 }
@@ -483,11 +484,11 @@ void TheWifi::ProcessScannedAPs()
                 ESP_LOGW(__FUNCTION__, "Cannot stop scan");
             }
 
-            ESP_LOGD(__FUNCTION__, "Connecting to %s/", ap_info[lastWinner].ssid);
             strcpy((char *)wifi_config.sta.ssid, (char *)ap_info[lastWinner].ssid);
             InferPassword((char *)wifi_config.sta.ssid, (char *)wifi_config.sta.password);
             memcpy(wifi_config.sta.bssid, ap_info[lastWinner].bssid, sizeof(uint8_t) * 6);
             wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+            ESP_LOGD(__FUNCTION__, "Connecting to %s/%s", (char *)wifi_config.sta.ssid, (char *)wifi_config.sta.password);
             ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_STA, &wifi_config));
 
             if ((ret=esp_wifi_connect()) == ESP_OK)

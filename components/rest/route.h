@@ -53,6 +53,7 @@ public:
   };
 protected:
   static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
+  static bool HealthCheck(void *instance);
 
   EventHandlerDescriptor* BuildHandlerDescriptors();
   static cJSON* BuildStatus(void*);

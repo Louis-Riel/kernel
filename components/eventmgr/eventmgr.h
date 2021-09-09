@@ -125,11 +125,20 @@ public:
     uint8_t RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char *method, bool inBackground);
     uint8_t RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data);
     void RunProgram(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char *progName);
+    void RunProgram(const char *progName);
     bool IsProgram();
     char *GetProgramName();
     char* ToString();
 
 private:
+    typedef struct
+    {
+        EventInterpretor* interpretor;
+        cJSON* program;
+    } LoopyArgs;
+    
+    static void RunLooper(void* param);
+
     cJSON *programs;
     cJSON *config;
     char *programName;
@@ -167,11 +176,13 @@ class ManagedDevice
 public:
     ManagedDevice(char *type);
     ManagedDevice(char *type, char *name, cJSON *(*statusFnc)(void *));
+    ManagedDevice(char *type, char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void *));
     ~ManagedDevice();
     static void UpdateStatuses();
     const char *GetName();
     esp_event_base_t eventBase;
     EventHandlerDescriptor *handlerDescriptors;
+    static void RunHealthCheck(void* param);
 
 protected:
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
@@ -179,10 +190,13 @@ protected:
     EventHandlerDescriptor *BuildHandlerDescriptors();
     static cJSON *BuildStatus(void *instance);
     cJSON *(*statusFnc)(void *);
+    bool (*hcFnc)(void *);
     cJSON *status;
     char *name;
+    static bool HealthCheck(void *instance);
 
 private:
+    static bool ValidateDevices();
     static ManagedDevice *runningInstances[MAX_NUM_DEVICES];
     static uint8_t numDevices;
 };

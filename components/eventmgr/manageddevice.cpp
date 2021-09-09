@@ -5,10 +5,22 @@
 uint8_t ManagedDevice::numDevices=0;
 ManagedDevice* ManagedDevice::runningInstances[MAX_NUM_DEVICES];
 
+ManagedDevice::ManagedDevice(char* type)
+:ManagedDevice(type,type,&BuildStatus)
+{
+}
+
 ManagedDevice::ManagedDevice(char *type,char* name,cJSON* (*statusFnc)(void*))
+:ManagedDevice(type, name, statusFnc, &HealthCheck)
+{
+
+}
+
+ManagedDevice::ManagedDevice(char *type, char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void*))
 :eventBase((esp_event_base_t)dmalloc(strlen(type)+1))
 ,handlerDescriptors(NULL)
 ,statusFnc(statusFnc)
+,hcFnc(hcFnc)
 ,status(NULL)
 {
   strcpy((char*)eventBase, type);
@@ -33,11 +45,6 @@ const char* ManagedDevice::GetName() {
   return name;
 }
 
-ManagedDevice::ManagedDevice(char* type)
-:ManagedDevice(type,type,&BuildStatus)
-{
-}
-
 ManagedDevice::~ManagedDevice() {
   for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
     if (runningInstances[idx] == this){
@@ -57,7 +64,8 @@ void ManagedDevice::ProcessEvent(void *handler_args, esp_event_base_t base, int3
 }
 
 esp_err_t ManagedDevice::PostEvent(void* content, size_t len,int32_t event_id){
-    return esp_event_post(eventBase,event_id,content,len,portMAX_DELAY);
+  ESP_LOGV(__FUNCTION__,"Posting %s(%d) with a message %d bytes long",eventBase,event_id,len);
+  return esp_event_post(eventBase,event_id,content,len,portMAX_DELAY);
 }
 
 void ManagedDevice::UpdateStatuses(){
@@ -80,4 +88,34 @@ cJSON* ManagedDevice::BuildStatus(void* instance){
       ESP_LOGW(__FUNCTION__,"Missing status for %s", md->GetName()?md->GetName():"null");
   }
   return md->status;
+}
+
+bool ManagedDevice::ValidateDevices(){
+  bool hasIssues = false;
+  for (uint32_t idx = 0; idx < MAX_NUM_DEVICES; idx++) {
+    if (runningInstances[idx]) {
+      hasIssues |= !runningInstances[idx]->hcFnc(runningInstances[idx]);
+    }
+  }
+  return !hasIssues;
+}
+
+void ManagedDevice::RunHealthCheck(void* param) {
+  if (!ValidateDevices()){
+    dumpLogs();
+    esp_restart();
+  }
+}
+
+bool ManagedDevice::HealthCheck(void* instance){
+  if (instance == NULL) {
+    ESP_LOGE(__FUNCTION__,"Missing instance to validate");
+  }
+  ManagedDevice* dev = (ManagedDevice*)instance;
+  if (!heap_caps_check_integrity_all(true)) {
+      ESP_LOGE(dev->name,"bcaps integrity error");
+      return false;
+  }
+  ESP_LOGV(dev->name,"All good");
+  return true;
 }
