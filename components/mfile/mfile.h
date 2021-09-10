@@ -32,7 +32,7 @@ enum fileEventIds {
 class MFile:ManagedDevice {
 public:
     MFile();
-    MFile(char* fileName);
+    MFile(const char* fileName);
     ~MFile();
 
     enum mfile_state_t {
@@ -44,7 +44,7 @@ public:
         MFILE_FAILED=BIT5
     } fileStatus;
 
-    static MFile* GetFile(char* fileName);
+    static MFile* GetFile(const char* fileName);
     void Open(const char* mode);
     void Close();
     void Write(uint8_t* data, uint32_t len);
@@ -72,10 +72,10 @@ private:
 class BufferedFile:MFile {
 public:
     BufferedFile();
-    BufferedFile(char* fileName);
+    BufferedFile(const char* fileName);
     ~BufferedFile();
-    static BufferedFile* GetFile(char* fileName);
-    static BufferedFile* GetOpenedFile(char* fileName);
+    static BufferedFile* GetFile(const char* fileName);
+    static BufferedFile* GetOpenedFile(const char* fileName);
     void Write(uint8_t* data, uint32_t len);
     void WriteLine(uint8_t* data, uint32_t len);
     void Flush();

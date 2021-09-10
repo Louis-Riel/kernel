@@ -32,7 +32,7 @@ esp_err_t tarString(mtar_t *tar, const char *path, const char *data)
     return mtar_write_data(tar, data, strlen(data));
 }
 
-esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, const char *excludeList, uint32_t maxSize, bool removeSrc)
+esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursive, const char *excludeList, uint32_t maxSize, bool removeSrc)
 {
     if ((path == NULL) || (strlen(path) == 0))
     {
@@ -110,8 +110,6 @@ esp_err_t tarFiles(mtar_t *tar, char *path, const char *ext, bool recursive, con
                     {
                         uint32_t startPos = tar->pos;
                         fcnt++;
-                        bool headerWritten = false;
-                        bool allDone = false;
                         ESP_LOGV(__FUNCTION__, "Adding %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
                         tarStat = mtar_write_file_header(tar, theFName + 1, fileStat.st_size);
                         ESP_LOGV(__FUNCTION__, "stat %s: %d files. file %s, ram %d len: %li", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), fileStat.st_size);
@@ -355,9 +353,7 @@ void TheRest::SendTar(void* param)
     time_t now = 0;
     esp_err_t err = 0;
     uint32_t hlen=0;
-    uint32_t retCode=0;
     uint32_t sentLen=0;
-    uint32_t postLen=0;
     time(&now);
     localtime_r(&now, &timeinfo);
     strftime(url+strlen(url), 255-strlen(url), "%Y/%m/%d/%H-%M-%S.tar", &timeinfo);
@@ -380,7 +376,6 @@ void TheRest::SendTar(void* param)
     xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
     xEventGroupClearBits(eventGroup, TAR_BUFFER_SENT);
     xEventGroupClearBits(eventGroup, TAR_BUILD_DONE);
-    //CreateWokeInlineTask(MeasureTar,"MeasureTar",4096, NULL);
     uint32_t totLen = sp.len;
     sp.bufLen = 0;
     sp.len = 0;

@@ -85,17 +85,6 @@ typedef enum {
    GPS_ZDA = 0X08
 } gps_protocol_t;
 
-static const char* gps_protocol_name[] = {
-   "GPS_GGA",
-   "GPS_GLL",
-   "GPS_GSA",
-   "GPS_GSV",
-   "GPS_RMC",
-   "GPS_VTG",
-   "GPS_GRS",
-   "GPS_GST",
-   "GPS_ZDA"};
-
 //const uint8_t GGA_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0XFF, 0X23};
 //const uint8_t GLL_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X01, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X2A};
 //const uint8_t GSA_Off[] = { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X02, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X01, 0X31};

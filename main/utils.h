@@ -133,7 +133,7 @@ struct dataPoint
 
 class AppConfig {
 public:
-  AppConfig(char* filePath);
+  AppConfig(const char* filePath);
   AppConfig(cJSON* json, AppConfig* root);
 
   static AppConfig* GetAppConfig();
@@ -153,7 +153,7 @@ public:
 
   bool HasProperty(const char* path);
 
-  char* GetStringProperty(const char* path);
+  const char* GetStringProperty(const char* path);
   int32_t GetIntProperty(const char* path);
   gpio_num_t GetPinNoProperty(const char* path);
   item_state_t GetStateProperty(const char* path);
@@ -184,7 +184,7 @@ protected:
   static AppConfig* configInstance;
   static AppConfig* statusInstance;
   EventGroupHandle_t eg;
-  char* filePath;
+  const char* filePath;
   AppConfig* root = NULL;
   const char* activeStorage;
 };
@@ -208,11 +208,9 @@ bool stringContains(const char* str,const char* val) ;
 void commitTripToDisk(void* param);
 int64_t getSleepTime();
 int64_t getUpTime();
-void cJSON_AddVersionedStringToObject(cfg_label_t* itemToAdd, char* name, cJSON* dest);
-void cJSON_AddVersionedGpioToObject(cfg_gpio_t* itemToAdd, char* name,  cJSON* dest);
 uint32_t GetNumOpenFiles();
-bool rmDashFR(char* folderName);
-bool deleteFile(char* fileName);
+bool rmDashFR(const char* folderName);
+bool deleteFile(const char* fileName);
 void DisplayMemInfo();
 
 #endif

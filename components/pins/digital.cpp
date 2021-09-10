@@ -27,7 +27,7 @@ Pin::Pin(AppConfig* config)
     config(config),
     pinStatus(NULL)
 {
-    char* pname = config->GetStringProperty("pinName");
+    const char* pname = config->GetStringProperty("pinName");
     ldfree(name);
     uint32_t sz = strlen(pname)+1;
     name = (char*)malloc(200);

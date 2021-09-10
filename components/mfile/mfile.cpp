@@ -31,7 +31,7 @@ MFile::MFile()
     }
 }
 
-MFile::MFile(char* fileName):MFile()
+MFile::MFile(const char* fileName):MFile()
 {
     uint32_t sz = strlen(fileName)+1;
     ESP_LOGV(__FUNCTION__,"Opening file %s(%d)",fileName, sz);
@@ -56,7 +56,7 @@ EventHandlerDescriptor* MFile::BuildHandlerDescriptors(){
   return handler;
 }
 
-MFile* MFile::GetFile(char* fileName){
+MFile* MFile::GetFile(const char* fileName){
     if ((fileName == NULL) || !strlen(fileName)) {
         return NULL;
     }
@@ -231,7 +231,7 @@ BufferedFile::BufferedFile()
     ESP_ERROR_CHECK(esp_event_handler_instance_register(MFile::GetEventBase(), ESP_EVENT_ANY_ID, ProcessEvent, this, NULL));
 }
 
-BufferedFile::BufferedFile(char* fileName)
+BufferedFile::BufferedFile(const char* fileName)
     :MFile(fileName)
     ,isNewOrEmpty(false) {
     struct stat st;
@@ -271,7 +271,7 @@ void BufferedFile::CloseAll() {
     }
 }
 
-BufferedFile* BufferedFile::GetOpenedFile(char* fileName){
+BufferedFile* BufferedFile::GetOpenedFile(const char* fileName){
     if ((fileName == NULL) || !strlen(fileName)) {
         return NULL;
     }
@@ -291,7 +291,7 @@ BufferedFile* BufferedFile::GetOpenedFile(char* fileName){
     return NULL;
 }
 
-BufferedFile* BufferedFile::GetFile(char* fileName){
+BufferedFile* BufferedFile::GetFile(const char* fileName){
     if ((fileName == NULL) || !strlen(fileName)) {
         return NULL;
     }

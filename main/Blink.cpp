@@ -534,6 +534,8 @@ void doHibernate(void *param)
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_XTAL, ESP_PD_OPTION_OFF));
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM, ESP_PD_OPTION_OFF));
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF));
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
+  CLEAR_PERI_REG_MASK(RTC_CNTL_BROWN_OUT_REG, RTC_CNTL_BROWN_OUT_RST_ENA);
   dumpTheLogs(NULL);
   ESP_LOGD(__FUNCTION__, "Hybernating");
   esp_deep_sleep_start();
@@ -772,54 +774,56 @@ void configureMotionDetector()
 
 void print_wakeup_reason()
 {
-  esp_sleep_wakeup_cause_t wakeup_reason;
-  wakeup_reason = esp_sleep_get_wakeup_cause();
-  switch (wakeup_reason)
+  esp_reset_reason_t reset_reason = esp_reset_reason();
+
+  switch (reset_reason)
   {
-  case ESP_SLEEP_WAKEUP_EXT0:
-    ESP_LOGI(__FUNCTION__, "Wakeup caused by external signal using RTC_IO");
-    break;
-  case ESP_SLEEP_WAKEUP_EXT1:
-    ESP_LOGI(__FUNCTION__, "Wakeup caused by external signal using RTC_CNTL");
-    break;
-  case ESP_SLEEP_WAKEUP_TIMER:
-    ESP_LOGI(__FUNCTION__, "Wakeup caused by timer");
-    break;
-  case ESP_SLEEP_WAKEUP_TOUCHPAD:
-    ESP_LOGI(__FUNCTION__, "Wakeup caused by touchpad");
-    break;
-  case ESP_SLEEP_WAKEUP_ULP:
-    ESP_LOGI(__FUNCTION__, "Wakeup caused by ULP program");
-    break;
-  default:
-    ESP_LOGI(__FUNCTION__, "Wakeup was not caused by deep sleep %d", wakeup_reason);
-    break;
+  case ESP_RST_UNKNOWN:    ESP_LOGD(__FUNCTION__, "Reset reason can not be determined"); break;
+  case ESP_RST_POWERON:    ESP_LOGD(__FUNCTION__, "Reset due to power-on event"); break;
+  case ESP_RST_EXT:        ESP_LOGD(__FUNCTION__, "Reset by external pin (not applicable for ESP32)"); break;
+  case ESP_RST_SW:         ESP_LOGD(__FUNCTION__, "Software reset via esp_restart"); break;
+  case ESP_RST_PANIC:      ESP_LOGD(__FUNCTION__, "Software reset due to exception/panic"); break;
+  case ESP_RST_INT_WDT:    ESP_LOGD(__FUNCTION__, "Reset (software or hardware) due to interrupt watchdog"); break;
+  case ESP_RST_TASK_WDT:   ESP_LOGD(__FUNCTION__, "Reset due to task watchdog"); break;
+  case ESP_RST_WDT:        ESP_LOGD(__FUNCTION__, "Reset due to other watchdogs"); break;
+  case ESP_RST_DEEPSLEEP:  ESP_LOGD(__FUNCTION__, "Reset after exiting deep sleep mode"); break;
+  case ESP_RST_BROWNOUT:   ESP_LOGD(__FUNCTION__, "Brownout reset (software or hardware)"); break;
+  case ESP_RST_SDIO:       ESP_LOGD(__FUNCTION__, "Reset over SDIO"); break;
   }
-  switch (wakeup_reason)
+
+  if (reset_reason == ESP_RST_DEEPSLEEP)
   {
-  case ESP_SLEEP_WAKEUP_EXT1:
-  {
-    uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
-    if (wakeup_pin_mask != 0)
-    {
-      int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-      ESP_LOGD(__FUNCTION__, "Wake up from GPIO %d\n", pin);
-      ESP_LOGD(__FUNCTION__, "level %d\n", gpio_get_level((gpio_num_t)pin));
+    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+    uint64_t wakeup_pin_mask=0;
+    switch(wakeup_reason)
+    { 
+    case ESP_SLEEP_WAKEUP_UNDEFINED:       ESP_LOGD(__FUNCTION__, "In case of deep sleep: reset was not caused by exit from deep sleep"); break;
+    case ESP_SLEEP_WAKEUP_ALL:             ESP_LOGD(__FUNCTION__, "Not a wakeup cause: used to disable all wakeup sources with esp_sleep_disable_wakeup_source"); break;
+    case ESP_SLEEP_WAKEUP_EXT0:            ESP_LOGD(__FUNCTION__, "Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1:            
+      ESP_LOGD(__FUNCTION__, "Wakeup caused by external signal using RTC_CNTL"); 
+      wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+      if (wakeup_pin_mask != 0)
+      {
+        int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
+        ESP_LOGD(__FUNCTION__, "Wake up from GPIO %d\n", pin);
+        ESP_LOGD(__FUNCTION__, "level %d\n", gpio_get_level((gpio_num_t)pin));
+      }
+      else
+      {
+        ESP_LOGD(__FUNCTION__, "Wake up from GPIO\n");
+      }
+      break;
+    case ESP_SLEEP_WAKEUP_TIMER:           ESP_LOGD(__FUNCTION__, "Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD:        ESP_LOGD(__FUNCTION__, "Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP:             ESP_LOGD(__FUNCTION__, "Wakeup caused by ULP program"); break;
+    case ESP_SLEEP_WAKEUP_GPIO:            ESP_LOGD(__FUNCTION__, "Wakeup caused by GPIO (light sleep only)"); break;
+    case ESP_SLEEP_WAKEUP_UART:            ESP_LOGD(__FUNCTION__, "Wakeup caused by UART (light sleep only)"); break;
+    case ESP_SLEEP_WAKEUP_COCPU:           ESP_LOGD(__FUNCTION__, "Wakeup caused by ESP_SLEEP_WAKEUP_COCPU"); break;
+    case ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG: ESP_LOGD(__FUNCTION__, "Wakeup caused by ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG"); break;
+    case ESP_SLEEP_WAKEUP_BT:              ESP_LOGD(__FUNCTION__, "Wakeup caused by BT"); break;
+    case ESP_SLEEP_WAKEUP_WIFI:            ESP_LOGD(__FUNCTION__, "Wakeup caused by Wifi"); break;
     }
-    else
-    {
-      ESP_LOGD(__FUNCTION__, "Wake up from GPIO\n");
-    }
-    break;
-  }
-  case ESP_SLEEP_WAKEUP_TOUCHPAD:
-  {
-    ESP_LOGD(__FUNCTION__, "Wake up from touch on pad %d\n", esp_sleep_get_touchpad_wakeup_status());
-    break;
-  }
-  case ESP_SLEEP_WAKEUP_UNDEFINED:
-  default:
-    break;
   }
 }
 int32_t GenerateDevId()

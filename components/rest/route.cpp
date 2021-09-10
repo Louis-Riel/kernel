@@ -515,7 +515,7 @@ esp_err_t TheRest::rest_handler(httpd_req_t *req)
 {
     ESP_LOGV(__FUNCTION__, "rest handling (%d)%s", req->method, req->uri);
     uint32_t idx = 0;
-    esp_err_t ret = ESP_OK;
+
     for (const httpd_uri_t &theUri : restInstance->restUris)
     {
         idx++;

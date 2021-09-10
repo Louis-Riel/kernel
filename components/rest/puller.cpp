@@ -58,7 +58,7 @@ esp_err_t json_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
-bool moveFolder(char *folderName, char *toFolderName)
+bool moveFolder(const char *folderName,const char *toFolderName)
 {
     if ((folderName == NULL) || (toFolderName == NULL))
     {
@@ -627,7 +627,7 @@ void pullStation(void *pvParameter)
                 config->max_redirection_count = 0;
                 config->port = 80;
                 esp_http_client_handle_t client = esp_http_client_init(config);
-                char *postData = "{\"enabled\":\"no\"}";
+                const char *postData = "{\"enabled\":\"no\"}";
                 ESP_LOGD(__FUNCTION__, "Sending wifi off %s to %s", postData, config->url);
                 esp_err_t ret = ESP_FAIL;
                 if ((ret = esp_http_client_open(client, strlen(postData))) == ESP_OK)

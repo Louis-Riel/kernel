@@ -5,7 +5,7 @@
 EventDescriptor_t* EventHandlerDescriptor::eventDescriptorCache = NULL;
 uint32_t EventHandlerDescriptor::numCacheEntries = 0;
 
-EventHandlerDescriptor::EventHandlerDescriptor(esp_event_base_t eventBase,char* name){
+EventHandlerDescriptor::EventHandlerDescriptor(esp_event_base_t eventBase,const char* name){
     this->eventBase = eventBase;
     this->eventDescriptors = (EventDescriptor_t*)dmalloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS_PER_BASE);
     ESP_LOGV(__FUNCTION__,"Event descriptor for base %s with name %s created", eventBase, name);
@@ -18,7 +18,7 @@ EventHandlerDescriptor::EventHandlerDescriptor(esp_event_base_t eventBase,char* 
     strcpy(this->name,name);
 }
 
-bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,char* eventName){
+bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName){
     for (int idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
         EventDescriptor_t* descriptor = &this->eventDescriptors[idx];
         if (!descriptor->eventName){
@@ -47,7 +47,7 @@ char* EventHandlerDescriptor::GetName(){
     return this->name;
 }
 
-cJSON* EventHandlerDescriptor::GetEventBaseEvents(char* base, char* filter) {
+cJSON* EventHandlerDescriptor::GetEventBaseEvents(const char* base, const char* filter) {
     cJSON* ret = cJSON_CreateArray();
     for (int idx = 0; idx < MAX_NUM_EVENTS; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
@@ -74,7 +74,7 @@ cJSON* EventHandlerDescriptor::GetEventBaseEvents(char* base, char* filter) {
     return ret;
 }
 
-EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(char* base,char* eventName) {
+EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(const char* base,const char* eventName) {
     ESP_LOGV(__FUNCTION__,"GetEventDescriptor %s(%s)", eventName, base);
     for (int idx = 0; idx < MAX_NUM_EVENTS; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
@@ -107,20 +107,19 @@ EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(esp_event_base_t b
     return NULL;
 }
 
-void EventHandlerDescriptor::SetEventName(int32_t id,char* name){
+void EventHandlerDescriptor::SetEventName(int32_t id,const char* name){
     for (uint8_t idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
         if (eventDescriptors[idx].eventName == NULL) {
             ESP_LOGV(__FUNCTION__,"%d:%s set at idx:%d", id, name, idx);
             eventDescriptors[idx].id = id;
-            eventDescriptors[idx].eventName = (char*)dmalloc(strlen(name)+1);
-            strcpy(eventDescriptors[idx].eventName,name);
+            eventDescriptors[idx].eventName=name;
             return;
         }
     }
     ESP_LOGE(__FUNCTION__,"No space to set event name for %s-%d",name, id);
 }
 
-int32_t EventHandlerDescriptor::GetEventId(char* name){
+int32_t EventHandlerDescriptor::GetEventId(const char* name){
     if ((name == NULL) || (strlen(name)==0)) {
         ESP_LOGW(__FUNCTION__,"Missing name for descriptor");
         return -1;
@@ -134,7 +133,7 @@ int32_t EventHandlerDescriptor::GetEventId(char* name){
     return -1;
 }
 
-char* EventHandlerDescriptor::GetEventName(int32_t id){
+const char* EventHandlerDescriptor::GetEventName(int32_t id){
     for (int idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
         EventDescriptor_t* descriptor = &this->eventDescriptors[idx];
         if ((descriptor != NULL) && (descriptor->id == id)){
@@ -148,7 +147,7 @@ esp_event_base_t EventHandlerDescriptor::GetEventBase(){
     return this->eventBase;
 }
 
-EventHandlerDescriptor::templateType_t EventHandlerDescriptor::GetTemplateType(char* term) {
+EventHandlerDescriptor::templateType_t EventHandlerDescriptor::GetTemplateType(const char* term) {
     if (indexOf(term+2,"Status.")==term+2) {
         return EventHandlerDescriptor::templateType_t::Status;
     }

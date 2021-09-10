@@ -9,26 +9,6 @@ EventManager::EventManager(cJSON* cfg, cJSON* programs)
 ,programs(programs)
 {
     memset(eventInterpretors,0,sizeof(void*)*MAX_NUM_EVENTS);
-    esp_err_t ret=0;
-// typedef struct {
-//     int32_t queue_size;                         /**< size of the event loop queue */
-//     const char *task_name;                      /**< name of the event loop task; if NULL,
-//                                                         a dedicated task is not created for event loop*/
-//     UBaseType_t task_priority;                  /**< priority of the event loop task, ignored if task name is NULL */
-//     uint32_t task_stack_size;                   /**< stack size of the event loop task, ignored if task name is NULL */
-//     BaseType_t task_core_id;                    /**< core to which the event loop task is pinned to,
-//                                                         ignored if task name is NULL */
-// } esp_event_loop_args_t;
-
-    const esp_event_loop_args_t loopArgs = {
-        .queue_size=5,
-        .task_name="EventQueuer",
-        .task_priority=10,
-        .task_stack_size=8192,
-        .task_core_id=1};
-    //if ((ret=esp_event_loop_create(&loopArgs,&evtMgrLoopHandle)) != ESP_OK){
-    //    ESP_LOGE(__FUNCTION__,"Failed in creating event loop %s",esp_err_to_name(ret));
-    //}
     if (!ValidateConfig()) {
         ESP_LOGE(__FUNCTION__,"Event manager is invalid");
     }

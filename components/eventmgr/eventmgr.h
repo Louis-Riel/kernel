@@ -26,23 +26,23 @@
 struct EventDescriptor_t
 {
     int32_t id;
-    char *eventName;
+    const char *eventName;
     char *baseName;
 };
 
 class EventHandlerDescriptor
 {
 public:
-    EventHandlerDescriptor(esp_event_base_t base, char *name);
-    bool AddEventDescriptor(int32_t id, char *name);
-    static EventDescriptor_t *GetEventDescriptor(char *base, char *eventName);
+    EventHandlerDescriptor(esp_event_base_t base, const char *name);
+    bool AddEventDescriptor(int32_t id, const char *name);
+    static EventDescriptor_t *GetEventDescriptor(const char *base,const char *eventName);
     static EventDescriptor_t *GetEventDescriptor(esp_event_base_t base, uint32_t id);
-    static cJSON *GetEventBaseEvents(char *base, char *filter);
+    static cJSON *GetEventBaseEvents(const char *base, const char *filter);
     static char *GetParsedValue(const char *value);
     char *GetName();
-    char *GetEventName(int32_t id);
-    int32_t GetEventId(char *name);
-    void SetEventName(int32_t id, char *name);
+    const char *GetEventName(int32_t id);
+    int32_t GetEventId(const char *name);
+    void SetEventName(int32_t id, const char *name);
     esp_event_base_t GetEventBase();
     enum templateType_t
     {
@@ -62,7 +62,7 @@ private:
     esp_event_base_t eventBase;
     char *name;
 
-    static EventHandlerDescriptor::templateType_t GetTemplateType(char *term);
+    static EventHandlerDescriptor::templateType_t GetTemplateType(const char *term);
 };
 
 enum class compare_operation_t
@@ -127,7 +127,7 @@ public:
     void RunProgram(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char *progName);
     void RunProgram(const char *progName);
     bool IsProgram();
-    char *GetProgramName();
+    const char *GetProgramName();
     char* ToString();
 
 private:
@@ -141,10 +141,10 @@ private:
 
     cJSON *programs;
     cJSON *config;
-    char *programName;
-    char *eventBase;
-    char *eventId;
-    char *method;
+    const char *programName;
+    const char *eventBase;
+    const char *eventId;
+    const char *method;
     EventCondition *conditions[5];
     bool isAnd[5];
     cJSON *params;
@@ -174,9 +174,9 @@ private:
 class ManagedDevice
 {
 public:
-    ManagedDevice(char *type);
-    ManagedDevice(char *type, char *name, cJSON *(*statusFnc)(void *));
-    ManagedDevice(char *type, char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void *));
+    ManagedDevice(const char *type);
+    ManagedDevice(const char *type, const char *name, cJSON *(*statusFnc)(void *));
+    ManagedDevice(const char *type, const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void *));
     ~ManagedDevice();
     static void UpdateStatuses();
     const char *GetName();
@@ -312,7 +312,7 @@ public:
         WaitForThreads(bitsToWaitFor);
     }
 
-    void WaitToSleepExceptFor(char* name)
+    void WaitToSleepExceptFor(const char* name)
     {
         uint32_t bitsToWaitFor = 0;
         PrintState();
@@ -479,7 +479,6 @@ public:
             }
             else
             {
-                uint8_t retryCtn = 10;
                 if (!heap_caps_check_integrity_all(true)) {
                     ESP_LOGE(__FUNCTION__,"bcaps integrity error");
                 }
@@ -503,6 +502,8 @@ public:
                 else
                 {
                     ESP_LOGE(__FUNCTION__, "Error running %s: %s stack depth:%d", thread->pcName, esp_err_to_name(ret), usStackDepth);
+                    dumpTheLogs(NULL);
+                    esp_restart();
                 }
             }
         }
@@ -614,7 +615,7 @@ static BaseType_t CreateMainlineTask(
     return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, 8192, pvParameters, false, false, false);
 };
 
-static void WaitToSleepExceptFor(char* name)
+static void WaitToSleepExceptFor(const char* name)
 {
     managedThreads.WaitToSleepExceptFor(name);
 }
@@ -644,24 +645,6 @@ static uint8_t CreateWokeBackgroundTask(
     TaskHandle_t *const pvCreatedTask)
 {
     return managedThreads.CreateBackgroundManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pvCreatedTask, false, true);
-};
-
-static BaseType_t CreateInlineTask(
-    TaskFunction_t pvTaskCode,
-    const char *const pcName,
-    const uint32_t usStackDepth,
-    void *const pvParameters)
-{
-    return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, false, false);
-};
-
-static BaseType_t CreateWokeInlineTask(
-    TaskFunction_t pvTaskCode,
-    const char *const pcName,
-    const uint32_t usStackDepth,
-    void *const pvParameters)
-{
-    return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, false, true);
 };
 
 #endif

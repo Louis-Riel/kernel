@@ -66,7 +66,7 @@ bool EventInterpretor::IsValid(EventHandlerDescriptor *handler, int32_t id, void
 {
     if (this->handler == NULL)
     {
-        char *eventName = handler->GetEventName(id);
+        const char *eventName = handler->GetEventName(id);
         if (eventName == NULL)
         {
             return NULL;
@@ -103,7 +103,7 @@ bool EventInterpretor::IsProgram() {
     return (programName != NULL);
 }
 
-char* EventInterpretor::GetProgramName() {
+const char* EventInterpretor::GetProgramName() {
     if (IsProgram()) {
         return programName;
     }
@@ -231,7 +231,7 @@ void EventInterpretor::RunLooper(void* param) {
     uint32_t period = program->GetIntProperty("period");
     TickType_t ticks;
     bool done = false;
-    char* progName = program->GetStringProperty("program");
+    const char* progName = program->GetStringProperty("program");
     ESP_LOGV(__FUNCTION__,"Looping %s every %dms",progName,period);
     while (!done) {
         interpretor->RunProgram(progName);
@@ -257,6 +257,15 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
 char* EventInterpretor::ToString() {
     return cJSON_Print(config);
 }
+
+static BaseType_t CreateWokeInlineTask(
+    TaskFunction_t pvTaskCode,
+    const char *const pcName,
+    const uint32_t usStackDepth,
+    void *const pvParameters)
+{
+    return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, false, true);
+};
 
 uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char* method, bool inBackground)
 {

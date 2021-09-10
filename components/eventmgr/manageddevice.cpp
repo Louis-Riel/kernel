@@ -5,18 +5,18 @@
 uint8_t ManagedDevice::numDevices=0;
 ManagedDevice* ManagedDevice::runningInstances[MAX_NUM_DEVICES];
 
-ManagedDevice::ManagedDevice(char* type)
+ManagedDevice::ManagedDevice(const char* type)
 :ManagedDevice(type,type,&BuildStatus)
 {
 }
 
-ManagedDevice::ManagedDevice(char *type,char* name,cJSON* (*statusFnc)(void*))
+ManagedDevice::ManagedDevice(const char *type,const char* name,cJSON* (*statusFnc)(void*))
 :ManagedDevice(type, name, statusFnc, &HealthCheck)
 {
 
 }
 
-ManagedDevice::ManagedDevice(char *type, char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void*))
+ManagedDevice::ManagedDevice(const char *type,const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void*))
 :eventBase((esp_event_base_t)dmalloc(strlen(type)+1))
 ,handlerDescriptors(NULL)
 ,statusFnc(statusFnc)
@@ -102,7 +102,7 @@ bool ManagedDevice::ValidateDevices(){
 
 void ManagedDevice::RunHealthCheck(void* param) {
   if (!ValidateDevices()){
-    dumpLogs();
+    dumpTheLogs(NULL);
     esp_restart();
   }
 }

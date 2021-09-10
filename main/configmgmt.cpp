@@ -14,23 +14,7 @@
 
 extern const uint8_t defaultconfig_json_start[] asm("_binary_defaultconfig_json_start");
 extern const uint8_t defaultconfig_json_end[] asm("_binary_defaultconfig_json_end");
-char* emptyString="";
-
-void cJSON_AddVersionedStringToObject(cfg_label_t *itemToAdd, char *name, cJSON *dest)
-{
-  cJSON *item = cJSON_CreateObject();
-  cJSON_AddItemToObject(item, "value", cJSON_CreateString(itemToAdd->value));
-  cJSON_AddItemToObject(item, "version", cJSON_CreateNumber(itemToAdd->version));
-  cJSON_AddItemToObject(dest, name, item);
-}
-
-void cJSON_AddVersionedGpioToObject(cfg_gpio_t *itemToAdd, char *name, cJSON *dest)
-{
-  cJSON *item = cJSON_CreateObject();
-  cJSON_AddItemToObject(item, "value", cJSON_CreateNumber(itemToAdd->value));
-  cJSON_AddItemToObject(item, "version", cJSON_CreateNumber(itemToAdd->version));
-  cJSON_AddItemToObject(dest, name, item);
-}
+const char* emptyString="";
 
 AppConfig *GetAppConfig()
 {
@@ -40,7 +24,7 @@ AppConfig *GetAppConfig()
 AppConfig *AppConfig::configInstance = NULL;
 AppConfig *AppConfig::statusInstance = NULL;
 
-AppConfig::AppConfig(char *filePath)
+AppConfig::AppConfig(const char *filePath)
     : version(0)
     , json(NULL)
     , filePath(filePath)
@@ -526,7 +510,7 @@ bool AppConfig::HasProperty(const char *path)
   return GetPropertyHolder(GetJSONProperty(path)) != NULL;
 }
 
-char *AppConfig::GetStringProperty(const char *path)
+const char *AppConfig::GetStringProperty(const char *path)
 {
   if (!isValid())
   {

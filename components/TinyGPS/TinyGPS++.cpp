@@ -46,6 +46,16 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 const uint8_t numWakePins = 3;
 const gpio_num_t wakePins[] = {GPIO_NUM_32, GPIO_NUM_33, GPIO_NUM_34};
+static const char* gps_protocol_name[] = {
+   "GPS_GGA",
+   "GPS_GLL",
+   "GPS_GSA",
+   "GPS_GSV",
+   "GPS_RMC",
+   "GPS_VTG",
+   "GPS_GRS",
+   "GPS_GST",
+   "GPS_ZDA"};
 
 unsigned long IRAM_ATTR millis()
 {
@@ -517,6 +527,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
       else
       {
         ESP_LOGW(__FUNCTION__, "GPS Timed out");
+        dumpTheLogs(NULL);
         esp_restart();
       }
     }

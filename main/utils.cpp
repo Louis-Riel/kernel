@@ -566,13 +566,13 @@ bool initSPISDCard()
   return initSPISDCard(true);
 }
 
-bool deleteFile(char *fileName)
+bool deleteFile(const char *fileName)
 {
   ESP_LOGD(__FUNCTION__, "Deleting file %s", fileName);
   return unlink(fileName) == 0;
 }
 
-bool rmDashFR(char *folderName)
+bool rmDashFR(const char *folderName)
 {
   DIR *theFolder;
   struct dirent *fi;
@@ -843,7 +843,6 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
 void UpgradeFirmware()
 {
   struct stat md5St, fwSt;
-  int ret = 0;
   char md5fName[] = "/lfs/firmware/tobe.bin.md5";
   char fwfName[] = "/lfs/firmware/current.bin";
   size_t md5len = 0;

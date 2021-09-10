@@ -5,7 +5,7 @@
 #include "../../main/logs.h"
 #include "../../main/utils.h"
 #include "../esp_littlefs/include/esp_littlefs.h"
-#include "rom/ets_sys.h"
+#include "esp32/rom/ets_sys.h"
 #include "soc/rtc_cntl_reg.h"
 #include "soc/sens_reg.h"
 #include "driver/adc.h"
@@ -69,7 +69,6 @@ cJSON *status_json()
     ESP_LOGV(__FUNCTION__, "Status Handler");
     deviceId ? deviceId : deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
 
-    AppConfig *appcfg = AppConfig::GetAppConfig();
     struct timeval tv_now;
     gettimeofday(&tv_now, NULL);
     int64_t time_us = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
@@ -91,7 +90,7 @@ cJSON *status_json()
     return status;
 }
 
-esp_err_t findFiles(httpd_req_t *req, char *path, const char *ext, bool recursive, char *res, uint32_t resLen)
+esp_err_t findFiles(httpd_req_t *req, const char *path, const char *ext, bool recursive, char *res, uint32_t resLen)
 {
     if ((path == NULL) || (strlen(path) == 0))
     {
@@ -318,7 +317,7 @@ esp_err_t TheRest::HandleWifiCommand(httpd_req_t *req)
     return ret;
 }
 
-void parseFolderForTars(char *folder)
+void parseFolderForTars(const char *folder)
 {
     ESP_LOGD(__FUNCTION__, "Looking for tars in %s", folder);
     DIR *tarFolder;
