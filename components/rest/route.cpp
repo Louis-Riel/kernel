@@ -1,5 +1,6 @@
 #include "./route.h"
 #include "esp_debug_helpers.h"
+#include "eventmgr.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define min(a, b) (((a) < (b)) ? (a) : (b))
@@ -23,7 +24,8 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       restConfig(HTTPD_DEFAULT_CONFIG()),
       gwAddr(NULL),
       ipAddr(NULL),
-      app_eg(getAppEG())
+      app_eg(getAppEG()),
+      healthCheckCount(0)
 {
     if (restInstance == NULL)
     {
@@ -561,6 +563,7 @@ bool TheRest::HealthCheck(void* instance){
         ldfree(resp);
         ldfree(atmp);
         cJSON_Delete(jtmp);
+        theRest->healthCheckCount++;
         return ManagedDevice::HealthCheck(instance);
     }
     return false;

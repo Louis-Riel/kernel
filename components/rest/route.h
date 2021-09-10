@@ -90,6 +90,7 @@ private:
   char* gwAddr;
   char* ipAddr;
   EventGroupHandle_t app_eg;
+  uint32_t healthCheckCount;
   
   httpd_uri_t const restUris[10] =
   {

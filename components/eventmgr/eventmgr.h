@@ -607,7 +607,7 @@ protected:
 
 static ManagedThreads managedThreads;
 
-static BaseType_t CreateMainlineTask(
+static BaseType_t CreateForegroundTask(
     TaskFunction_t pvTaskCode,
     const char *const pcName,
     void *const pvParameters)

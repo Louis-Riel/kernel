@@ -68,13 +68,14 @@ public:
 
 protected:
     void ParseStateBits(AppConfig* state);
+    static bool HealthCheck(void *instance);
 
     Aper** GetClients();
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     static void network_event(void *handler_arg, esp_event_base_t base, int32_t event_id, void *event_data);
 
     EventHandlerDescriptor* BuildHandlerDescriptors();
-    cJSON* BuildStatus();
+    static cJSON* BuildStatus(void* instance);
 
     Aper *clients[MAX_NUM_CLIENTS];
     wifi_config_t wifi_config;
@@ -93,6 +94,7 @@ private:
     SemaphoreHandle_t bitMutex;
     esp_event_handler_instance_t wifiEvtHandler;
     esp_event_handler_instance_t ipEvtHandler;
+    uint32_t healthCheckCount;
 };
 
 #endif

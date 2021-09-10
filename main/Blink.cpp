@@ -646,8 +646,8 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     char ccctmp[70];
     sprintf(ccctmp,"gps:%d sig change:%d bump:%d signal:%d boto:%d dto:%d",gpsto,sgpsto,buto,sito,boto,dto);
     if (strcmp(ccctmp,cctmp) != 0) {
-      ESP_LOGV(__FUNCTION__,"States: %s lastSLocTs:%" PRIx64 " now - lastSLocTs:%" PRIx64 " timeout:%d",ccctmp,lastSLocTs,now - lastSLocTs, timeout);
-      ESP_LOGV(__FUNCTION__, "Bumps:%d, lastMovement:%" PRIx64 " state:%s", bumpCnt, lastMovement,ccctmp);
+      ESP_LOGD(__FUNCTION__,"States: %s lastSLocTs:%" PRIx64 " now - lastSLocTs:%" PRIx64 " timeout:%d",ccctmp,lastSLocTs,now - lastSLocTs, timeout);
+      ESP_LOGD(__FUNCTION__, "Bumps:%d, lastMovement:%" PRIx64 " state:%s", bumpCnt, lastMovement,ccctmp);
       strcpy(cctmp,ccctmp);
     }
 
@@ -914,7 +914,7 @@ static void serviceLoop(void* param) {
     }
     ESP_LOGV(__FUNCTION__,"curr:%s %d",bits, serviceBits);
     if (serviceBits&app_bits_t::WIFI_ON && !TheWifi::GetInstance()) {
-      CreateMainlineTask(wifiSallyForth,"WifiSallyForth",NULL);
+      CreateForegroundTask(wifiSallyForth,"WifiSallyForth",NULL);
     } else if ((serviceBits&app_bits_t::WIFI_OFF) && TheWifi::GetInstance()) {
       if (TheWifi* theWifi = TheWifi::GetInstance()){
         delete theWifi;
@@ -922,7 +922,7 @@ static void serviceLoop(void* param) {
     }
     if (((serviceBits&(app_bits_t::REST|app_bits_t::WIFI_ON))==(app_bits_t::REST|app_bits_t::WIFI_ON)) 
                   && !TheRest::GetServer()) {
-      CreateMainlineTask(restSallyForth,"restSallyForth",TheWifi::GetEventGroup());
+      CreateForegroundTask(restSallyForth,"restSallyForth",TheWifi::GetEventGroup());
     } else if ((serviceBits&(app_bits_t::REST|app_bits_t::WIFI_OFF)) && TheRest::GetServer()) {
       if (TheRest* theRest = TheRest::GetServer()){
         delete theRest;
@@ -931,7 +931,7 @@ static void serviceLoop(void* param) {
     if (serviceBits&(app_bits_t::GPS_ON) && 
         !TinyGPSPlus::runningInstance() && 
         (appCfg->HasProperty("/gps/rxPin"))) {
-      CreateMainlineTask(gpsSallyForth,"gpsSallyForth",appCfg);
+      CreateForegroundTask(gpsSallyForth,"gpsSallyForth",appCfg);
       gps = TinyGPSPlus::runningInstance();
       ESP_LOGV(__FUNCTION__,"Waiting on GPS to start");
       if (xEventGroupWaitBits(gps->eg, TinyGPSPlus::gpsEvent::gpsRunning, pdFALSE, pdTRUE, 1500 / portTICK_RATE_MS) & TinyGPSPlus::gpsEvent::gpsRunning)

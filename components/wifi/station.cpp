@@ -76,12 +76,13 @@ TheWifi::~TheWifi(){
 
 
 TheWifi::TheWifi(AppConfig* appcfg)
-    :ManagedDevice("TheWifi")
+    :ManagedDevice("TheWifi","TheWifi",BuildStatus,HealthCheck)
     ,eventGroup(xEventGroupCreate())
     ,cfg(appcfg)
     ,astate(AppConfig::GetAppStatus())
     ,s_app_eg(getAppEG())
     ,bitMutex(xSemaphoreCreateMutex())
+    ,healthCheckCount(0)
 {
     theInstance = this;
     stationStat = astate->GetConfig("/wifi/station");
@@ -549,7 +550,7 @@ void time_sync_notification_cb(struct timeval *tv)
     sntp_set_sync_status(SNTP_SYNC_STATUS_COMPLETED);
 }
 
-cJSON* TheWifi::BuildStatus(){
+cJSON* TheWifi::BuildStatus(void* instance){
     AppConfig* state = AppConfig::GetAppStatus();
     return state->GetJSONConfig("wifistat");
 }
@@ -665,11 +666,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             time(&now);
             localtime_r(&now, &timeinfo);
             // Is time set? If not, tm_year will be (1970 - 1900).
-            if (timeinfo.tm_year < (2016 - 1900) && (timeHandle == NULL))
-            {
-                ESP_LOGD(__FUNCTION__, "Time is not set yet. Connecting to WiFi and getting time over NTP.");
-                CreateBackgroundTask(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, &timeHandle);
-            }
+            CreateBackgroundTask(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, &timeHandle);
 
             restSallyForth(evtGrp);
             break;
@@ -840,6 +837,15 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
         }
     }
     AppConfig::SignalStateChange(state_change_t::WIFI);
+}
+
+bool TheWifi::HealthCheck(void* instance){
+    TheWifi* theWifi = (TheWifi*)instance;
+    
+    //if (theWifi->healthCheckCount++ % 10 == 10)
+    //    CreateForegroundTask(updateTime, "updateTime", NULL);
+    
+    return ManagedDevice::HealthCheck(instance);
 }
 
 void wifiSallyForth(void *pvParameter)
