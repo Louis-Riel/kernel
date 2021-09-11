@@ -1021,6 +1021,7 @@ bool TinyGPSPlus::endOfTermHandler()
       if (altitude.isValid() && altitude.isUpdated())
       {
         ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::locationChanged, NULL, 0, portMAX_DELAY));
+        AppConfig::SignalStateChange(state_change_t::GPS);
       }
       return true;
     }

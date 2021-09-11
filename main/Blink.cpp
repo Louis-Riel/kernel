@@ -562,7 +562,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:
-    ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters());
+    ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f Bat:%f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters(),getBatteryVoltage());
     lastLocTs = now;
     gpsto=false;
     if (lastSLocTs == 0) {
@@ -1064,4 +1064,5 @@ void app_main(void)
   if (!heap_caps_check_integrity_all(true)) {
       ESP_LOGE(__FUNCTION__,"caps integrity error");
   }
+  ESP_LOGD(__FUNCTION__,"Battery: %f", getBatteryVoltage());
 }

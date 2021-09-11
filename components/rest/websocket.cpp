@@ -15,70 +15,78 @@
 
 static WebsocketManager* stateHandler = NULL;
 
-void WebsocketManager::QueueHandler(void* instance){
-  ESP_LOGD(__FUNCTION__,"QueueHandler Starting");
-  WebsocketManager* me = (WebsocketManager*)instance;
-  char* buf = (char*)dmalloc(JSON_BUFFER_SIZE);
+WebsocketManager::WebsocketManager():
+    isLive(true),
+    logPos(0),
+    msgQueue(xQueueCreate(25,JSON_BUFFER_SIZE)),
+    logBuffer((char*)dmalloc(JSON_BUFFER_SIZE)),
+    stateBuffer((char*)dmalloc(JSON_BUFFER_SIZE)),
+    emptyString(0)
+{
+  stateHandler=this;
+  memset(clients,0,sizeof(clients));
+  ESP_LOGV(__FUNCTION__,"Created Websocket");
+  CreateBackgroundTask(QueueHandler,"WebsocketQH",4096, NULL, tskIDLE_PRIORITY, NULL);
+  CreateBackgroundTask(statePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
+  registerLogCallback(logCallback,stateHandler);
+};
+
+WebsocketManager::~WebsocketManager(){
+  ESP_LOGD(__FUNCTION__,"State Poller Done");
+  unregisterLogCallback(logCallback);
+  ESP_LOGD(__FUNCTION__,"Unregistered log callback");
+  vQueueDelete(msgQueue);
+  ldfree(logBuffer);
+  ldfree(stateBuffer);
+  stateHandler=NULL;
+}
+
+void WebsocketManager::ProcessMessage(uint8_t* msg){
   httpd_ws_frame_t ws_pkt;
   ws_pkt.type = HTTPD_WS_TYPE_TEXT;
   ws_pkt.final = false;
-  esp_err_t ret;
-  uint8_t* emptyString = (uint8_t*)dmalloc(1);
-  *emptyString=0;
-  while(me->isLive){
-    if (xQueueReceive(me->rdySem,buf,3000/portTICK_PERIOD_MS)) {
-      ws_pkt.payload = (uint8_t*)buf;
-      ws_pkt.len = strlen(buf);
-      //printf("\nGot a %s(%d) msg",ws_pkt.payload[0] == '{' ? "State" : "Logs\n", ws_pkt.len);
-    } else {
-      ws_pkt.payload = emptyString;
-      ws_pkt.len = 0;
-    }
-    bool isLive = false;
-    for (uint8_t idx = 0; idx < 5; idx++){
-      if (me->clients[idx].isLive){
-        if ((ret = httpd_ws_send_frame_async(me->clients[idx].hd, me->clients[idx].fd, &ws_pkt)) != ESP_OK) {
-          if (me->clients[idx].errorCount++ > 4){
-            me->clients[idx].isLive=false;
-            if (ret == ESP_ERR_INVALID_ARG) {
-              ESP_LOGD(__FUNCTION__,"Client %d disconnected",idx);
-            } else {
-              ESP_LOGW(__FUNCTION__,"Client %d Error %s",idx, esp_err_to_name(ret));
-            }
-          } else {
-              ESP_LOGD(__FUNCTION__,"Client %d not responding, retry %d",idx, me->clients[idx].errorCount);
-              vTaskDelay(1000/portTICK_PERIOD_MS);
-          }
-        }
-        isLive |= me->clients[idx].isLive;
-        break;
-      }
-    }
-    me->isLive = isLive;
-  }
-  ESP_LOGD(__FUNCTION__,"QueueHandler Done");
+  ws_pkt.payload = msg == NULL ? &emptyString : msg;
+  ws_pkt.len = msg == NULL ? 0 : strlen((char*)msg);
   ws_pkt.final = true;
+  esp_err_t ret;
+
+  bool hasLiveClients = false;
+  bool hadClients = false;
   for (uint8_t idx = 0; idx < 5; idx++){
-    if (me->clients[idx].fd){
-      httpd_ws_send_frame_async(me->clients[idx].hd, me->clients[idx].fd, &ws_pkt);
+    if (clients[idx].isLive){
+      hadClients = true;
+      if ((ret = httpd_ws_send_frame_async(clients[idx].hd, clients[idx].fd, &ws_pkt)) != ESP_OK) {
+        clients[idx].isLive=false;
+        httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
+      }
+      hasLiveClients |= clients[idx].isLive;
     }
   }
-  ldfree(buf);
-  ldfree(emptyString);
-  ldfree(me->name);
-  vQueueDelete(me->rdySem);
+  if (hadClients){
+    if (isLive != hasLiveClients){
+      isLive = hasLiveClients;
+      AppConfig::SignalStateChange(state_change_t::WIFI);
+    }
+  }
 }
 
-WebsocketManager::WebsocketManager(const char* name):
-    rdySem(xQueueCreate(10, JSON_BUFFER_SIZE)),
-    name((char*)dmalloc(strlen(name)+1)),
-    isLive(true)
-{
-    strcpy(this->name,name);
-    memset(clients,0,sizeof(clients));
-    ESP_LOGV(__FUNCTION__,"Created Websocket %s",name);
-    CreateBackgroundTask(QueueHandler,name,4096,this,tskIDLE_PRIORITY,&queueTask);
-};
+void WebsocketManager::QueueHandler(void* param){
+  ESP_LOGD(__FUNCTION__,"QueueHandler Starting");
+  uint8_t* buf = (uint8_t*)dmalloc(JSON_BUFFER_SIZE);
+  while(stateHandler->isLive){
+    if (xQueueReceive(stateHandler->msgQueue,buf,3000/portTICK_PERIOD_MS)) {
+      stateHandler->ProcessMessage(buf);
+    } else {
+      stateHandler->ProcessMessage(NULL);
+    }
+  }
+  ESP_LOGD(__FUNCTION__,"QueueHandler Done");
+  ldfree(buf);
+}
+
+bool WebsocketManager::HasOpenedWs(){
+  return stateHandler ? stateHandler->isLive : false;
+}
 
 bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
   for (uint8_t idx = 0; idx < 5; idx++){
@@ -92,12 +100,12 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
     if (!clients[idx].isLive){
       clients[idx].hd = hd;
       clients[idx].fd = fd;
-      ESP_LOGV(__FUNCTION__,"Client is inserted at position %d",idx);
+      ESP_LOGD(__FUNCTION__,"Client is inserted at position %d",idx);
       isLive=true;
       return clients[idx].isLive = true;
     }
   }
-  ESP_LOGV(__FUNCTION__,"Client could not be added");
+  ESP_LOGD(__FUNCTION__,"Client could not be added");
   return false;
 }
 
@@ -105,84 +113,92 @@ time_t GetTime() {
   return esp_timer_get_time() / 1000LL;
 }
 
-static bool logCallback(void* instance, char* logData){
-  WebsocketManager* ws = (WebsocketManager*) instance;
-  //printf("\nSending log(%d)ws null:%d live:%d", strlen(logData), ws == NULL, ws != NULL && ws->isLive);
-
-  return ws == NULL || ws->isLive == false ? false : xQueueSend(ws->rdySem,logData,portMAX_DELAY);
+bool WebsocketManager::logCallback(void* instance, char* logData){
+  if (stateHandler && stateHandler->isLive) {
+    if (logData) {
+      strcpy(stateHandler->logBuffer,logData);
+      return xQueueSend(stateHandler->msgQueue,stateHandler->logBuffer,portMAX_DELAY);
+    }
+  }
+  return false;
 };
 
-static void statePoller(void *instance){
-  WebsocketManager* ws = (WebsocketManager*) instance;
+void WebsocketManager::statePoller(void *instance){
   EventGroupHandle_t stateEg = AppConfig::GetStateGroupHandle();
-
+  ESP_LOGD(__FUNCTION__,"State poller started");
   EventBits_t bits = 0;
-  while ((ws!=NULL) && (ws->isLive)) {
-    bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,1000/portTICK_RATE_MS);
-    if (bits){
+  while (stateHandler && stateHandler->isLive) {
+    bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,portMAX_DELAY);
+    if (stateHandler && stateHandler->isLive){
       cJSON* state = status_json();
       if (bits&state_change_t::GPS) {
         ESP_LOGV(__FUNCTION__,"gState Changed %d", bits);
         cJSON_AddItemReferenceToObject(state,"gps",AppConfig::GetAppStatus()->GetJSONConfig("gps"));
-      } 
-      if (bits&state_change_t::WIFI) {
+      } else {
         ESP_LOGV(__FUNCTION__,"wState Changed %d", bits);
         cJSON* item;
         cJSON_ArrayForEach(item,AppConfig::GetAppStatus()->GetJSONConfig(NULL)) {
           if (state!= NULL){
             cJSON_AddItemReferenceToObject(state,item->string,AppConfig::GetAppStatus()->GetJSONConfig(item->string));
           } else {
-            ESP_LOGW(__FUNCTION__, "missing state");
+            ESP_LOGW(__FUNCTION__, "Missing state");
           }
         }
-      } else {
-        ESP_LOGV(__FUNCTION__,"State Changed %d", bits);
       }
-      char* buf = cJSON_PrintUnformatted(state);
-      if (buf){
-        xQueueSend(ws->rdySem,buf,portMAX_DELAY);
-        ldfree(buf);
+      if (cJSON_PrintPreallocated(state,stateHandler->logBuffer,JSON_BUFFER_SIZE,pdFALSE)){
+        if (xQueueSend(stateHandler->msgQueue,stateHandler->logBuffer,portMAX_DELAY) == pdTRUE) {
+          ESP_LOGV(__FUNCTION__,"State sent %d",strlen(stateHandler->logBuffer));
+        } else {
+          ESP_LOGW(__FUNCTION__,"Failed to queue state");
+        }
+      } else {
+        ESP_LOGW(__FUNCTION__,"Failed to stringify state");
       }
       cJSON_free(state);
     }
   }
-  ESP_LOGD(__FUNCTION__,"State Poller Done");
-  stateHandler=NULL;
+  ESP_LOGD(__FUNCTION__,"State poller done");
+  delete stateHandler;
 }
 
 
-esp_err_t TheRest::ws_handler(httpd_req_t *req){
-    ESP_LOGD(__FUNCTION__, "WEBSOCKET Session");
+esp_err_t TheRest::ws_handler(httpd_req_t *req) {
+  ESP_LOGV(__FUNCTION__, "WEBSOCKET Session");
+  if (stateHandler == NULL) {
+    ESP_LOGD(__FUNCTION__, "Staring Manager");
+    stateHandler = new WebsocketManager();
+  }
 
-    uint8_t buf[128] = { 0 };
-    httpd_ws_frame_t ws_pkt;
-    memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-    ws_pkt.payload = buf;
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 128);
-    if (ret != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "httpd_ws_recv_frame failed with %d", ret);
-        return ret;
-    }
-    ESP_LOGD(__FUNCTION__, "Got packet with message: %s", ws_pkt.payload);
-    ESP_LOGD(__FUNCTION__, "Packet type: %d", ws_pkt.type);
-    if (ws_pkt.type == HTTPD_WS_TYPE_TEXT){
-      if (stateHandler == NULL) {
-        stateHandler = new WebsocketManager("StateWebsocket");
-        CreateBackgroundTask(statePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
-        registerLogCallback(logCallback,stateHandler);
+  httpd_ws_frame_t ws_pkt;
+  memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+  ws_pkt.payload = (uint8_t*)dmalloc(128);
+  memset(ws_pkt.payload,0,128);
+  esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 128);
+  if (ret == ESP_OK) 
+  {
+    switch (ws_pkt.type)
+    {
+    case HTTPD_WS_TYPE_TEXT:
+      if (strcmp((char*)ws_pkt.payload,"Connect")==0){
+        if (stateHandler->RegisterClient(req->handle,httpd_req_to_sockfd(req))){
+          ESP_LOGV(__FUNCTION__,"Client Connected");
+        } else {
+          ESP_LOGW(__FUNCTION__,"Client cannot be connected");
+        }
+      } else {
+        ESP_LOGW(__FUNCTION__,"Unknown Command(%d):%s",ws_pkt.len, (char*)ws_pkt.payload);
       }
-      if (strcmp((char*)ws_pkt.payload,"Logs") == 0) {
-        return stateHandler->RegisterClient(req->handle,httpd_req_to_sockfd(req)) ? ESP_OK : ESP_FAIL;
-      }
-      if (strcmp((char*)ws_pkt.payload,"State") == 0) {
-        return stateHandler->RegisterClient(req->handle,httpd_req_to_sockfd(req)) ? ESP_OK : ESP_FAIL;
-      }
+    break;
+    case HTTPD_WS_TYPE_CONTINUE:  ESP_LOGD(__FUNCTION__,"Packet type(%d): CONTINUE: %s",ws_pkt.len, (char*)ws_pkt.payload); break;
+    case HTTPD_WS_TYPE_BINARY:    ESP_LOGD(__FUNCTION__,"Packet type(%d): BINARY",ws_pkt.len);   break;
+    case HTTPD_WS_TYPE_CLOSE:     ESP_LOGD(__FUNCTION__,"Packet type(%d): CLOSE",ws_pkt.len);    break;
+    case HTTPD_WS_TYPE_PING:      ESP_LOGD(__FUNCTION__,"Packet type(%d): PING",ws_pkt.len);     break;
+    case HTTPD_WS_TYPE_PONG:      ESP_LOGD(__FUNCTION__,"Packet type(%d): PONG",ws_pkt.len);     break;
+    default:                      ESP_LOGW(__FUNCTION__,"Packet type(%d): UNKNOWN",ws_pkt.len);  break;
     }
-
-    ret = httpd_ws_send_frame(req, &ws_pkt);
-    if (ret != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "httpd_ws_send_frame failed with %d", ret);
-    }
-    return ret;
+  } else {
+    ESP_LOGE(__FUNCTION__, "httpd_ws_recv_frame failed: %s", esp_err_to_name(ret));
+  }
+  ldfree(ws_pkt.payload);
+  return ret;
 }

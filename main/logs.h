@@ -43,5 +43,6 @@ void dumpTheLogs(void* params);
 char* getLogFName();
 typedef bool (*LogFunction_t)( void * ,char * );
 void registerLogCallback( LogFunction_t callback, void* param);
+void unregisterLogCallback( LogFunction_t callback);
 
 #endif

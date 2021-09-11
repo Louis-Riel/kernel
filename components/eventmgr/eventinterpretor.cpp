@@ -265,7 +265,7 @@ static BaseType_t CreateWokeInlineTask(
     void *const pvParameters)
 {
     return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, false, true);
-};
+}
 
 uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char* method, bool inBackground)
 {

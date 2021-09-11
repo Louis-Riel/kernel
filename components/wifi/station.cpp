@@ -478,6 +478,7 @@ void TheWifi::ProcessScannedAPs()
                 }
             }
         }
+        AppConfig::SignalStateChange(state_change_t::WIFI);
 
         if (lastWinner >= 0) {
             if (esp_wifi_scan_stop() != ESP_OK)
@@ -841,9 +842,6 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
 
 bool TheWifi::HealthCheck(void* instance){
     TheWifi* theWifi = (TheWifi*)instance;
-    
-    //if (theWifi->healthCheckCount++ % 10 == 10)
-    //    CreateForegroundTask(updateTime, "updateTime", NULL);
     
     return ManagedDevice::HealthCheck(instance);
 }

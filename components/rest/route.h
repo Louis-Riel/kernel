@@ -11,11 +11,16 @@ static uint32_t deviceId = 0;
 
 class WebsocketManager {
   public:
-    WebsocketManager(const char* name);
+    WebsocketManager();
+    ~WebsocketManager();
     bool RegisterClient(httpd_handle_t hd,int fd);
+    void ProcessMessage(uint8_t* msg);
+    static void QueueHandler(void* instance);
+    static void statePoller(void *instance);
+    static bool logCallback(void* instance, char* logData);
+    static bool HasOpenedWs();
+
     TaskHandle_t queueTask;
-    QueueHandle_t rdySem;
-    char* name;
     bool isLive;
     struct ws_client_t
     {
@@ -27,8 +32,11 @@ class WebsocketManager {
     } clients[5];
 
   private:
-    static void QueueHandler(void* instance);
-    uint32_t logPos = 0;
+    uint32_t logPos;
+    QueueHandle_t msgQueue;
+    char* logBuffer;
+    char* stateBuffer;
+    uint8_t emptyString;
 };
 
 class TheRest:ManagedDevice {

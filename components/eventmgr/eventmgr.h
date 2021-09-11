@@ -402,6 +402,7 @@ public:
             if (pvCreatedTask != NULL)
             {
                 *pvCreatedTask = thread->pvCreatedTask;
+                AppConfig::SignalStateChange(state_change_t::MAIN);
             }
             return bitNo;
         }

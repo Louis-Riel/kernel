@@ -55,6 +55,8 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     }
 
     restConfig.uri_match_fn = this->routeHttpTraffic;
+    restConfig.lru_purge_enable = true;
+
     ESP_LOGI(__FUNCTION__, "Starting server on port %d ip%s gw:%s", restConfig.server_port, ipAddr, gwAddr);
     esp_err_t ret = ESP_FAIL;
     if ((ret = httpd_start(&server, &restConfig)) == ESP_OK)
@@ -565,6 +567,10 @@ bool TheRest::HealthCheck(void* instance){
         cJSON_Delete(jtmp);
         theRest->healthCheckCount++;
         return ManagedDevice::HealthCheck(instance);
+    }
+    if (WebsocketManager::HasOpenedWs()) {
+        ESP_LOGW(__FUNCTION__,"Ignoring error since we have web sockets");
+        return true;
     }
     return false;
 }

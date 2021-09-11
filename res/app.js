@@ -702,45 +702,44 @@ function setupWs(ctrl) {
             ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
             var stopItWithThatShit = setTimeout(() => {
                 ws.close();
-                ws = null;
             }, 3000);
             ws.onmessage = (event) => {
+                clearTimeout(stopItWithThatShit);
                 if (event && event.data) {
                     if (event.data[0] == "{") {
                         stateViewer.state.statuses[stateViewer.state.deviceId] = Object.assign(Object.assign({}, stateViewer.state.statuses[stateViewer.state.deviceId]), fromVersionedToPlain(JSON.parse(event.data)))
                         stateViewer.setState({ statuses: stateViewer.state.statuses });
-                    } else if (systemManager) {
-                        systemManager.AddLogLine(event.data);
+                    } else if (event.data.match(/.*\) ([^:]*)/g)) {
+                        if (systemManager)
+                            systemManager.AddLogLine(event.data);
                     }
-                } else {
-                    clearTimeout(stopItWithThatShit);
-                    stopItWithThatShit = setTimeout(() => {
-                        if (ws)
-                            ws.close();
-                        ws = null;
-                    }, 3000);
                 }
+                stopItWithThatShit = setTimeout(() => {
+                    ctrl = document.getElementById(ctrl.id);
+                    ctrl.style.opacity = 0.5;
+                    ws.close();
+                }, 3000);
             };
             ws.onopen = () => {
                 clearTimeout(stopItWithThatShit);
                 ctrl = document.getElementById(ctrl.id);
                 ctrl.style.opacity = 1;
                 ctrl.connected = true;
-                console.log("Requesting log ws");
-                ws.send("Logs")
-                console.log("Requesting state ws");
-                ws.send("State")
+                console.log("Connected");
+                ws.send("Connect");
+                stopItWithThatShit = setTimeout(() => {
+                    ws.close();
+                }, 3000);
             };
             ws.onerror = (err) => {
                 clearTimeout(stopItWithThatShit);
+                ctrl.style.opacity = 0.5;
                 ws.close();
-                setTimeout(() => {
-                    ctrl.checked = true;
-                    setupWs(ctrl);
-                }, 1500);
             };
             ws.onclose = (evt => {
+                clearTimeout(stopItWithThatShit);
                 ctrl = document.getElementById(ctrl.id);
+                ctrl.style.opacity = 1;
                 ctrl.checked = false;
                 console.log("log closed");
                 ws = null;
@@ -760,10 +759,11 @@ function setupWs(ctrl) {
 class LogLine extends React.Component {
     constructor(props) {
         super(props);
+        var msg = this.props.logln.match(/^[^IDVEW]*(.+)/)[1];
         this.state = {
-            level: this.props.logln.substr(0, 1),
-            date: this.props.logln.substr(3, 12),
-            function: this.props.logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1"),
+            level: msg.substr(0, 1),
+            date: msg.substr(3, 12),
+            function: msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1"),
         }
         this.state.msg = this.props.logln.substr(this.props.logln.indexOf(this.state.function) + this.state.function.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/.\[..\n$/g, "")
     }

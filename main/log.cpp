@@ -94,11 +94,19 @@ void registerLogCallback( LogFunction_t callback, void* param) {
     }
 }
 
+void unregisterLogCallback( LogFunction_t callback) {
+    for (int idx=0; idx < 5; idx++){
+        if (callbacks[idx] == callback) {
+            callbacks[idx]=NULL;
+            break;
+        }
+    }
+}
+
 int loggit(const char *fmt, va_list args) {
     char* curLogLine = logBuff+logBufPos;
     xSemaphoreTake(logMutex,portMAX_DELAY);
     logBufPos+=vsprintf(logBuff+logBufPos,fmt,args);
-    xSemaphoreGive(logMutex);
     for (int idx=0; idx < 5; idx++){
         if (callbacks[idx] != NULL) {
             if (!callbacks[idx](params[idx],curLogLine)){
@@ -109,6 +117,7 @@ int loggit(const char *fmt, va_list args) {
     if (logBufPos >= LOG_BUF_ULIMIT) {
         dumpLogs();
     }
+    xSemaphoreGive(logMutex);
     return vprintf(fmt, args);
 }
 
