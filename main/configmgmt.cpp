@@ -94,12 +94,7 @@ AppConfig *AppConfig::GetAppStatus()
   {
     statusInstance = new AppConfig(cJSON_CreateObject(), NULL);
     statusInstance->eg = xEventGroupCreate();
-    const esp_app_desc_t* ad = esp_ota_get_app_description();
-    char bo[50];
-    sprintf(bo,"%s %s",ad->date,ad->time);
-    statusInstance->SetStringProperty("/build/date",bo);
-    statusInstance->SetStringProperty("/build/ver",ad->version);
-    ESP_LOGD(__FUNCTION__,"Initializing Status instance %s builton:%s",statusInstance->GetStringProperty("/build/ver"),statusInstance->GetStringProperty("/build/date"));
+    ESP_LOGV(__FUNCTION__,"Initializing Status");
   }
   return statusInstance;
 }
@@ -109,7 +104,7 @@ const char *AppConfig::GetActiveStorage()
   AppConfig* stat = GetAppStatus();
   if (stat->activeStorage == NULL)
     return stat->SPIFFPATH;
-  return GetAppStatus()->activeStorage;
+  return stat->activeStorage == NULL ? stat->SPIFFPATH:stat->SPIFFPATH;
 }
 
 bool AppConfig::isValid()

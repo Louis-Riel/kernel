@@ -19,7 +19,6 @@ char* getLogFName(){
 static TaskHandle_t dltask = NULL;
 
 void dumpTheLogs(void* params){
-    const char* storage = AppConfig::GetActiveStorage();
     bool isAp = GetAppConfig()->IsAp();
     if (logBufPos == 0) {
         ESP_LOGD(__FUNCTION__,"No logs to dump");
@@ -57,7 +56,7 @@ void dumpTheLogs(void* params){
         
         if ((strlen(logfname) == 0) || (indexOf(logfname,"1970") && (timeinfo.tm_year > 1970))){
             char lpath[255];
-            sprintf(lpath,"%s/logs/%s-%%Y-%%m-%%d_%%H-%%M-%%S.log",storage,isAp?"TRACKER":"PULLER");
+            sprintf(lpath,"%s/logs/%s-%%Y-%%m-%%d_%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),isAp?"TRACKER":"PULLER");
             strftime(logfname, 254, lpath, &timeinfo);
         }
 

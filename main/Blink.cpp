@@ -979,7 +979,15 @@ void app_main(void)
     gpio_install_isr_service(0);
     const esp_app_desc_t* ad = esp_ota_get_app_description();
     ESP_LOGI(__FUNCTION__, "Starting %s v%s %s %s",ad->project_name,ad->version,ad->date, ad->time);
+
     AppConfig *appcfg = new AppConfig(CFG_PATH);
+    AppConfig *appstat = AppConfig::GetAppStatus();
+
+    char bo[50];
+    sprintf(bo,"%s %s",ad->date,ad->time);
+    appstat->SetStringProperty("/build/date",bo);
+    appstat->SetStringProperty("/build/ver",ad->version);
+
 
     check_efuse();
     adc1_config_width(ADC_WIDTH_12Bit);

@@ -32,7 +32,7 @@ esp_err_t tarString(mtar_t *tar, const char *path, const char *data)
     return mtar_write_data(tar, data, strlen(data));
 }
 
-esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursive, const char *excludeList, uint32_t maxSize, bool removeSrc)
+esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursive, const char *excludeList, uint32_t maxSize, bool removeSrc, char* filesToDelete)
 {
     if ((path == NULL) || (strlen(path) == 0))
     {
@@ -65,7 +65,8 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     memset(theFolders, 0, 1024);
     memset(theFName, 0, 300);
 
-    ESP_LOGV(__FUNCTION__, "Parsing %s", path);
+    uint32_t fdpos = filesToDelete == NULL ? 0 : strlen(filesToDelete);
+    ESP_LOGD(__FUNCTION__, "Parsing %s files to delete:%s fdpos:%d", path, filesToDelete == NULL ? "NULL" : filesToDelete, fdpos);
     struct timeval tv_start, tv_end, tv_open, tv_stat, tv_rstart, tv_rend, tv_wstart, tv_wend;
 
     if ((theFolder = openDir(path)) != NULL)
@@ -159,7 +160,9 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                             !endsWith(theFName, ".json") && 
                             !endsWith(theFName, ".md5") &&
                             !endsWith(theFName,getLogFName())){
-                            deleteFile(theFName);
+                            ESP_LOGD(__FUNCTION__,"Flagging %s for deletion",theFName);
+                            fdpos+=sprintf(filesToDelete+fdpos,"%s,",theFName);
+                            ESP_LOGD(__FUNCTION__,"Files to delete(%d):%s",fdpos, filesToDelete);
                         } else {
                             ESP_LOGV(__FUNCTION__,"Not deleting %s",theFName);
                         }
@@ -194,7 +197,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
             while ((tarStat == MTAR_ESUCCESS)&&(dcnt-- > 0))
             {
                 ESP_LOGV(__FUNCTION__, "%d-%s: Getting sub-folder(%d) %s", dcnt, path, ctpos, theFolders + ctpos);
-                if ((ret = tarFiles(tar, theFolders + ctpos, ext, recursive, excludeList, maxSize, removeSrc)) != ESP_OK)
+                if ((ret = tarFiles(tar, theFolders + ctpos, ext, recursive, excludeList, maxSize, removeSrc, filesToDelete)) != ESP_OK)
                 {
                     ESP_LOGW(__FUNCTION__, "Error invoking getSdFiles for %s", kmlFileName);
                 }
@@ -317,13 +320,44 @@ int tarClose(mtar_t *tar)
 
 void BuildTar(void* param){
     mtar_t tar;
+    char* filesToDelete = (char*)dmalloc(JSON_BUFFER_SIZE);
+    memset(filesToDelete,0,JSON_BUFFER_SIZE);
     memset(&tar, 0, sizeof(tar));
     tar.read = tarRead;
     tar.close = tarClose;
     tar.seek = tarSeek;
     tar.write = tarWrite;
-    tarFiles(&tar,"/lfs",NULL,true,"current.bin",1024000,true);
-    mtar_close(&tar);
+    tarFiles(&tar,"/lfs",NULL,true,"current.bin",1024000,true,filesToDelete);
+    if (mtar_close(&tar) == MTAR_ESUCCESS){
+        char* nextFile = lastIndexOf(filesToDelete,",");
+        if (nextFile){
+            *nextFile=0; //Remove trailng ,
+            nextFile = lastIndexOf(filesToDelete,",");
+            ESP_LOGD(__FUNCTION__,"Files to delete:%s",filesToDelete);
+            if (nextFile == NULL) {
+                nextFile = filesToDelete; //Assume there was only one file
+            } else {
+                nextFile++;
+            }
+            while (nextFile) {
+                deleteFile(nextFile);
+                if (nextFile == filesToDelete) {
+                    break;
+                } else {
+                    *(nextFile-1)=0; // remove comma of processed file
+                    nextFile = lastIndexOf(filesToDelete,",");
+                    if (nextFile == NULL) {
+                        nextFile = filesToDelete; // last file to delete
+                    } else {
+                        nextFile++;
+                    }
+                }
+            }
+        }
+    } else {
+        ESP_LOGE(__FUNCTION__,"Failed to close tar");
+    }
+    ldfree(filesToDelete);
 }
 
 void MeasureTar(void* param){
@@ -333,7 +367,8 @@ void MeasureTar(void* param){
     tar.close = tarCountClose;
     tar.seek = tarSeek;
     tar.write = tarCount;
-    tarFiles(&tar,"/lfs",NULL,true,"current.bin",1024000,false);
+    tarFiles(&tar,"/lfs",NULL,true,"current.bin",1024000,false,NULL);
+    mtar_close(&tar);
 }
 
 void TheRest::SendTar(void* param)
