@@ -14,7 +14,6 @@
 #include "../TinyGPS/TinyGPS++.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
-esp_err_t sendFile(httpd_req_t *req, const char *path);
 
 //char* kmlFileName=(char*)dmalloc(255);
 float temperatureReadFixed()
@@ -84,13 +83,13 @@ cJSON *status_json()
     cJSON_AddItemToObject(status, "temperature", cJSON_CreateNumber(temperatureReadFixed()));
     cJSON_AddItemToObject(status, "hallsensor", cJSON_CreateNumber(hall_sensor_read()));
     cJSON_AddItemToObject(status, "openfiles", cJSON_CreateNumber(GetNumOpenFiles()));
-    cJSON_AddItemToObject(status, "runtime_ms", cJSON_CreateNumber(xTaskGetTickCount() * portTICK_PERIOD_MS));
+    cJSON_AddItemToObject(status, "runtime_us", cJSON_CreateNumber(esp_timer_get_time()));
     cJSON_AddItemToObject(status, "systemtime_us", cJSON_CreateNumber(time_us));
     cJSON_AddItemToObject(status, "activestorage", cJSON_CreateString(AppConfig::GetActiveStorage()));
     return status;
 }
 
-esp_err_t findFiles(httpd_req_t *req, const char *path, const char *ext, bool recursive, char *res, uint32_t resLen)
+esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext, bool recursive, char *res, uint32_t resLen)
 {
     if ((path == NULL) || (strlen(path) == 0))
     {
@@ -149,6 +148,7 @@ esp_err_t findFiles(httpd_req_t *req, const char *path, const char *ext, bool re
                             ESP_LOGE(__FUNCTION__, "Error sending chunk %s sLenL%d, actuallen:%d", esp_err_to_name(ret), sLen, strlen(res));
                             break;
                         }
+                        TheRest::GetServer()->bytesOut+=strlen(res);
                         memset(res, 0, resLen);
                         sLen = 0;
                     }
@@ -171,6 +171,8 @@ esp_err_t findFiles(httpd_req_t *req, const char *path, const char *ext, bool re
                     {
                         ESP_LOGE(__FUNCTION__, "Error sending chunk %s sLenL%d, actuallen:%d", esp_err_to_name(ret), sLen, strlen(res));
                         break;
+                    } else {
+                        TheRest::GetServer()->bytesOut+=strlen(res);
                     }
                     memset(res, 0, resLen);
                     sLen = 0;
@@ -254,10 +256,11 @@ esp_err_t TheRest::list_entity_handler(httpd_req_t *req)
         sprintf(jsonbuf, "%s", "[]");
     }
 
-    httpd_resp_send_chunk(req, jsonbuf, strlen(jsonbuf));
+    esp_err_t ret = httpd_resp_send(req, jsonbuf, strlen(jsonbuf));
+    TheRest::GetServer()->bytesOut+=strlen(jsonbuf);
     ESP_LOGV(__FUNCTION__, "Sent final chunck of %d", strlen(jsonbuf));
     ldfree(jsonbuf);
-    return httpd_resp_send_chunk(req, NULL, 0);
+    return ret;
 }
 
 void UpdateGpioProp(cfg_gpio_t *cfg, gpio_num_t val)
@@ -301,6 +304,7 @@ esp_err_t TheRest::HandleWifiCommand(httpd_req_t *req)
             {
                 ESP_LOGD(__FUNCTION__, "All done wif wifi");
                 ret = httpd_resp_send(req, "OK", 2);
+                TheRest::GetServer()->bytesOut+=2;
                 xEventGroupClearBits(getAppEG(),app_bits_t::WIFI_ON);
                 xEventGroupSetBits(getAppEG(),app_bits_t::WIFI_OFF);
             }
@@ -357,7 +361,7 @@ void parseFiles(void *param)
     commitTripToDisk(NULL);
 }
 
-esp_err_t HandleSystemCommand(httpd_req_t *req)
+esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
 {
     esp_err_t ret = 0;
     char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
@@ -377,18 +381,20 @@ esp_err_t HandleSystemCommand(httpd_req_t *req)
             cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
             if (jitem && (strcmp(jitem->valuestring, "reboot") == 0))
             {
-                dumpTheLogs(NULL);
+                dumpTheLogs((void*)true);
                 esp_restart();
             }
             if (jitem && (strcmp(jitem->valuestring, "parseFiles") == 0))
             {
                 CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
                 ret = httpd_resp_send(req, "parsing", 7);
+                TheRest::GetServer()->bytesOut+=7;
             }
             else if (jitem && (strcmp(jitem->valuestring, "factoryReset") == 0))
             {
                 AppConfig::ResetAppConfig(true);
                 ret = httpd_resp_send(req, "OK", 2);
+                TheRest::GetServer()->bytesOut+=2;
             }
             else
             {
@@ -400,6 +406,7 @@ esp_err_t HandleSystemCommand(httpd_req_t *req)
         {
             ESP_LOGE(__FUNCTION__, "Error whilst parsing json");
             ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR, "Error whilst parsing json");
+            TheRest::GetServer()->bytesOut+=25;
         }
     }
     ldfree(postData);
@@ -407,7 +414,7 @@ esp_err_t HandleSystemCommand(httpd_req_t *req)
 }
 
 
-esp_err_t sendFile(httpd_req_t *req, const char *path)
+esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
 {
     bool moveTheSucker = false;
     if (httpd_req_get_hdr_value_len(req, "movetosent") > 1)
@@ -468,6 +475,7 @@ esp_err_t sendFile(httpd_req_t *req, const char *path)
                 }
             }
             httpd_resp_send_chunk(req, NULL, 0);
+            TheRest::GetServer()->bytesOut+=len;
             ldfree(buf);
             fClose(theFile);
             if (moveTheSucker)
@@ -486,6 +494,7 @@ esp_err_t sendFile(httpd_req_t *req, const char *path)
         {
             httpd_resp_set_status(req, HTTPD_404);
             httpd_resp_send(req, "Not Found", 9);
+            TheRest::GetServer()->bytesOut+=9;
         }
     }
     ESP_LOGD(__FUNCTION__, "Sent %s(%d)", path, len);
@@ -498,22 +507,26 @@ esp_err_t TheRest::app_handler(httpd_req_t *req)
     if (endsWith(req->uri, "favicon.ico"))
     {
         httpd_resp_set_type(req, "image/x-icon");
+        TheRest::GetServer()->bytesOut+=(favicon_ico_end - favicon_ico_start);
         return httpd_resp_send(req, (const char *)favicon_ico_start, favicon_ico_end - favicon_ico_start);
     }
     if (endsWith(req->uri, "app.js"))
     {
         httpd_resp_set_type(req, "text/javascript");
+        TheRest::GetServer()->bytesOut+=(app_js_end - app_js_start - 1);
         return httpd_resp_send(req, (const char *)app_js_start, app_js_end - app_js_start - 1);
     }
     if (endsWith(req->uri, "app.css"))
     {
         httpd_resp_set_type(req, "text/css");
+        TheRest::GetServer()->bytesOut+=(app_css_end - app_css_start - 1);
         return httpd_resp_send(req, (const char *)app_css_start, app_css_end - app_css_start - 1);
     }
 
     if (endsWith(req->uri, "configschema.json"))
     {
         httpd_resp_set_type(req, "text/json");
+        TheRest::GetServer()->bytesOut+=(jsonschema_end - jsonschema_start - 1);
         return httpd_resp_send(req, (const char *)jsonschema_start, jsonschema_end - jsonschema_start - 1);
     }
 
@@ -521,7 +534,8 @@ esp_err_t TheRest::app_handler(httpd_req_t *req)
     {
         return sendFile(req, req->uri);
     }
-    return httpd_resp_send(req, (const char *)index_html_start, (index_html_end - index_html_start));
+    TheRest::GetServer()->bytesOut+=(index_html_end - index_html_start);
+    return httpd_resp_send(req, (const char *)index_html_start, (index_html_end - index_html_start - 1));
 }
 
 esp_err_t TheRest::stat_handler(httpd_req_t *req)
@@ -555,7 +569,8 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                         ESP_LOGD(__FUNCTION__, "%s is a file", fname);
                         if (deleteFile(fname))
                         {
-                            ret = httpd_resp_send(req, "OK", 3);
+                            ret = httpd_resp_send(req, "OK", 2);
+                            TheRest::GetServer()->bytesOut+=2;
                         }
                         else
                         {
@@ -569,6 +584,7 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                         if (rmDashFR(fname))
                         {
                             ret = httpd_resp_send(req, "OK", 3);
+                            TheRest::GetServer()->bytesOut+=2;
                         }
                         else
                         {
@@ -593,6 +609,7 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                 httpd_resp_set_type(req, "application/json");
                 sprintf(res, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}", path, fpos + 1, "file", (uint32_t)st.st_size);
                 ret = httpd_resp_send(req, res, strlen(res));
+                TheRest::GetServer()->bytesOut+=strlen(res);
                 ldfree(path);
                 ldfree(res);
             }
@@ -659,6 +676,7 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
                     {
                         fWrite(postData, strlen(postData), sizeof(char), cfg);
                         ret = httpd_resp_send(req, postData, strlen(postData));
+                        TheRest::GetServer()->bytesOut+=strlen(postData);
                         fClose(cfg);
                     }
                     else
@@ -689,6 +707,7 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
             if (sjson)
             {
                 ret = httpd_resp_send(req, sjson, strlen(sjson));
+                TheRest::GetServer()->bytesOut+=strlen(sjson);
                 ldfree(sjson);
             }
             else
@@ -787,6 +806,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         if ((sjson != NULL) && (strlen(sjson) > 0))
         {
             ret = httpd_resp_send(req, sjson, strlen(sjson));
+            TheRest::GetServer()->bytesOut+=strlen(sjson);
         }
         else
         {
@@ -884,6 +904,7 @@ esp_err_t TheRest::download_handler(httpd_req_t *req) {
     ESP_LOGV(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
     if (endsWith(req->uri,"tar"))
         CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
+    TheRest::GetServer()->bytesOut+=2;
     return httpd_resp_send(req,"OK",2);
 }
 
@@ -954,6 +975,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                 if ((ret == ESP_OK) && (strcmp(ccmd5, md5) == 0))
                 {
                     ESP_LOGD(__FUNCTION__, "Firmware is not updated RAM:%d", esp_get_free_heap_size());
+                    TheRest::GetServer()->bytesOut+=7;
                     return httpd_resp_send(req, "Not new", 7);
                 }
                 else
@@ -1070,10 +1092,11 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                 else
                                 {
                                     httpd_resp_send(req, "Flashing", 8);
+                                    TheRest::GetServer()->bytesOut+=8;
                                     dumpLogs();
                                     WaitToSleep();
                                     vTaskDelay(1000 / portTICK_PERIOD_MS);
-                                    dumpTheLogs(NULL);
+                                    dumpTheLogs((void*)true);
                                     esp_restart(); // Restart ESP
                                 }
                             }
@@ -1101,6 +1124,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             else
             {
                 ESP_LOGV(__FUNCTION__, "md5:(%s)(%s)", ccmd5, md5);
+                TheRest::GetServer()->bytesOut+=12;
                 httpd_resp_send(req, "Bad Checksum", 12);
             }
         }
@@ -1108,6 +1132,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
         {
             ESP_LOGE(__FUNCTION__, "Missing len %d or md5 %d", totLen, md5[0]);
             httpd_resp_send(req, "Missing len or md5", 18);
+            TheRest::GetServer()->bytesOut+=18;
         }
         return ESP_OK;
     }
@@ -1127,8 +1152,10 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                     if ((ret = httpd_resp_send(req, ccmd5, 32)) != ESP_OK)
                     {
                         ESP_LOGE(__FUNCTION__, "Error sending MD5:%s", esp_err_to_name(ret));
+                    } else {
+                        TheRest::GetServer()->bytesOut+=32;
+                        ESP_LOGD(__FUNCTION__, "Sent MD5:%s", ccmd5);
                     }
-                    ESP_LOGD(__FUNCTION__, "Sent MD5:%s", ccmd5);
                     fClose(fw);
                     deinitSPISDCard();
                     return ret;
@@ -1151,5 +1178,6 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
         }
     }
     httpd_resp_send(req, "BADMD5", 6);
+    TheRest::GetServer()->bytesOut+=6;
     return ESP_FAIL;
 }

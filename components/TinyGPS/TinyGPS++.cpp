@@ -134,7 +134,7 @@ void TinyGPSPlus::waitOnStop(void *param)
 {
   TinyGPSPlus *gps = (TinyGPSPlus *)param;
   ESP_LOGD(__FUNCTION__, "We are stopped, checking bumps");
-  if (xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdTRUE, 5000 / portTICK_PERIOD_MS) & gpsEvent::locationChanged)
+  if (xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdFALSE, 5000 / portTICK_PERIOD_MS) & gpsEvent::locationChanged)
   {
     ESP_LOGD(__FUNCTION__, "We are not so stopped, not using bump bumps");
   }
@@ -201,8 +201,7 @@ void TinyGPSPlus::theLoop(void *param)
   cJSON *poi = NULL;
   cJSON *pois = NULL;
   bool hasPois = false;
-  bool init = true;
-  EventBits_t bits;
+  EventBits_t bits=0;
   uint32_t cfgVer=0;
 
   struct poi_t
@@ -214,43 +213,148 @@ void TinyGPSPlus::theLoop(void *param)
 
   memset(&thePois,0,sizeof(thePois));
   
-
-  while (xEventGroupGetBits(gps->eg) & gpsEvent::gpsRunning)
-  {
-    if (init)
+  ESP_LOGI(__FUNCTION__, "Initiazing GPS");
+  while (xEventGroupGetBits(gps->eg) & gpsEvent::gpsRunning) {
+    if (xEventGroupWaitBits(gps->eg, gpsEvent::msg, pdFALSE, pdTRUE, 1000 / portTICK_RATE_MS) & gpsEvent::msg)
     {
-      ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(10 * 1000000));
-      gpio_hold_en(gps->enpin);
-      gpio_deep_sleep_hold_en();
-      ESP_LOGV(__FUNCTION__, "Waiting on GPS %d secs ", GPS_WAIT_PERIOD);
+      ESP_LOGV(__FUNCTION__, "UART Got data");
+      gps->flagProtocol(gps_protocol_t::GPS_GGA, pdTRUE);
+      gps->flagProtocol(gps_protocol_t::GPS_RMC, pdTRUE);
+      gps->flagProtocol(gps_protocol_t::GPS_GLL, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_GSA, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_GSV, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_VTG, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_GRS, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_GST, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_ZDA, pdFALSE);
 
-      uint8_t retryCnt=0;
-      while (!(bits = (xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdTRUE, 200 / portTICK_PERIOD_MS)) & gpsEvent::locationChanged))
-      {
-        gpio_set_level(BLINK_GPIO, 0);
-        bits = xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdTRUE, 400 / portTICK_PERIOD_MS);
-        gpio_set_level(BLINK_GPIO, 1);
-        if (!(bits & gpsEvent::locationChanged)){
-          ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(GPS_WAIT_PERIOD * 1000000));
-          ESP_LOGV(__FUNCTION__, "Waiting on GPS %d secs %d", GPS_WAIT_PERIOD, ++retryCnt);
-          gpio_hold_en(gps->enpin);
-          gpio_deep_sleep_hold_en();
-          if (xEventGroupGetBits(getAppEG()) & app_bits_t::WIFI_ON)
-            vTaskDelay((GPS_WAIT_PERIOD*1000)/portTICK_PERIOD_MS);
-          else{
-            ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
-            esp_light_sleep_start();
-            ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, NULL, 0, portMAX_DELAY));
-          }
-        }
-      }
-      gpio_set_level(BLINK_GPIO, 1);
-      init = false;
+      int wb;
+      if ((wb = uart_write_bytes(UART_NUM_2, (const char *)update_0_2_secs, 16)) != 16)
+        ESP_LOGD(__FUNCTION__, "Failed sending freq scaledown command (%d bytes), ret %d bytes", 16, wb);
+
+      gps->curFreqIdx = 0;
+      gps->toBeFreqIdx = 0;
+      gps->gpsResume();
+
+      ESP_LOGI(__FUNCTION__, "GPS Initialized");
+      break;
     }
     else
     {
-      bits = xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged | gpsEvent::msg, pdFALSE, pdTRUE, portMAX_DELAY);
+      ESP_LOGW(__FUNCTION__, "GPS Timed out");
     }
+  }
+
+  ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(10 * 1000000));
+  gpio_hold_en(gps->enpin);
+  gpio_deep_sleep_hold_en();
+  ESP_LOGV(__FUNCTION__, "Waiting on GPS %d secs ", GPS_WAIT_PERIOD);
+
+  uint8_t retryCnt=0;
+  while ((xEventGroupGetBits(gps->eg) & gpsEvent::gpsRunning) &&
+         !(bits = (xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdFALSE, 200 / portTICK_PERIOD_MS)) & gpsEvent::locationChanged))
+  {
+    gpio_set_level(BLINK_GPIO, 0);
+    bits = xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdFALSE, 400 / portTICK_PERIOD_MS);
+    gpio_set_level(BLINK_GPIO, 1);
+    if (!(bits & gpsEvent::locationChanged)){
+      ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(GPS_WAIT_PERIOD * 1000000));
+      ESP_LOGV(__FUNCTION__, "Waiting on GPS %d secs %d", GPS_WAIT_PERIOD, ++retryCnt);
+      if (xEventGroupGetBits(getAppEG()) & app_bits_t::WIFI_ON)
+        xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdFALSE, 1000 / portTICK_PERIOD_MS);
+      else{
+        ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
+        esp_light_sleep_start();
+        ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, NULL, 0, portMAX_DELAY));
+      }
+    }
+  }
+  
+  gpio_set_level(BLINK_GPIO, 1);
+
+  if (!(xEventGroupGetBits(gps->eg) & gpsEvent::gpsRunning)) {
+    xEventGroupSetBits(gps->eg, gpsEvent::gpsStopped);
+    return;
+  }
+
+  ESP_LOGD(__FUNCTION__,"Initializing POIs");
+  appcfg = AppConfig::GetAppConfig();
+  cfgVer = appcfg->version;
+  jcfg = appcfg->GetJSONConfig(NULL);
+  if (!cJSON_HasObjectItem(jcfg, "pois"))
+  {
+    ESP_LOGD(__FUNCTION__,"No POIs currently configured");
+    pois = cJSON_AddArrayToObject(jcfg, "pois");
+  }
+  else
+  {
+    ESP_LOGD(__FUNCTION__,"POIs are currently configured");
+    pois = cJSON_GetObjectItem(jcfg, "pois");
+  }
+
+  cJSON_ArrayForEach(poi, pois)
+  {
+    AppConfig *apoi = new AppConfig(poi, appcfg);
+    hasPois = true;
+    thePois[numPois].lat=apoi->GetDoubleProperty("lat");
+    thePois[numPois++].lng=apoi->GetDoubleProperty("lng");
+    ESP_LOGV(__FUNCTION__,"POI%d: lat:%f lng:%f",numPois,thePois[numPois-1].lat,thePois[numPois-1].lng);
+    if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
+      char* ctmp = cJSON_Print(poi);
+      ESP_LOGD(__FUNCTION__,"%s",ctmp);
+      ldfree(ctmp);
+    }
+    free(apoi);
+  }
+
+  if (!hasPois)
+  {
+    ESP_LOGD(__FUNCTION__,"No POIs, adding one here");
+    poi = cJSON_CreateObject();
+    cJSON_AddItemToArray(pois, poi);
+    AppConfig *cpoi = new AppConfig(poi, appcfg);
+    cpoi->SetDoubleProperty("lat", gps->location.lat());
+    cpoi->SetDoubleProperty("lng", gps->location.lng());
+    thePois[0].lat=gps->location.lat();
+    thePois[0].lng=gps->location.lng();
+    ESP_LOGD(__FUNCTION__,"1POI%d: lat:%f lng:%f",numPois,thePois[numPois].lat,thePois[numPois].lng);
+    numPois=1;
+    hasPois=true;
+    free(cpoi);
+  }
+
+  dist=-1;
+  for (int idx=0; idx < numPois; idx++) {
+    if (thePois[idx].lat == 0){
+      break;
+    }
+    dtmp = TinyGPSPlus::distanceBetween(gps->location.lat(), gps->location.lng(), thePois[idx].lat, thePois[idx].lng);
+    if ((dist == -1) || (dist > dtmp))
+    {
+      dist = dtmp;
+    }
+  }
+
+  if (dist >= 0.0)
+  {
+    gps->poiState = (dist >= PIO_MIN_DIST) ? poiState_t::out : poiState_t::in;
+    if (gps->poiState == poiState_t::in)
+    {
+      ESP_LOGD(__FUNCTION__, "Initially in PIO %f", dist);
+      ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::atSyncPoint, NULL, 0, portMAX_DELAY));
+    }
+    else
+    {
+      ESP_LOGD(__FUNCTION__, "Initially out of PIO dist:%f lat:%f lng:%f", dist, gps->location.lat(), gps->location.lng());
+      ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::outSyncPoint, NULL, 0, portMAX_DELAY));
+    }
+  } else {
+    ESP_LOGE(__FUNCTION__,"Cannot get dist to POI");
+  }
+
+  while (xEventGroupGetBits(gps->eg) & gpsEvent::gpsRunning)
+  {
+    bits = xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged | gpsEvent::msg, pdFALSE, pdTRUE, portMAX_DELAY);
 
     if (bits & gpsEvent::msg)
     {
@@ -259,46 +363,12 @@ void TinyGPSPlus::theLoop(void *param)
 
     if (bits & gpsEvent::locationChanged)
     {
-      if ((pois == NULL) || (appcfg == NULL) || (cfgVer != appcfg->version)) {
-        ESP_LOGD(__FUNCTION__,"Initializing POIs");
-        appcfg = AppConfig::GetAppConfig();
-        cfgVer = appcfg->version;
-        jcfg = appcfg->GetJSONConfig(NULL);
-        if (!cJSON_HasObjectItem(jcfg, "pois"))
-        {
-          pois = cJSON_AddArrayToObject(jcfg, "pois");
-        }
-        else
-        {
-          pois = cJSON_GetObjectItem(jcfg, "pois");
-        }
-
-        cJSON_ArrayForEach(poi, pois)
-        {
-          hasPois = true;
-        }
-
-        if (!hasPois)
-        {
-          ESP_LOGD(__FUNCTION__,"No POIs, adding one here");
-          poi = cJSON_CreateObject();
-          cJSON_AddItemToArray(pois, poi);
-          AppConfig *cpoi = new AppConfig(poi, appcfg);
-          cpoi->SetDoubleProperty("lat", gps->location.lat());
-          cpoi->SetDoubleProperty("lng", gps->location.lng());
-          free(cpoi);
-        }
-
-        cJSON_ArrayForEach(poi, pois)
-        {
-          AppConfig *apoi = new AppConfig(poi, appcfg);
-          thePois[numPois].lat=apoi->GetDoubleProperty("lat");
-          thePois[numPois++].lng=apoi->GetDoubleProperty("lng");
-          free(apoi);
-        }
-
+      if ((gps->location.lat() == 0) || (gps->location.lng() == 0)) {
+        ESP_LOGV(__FUNCTION__,"Whacky coords");
+        continue;
       }
 
+      dist=-1;
       for (int idx=0; idx < numPois; idx++) {
         if (thePois[idx].lat == 0){
           break;
@@ -318,12 +388,12 @@ void TinyGPSPlus::theLoop(void *param)
           gps->poiState = (dist >= PIO_MIN_DIST) ? poiState_t::out : poiState_t::in;
           if (gps->poiState == poiState_t::in)
           {
-            ESP_LOGD(__FUNCTION__, "Initially in PIO %f", dist);
+            ESP_LOGD(__FUNCTION__, "Weirly in PIO %f", dist);
             ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::atSyncPoint, NULL, 0, portMAX_DELAY));
           }
           else
           {
-            ESP_LOGD(__FUNCTION__, "Initially out of PIO %f", dist);
+            ESP_LOGD(__FUNCTION__, "Weirly out of PIO %f", dist);
             ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::outSyncPoint, NULL, 0, portMAX_DELAY));
           }
           break;
@@ -496,41 +566,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
   else
   {
     xEventGroupClearBits(eg, gpsEvent::msg);
-    while(true){
-      if (xEventGroupWaitBits(eg, gpsEvent::msg, pdFALSE, pdTRUE, 1000 / portTICK_RATE_MS) & gpsEvent::msg)
-      {
-        ESP_LOGV(__FUNCTION__, "UART Got data");
-        flagProtocol(gps_protocol_t::GPS_GGA, pdTRUE);
-        flagProtocol(gps_protocol_t::GPS_RMC, pdTRUE);
-
-        flagProtocol(gps_protocol_t::GPS_GLL, pdFALSE);
-        flagProtocol(gps_protocol_t::GPS_GSA, pdFALSE);
-        flagProtocol(gps_protocol_t::GPS_GSV, pdFALSE);
-        flagProtocol(gps_protocol_t::GPS_VTG, pdFALSE);
-        flagProtocol(gps_protocol_t::GPS_GRS, pdFALSE);
-        flagProtocol(gps_protocol_t::GPS_GST, pdFALSE);
-        flagProtocol(gps_protocol_t::GPS_ZDA, pdFALSE);
-
-        int wb;
-        if ((wb = uart_write_bytes(UART_NUM_2, (const char *)update_0_2_secs, 16)) != 16)
-          ESP_LOGD(__FUNCTION__, "Failed sending freq scaledown command (%d bytes), ret %d bytes", 16, wb);
-
-        curFreqIdx = 0;
-        toBeFreqIdx = 0;
-        this->gpsResume();
-
-        CreateBackgroundTask(TinyGPSPlus::theLoop, "theLoop", 8196, this, tskIDLE_PRIORITY, NULL);
-        ESP_LOGI(__FUNCTION__, "GPS Initialized");
-        xEventGroupSetBits(app_eg,app_bits_t::GPS_ON);
-        break;
-      }
-      else
-      {
-        ESP_LOGW(__FUNCTION__, "GPS Timed out");
-        dumpTheLogs(NULL);
-        esp_restart();
-      }
-    }
+    CreateBackgroundTask(TinyGPSPlus::theLoop, "theLoop", 8196, this, tskIDLE_PRIORITY, NULL);
   }
 }
 
@@ -538,6 +574,9 @@ TinyGPSPlus::~TinyGPSPlus() {
   ESP_LOGI(__FUNCTION__,"Stopping GPS Service");
   gpsStop();
   xEventGroupClearBits(app_eg,app_bits_t::GPS_ON);
+  xEventGroupClearBits(eg,gpsEvent::gpsRunning);
+  xEventGroupWaitBits(eg,gpsEvent::gpsStopped,pdFALSE,pdTRUE,portMAX_DELAY);
+  vEventGroupDelete(eg);
   instance=NULL;
 }
 
@@ -609,23 +648,10 @@ void TinyGPSPlus::processEncoded(void)
 
     if (abs(gpsDt - curTs) > 2)
     {
-      char strftime_buf[64];
-      struct tm timeinfo;
-      localtime_r(&gpsDt, &timeinfo);
-      strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-      if (indexOf(strftime_buf," 00:00")) {
-        ESP_LOGW(__FUNCTION__, "Invalid GPS Time: %s", strftime_buf);
-        return;
-      }
-      ESP_LOGI(__FUNCTION__, "GPS Time: %s", strftime_buf);
-      localtime_r(&curTs, &timeinfo);
-      strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-      ESP_LOGI(__FUNCTION__, "System Time: %s", strftime_buf);
-
       struct timeval newTs = {tv_sec:gpsDt,tv_usec:0};
       settimeofday(&newTs, NULL);
 
-      ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::systimeChanged, NULL, 0, portMAX_DELAY));
+      ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::systimeChanged, (void*)abs(gpsDt - curTs), 0, portMAX_DELAY));
     }
 
     gettimeofday(&lastMsgTs, NULL);
@@ -1018,7 +1044,7 @@ bool TinyGPSPlus::endOfTermHandler()
       for (TinyGPSCustom *p = customCandidates; p != NULL && strcmp(p->sentenceName, customCandidates->sentenceName) == 0; p = p->next)
         p->commit();
 
-      if (altitude.isValid() && altitude.isUpdated())
+      if (altitude.isValid() && altitude.isUpdated() && (location.lat()!=0) && (location.lng() != 0))
       {
         ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::locationChanged, NULL, 0, portMAX_DELAY));
         AppConfig::SignalStateChange(state_change_t::GPS);

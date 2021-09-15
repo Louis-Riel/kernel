@@ -199,6 +199,8 @@ private:
     static bool ValidateDevices();
     static ManagedDevice *runningInstances[MAX_NUM_DEVICES];
     static uint8_t numDevices;
+    static uint32_t numErrors;
+    static uint64_t lastErrorTs;
 };
 
 class ManagedThreads
@@ -396,7 +398,7 @@ public:
             if (ret != pdPASS)
             {
                 ESP_LOGE(__FUNCTION__, "Failed in creating thread for %s. %s", pcName, esp_err_to_name(ret));
-                dumpTheLogs(NULL);
+                dumpTheLogs((void*)true);
                 esp_restart();
             }
             if (pvCreatedTask != NULL)
@@ -480,9 +482,6 @@ public:
             }
             else
             {
-                if (!heap_caps_check_integrity_all(true)) {
-                    ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-                }
                 if ((ret = xTaskCreate(ManagedThreads::runThread,
                                        pcName,
                                        usStackDepth,
@@ -493,9 +492,6 @@ public:
                     ESP_LOGV(__FUNCTION__, "Waiting for %s to finish", thread->pcName);
                     xEventGroupWaitBits(managedThreadBits, 1 << bitNo, pdFALSE, pdTRUE, portMAX_DELAY);
                     printMemStat();
-                    if (!heap_caps_check_integrity_all(true)) {
-                        ESP_LOGE(__FUNCTION__,"caps integrity error");
-                    }
                     ESP_LOGV(__FUNCTION__, "Done running %s", thread->pcName);
                     thread->isRunning = false;
                     return ESP_OK;
@@ -503,8 +499,7 @@ public:
                 else
                 {
                     ESP_LOGE(__FUNCTION__, "Error running %s: %s stack depth:%d", thread->pcName, esp_err_to_name(ret), usStackDepth);
-                    dumpTheLogs(NULL);
-                    esp_restart();
+                    dumpTheLogs((void*)true);
                 }
             }
         }

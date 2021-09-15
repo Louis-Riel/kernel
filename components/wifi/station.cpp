@@ -58,6 +58,7 @@ EventGroupHandle_t TheWifi::GetEventGroup(){
 }
 
 TheWifi::~TheWifi(){
+    ESP_LOGD(__FUNCTION__, "Stoppint");
     theInstance=NULL;
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(IP_EVENT, ESP_EVENT_ANY_ID, wifiEvtHandler));
     ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, ipEvtHandler));
@@ -69,9 +70,12 @@ TheWifi::~TheWifi(){
         esp_wifi_clear_default_wifi_driver_and_handlers(sta_netif);
     if (ap_netif)
         esp_wifi_clear_default_wifi_driver_and_handlers(ap_netif);
-    ESP_LOGD(__FUNCTION__, "Stoppint");
     xEventGroupClearBits(s_app_eg, app_bits_t::WIFI_ON);
     xEventGroupSetBits(s_app_eg, app_bits_t::WIFI_OFF);
+    vEventGroupDelete(eventGroup);
+    vSemaphoreDelete(bitMutex);
+    theInstance=NULL;
+    EventManager::EventManager::UnRegisterEventHandler(handlerDescriptors);
 }
 
 
@@ -572,12 +576,16 @@ static void updateTime(void *param)
     const int retry_count = 10;
     EventGroupHandle_t evtGrp = TheWifi::GetEventGroup();
 
-    while ((xEventGroupGetBits(evtGrp)&WIFI_CONNECTED_BIT) && (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count))
+    while ((evtGrp = TheWifi::GetEventGroup()) &&
+           (xEventGroupGetBits(evtGrp)&WIFI_CONNECTED_BIT) && 
+           (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count))
     {
         ESP_LOGV(__FUNCTION__, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
         vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
-    if ((xEventGroupGetBits(evtGrp)&WIFI_CONNECTED_BIT) && (sntp_get_sync_status() != SNTP_SYNC_STATUS_RESET)){
+    if ((evtGrp = TheWifi::GetEventGroup()) &&
+        (xEventGroupGetBits(evtGrp)&WIFI_CONNECTED_BIT) && 
+        (sntp_get_sync_status() != SNTP_SYNC_STATUS_RESET)){
         time(&now);
         localtime_r(&now, &timeinfo);
     }
@@ -619,7 +627,7 @@ int TheWifi::RefreshApMembers(AppConfig* state) {
 
 void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t event_id, void *event_data)
 {
-    ESP_LOGV(__FUNCTION__, "Base %s event %d", base, event_id);
+    ESP_LOGD(__FUNCTION__, "Base %s event %d", base, event_id);
     TheWifi* theWifi = (TheWifi*) theInstance;
     if (theInstance == NULL) {
         ESP_LOGW(__FUNCTION__,"Not processing as wifi is off");
@@ -732,7 +740,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
     }
     if (base == WIFI_EVENT)
     {
-        ESP_LOGV(__FUNCTION__, "wifi event %d", event_id+20);
+        ESP_LOGD(__FUNCTION__, "wifi event %d", event_id+20);
         ESP_ERROR_CHECK(theWifi->PostEvent(event_data,event_data != NULL ? sizeof(void*) : 0,event_id+20));
         switch (event_id)
         {
@@ -848,6 +856,7 @@ bool TheWifi::HealthCheck(void* instance){
 
 void wifiSallyForth(void *pvParameter)
 {
+    dumpTheLogs(NULL);
     if (TheWifi::GetInstance() == NULL) {
         theInstance = new TheWifi(AppConfig::GetAppConfig());
     }

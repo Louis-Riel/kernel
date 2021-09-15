@@ -72,9 +72,6 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
                             {
                                 fClose(toBeMd5);
                                 ESP_LOGI(__FUNCTION__, "Updated Firmware File");
-                                if (!heap_caps_check_integrity_all(true)) {
-                                    ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-                                }
                                 return true;
                             }
                             else

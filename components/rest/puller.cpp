@@ -400,7 +400,7 @@ void extractClientTar(char *tarFName)
                                     fWrite(buf, 1, header.size, fw);
                                     fClose(fw);
                                 } else {
-                                    ESP_LOGD(__FUNCTION__, "Skippng %s (%d bytes).", fname, header.size);
+                                    ESP_LOGD(__FUNCTION__, "Skippng %s (header %d bytes,file %d bytes).", fname, header.size, (int)st.st_size);
                                 }
                             }
                         } else{

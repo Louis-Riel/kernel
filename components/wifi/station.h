@@ -67,15 +67,14 @@ public:
     tcpip_adapter_ip_info_t staIp;
 
 protected:
-    void ParseStateBits(AppConfig* state);
     static bool HealthCheck(void *instance);
-
-    Aper** GetClients();
-    static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
-    static void network_event(void *handler_arg, esp_event_base_t base, int32_t event_id, void *event_data);
-
-    EventHandlerDescriptor* BuildHandlerDescriptors();
     static cJSON* BuildStatus(void* instance);
+    static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
+    EventHandlerDescriptor* BuildHandlerDescriptors();
+
+    void ParseStateBits(AppConfig* state);
+    Aper** GetClients();
+    static void network_event(void *handler_arg, esp_event_base_t base, int32_t event_id, void *event_data);
 
     Aper *clients[MAX_NUM_CLIENTS];
     wifi_config_t wifi_config;

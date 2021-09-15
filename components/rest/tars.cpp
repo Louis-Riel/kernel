@@ -64,17 +64,18 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     memset(kmlFileName, 0, 300);
     memset(theFolders, 0, 1024);
     memset(theFName, 0, 300);
+    EventGroupHandle_t eventGroup = TheRest::GetEventGroup();
 
     uint32_t fdpos = filesToDelete == NULL ? 0 : strlen(filesToDelete);
-    ESP_LOGD(__FUNCTION__, "Parsing %s files to delete:%s fdpos:%d", path, filesToDelete == NULL ? "NULL" : filesToDelete, fdpos);
+    ESP_LOGD(__FUNCTION__, "Parsing %s", path);
     struct timeval tv_start, tv_end, tv_open, tv_stat, tv_rstart, tv_rend, tv_wstart, tv_wend;
 
-    if ((theFolder = openDir(path)) != NULL)
+    if (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (theFolder = openDir(path)) != NULL)
     {
         sprintf(kmlFileName, "%s/", path+1);
         tarStat = mtar_write_dir_header(tar, kmlFileName);
         ESP_LOGV(__FUNCTION__, "Reading folder %s", path);
-        while ((tarStat == MTAR_ESUCCESS) && ((fi = readDir(theFolder)) != NULL))
+        while (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (tarStat == MTAR_ESUCCESS) && ((fi = readDir(theFolder)) != NULL))
         {
             ESP_LOGV(__FUNCTION__, "At %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
             if (strlen(fi->d_name) == 0)
@@ -114,7 +115,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                         ESP_LOGV(__FUNCTION__, "Adding %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
                         tarStat = mtar_write_file_header(tar, theFName + 1, fileStat.st_size);
                         ESP_LOGV(__FUNCTION__, "stat %s: %d files. file %s, ram %d len: %li", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), fileStat.st_size);
-                        while ((tarStat == MTAR_ESUCCESS) && !feof(theFile))
+                        while (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (tarStat == MTAR_ESUCCESS) && !feof(theFile))
                         {
                             gettimeofday(&tv_rstart, NULL);
                             if ((len = fRead(buf, 1, F_BUF_SIZE, theFile)) > 0)
@@ -155,14 +156,20 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                         }
                         fClose(theFile);
                         ESP_LOGV(__FUNCTION__, "Closing %s", theFName);
-                        if (removeSrc && 
+                        if ((tarStat == MTAR_ESUCCESS) && 
+                            !(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) &&
+                            removeSrc && 
                             (BufferedFile::GetOpenedFile(theFName) == NULL) &&
                             !endsWith(theFName, ".json") && 
                             !endsWith(theFName, ".md5") &&
                             !endsWith(theFName,getLogFName())){
-                            ESP_LOGD(__FUNCTION__,"Flagging %s for deletion",theFName);
-                            fdpos+=sprintf(filesToDelete+fdpos,"%s,",theFName);
-                            ESP_LOGD(__FUNCTION__,"Files to delete(%d):%s",fdpos, filesToDelete);
+                            if ((strlen(theFName)+strlen(filesToDelete)) > JSON_BUFFER_SIZE){
+                                ESP_LOGW(__FUNCTION__,"%s cannot be added to the deleted files this go round", theFName);
+                            } else {
+                                ESP_LOGD(__FUNCTION__,"Flagging %s for deletion",theFName);
+                                fdpos+=sprintf(filesToDelete+fdpos,"%s,",theFName);
+                                ESP_LOGV(__FUNCTION__,"Files to delete(%d):%s",fdpos, filesToDelete);
+                            }
                         } else {
                             ESP_LOGV(__FUNCTION__,"Not deleting %s",theFName);
                         }
@@ -299,7 +306,7 @@ int tarCountClose(mtar_t *tar){
 int tarClose(mtar_t *tar)
 {
     EventGroupHandle_t eventGroup = TheRest::GetEventGroup();
-    if (sp.bufLen > 0){
+    if (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (sp.bufLen > 0)){
         ESP_LOGD(__FUNCTION__, "Closing Tar, waiting for final chunck");
         sp.sendLen = sp.bufLen;
         memcpy(sp.sendBuf, (const void *)sp.tarBuf, sp.bufLen);
@@ -339,18 +346,20 @@ void BuildTar(void* param){
             } else {
                 nextFile++;
             }
-            while (nextFile) {
-                deleteFile(nextFile);
-                if (nextFile == filesToDelete) {
-                    break;
+        }
+        while (nextFile) {
+            deleteFile(nextFile);
+            if (nextFile == filesToDelete) {
+                ESP_LOGD(__FUNCTION__,"Done deleting");
+                break;
+            } else {
+                *(nextFile-1)=0; // remove comma of processed file
+                ESP_LOGV(__FUNCTION__,"FTD:%s",filesToDelete);
+                nextFile = lastIndexOf(filesToDelete,",");
+                if (nextFile == NULL) {
+                    nextFile = filesToDelete; // last file to delete
                 } else {
-                    *(nextFile-1)=0; // remove comma of processed file
-                    nextFile = lastIndexOf(filesToDelete,",");
-                    if (nextFile == NULL) {
-                        nextFile = filesToDelete; // last file to delete
-                    } else {
-                        nextFile++;
-                    }
+                    nextFile++;
                 }
             }
         }
@@ -358,6 +367,7 @@ void BuildTar(void* param){
         ESP_LOGE(__FUNCTION__,"Failed to close tar");
     }
     ldfree(filesToDelete);
+    xEventGroupSetBits(TheRest::GetEventGroup(),TAR_FINILIZED);
 }
 
 void MeasureTar(void* param){
@@ -411,6 +421,7 @@ void TheRest::SendTar(void* param)
     xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
     xEventGroupClearBits(eventGroup, TAR_BUFFER_SENT);
     xEventGroupClearBits(eventGroup, TAR_BUILD_DONE);
+    xEventGroupClearBits(eventGroup, TAR_FINILIZED);
     uint32_t totLen = sp.len;
     sp.bufLen = 0;
     sp.len = 0;
@@ -436,13 +447,16 @@ void TheRest::SendTar(void* param)
 
                 if (sentLen == sp.sendLen)
                 {
-                    ESP_LOGV(__FUNCTION__, "Sent chunk of %d", sp.sendLen);
                     sp.sendLen = 0;
                     xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
                     xEventGroupSetBits(eventGroup, TAR_BUFFER_SENT);
+                    ESP_LOGV(__FUNCTION__, "Sent chunk of %d", sp.sendLen);
                 }
                 else
                 {
+                    sp.sendLen = 0;
+                    xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
+                    xEventGroupSetBits(eventGroup, TAR_BUFFER_SENT);
                     ESP_LOGE(__FUNCTION__, "Chunk len %d won't go, sent: %d", sp.sendLen, sentLen);
                     break;
                 }
@@ -465,6 +479,7 @@ void TheRest::SendTar(void* param)
     } else {
         ESP_LOGE(__FUNCTION__,"Error whilst sending tar:%s hlen:%d",esp_err_to_name(err), hlen);
     }
+    xEventGroupWaitBits(eventGroup,TAR_FINILIZED,pdFALSE,pdFALSE,portMAX_DELAY);
     xEventGroupClearBits(getAppEG(),app_bits_t::TRIPS_SYNCING);
 }
 

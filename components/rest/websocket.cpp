@@ -16,6 +16,7 @@
 static WebsocketManager* stateHandler = NULL;
 
 WebsocketManager::WebsocketManager():
+    ManagedDevice("WebsocketManager","WebsocketManager",BuildStatus,ManagedDevice::HealthCheck),
     isLive(true),
     logPos(0),
     msgQueue(xQueueCreate(25,JSON_BUFFER_SIZE)),
@@ -29,6 +30,7 @@ WebsocketManager::WebsocketManager():
   CreateBackgroundTask(QueueHandler,"WebsocketQH",4096, NULL, tskIDLE_PRIORITY, NULL);
   CreateBackgroundTask(statePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
   registerLogCallback(logCallback,stateHandler);
+  BuildStatus(this);
 };
 
 WebsocketManager::~WebsocketManager(){
@@ -38,7 +40,61 @@ WebsocketManager::~WebsocketManager(){
   vQueueDelete(msgQueue);
   ldfree(logBuffer);
   ldfree(stateBuffer);
+  AppConfig* stats = new AppConfig(AppConfig::GetAppStatus()->GetJSONConfig("WebsocketManager"),NULL);
+  stats->SetBoolProperty("IsLive",false);
+  cJSON_DeleteItemFromObject(stats->GetJSONConfig(NULL),"clients");
+  delete stats;
   stateHandler=NULL;
+}
+
+cJSON* WebsocketManager::BuildStatus(void* instance){
+  if (instance == NULL) {
+    return NULL;
+  }
+  WebsocketManager* ws = (WebsocketManager*)instance;
+  cJSON* sjson = NULL;
+  AppConfig* acfg = new AppConfig(sjson=ManagedDevice::BuildStatus(instance),AppConfig::GetAppStatus());
+  if (instance == NULL) {
+    acfg->SetBoolProperty("IsLive",false);
+    cJSON_DeleteItemFromObject(sjson,"clients");
+    return sjson;
+  }
+
+  if (!cJSON_HasObjectItem(sjson,"clients")) {
+    ESP_LOGV(__FUNCTION__,"First Status, creating array");
+  } else {
+    ESP_LOGV(__FUNCTION__,"Refresh Status");
+    cJSON_DeleteItemFromObject(sjson,"clients");
+  }
+  cJSON* jClients = cJSON_AddArrayToObject(sjson,"clients");
+
+  AppConfig* client=NULL;
+  struct tm timeinfo;
+  char strftime_buf[30];
+  char ipstr[INET6_ADDRSTRLEN];
+  for (uint8_t idx = 0; idx < 5; idx++){
+    if (ws->clients[idx].isLive){
+      ESP_LOGV(__FUNCTION__,"Client at idx %d is live",idx);
+      client = new AppConfig(cJSON_CreateObject(),AppConfig::GetAppStatus());
+      localtime_r(&ws->clients[idx].lastTs, &timeinfo);
+      strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+      inet_ntop(AF_INET, &ws->clients[idx].addr, ipstr, sizeof(ipstr));
+      client->SetStringProperty("Address",ipstr);
+      client->SetStringProperty("LastTs",strftime_buf);
+      client->SetLongProperty("Bytes",ws->clients[idx].bytesOut);
+      client->SetBoolProperty("IsLive",ws->clients[idx].isLive);
+      cJSON_AddItemToArray(jClients,client->GetJSONConfig(NULL));
+      delete client;
+    } else {
+      ESP_LOGV(__FUNCTION__,"Client at idx %d is not live",idx);
+    }
+  }
+
+  acfg->SetBoolProperty("IsLive",ws->isLive);
+  AppConfig::SignalStateChange(state_change_t::MAIN);
+
+  delete acfg;
+  return sjson;
 }
 
 void WebsocketManager::ProcessMessage(uint8_t* msg){
@@ -52,12 +108,17 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
 
   bool hasLiveClients = false;
   bool hadClients = false;
+  bool stateChange=false;
   for (uint8_t idx = 0; idx < 5; idx++){
     if (clients[idx].isLive){
       hadClients = true;
       if ((ret = httpd_ws_send_frame_async(clients[idx].hd, clients[idx].fd, &ws_pkt)) != ESP_OK) {
         clients[idx].isLive=false;
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
+        stateChange=true;
+        ESP_LOGV(__FUNCTION__,"Client %d disconnected",idx);
+      } else {
+        clients[idx].bytesOut+=ws_pkt.len;
       }
       hasLiveClients |= clients[idx].isLive;
     }
@@ -65,8 +126,11 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
   if (hadClients){
     if (isLive != hasLiveClients){
       isLive = hasLiveClients;
-      AppConfig::SignalStateChange(state_change_t::WIFI);
+      stateChange=true;
     }
+  }
+  if (stateChange){
+    BuildStatus(this);
   }
 }
 
@@ -93,16 +157,25 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
     if ((clients[idx].hd == hd) && (clients[idx].fd == fd)){
       ESP_LOGV(__FUNCTION__,"Client was at position %d",idx);
       isLive=true;
-      return clients[idx].isLive = true;
+      clients[idx].isLive = true;
+      BuildStatus(this);
+      return true;
     }
   }
   for (uint8_t idx = 0; idx < 5; idx++){
     if (!clients[idx].isLive){
       clients[idx].hd = hd;
       clients[idx].fd = fd;
+      socklen_t addr_size = sizeof(clients[idx].addr);
+      
+      if (getpeername(fd, (struct sockaddr *)&clients[idx].addr, &addr_size) < 0) {
+        ESP_LOGW(__FUNCTION__, "Error getting client IP");
+      }
       ESP_LOGD(__FUNCTION__,"Client is inserted at position %d",idx);
       isLive=true;
-      return clients[idx].isLive = true;
+      clients[idx].isLive = true;
+      BuildStatus(this);
+      return true;
     }
   }
   ESP_LOGD(__FUNCTION__,"Client could not be added");
@@ -130,12 +203,13 @@ void WebsocketManager::statePoller(void *instance){
   while (stateHandler && stateHandler->isLive) {
     bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,portMAX_DELAY);
     if (stateHandler && stateHandler->isLive){
-      cJSON* state = status_json();
+      cJSON* state = NULL;
+      state = status_json();
       if (bits&state_change_t::GPS) {
         ESP_LOGV(__FUNCTION__,"gState Changed %d", bits);
         cJSON_AddItemReferenceToObject(state,"gps",AppConfig::GetAppStatus()->GetJSONConfig("gps"));
       } else {
-        ESP_LOGV(__FUNCTION__,"wState Changed %d", bits);
+        ESP_LOGV(__FUNCTION__,"mState Changed %d", bits);
         cJSON* item;
         cJSON_ArrayForEach(item,AppConfig::GetAppStatus()->GetJSONConfig(NULL)) {
           if (state!= NULL){
@@ -176,6 +250,7 @@ esp_err_t TheRest::ws_handler(httpd_req_t *req) {
   esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 128);
   if (ret == ESP_OK) 
   {
+    GetServer()->bytesOut+=ws_pkt.len;
     switch (ws_pkt.type)
     {
     case HTTPD_WS_TYPE_TEXT:

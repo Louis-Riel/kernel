@@ -2,7 +2,11 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
+#define ERROR_MIN_TIME 5*1000*60
+
 uint8_t ManagedDevice::numDevices=0;
+uint32_t ManagedDevice::numErrors=0;
+uint64_t ManagedDevice::lastErrorTs=0;
 ManagedDevice* ManagedDevice::runningInstances[MAX_NUM_DEVICES];
 
 ManagedDevice::ManagedDevice(const char* type)
@@ -79,13 +83,18 @@ void ManagedDevice::UpdateStatuses(){
 }
 
 cJSON* ManagedDevice::BuildStatus(void* instance){
+  if (instance == NULL) {
+    ESP_LOGE(__FUNCTION__,"Missing instance");
+  }
   ManagedDevice* md = (ManagedDevice*) instance;
   if (md && (md->status == NULL)) {
     md->status = AppConfig::GetAppStatus()->GetJSONConfig(md->GetName());
-    if (md->status && md->GetName())
+    if (md->status && md->GetName()){
       cJSON_AddStringToObject(md->status,"name",md->GetName());
-    else
-      ESP_LOGW(__FUNCTION__,"Missing status for %s", md->GetName()?md->GetName():"null");
+      return md->status;
+    } else{
+      ESP_LOGE(__FUNCTION__,"Missing name");
+    }
   }
   return md->status;
 }
@@ -94,7 +103,11 @@ bool ManagedDevice::ValidateDevices(){
   bool hasIssues = false;
   for (uint32_t idx = 0; idx < MAX_NUM_DEVICES; idx++) {
     if (runningInstances[idx]) {
-      hasIssues |= !runningInstances[idx]->hcFnc(runningInstances[idx]);
+      if (!runningInstances[idx]->hcFnc(runningInstances[idx])){
+        hasIssues = true;
+        numErrors++;
+        lastErrorTs = esp_timer_get_time();
+      }
     }
   }
   return !hasIssues;
@@ -102,8 +115,13 @@ bool ManagedDevice::ValidateDevices(){
 
 void ManagedDevice::RunHealthCheck(void* param) {
   if (!ValidateDevices()){
-    dumpTheLogs(NULL);
-    esp_restart();
+    dumpTheLogs((void*)true);
+    if (numErrors > 5)
+      esp_restart();
+  } else if (lastErrorTs) {
+    if ((esp_timer_get_time() - lastErrorTs) > ERROR_MIN_TIME) {
+      numErrors = 0;
+    }
   }
 }
 
@@ -115,6 +133,11 @@ bool ManagedDevice::HealthCheck(void* instance){
   if (!heap_caps_check_integrity_all(true)) {
       ESP_LOGE(dev->name,"bcaps integrity error");
       return false;
+  }
+  uint32_t freeMem = esp_get_free_heap_size();
+  if (freeMem < 800000) {
+    ESP_LOGE(__FUNCTION__,"Running low on mem: %d",freeMem);
+    return false;
   }
   ESP_LOGV(dev->name,"All good");
   return true;

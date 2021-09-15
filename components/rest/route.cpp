@@ -25,7 +25,9 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       gwAddr(NULL),
       ipAddr(NULL),
       app_eg(getAppEG()),
-      healthCheckCount(0)
+      healthCheckCount(0),
+      bytesOut(0),
+      bytesIn(0)
 {
     if (restInstance == NULL)
     {
@@ -216,7 +218,9 @@ cJSON* TheRest::BuildStatus(void* instance){
     cJSON* sjson = NULL;
     AppConfig* apin = new AppConfig(sjson=ManagedDevice::BuildStatus(instance),AppConfig::GetAppStatus());
     apin->SetIntProperty("numRequests",theRest->numRequests);
-    apin->SetIntProperty("processingTime",theRest->processingTime);
+    apin->SetLongProperty("processingTime_us",theRest->processingTime);
+    apin->SetLongProperty("BytesIn",theRest->bytesIn);
+    apin->SetLongProperty("BytesOut",theRest->bytesOut);
     delete apin;
     return sjson;
 }
@@ -242,17 +246,11 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
     int retCode = -1;
     size_t totLen = isPreAllocated ? *len : 0;
     
-    if (!heap_caps_check_integrity_all(true)) {
-        ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-    }
     if ((client = esp_http_client_init(config)) &&
         ((err = esp_http_client_open(client, 0)) == ESP_OK) &&
         ((hlen = esp_http_client_fetch_headers(client)) >= 0) &&
         ((retCode = esp_http_client_get_status_code(client)) == 200))
     {
-        if (!heap_caps_check_integrity_all(true)) {
-            ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-        }
         int bufLen = isPreAllocated ? *len : hlen > 0 ? hlen + 1
                                                       : JSON_BUFFER_SIZE;
         char *retVal = isPreAllocated ? charBuf : (char *)dmalloc(bufLen);
@@ -262,29 +260,18 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         *len = 0;
         memset(retVal, 0, bufLen);
         ESP_LOGV(__FUNCTION__, "Downloading isPreAllocated:%d hlen:%d chunckLen:%d buflen:%d len: %d bytes of data for %s", isPreAllocated, hlen, chunckLen, bufLen, (int)*len, url);
-        if (!heap_caps_check_integrity_all(true)) {
-            ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-        }
         while ((chunckLen = esp_http_client_read(client, retVal + *len, chunckLen)) > 0)
         {
             ESP_LOGV(__FUNCTION__, "Chunck %d bytes of data for %s. Totlen:%d", chunckLen, url, *len);
             *len += chunckLen;
             if (!isPreAllocated || (isPreAllocated && (*len < totLen)))
                 memset(retVal + *len, 0, 1);
-            if (!heap_caps_check_integrity_all(true)) {
-                ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-            }
-        }
-        if (!heap_caps_check_integrity_all(true)) {
-            ESP_LOGE(__FUNCTION__,"bcaps integrity error");
         }
         ESP_LOGV(__FUNCTION__, "Downloaded %d bytes of data from %s", *len, url);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         ldfree((void *)config);
-        if (!heap_caps_check_integrity_all(true)) {
-            ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-        }
+        restInstance->bytesIn+=*len;
         return retVal;
     }
     else
@@ -305,13 +292,7 @@ cJSON *TheRest::PostJSonRequest(const char *url)
     cJSON *ret = NULL;
     size_t len = 0;
     ESP_LOGV(__FUNCTION__, "Posting (%s).", url);
-    if (!heap_caps_check_integrity_all(true)) {
-        ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-    }
     char *sjson = PostRequest(url, &len);
-    if (!heap_caps_check_integrity_all(true)) {
-        ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-    }
     if (len)
     {
         ESP_LOGV(__FUNCTION__, "Parsing (%s).", sjson);
@@ -323,9 +304,6 @@ cJSON *TheRest::PostJSonRequest(const char *url)
         else
         {
             ESP_LOGW(__FUNCTION__, "Got %d of nobueno bits for %s:%s.", len, url, sjson ? sjson : "*null*");
-        }
-        if (!heap_caps_check_integrity_all(true)) {
-            ESP_LOGE(__FUNCTION__,"bcaps integrity error");
         }
         ldfree(sjson);
     }
@@ -344,13 +322,7 @@ cJSON *TheRest::GetDeviceConfig(esp_ip4_addr_t *ipInfo, uint32_t deviceId)
         sprintf((char *)url, "http://" IPSTR "/config", IP2STR(ipInfo));
     ESP_LOGV(__FUNCTION__, "Getting config from %s", url);
     DisplayMemInfo();
-    if (!heap_caps_check_integrity_all(true)) {
-        ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-    }
     jret = PostJSonRequest(url);
-    if (!heap_caps_check_integrity_all(true)) {
-        ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-    }
     DisplayMemInfo();
     ldfree(url);
     return jret;
@@ -400,9 +372,6 @@ esp_err_t TheRest::SendConfig(char *addr, cJSON *cfg)
 void TheRest::MergeConfig(void *param)
 {
     TheRest *rest = NULL;
-    if (!heap_caps_check_integrity_all(true)) {
-        ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-    }
     while ((rest = restInstance) == NULL)
     {
         vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -410,17 +379,8 @@ void TheRest::MergeConfig(void *param)
     xEventGroupWaitBits(rest->eventGroup, HTTP_SERVING, pdFALSE, pdTRUE, portMAX_DELAY);
     ESP_LOGD(__FUNCTION__, "Merging Config");
     uint32_t addr = ipaddr_addr(rest->gwAddr);
-    if (!heap_caps_check_integrity_all(true)) {
-        ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-    }
     cJSON *newCfg = rest->GetDeviceConfig((esp_ip4_addr *)&addr, deviceId);
-    if (!heap_caps_check_integrity_all(true)) {
-        ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-    }
     cJSON *curCfg = AppConfig::GetAppConfig()->GetJSONConfig(NULL);
-    if (!heap_caps_check_integrity_all(true)) {
-        ESP_LOGE(__FUNCTION__,"bcaps integrity error");
-    }
     if (newCfg)
     {
         if (!cJSON_Compare(newCfg, curCfg, true))
@@ -439,9 +399,6 @@ void TheRest::MergeConfig(void *param)
     {
         ESP_LOGW(__FUNCTION__, "Cannot get config from " IPSTR " for devid %d", IP2STR((esp_ip4_addr *)&addr), deviceId);
         TheRest::SendConfig(rest->gwAddr, curCfg);
-    }
-    if (!heap_caps_check_integrity_all(true)) {
-        ESP_LOGE(__FUNCTION__,"bcaps integrity error");
     }
 }
 
@@ -544,6 +501,11 @@ EventGroupHandle_t TheRest::GetEventGroup()
 
 bool TheRest::HealthCheck(void* instance){
     TheRest* theRest = (TheRest*)instance;
+    if (xEventGroupGetBits(theRest->app_eg) & app_bits_t::TRIPS_SYNCING) {
+        ESP_LOGD(__FUNCTION__,"Skipping healthcheck whilst synching");
+        return true;
+    }
+
     char* url = (char*)dmalloc(50);
     sprintf(url,"http://%s/status/",theRest->ipAddr);
     size_t len=0;
@@ -570,6 +532,10 @@ bool TheRest::HealthCheck(void* instance){
     }
     if (WebsocketManager::HasOpenedWs()) {
         ESP_LOGW(__FUNCTION__,"Ignoring error since we have web sockets");
+        return true;
+    }
+    if (xEventGroupGetBits(theRest->app_eg) & app_bits_t::TRIPS_SYNCING) {
+        ESP_LOGW(__FUNCTION__,"Ignoring error since we are synching");
         return true;
     }
     return false;

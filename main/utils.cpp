@@ -810,7 +810,7 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
                 deleteFile("/lfs/firmware/current.bin");
               }
               deinitSPISDCard();
-              dumpTheLogs(NULL);
+              dumpTheLogs((void*)true);
               esp_restart();
             }
             else
