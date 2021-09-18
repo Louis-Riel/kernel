@@ -366,6 +366,7 @@ label.table {
 label>div.value {
     margin-top: 10px;
     font-size: large;
+    white-space: pre-wrap;
 }
 
 dialog#jsoneditor {

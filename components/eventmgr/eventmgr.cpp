@@ -7,12 +7,14 @@ static EventManager* runningInstance=NULL;
 EventManager::EventManager(cJSON* cfg, cJSON* programs)
 :config(cfg)
 ,programs(programs)
+,eventQueue(xQueueCreate(20, sizeof(postedEvent_t)))
 {
     memset(eventInterpretors,0,sizeof(void*)*MAX_NUM_EVENTS);
     if (!ValidateConfig()) {
         ESP_LOGE(__FUNCTION__,"Event manager is invalid");
     }
     ESP_LOGV(__FUNCTION__,"Event Manager Running");
+    CreateBackgroundTask(EventPoller,"EventPoller",4096,this,tskIDLE_PRIORITY,NULL);
 }
 
 EventManager* EventManager::GetInstance(){
@@ -50,11 +52,12 @@ bool EventManager::ValidateConfig(){
         }
         if (isValid){
             eventInterpretors[idx++] = new EventInterpretor(event,programs);
-        }else{
-            char* json = cJSON_PrintUnformatted(event);
-            ESP_LOGW(__FUNCTION__,"Event:%s",json);
-            free(json);
         }
+    }
+    ESP_LOGD(__FUNCTION__,"We have %d Events",idx);
+    if (eventQueue == NULL) {
+        ESP_LOGE(__FUNCTION__,"Event Queue not set");
+        isValid=false;
     }
     return isValid;
 }
@@ -62,32 +65,61 @@ bool EventManager::ValidateConfig(){
 void EventManager::RegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {
     ESP_LOGV(__FUNCTION__,"Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
     if (runningInstance == NULL) {
+        ESP_LOGD(__FUNCTION__,"Getting EventManager instance");
         runningInstance = EventManager::GetInstance();
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, EventManager::EventProcessor, runningInstance, NULL));
     }
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(eventHandlerDescriptor->GetEventBase(), ESP_EVENT_ANY_ID, EventManager::ProcessEvent, eventHandlerDescriptor, NULL));
-    ESP_LOGV(__FUNCTION__,"Done Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
 }
 
 void EventManager::UnRegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {
-    ESP_LOGV(__FUNCTION__,"UnRegistering %s",(char*)eventHandlerDescriptor->GetEventBase());
-    ESP_ERROR_CHECK(esp_event_handler_unregister(eventHandlerDescriptor->GetEventBase(), ESP_EVENT_ANY_ID, EventManager::ProcessEvent));
+    //ESP_LOGV(__FUNCTION__,"UnRegistering %s",(char*)eventHandlerDescriptor->GetEventBase());
+    //ESP_ERROR_CHECK(esp_event_handler_unregister(eventHandlerDescriptor->GetEventBase(), ESP_EVENT_ANY_ID, EventManager::ProcessEvent));
 }
 
-void EventManager::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
-    EventHandlerDescriptor* handler = (EventHandlerDescriptor*)handler_args;
-    uint8_t idx =0;
-    EventInterpretor* interpretor;
-    if ((strcmp(handler->GetName(),"GPSPLUS_EVENTS") != 0) || (!(id && BIT7|BIT0))){
-        ESP_LOGV(__FUNCTION__,"Event::::%s-%d",handler->GetName(),id);
+void EventManager::EventPoller(void* param){
+    postedEvent_t postedEvent;
+    EventManager* mgr = (EventManager*)param;
+    while(xQueueReceive(mgr->eventQueue,&postedEvent,portMAX_DELAY)){
+        ProcessEvent(&postedEvent);
     }
-    while ((idx < MAX_NUM_EVENTS) && ((interpretor = EventManager::GetInstance()->eventInterpretors[idx++])!=NULL)){
-        if (interpretor->IsValid(handler,id,event_data)) {
+}
+
+void EventManager::ProcessEvent(postedEvent_t* postedEvent){
+    if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
+        ESP_LOGV(__FUNCTION__,"Parsing Event %s %d",postedEvent->base, postedEvent->id);
+        EventDescriptor_t* desc = EventHandlerDescriptor::GetEventDescriptor(postedEvent->base,postedEvent->id);
+        if (desc) {
+            ESP_LOGV(__FUNCTION__,"Event %s %s",desc->baseName, desc->eventName);
+        }
+    }
+    EventInterpretor* interpretor;
+    uint8_t idx =0;
+    while ((idx < MAX_NUM_EVENTS) && 
+           ((interpretor = EventManager::GetInstance()->eventInterpretors[idx++])!=NULL)) {
+        if (interpretor->IsValid(postedEvent->base,postedEvent->id,postedEvent->event_data)){
+            ESP_LOGV(__FUNCTION__,"Running event at idx %d for %s",idx-1, postedEvent->base);
             if (interpretor->IsProgram()) {
-                interpretor->RunProgram(handler,id,NULL,interpretor->GetProgramName());
+                ESP_LOGV(__FUNCTION__,"Running program %s at idx %d", postedEvent->base, idx);
+                interpretor->RunProgram(interpretor->GetProgramName());
             } else {
-                interpretor->RunMethod(handler,id,NULL);
+                ESP_LOGV(__FUNCTION__,"Running method at idx %d",idx);
+                interpretor->RunMethod(NULL);
             }
         }
     }
+}
+
+void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
+    if (!base || !strlen(base)) {
+        ESP_LOGE(__FUNCTION__,"Missing base name");
+        return;
+    }
+    EventManager* mgr = (EventManager*) handler_args;
+    ESP_LOGV(__FUNCTION__,"Base:%s id:%d eventQueue:%" PRIXPTR "",base,id,(uintptr_t)mgr->eventQueue);
+    postedEvent_t postedEvent;
+    postedEvent.base=base;
+    postedEvent.id=id;
+    postedEvent.event_data=event_data;
+    xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
 }
 

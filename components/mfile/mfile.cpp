@@ -348,21 +348,26 @@ void BufferedFile::Write(uint8_t* data, uint32_t len) {
 void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
     if (strcmp(base,"MFile") == 0) {
         ESP_LOGV(__FUNCTION__,"Event %s-%d",base,id);
-        AppConfig* params = new AppConfig(*(cJSON**)event_data,NULL);
-        char* name = EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("name"));
-        if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-            char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
-            ESP_LOGW(__FUNCTION__,"Params:%s...",tmp);
-            ldfree(tmp);
+
+        if (event_data == NULL) {
+            ESP_LOGE(__FUNCTION__,"Missing params, no go");
+            return;
         }
+
+        if (cJSON_IsInvalid(*(cJSON**)event_data)) {
+            ESP_LOGW(__FUNCTION__,"Invalid input json 0x%" PRIXPTR ", no go",(uintptr_t)*(cJSON**)event_data);
+            return;
+        }
+
+        AppConfig* params = new AppConfig(*(cJSON**)event_data,NULL);
+        uint8_t* strbuf = NULL;
+        uint8_t* headerLine = NULL;
+        char* name = EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("name"));
+
         ESP_LOGV(__FUNCTION__,"NAME:%s...",name);
         BufferedFile* efile = (BufferedFile*)GetFile(name);
-         if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-            char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
-            ESP_LOGW(__FUNCTION__,"Params2:%s...",tmp);
-            ldfree(tmp);
-        }
         if (!efile) {
+            free(params);
             ESP_LOGE(__FUNCTION__,"No files available, no go");
             return;
         }
@@ -376,34 +381,19 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
         case fileEventIds::WRITE:
         case fileEventIds::WRITE_LINE:
             if (efile && params && params->HasProperty("value")){
-                uint8_t* strbuf = (uint8_t*)EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("value"));
                 if (params->HasProperty("header") && efile->isNewOrEmpty) {
-                    uint8_t* headerLine = (uint8_t*)EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("header"));
+                    headerLine = (uint8_t*)EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("header"));
                     if (headerLine) {
                         ESP_LOGV(__FUNCTION__,"header:%s",headerLine);
                         id==fileEventIds::WRITE_LINE?efile->WriteLine(headerLine,strlen((char*)headerLine)):efile->Write(headerLine,strlen((char*)headerLine));
                         ldfree(headerLine);
                     } else {
                         ESP_LOGW(__FUNCTION__,"Invalid of empty header line");
-                        if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-                            char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
-                            ESP_LOGW(__FUNCTION__,"Params:%s.",tmp);
-                            ldfree(tmp);
-                        }
                     }
                 }
+                strbuf = (uint8_t*)EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("value"));
                 ESP_LOGV(__FUNCTION__,"value:%s",strbuf);
-                if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-                    char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
-                    ESP_LOGW(__FUNCTION__,"Params3:%s...",tmp);
-                    ldfree(tmp);
-                }
                 id==fileEventIds::WRITE_LINE?efile->WriteLine(strbuf,strlen((char*)strbuf)):efile->Write(strbuf,strlen((char*)strbuf));
-                if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-                    char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
-                    ESP_LOGW(__FUNCTION__,"Params4:%s...",tmp);
-                    ldfree(tmp);
-                }
                 ldfree(strbuf);
             } else {
                 ESP_LOGW(__FUNCTION__,"Missing params:%d or file:%d name:%d or missing param when both are true.",params==NULL,efile==NULL, name==NULL);
@@ -415,11 +405,6 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
         default:
             MFile::ProcessEvent(handler_args,base,id,event_data);
             break;
-        }
-        if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
-            char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(NULL));
-            ESP_LOGW(__FUNCTION__,"Params5:%s...",tmp);
-            ldfree(tmp);
         }
         free(name);
         free(params);

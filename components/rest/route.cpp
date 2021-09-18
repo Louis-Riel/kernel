@@ -32,7 +32,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     if (restInstance == NULL)
     {
         deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
-        ESP_LOGV(__FUNCTION__, "First Rest for %d", deviceId);
+        ESP_LOGD(__FUNCTION__, "First Rest for %d", deviceId);
         restInstance = this;
     }
     if (xEventGroupGetBits(eventGroup) & HTTP_SERVING)
@@ -40,11 +40,13 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         ESP_LOGV(__FUNCTION__, "Not starting httpd, already serving");
         return;
     }
-    //xEventGroupWaitBits(wifiEventGroup, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+    ESP_LOGV(__FUNCTION__, "Waiting for wifi");
+    xEventGroupWaitBits(wifiEventGroup, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+    ESP_LOGV(__FUNCTION__, "Registering RegisterEventHandler");
     if (handlerDescriptors == NULL)
         EventManager::RegisterEventHandler((handlerDescriptors = BuildHandlerDescriptors()));
 
-    ESP_LOGV(__FUNCTION__, "Getting Ip for %d", deviceId);
+    ESP_LOGD(__FUNCTION__, "Getting Ip for %d", deviceId);
 
     if ((gwAddr == NULL) && (ipAddr == NULL))
     {
@@ -271,7 +273,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         ldfree((void *)config);
-        restInstance->bytesIn+=*len;
+        bytesIn+=*len;
         return retVal;
     }
     else
@@ -435,7 +437,6 @@ void TheRest::SendStatus(void *param)
     cJSON_AddItemReferenceToObject(astats, "tasks", jstats);
 
     char *sjson = cJSON_PrintUnformatted(astats);
-    cJSON_Delete(astats);
     cJSON_Delete(jstats);
     cJSON_Delete(cstats);
 
@@ -469,6 +470,7 @@ EventHandlerDescriptor *TheRest::BuildHandlerDescriptors()
     handler->AddEventDescriptor(restEvents_t::CHECK_UPGRADE, "CHECK_UPGRADE");
     handler->AddEventDescriptor(restEvents_t::SEND_STATUS, "SEND_STATUS");
     handler->AddEventDescriptor(restEvents_t::UPDATE_CONFIG, "UPDATE_CONFIG");
+    ESP_LOGV(__FUNCTION__, "TheRest: Done BuildHandlerDescriptors");
     return handler;
 }
 

@@ -18,10 +18,9 @@ EventInterpretor::EventInterpretor(cJSON *json, cJSON* programs)
     AppConfig* cfg = new AppConfig(json,NULL);
     memset(conditions, 0, 5 * sizeof(void *));
     memset(isAnd, 0, 5 * sizeof(bool));
-    id = -1;
-    handler = NULL;
     eventBase = cfg->GetStringProperty("eventBase");
     eventId = cfg->GetStringProperty("eventId");
+    id=-1;
     if (cfg->HasProperty("method"))
         method = cfg->GetStringProperty("method");
     if (cJSON_HasObjectItem(json,"params")){
@@ -30,6 +29,7 @@ EventInterpretor::EventInterpretor(cJSON *json, cJSON* programs)
     if (cfg->HasProperty("program") && programs){
         programName = cfg->GetStringProperty("program");
     }
+    delete cfg;
 
     if (!method && !programName) {
         ESP_LOGE(__FUNCTION__,"Invalid Event, missing both method and program name and programs is %snull", programs?"not ":"");
@@ -62,40 +62,39 @@ EventInterpretor::EventInterpretor(cJSON *json, cJSON* programs)
     }
 }
 
-bool EventInterpretor::IsValid(EventHandlerDescriptor *handler, int32_t id, void *event_data)
+bool EventInterpretor::IsValid(esp_event_base_t eventBase, int32_t id, void *event_data)
 {
-    if (this->handler == NULL)
-    {
-        const char *eventName = handler->GetEventName(id);
-        if (eventName == NULL)
-        {
-            return NULL;
-        }
-        if ((strcmp(this->eventBase, handler->GetName()) == 0) && (strcmp(eventName, this->eventId) == 0))
-        {
-            this->handler = handler;
-            this->id = id;
-            ESP_LOGV(__FUNCTION__, "%s %s %s-%s-%d Event Registered", IsProgram()?"Program ":"Method",IsProgram()?programName:method, handler->GetName(), eventName, id);
+    if (this->id == -1) {
+        ESP_LOGV(__FUNCTION__,"Registering %s %s",this->eventBase, this->eventId);
+        EventDescriptor_t* desc = EventHandlerDescriptor::GetEventDescriptor(this->eventBase,this->eventId);
+        if (desc) {
+            this->id = desc->id;
+            ESP_LOGV(__FUNCTION__,"Registered as %s %d",this->eventBase, this->id);
+        } else {
+            ESP_LOGV(__FUNCTION__,"No descriptor for %s-%s yet",this->eventBase,this->eventId);
+            return false;
         }
     }
-
-
-    bool ret = (handler != NULL) && (this->handler != NULL) && (handler->GetEventBase() == this->handler->GetEventBase()) && (id == this->id);
+    ESP_LOGV(__FUNCTION__,"(this->eventBase(%s) == eventBase(%s)) && (id(%d) == this->id(%d))",this->eventBase, eventBase, id, this->id);
+    bool ret = (strcmp(this->eventBase, eventBase) == 0) && (id == this->id);
     if (ret)
     {
-        ESP_LOGV(__FUNCTION__, "%s-%d Match", handler->GetName(), id);
+        ESP_LOGV(__FUNCTION__, "%s-%d Match", eventBase, id);
         for (int idx = 0; idx < 5; idx++)
         {
             if (conditions[idx])
             {
+                ESP_LOGV(__FUNCTION__, "%s-%d Checking condition %d", eventBase, id, idx);
                 ret = conditions[idx]->IsEventCompliant(event_data);
                 if (!ret && (idx < 4) && (isAnd[idx + 1]))
                 {
+                    ESP_LOGV(__FUNCTION__, "%s-%d Matching condition %d", eventBase, id, idx);
                     return ret;
                 }
             }
         }
     }
+    ESP_LOGV(__FUNCTION__, "%s-%d Non Matching", eventBase, id);
     return ret;
 }
 
@@ -111,10 +110,10 @@ const char* EventInterpretor::GetProgramName() {
 }
 
 void EventInterpretor::RunProgram(const char* programName){
-    RunProgram(NULL,0,NULL,programName);
+    RunProgram(NULL,programName);
 }
 
-void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char* programName){
+void EventInterpretor::RunProgram(void *event_data, const char* programName){
     AppConfig* program=NULL;
     cJSON *prog;
     if (!programs) {
@@ -161,14 +160,14 @@ void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, v
                     ESP_LOGV(__FUNCTION__,"mParams:%s",ctmp);
                     ldfree(ctmp);
                 }
-                RunMethod(handler,id, mParams ? &mParams : NULL, aitem->GetStringProperty("method"),false);
+                RunMethod(aitem->GetStringProperty("method"), mParams ? &mParams : NULL, false);
             } else if (aitem->HasProperty("program")) {
                 if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
                     char* tmp = cJSON_Print(aitem->GetJSONConfig(NULL));
                     ESP_LOGV(__FUNCTION__,"running program from %s", tmp);
                     ldfree(tmp);
                 }
-                RunProgram(handler,id,event_data,aitem->GetStringProperty("program"));
+                RunProgram(event_data,aitem->GetStringProperty("program"));
             } else if (item != NULL) {
                 char* tmp = cJSON_Print(item);
                 ESP_LOGE(__FUNCTION__,"Nothing to run for %s",tmp);
@@ -183,7 +182,7 @@ void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, v
         cJSON_ArrayForEach(item,cJSON_GetObjectItem(program->GetJSONConfig(NULL),"parallelThreads")) {
             AppConfig* aitem = new AppConfig(item,NULL);
             if (aitem->HasProperty("method")) {
-                uint8_t bitno = RunMethod(handler,id,event_data,aitem->GetStringProperty("method"),true);
+                uint8_t bitno = RunMethod(aitem->GetStringProperty("method"),event_data,true);
                 if (bitno != UINT8_MAX) {
                     threads |= (1<<bitno);
                 } else {
@@ -191,7 +190,7 @@ void EventInterpretor::RunProgram(EventHandlerDescriptor *handler, int32_t id, v
                 }
             } else if (aitem->HasProperty("program")) {
                 ESP_LOGW(__FUNCTION__,"Program backgroup task not supported, running inline");
-                RunProgram(handler,id,event_data,aitem->GetStringProperty("program"));
+                RunProgram(event_data,aitem->GetStringProperty("program"));
             } else {
                 char* tmp = cJSON_Print(item);
                 ESP_LOGE(__FUNCTION__,"Nothing to run for %s",tmp);
@@ -240,7 +239,7 @@ void EventInterpretor::RunLooper(void* param) {
     ldfree(program);
 }
 
-uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data) {
+uint8_t EventInterpretor::RunMethod(void *event_data) {
     if (!method) {
         ESP_LOGE(__FUNCTION__,"Missing method.");
         if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
@@ -251,7 +250,7 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
         return UINT8_MAX;
     }
     ESP_LOGV(__FUNCTION__,"Running inline method %s", method);
-    return RunMethod(handler,id,event_data,method,true);
+    return RunMethod(method, event_data, true);
 }
 
 char* EventInterpretor::ToString() {
@@ -267,7 +266,11 @@ static BaseType_t CreateWokeInlineTask(
     return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, false, true);
 }
 
-uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char* method, bool inBackground)
+cJSON* EventInterpretor::GetParams(){
+    return params;
+}
+
+uint8_t EventInterpretor::RunMethod(const char* method, void *event_data, bool inBackground)
 {
     cJSON *jeventbase;
     cJSON *jeventid;
@@ -286,18 +289,8 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
 
     ESP_LOGV(__FUNCTION__,"Got %s method:(%s) with id %d",inBackground?"backgroung":"foreground",method,id);
 
-    cJSON* mParams = event_data == NULL ? params : *(cJSON**)event_data;
-    if (mParams && cJSON_HasObjectItem(mParams,"params")) {
-        ESP_LOGV(__FUNCTION__,"Passing method params");
-        mParams = cJSON_GetObjectItem(mParams,"params");
-    } 
-    if ((mParams) && (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)) {
-        char* tmp = cJSON_Print(mParams);
-        ESP_LOGV(__FUNCTION__,"%s",tmp);
-        ldfree(tmp);
-    }
-
     TaskFunction_t theFunc = NULL;
+    cJSON* mParams = event_data == NULL ? params : *(cJSON**)event_data;
     
     if (strcmp(method, "commitTripToDisk") == 0)
     {
@@ -305,7 +298,6 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
         jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "flags"), "value");
     } else if (strcmp(method, "wifioff") == 0)
     {
-        ESP_LOGD(__FUNCTION__, "%s from %s", handler->GetName(), "wifioff");
         xEventGroupClearBits(app_eg,app_bits_t::WIFI_ON);
         xEventGroupSetBits(app_eg,app_bits_t::WIFI_OFF);
         return UINT8_MAX;
@@ -336,40 +328,46 @@ uint8_t EventInterpretor::RunMethod(EventHandlerDescriptor *handler, int32_t id,
             vTaskDelay(pdMS_TO_TICKS(jtime->valueint));
             ESP_LOGV(__FUNCTION__,"Wokeup after %dms", jtime->valueint);
         } else {
-            ESP_LOGW(__FUNCTION__,"Missing param sleep");
+            char* tmp = cJSON_Print(mParams);
+            ESP_LOGW(__FUNCTION__, "Missing param sleep:%s",tmp == NULL ? "null" : tmp);
+            if (tmp)
+                ldfree(tmp);
         }
         return UINT8_MAX;
     } else if (strcmp(method, "Post") == 0) {
-        jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(mParams, "eventBase"), "value");
-        jeventid = cJSON_GetObjectItem(cJSON_GetObjectItem(mParams, "eventId"), "value");
-        if ((jeventbase == NULL) || (jeventid == NULL))
+        if ((jeventbase = cJSON_GetObjectItem(mParams, "eventBase")) &&
+            (jeventbase = cJSON_GetObjectItem(jeventbase, "value")) &&
+            (jeventid = cJSON_GetObjectItem(mParams, "eventId")) &&
+            (jeventid = cJSON_GetObjectItem(jeventid, "value")))
         {
+            EventDescriptor_t* edesc = EventHandlerDescriptor::GetEventDescriptor(jeventbase->valuestring,jeventid->valuestring);
+            if (strcmp(jeventbase->valuestring,"MFile")==0) {
+                BufferedFile::ProcessEvent(NULL,edesc->baseName,edesc->id, &mParams);
+            } else if (strcmp(jeventbase->valuestring,"DigitalPin")==0) {
+                Pin::ProcessEvent(NULL,edesc->baseName,edesc->id, &mParams);
+            } else if (edesc) {
+                ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)..", edesc->eventName, edesc->baseName, edesc->id);
+                if ((ret = esp_event_post(edesc->baseName, edesc->id, &mParams, sizeof(void *), portMAX_DELAY)) != ESP_OK)
+                {
+                    ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s..", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));
+                }
+            } else {
+                ESP_LOGW(__FUNCTION__, "Cannot find %s to %s..", jeventid->valuestring, jeventbase->valuestring);
+            }
+        } else {
             char* tmp = cJSON_Print(mParams);
             ESP_LOGW(__FUNCTION__, "Missing event id or base:%s",tmp == NULL ? "null" : tmp);
             if (tmp)
                 ldfree(tmp);
-            return UINT8_MAX;
-        }
-        EventDescriptor_t* edesc = handler->GetEventDescriptor(jeventbase->valuestring,jeventid->valuestring);
-        if (strcmp(jeventbase->valuestring,"MFile")==0) {
-            BufferedFile::ProcessEvent(NULL,edesc->baseName,edesc->id, &mParams);
-        } else if (strcmp(jeventbase->valuestring,"DigitalPin")==0) {
-            Pin::ProcessEvent(NULL,edesc->baseName,edesc->id, &mParams);
-        } else if (edesc) {
-            ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)..", edesc->eventName, edesc->baseName, edesc->id);
-            if ((ret = esp_event_post(edesc->baseName, edesc->id, &mParams, sizeof(void *), portMAX_DELAY)) != ESP_OK)
-            {
-                ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s..", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));
-            }
-        } else {
-            ESP_LOGW(__FUNCTION__, "Cannot find %s to %s..", jeventid->valuestring, jeventbase->valuestring);
         }
         return UINT8_MAX;
     }
-    if (inBackground)
-        return CreateWokeBackgroundTask(theFunc, method, 4096, NULL, tskIDLE_PRIORITY, NULL);
-    else
-        CreateWokeInlineTask(theFunc, method, 4096, NULL);
+    if (theFunc){
+        if (inBackground)
+            return CreateWokeBackgroundTask(theFunc, method, 4096, NULL, tskIDLE_PRIORITY, NULL);
+        else
+            CreateWokeInlineTask(theFunc, method, 4096, NULL);
+    }
     return UINT8_MAX;
 }
 

@@ -546,17 +546,12 @@ void doHibernate(void *param)
 
 void Hibernate()
 {
-  EventGroupHandle_t eg = getAppEG();
-  EventBits_t bits = xEventGroupGetBits(getAppEG());
-  if (!(bits & app_bits_t::WIFI_ON))
-  {
+  if (hybernator == NULL){
+    EventGroupHandle_t eg = getAppEG();
+    EventBits_t bits = xEventGroupGetBits(getAppEG());
     ESP_LOGV(__FUNCTION__, "Hibernating");
-    CreateWokeBackgroundTask(doHibernate, "doHibernate", 4096, NULL, tskIDLE_PRIORITY + 25, &hybernator);
+    CreateWokeBackgroundTask(doHibernate, "doHibernate", 4096, NULL, tskIDLE_PRIORITY, &hybernator);
     //xEventGroupSetBits(eg,app_bits_t::HIBERNATE);
-  }
-  else
-  {
-    ESP_LOGD(__FUNCTION__, "Not hibernating wifion:%d hybnull:%d", bits & app_bits_t::WIFI_ON, hybernator == NULL);
   }
 }
 
@@ -565,10 +560,16 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   now = esp_timer_get_time();
   lastDpTs = now;
   sampleBatteryVoltage();
+  char* ctmp;
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:
     ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f Bat:%f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters(), getBatteryVoltage());
+    if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
+      ctmp = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig("gps"));
+      ESP_LOGV(__FUNCTION__,"The j:%s",ctmp);
+      ldfree(ctmp);
+    }
     lastLocTs = now;
     gpsto = false;
     if (lastSLocTs == 0)
@@ -584,7 +585,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     localtime_r(&cdate, &timeinfo);
     strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
     dumpLogs();
-    ESP_LOGI(__FUNCTION__, "System Time: %s diff:%d", strftime_buf, (uint32_t)event_data);
+    ESP_LOGI(__FUNCTION__, "System Time: %s diff:%ld", strftime_buf, *(long*)event_data);
     break;
   case TinyGPSPlus::gpsEvent::significantDistanceChange:
     ESP_LOGD(__FUNCTION__, "Distance Diff: %f", *((double *)event_data));
@@ -971,7 +972,7 @@ static void serviceLoop(void *param)
     {
       bits[idx] = serviceBits & (1 << idx) ? '1' : '0';
     }
-    ESP_LOGD(__FUNCTION__, "curr:%s %d", bits, serviceBits);
+    ESP_LOGV(__FUNCTION__, "curr:%s %d", bits, serviceBits);
     if (serviceBits & app_bits_t::WIFI_ON && !TheWifi::GetInstance())
     {
       CreateForegroundTask(wifiSallyForth, "WifiSallyForth", NULL);
@@ -984,12 +985,15 @@ static void serviceLoop(void *param)
         delete theWifi;
       }
     }
+    ESP_LOGV(__FUNCTION__,"app_bits_t::REST:%d app_bits_t::WIFI_ON %d",serviceBits & app_bits_t::REST, serviceBits & app_bits_t::WIFI_ON);
     if (((serviceBits & (app_bits_t::REST | app_bits_t::WIFI_ON)) == (app_bits_t::REST | app_bits_t::WIFI_ON)) && !TheRest::GetServer())
     {
+      ESP_LOGV(__FUNCTION__,"Turning Rest On");
       CreateForegroundTask(restSallyForth, "restSallyForth", TheWifi::GetEventGroup());
     }
     else if ((serviceBits & (app_bits_t::REST | app_bits_t::WIFI_OFF)) && TheRest::GetServer())
     {
+      ESP_LOGV(__FUNCTION__,"Turning Rest Off if on %d",TheRest::GetServer()!=NULL);
       if (TheRest *theRest = TheRest::GetServer())
       {
         delete theRest;
@@ -1002,6 +1006,7 @@ static void serviceLoop(void *param)
       }
       doHibernate(NULL);
     }
+    ESP_LOGV(__FUNCTION__,"Checking GPS");
     if (serviceBits & (app_bits_t::GPS_ON) &&
         !TinyGPSPlus::runningInstance() &&
         (appCfg->HasProperty("/gps/rxPin")))
@@ -1025,8 +1030,11 @@ static void serviceLoop(void *param)
       {
         ESP_LOGE(__FUNCTION__, "No GPS, weirdness is afoot");
       }
+    } else {
+      ESP_LOGV(__FUNCTION__,"Cannot start GPS. Already running:%d has rx pin:%d",TinyGPSPlus::runningInstance()!=NULL,appCfg->HasProperty("/gps/rxPin"));
     }
-    else if ((serviceBits & (app_bits_t::GPS_OFF)) && TinyGPSPlus::runningInstance())
+    
+    if ((serviceBits & (app_bits_t::GPS_OFF)) && TinyGPSPlus::runningInstance())
     {
       if (TinyGPSPlus *gps = TinyGPSPlus::runningInstance())
       {
@@ -1045,9 +1053,9 @@ static void serviceLoop(void *param)
       waitMask = APP_SERVICE_BITS;
       vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
+    ESP_LOGV(__FUNCTION__, "ServiceLoop end loop");
   }
   ESP_LOGW(__FUNCTION__, "ServiceLoop done");
-  vTaskDelete(NULL);
 }
 
 void *spimalloc(size_t size)
@@ -1070,6 +1078,12 @@ void app_main(void)
 
     AppConfig *appcfg = new AppConfig(CFG_PATH);
     AppConfig *appstat = AppConfig::GetAppStatus();
+
+    if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
+      char* ctmp = cJSON_Print(appcfg->GetJSONConfig(NULL));
+      ESP_LOGV(__FUNCTION__,"cfg:%s",ctmp);
+      ldfree(ctmp);
+    }
 
     char bo[50];
     const esp_app_desc_t *ad = esp_ota_get_app_description();
@@ -1147,6 +1161,7 @@ void app_main(void)
 
     ConfigurePins(appcfg);
     EventGroupHandle_t app_eg = getAppEG();
+    ESP_LOGV(__FUNCTION__,"gps rx pin:%d",appcfg->GetIntProperty("/gps/rxPin"));
     if (appcfg->GetIntProperty("/gps/rxPin"))
       xEventGroupSetBits(app_eg, app_bits_t::GPS_ON);
 
@@ -1158,7 +1173,7 @@ void app_main(void)
     //Register event managers
     new BufferedFile();
 
-    CreateBackgroundTask(serviceLoop, "ServiceLoop", 8192, NULL, tskIDLE_PRIORITY+10, NULL);
+    CreateBackgroundTask(serviceLoop, "ServiceLoop", 8192, NULL, tskIDLE_PRIORITY, NULL);
     //xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
     //xEventGroupClearBits(app_eg,app_bits_t::WIFI_OFF);
   }

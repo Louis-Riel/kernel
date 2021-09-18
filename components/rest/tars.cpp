@@ -138,18 +138,14 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                             int64_t start_time_ms = (int64_t)tv_start.tv_sec * 1000L + ((int64_t)tv_start.tv_usec / 1000);
                             int64_t end_time_ms = (int64_t)tv_end.tv_sec * 1000L + ((int64_t)tv_end.tv_usec / 1000);
                             int64_t oend_time_ms = (int64_t)tv_open.tv_sec * 1000L + ((int64_t)tv_open.tv_usec / 1000);
-                            int64_t ostat_time_ms = (int64_t)tv_stat.tv_sec * 1000L + ((int64_t)tv_stat.tv_usec / 1000);
                             int64_t rstart_time_ms = (int64_t)tv_rstart.tv_sec * 1000L + ((int64_t)tv_rstart.tv_usec / 1000);
                             int64_t rend_time_ms = (int64_t)tv_rend.tv_sec * 1000L + ((int64_t)tv_rend.tv_usec / 1000);
-                            int64_t wstart_time_ms = (int64_t)tv_wstart.tv_sec * 1000L + ((int64_t)tv_wstart.tv_usec / 1000);
                             int64_t wend_time_ms = (int64_t)tv_wend.tv_sec * 1000L + ((int64_t)tv_wend.tv_usec / 1000);
-                            ESP_LOGV(__FUNCTION__, "%s: Total Time: %f,Open Time: %f,Stat Time: %f,Read Time: %f,Write Time: %f, Len: %d, Rate %f/s ram %d, ",
+                            ESP_LOGV(__FUNCTION__, "%s: Total Time: %f,Open Time: %f,Read Time: %f, Len: %d, Rate %f/s ram %d, ",
                                         path,
                                         (end_time_ms - start_time_ms) / 1000.0,
                                         (oend_time_ms - start_time_ms) / 1000.0,
-                                        (ostat_time_ms - oend_time_ms) / 1000.0,
                                         (rend_time_ms - rstart_time_ms) / 1000.0,
-                                        (wend_time_ms - wstart_time_ms) / 1000.0,
                                         tar->pos - startPos,
                                         (tar->pos - startPos) / ((end_time_ms - start_time_ms) / 1000.0),
                                         heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
@@ -454,10 +450,10 @@ void TheRest::SendTar(void* param)
                 }
                 else
                 {
+                    ESP_LOGE(__FUNCTION__, "Chunk len %d won't go, sent: %d", sp.sendLen, sentLen);
                     sp.sendLen = 0;
                     xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
                     xEventGroupSetBits(eventGroup, TAR_BUFFER_SENT);
-                    ESP_LOGE(__FUNCTION__, "Chunk len %d won't go, sent: %d", sp.sendLen, sentLen);
                     break;
                 }
             } else if (theBits&TAR_BUFFER_FILLED) {

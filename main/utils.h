@@ -33,7 +33,6 @@
 #define JSON_BUFFER_SIZE 8192
 #define KML_BUFFER_SIZE 204600
 
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define HTTP_BUF_SIZE 8192
 #define HTTP_CHUNK_SIZE 8192
 #define HTTP_RECEIVE_BUFFER_SIZE 2048
@@ -148,8 +147,9 @@ public:
   AppConfig* GetConfig(const char* path);
   cJSON* GetJSONConfig(const char* path);
   cJSON* GetJSONConfig(const char *path, bool createWhenMissing);
+  cJSON* GetPropertyHolder(const char* path);
   void SetAppConfig(cJSON* config);
-  static void MergeJSon(cJSON* curConfig, cJSON *newConfig);
+  void MergeJSon(cJSON* curConfig, cJSON *newConfig);
 
   bool HasProperty(const char* path);
 
@@ -171,7 +171,7 @@ public:
   void SetBoolProperty(const char* path,bool value);
   bool IsAp();
   bool IsSta();
-  static cJSON* GetPropertyHolder(cJSON* prop);
+  cJSON* GetPropertyHolder(cJSON* prop);
 protected:
   const char *SDPATH = "/sdcard";
   const char *SPIFFPATH = "/lfs";
@@ -188,6 +188,7 @@ protected:
   const char* filePath;
   AppConfig* root = NULL;
   const char* activeStorage;
+  SemaphoreHandle_t sema;
 };
 
 void UpgradeFirmware();

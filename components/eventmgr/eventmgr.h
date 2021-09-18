@@ -121,13 +121,14 @@ class EventInterpretor
 {
 public:
     EventInterpretor(cJSON *json, cJSON *programs);
-    bool IsValid(EventHandlerDescriptor *handler, int32_t id, void *event_data);
-    uint8_t RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char *method, bool inBackground);
-    uint8_t RunMethod(EventHandlerDescriptor *handler, int32_t id, void *event_data);
-    void RunProgram(EventHandlerDescriptor *handler, int32_t id, void *event_data, const char *progName);
+    bool IsValid(esp_event_base_t eventBase, int32_t id, void *event_data);
+    uint8_t RunMethod(const char* method, void *event_data, bool inBackground);
+    uint8_t RunMethod(void *event_data);
+    void RunProgram(void *event_data, const char *progName);
     void RunProgram(const char *progName);
     bool IsProgram();
     const char *GetProgramName();
+    cJSON* GetParams();
     char* ToString();
 
 private:
@@ -148,7 +149,6 @@ private:
     EventCondition *conditions[5];
     bool isAnd[5];
     cJSON *params;
-    EventHandlerDescriptor *handler;
     int32_t id;
     EventGroupHandle_t app_eg;
 };
@@ -165,10 +165,19 @@ public:
     static EventManager *GetInstance();
 
 private:
+    struct postedEvent_t
+    {
+        esp_event_base_t base;
+        int32_t id;
+        void *event_data;
+    };
+
     cJSON *config;
     cJSON *programs;
-    esp_event_loop_handle_t evtMgrLoopHandle;
-    static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
+    static void EventPoller(void* param);
+    static void ProcessEvent(postedEvent_t* postedEvent);
+    static void EventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
+    QueueHandle_t eventQueue;
 };
 
 class ManagedDevice
@@ -379,10 +388,10 @@ public:
             uint8_t retryCtn = 10;
             uint32_t runningBits = 0;
             while (retryCtn-- && (ret = xTaskCreate(ManagedThreads::runThread,
-                                                    pcName,
-                                                    usStackDepth,
+                                                    thread->pcName,
+                                                    thread->usStackDepth,
                                                     (void *)thread,
-                                                    uxPriority,
+                                                    thread->uxPriority,
                                                     &thread->pvCreatedTask)) != pdPASS)
             {
                 if ((runningBits = GetRunningBits()))
@@ -483,8 +492,8 @@ public:
             else
             {
                 if ((ret = xTaskCreate(ManagedThreads::runThread,
-                                       pcName,
-                                       usStackDepth,
+                                       thread->pcName,
+                                       thread->usStackDepth,
                                        (void *)thread,
                                        tskIDLE_PRIORITY,
                                        &thread->pvCreatedTask)) == pdPASS)
@@ -500,6 +509,7 @@ public:
                 {
                     ESP_LOGE(__FUNCTION__, "Error running %s: %s stack depth:%d", thread->pcName, esp_err_to_name(ret), usStackDepth);
                     dumpTheLogs((void*)true);
+                    esp_restart();
                 }
             }
         }

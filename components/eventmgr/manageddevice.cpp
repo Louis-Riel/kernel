@@ -139,6 +139,13 @@ bool ManagedDevice::HealthCheck(void* instance){
     ESP_LOGE(__FUNCTION__,"Running low on mem: %d",freeMem);
     return false;
   }
+  char* tmp = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(NULL));
+  if (tmp){
+      ldfree(tmp);
+  } else {
+      ESP_LOGE(__FUNCTION__,"Some suckyness is afoot");
+      return false;
+  }
   ESP_LOGV(dev->name,"All good");
   return true;
 }

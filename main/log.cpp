@@ -105,11 +105,13 @@ void unregisterLogCallback( LogFunction_t callback) {
 int loggit(const char *fmt, va_list args) {
     char* curLogLine = logBuff+logBufPos;
     xSemaphoreTake(logMutex,portMAX_DELAY);
-    logBufPos+=vsprintf(logBuff+logBufPos,fmt,args);
-    for (int idx=0; idx < 5; idx++){
-        if (callbacks[idx] != NULL) {
-            if (!callbacks[idx](params[idx],curLogLine)){
-                callbacks[idx] = nullptr;
+    if (*fmt != 'V'){
+        logBufPos+=vsprintf(logBuff+logBufPos,fmt,args);
+        for (int idx=0; idx < 5; idx++){
+            if (callbacks[idx] != NULL) {
+                if (!callbacks[idx](params[idx],curLogLine)){
+                    callbacks[idx] = nullptr;
+                }
             }
         }
     }

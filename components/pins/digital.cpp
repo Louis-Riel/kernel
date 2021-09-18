@@ -36,17 +36,15 @@ Pin::Pin(AppConfig* config)
     } else {
         sprintf(name,"DigitalPin pin(%d)",pinNo);
     }
-    ESP_LOGV(__FUNCTION__,"Pin(%d):%s",pinNo,name);
     status = BuildStatus(this);
-    EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(Pin::eventBase, ESP_EVENT_ANY_ID, ProcessEvent, this, NULL));
-
     if (pins == NULL){
+        EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
         pins = (Pin**)dmalloc(sizeof(void*)*MAX_NUM_PINS);
         memset(pins,0,sizeof(void*)*MAX_NUM_PINS);
         ESP_LOGV(__FUNCTION__,"Registering handler");
         PollPins();
     }
+    ESP_LOGV(__FUNCTION__,"Pin(%d):%s at idx:%d",pinNo,name,numPins);
     pins[numPins++]=this;
     InitDevice();
 }
@@ -94,7 +92,7 @@ cJSON* Pin::BuildStatus(void* instance){
     apin->SetPinNoProperty("pinNo",pin->pinNo);
     apin->SetStringProperty("name",pin->name);
     apin->SetBoolProperty("state",pin->state);
-    pin->pinStatus = AppConfig::GetPropertyHolder(apin->GetJSONConfig("state"));
+    pin->pinStatus = apin->GetPropertyHolder("state");
     delete apin;
     return sjson;
 }
@@ -134,6 +132,9 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
     Pin* pin = NULL;
     ESP_LOGV(__FUNCTION__,"Event %s-%d - %" PRIXPTR, base,id,(uintptr_t)event_data);
     cJSON* params=*(cJSON**)event_data;
+    if (cJSON_IsInvalid(params)) {
+        ESP_LOGE(__FUNCTION__,"Invalid params for digital pin");
+    }
     ESP_LOGV(__FUNCTION__,"Params(0x%" PRIXPTR " 0x%" PRIXPTR ")",(uintptr_t)event_data,(uintptr_t)params);
     uint32_t state;
     if ((params != NULL) && ((((uintptr_t)params) < 35) || cJSON_HasObjectItem(params,"pinNo"))){

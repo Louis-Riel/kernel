@@ -507,13 +507,6 @@ bool initSPISDCard(bool log)
           return true;
         }
       }
-      else
-      {
-        if (log)
-        {
-          ESP_LOGW(__FUNCTION__, "No SD Card bus_cfg.miso_io_num:%d bus_cfg.mosi_io_num:%d bus_cfg.sclk_io_num:%d", bus_cfg.miso_io_num, bus_cfg.mosi_io_num, bus_cfg.sclk_io_num);
-        }
-      }
     }
     else
     {

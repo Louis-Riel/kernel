@@ -814,7 +814,7 @@ class FirmwarUpdater extends React.Component {
             clearTimeout(stopAbort);
             return res.json()
         })
-        .then(state => this.setState({ waiter: null, loaded: `Loaded version ${state.build.ver} built on ${state.build.ver}` }))
+        .then(state => this.setState({ waiter: null, loaded: `Loaded version ${state.build.ver} built on ${state.build.date}` }))
         .catch(err => {
             clearTimeout(stopAbort);
             this.setState({ waiter: setTimeout(() => this.waitForDevFlashing(), 500) });

@@ -10,36 +10,48 @@ EventHandlerDescriptor::EventHandlerDescriptor(esp_event_base_t eventBase,const 
     this->eventDescriptors = (EventDescriptor_t*)dmalloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS_PER_BASE);
     ESP_LOGV(__FUNCTION__,"Event descriptor for base %s with name %s created", eventBase, name);
     memset(this->eventDescriptors,0,sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS_PER_BASE);
+    for (int idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
+        this->eventDescriptors[idx].id=-1;
+    }
     if (EventHandlerDescriptor::eventDescriptorCache == NULL) {
+        ESP_LOGV(__FUNCTION__,"Initing Event descriptor cache from base %s with name %s", eventBase, name);
         EventHandlerDescriptor::eventDescriptorCache = (EventDescriptor_t*)dmalloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS);
         memset(EventHandlerDescriptor::eventDescriptorCache,0,sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS);
+        for (int idx = 0; idx < MAX_NUM_HANDLERS; idx++) {
+            EventHandlerDescriptor::eventDescriptorCache[idx].id=-1;
+        }
     }
     this->name = (char*)dmalloc(strlen(name)+1);
     strcpy(this->name,name);
 }
 
 bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName){
-    for (int idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
-        EventDescriptor_t* descriptor = &this->eventDescriptors[idx];
-        if (!descriptor->eventName){
-            descriptor->id = id;
-            descriptor->eventName = eventName;
-            descriptor->baseName = name;
-            EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].id = id;
-            EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].baseName = name;
-            EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries++].eventName = eventName;
-            ESP_LOGV(__FUNCTION__,"Event descriptor %s(%d) registered in %s", eventName,id,this->eventBase);
-            return true;
-        }
+    EventDescriptor_t* desc = GetEventDescriptor(eventBase,id);
+    if (desc == NULL) {
+        ESP_LOGV(__FUNCTION__,"Caching event descriptor %s(%d) registered in %s at idx %d", eventName,id,this->eventBase,EventHandlerDescriptor::numCacheEntries);
+        desc=&EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries];
+        EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].id = id;
+        EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].baseName = name;
+        EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries++].eventName = eventName;
     }
-    ESP_LOGE(__FUNCTION__,"No space left for event descriptor, cannot register %s(%d) for base %s", eventName,id,this->eventBase);
-    for (int idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
-        EventDescriptor_t* descriptor = &this->eventDescriptors[idx];
-        if (descriptor->eventName){
-            ESP_LOGV(__FUNCTION__,"%d Event descriptor %s(%d) registered in %s", idx, eventName,id,this->eventBase);
-            return true;
+
+    if (desc){
+        for (int idx = 0; idx < MAX_NUM_HANDLERS; idx++) {
+            EventDescriptor_t* descriptor = &this->eventDescriptors[idx];
+            if (descriptor->id == -1){
+                descriptor->id = desc->id;
+                descriptor->eventName = desc->eventName;
+                descriptor->baseName = desc->baseName;
+                ESP_LOGV(__FUNCTION__,"Event descriptor %s(%d) registered in %s at idx %d", eventName,id,this->eventBase, idx);
+                return true;
+            }
         }
+    } else {
+        ESP_LOGE(__FUNCTION__,"Event descriptor %s(%d) NOT cached in %s", eventName,id,this->eventBase);
     }
+
+
+    ESP_LOGE(__FUNCTION__,"Event descriptor %s(%d) NOT registered in %s", eventName,id,this->eventBase);
     return false;
 }
 
@@ -49,7 +61,7 @@ char* EventHandlerDescriptor::GetName(){
 
 cJSON* EventHandlerDescriptor::GetEventBaseEvents(const char* base, const char* filter) {
     cJSON* ret = cJSON_CreateArray();
-    for (int idx = 0; idx < MAX_NUM_EVENTS; idx++) {
+    for (int idx = 0; idx < numCacheEntries; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
         if ((ei != NULL) || 
             (filter == NULL) || 
@@ -76,7 +88,7 @@ cJSON* EventHandlerDescriptor::GetEventBaseEvents(const char* base, const char* 
 
 EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(const char* base,const char* eventName) {
     ESP_LOGV(__FUNCTION__,"GetEventDescriptor %s(%s)", eventName, base);
-    for (int idx = 0; idx < MAX_NUM_EVENTS; idx++) {
+    for (int idx = 0; idx < numCacheEntries; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
         if ((ei != NULL) && 
             (ei->baseName != NULL) &&
@@ -92,15 +104,19 @@ EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(const char* base,c
 }
 
 EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(esp_event_base_t base,uint32_t id) {
-    ESP_LOGV(__FUNCTION__,"GetEventDescriptor %s(%d)",  base, id);
-    for (int idx = 0; idx < MAX_NUM_EVENTS; idx++) {
+    ESP_LOGV(__FUNCTION__,"Looking for GetEventDescriptor %s(%d)-%d",  base, id, numCacheEntries);
+    for (int idx = 0; idx < numCacheEntries; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
+        if (ei->id == -1)
+            continue;
+
         if ((ei != NULL) && 
             (ei->baseName != NULL) &&
             (ei->id >= 0) &&
             (base != NULL) && 
             (indexOf(ei->baseName,base) != NULL) &&
             (ei->id == id)) {
+            ESP_LOGV(__FUNCTION__,"GetEventDescriptor %s(%d)-%d",  ei->baseName, ei->id, idx);
             return ei;
         }
     }
@@ -195,6 +211,8 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
     strcpy(sourceShadow,sourceValue);
 
     AppConfig* cfg = NULL;
+    AppConfig* jstat = AppConfig::GetAppStatus();
+    AppConfig* jcfg = AppConfig::GetAppConfig();
     while ((openPos=indexOf(openPos,"${")) && (closePos=indexOf(openPos,"}"))) {
         lastClosePos=closePos;
         if (openPos != sourceShadow) {
@@ -207,7 +225,7 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
         {
         case EventHandlerDescriptor::templateType_t::Config:
         case EventHandlerDescriptor::templateType_t::Status:
-            cfg = tt==EventHandlerDescriptor::templateType_t::Status?AppConfig::GetAppStatus():AppConfig::GetAppConfig();
+            cfg = tt==EventHandlerDescriptor::templateType_t::Status?jstat:jcfg;
             ESP_LOGV(__FUNCTION__,"Getting %s", tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
             termName=indexOf(openPos,".");
             if (termName) {
@@ -218,7 +236,7 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
                         cJSON_PrintPreallocated(cfg->GetJSONConfig(termName),retCursor,200,false);
                         ESP_LOGV(__FUNCTION__,"added json:%s", retCursor);
                     } else {
-                        jtmp = cfg->GetPropertyHolder(cfg->GetJSONConfig(termName));
+                        jtmp = cfg->GetPropertyHolder(termName);
                         if (cJSON_IsNumber(jtmp)) {
                             sprintf(strftime_buf,"%f",cJSON_GetNumberValue(jtmp));
                             ESP_LOGV(__FUNCTION__,"Number Value %s", strftime_buf);
