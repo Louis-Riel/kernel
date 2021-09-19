@@ -541,6 +541,7 @@ void doHibernate(void *param)
   ESP_LOGV(__FUNCTION__, "Waiting for sleepers");
   WaitToSleepExceptFor("doHibernate");
   ESP_LOGD(__FUNCTION__, "Hybernating");
+  gpio_set_level(BLINK_GPIO, 1);
   esp_deep_sleep_start();
 }
 

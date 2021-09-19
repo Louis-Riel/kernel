@@ -45,12 +45,10 @@ extern const unsigned char favicon_ico_start[] asm("_binary_favicon_ico_start");
 extern const unsigned char favicon_ico_end[]   asm("_binary_favicon_ico_end");
 extern const unsigned char index_html_start[] asm("_binary_index_html_start");
 extern const unsigned char index_html_end[]   asm("_binary_index_html_end");
-extern const unsigned char app_css_start[] asm("_binary_app_css_start");
-extern const unsigned char app_css_end[]   asm("_binary_app_css_end");
-extern const unsigned char app_js_start[] asm("_binary_app_js_start");
-extern const unsigned char app_js_end[]   asm("_binary_app_js_end");
-extern const unsigned char jsonschema_start[] asm("_binary_configschema_json_start");
-extern const unsigned char jsonschema_end[]   asm("_binary_configschema_json_end");
+extern const unsigned char app_css_start[] asm("_binary_app_min_css_start");
+extern const unsigned char app_css_end[]   asm("_binary_app_min_css_end");
+extern const unsigned char app_js_start[] asm("_binary_app_min_js_start");
+extern const unsigned char app_js_end[]   asm("_binary_app_min_js_end");
 
 struct poiConfig_t {
   float lat;

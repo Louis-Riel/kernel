@@ -16,7 +16,7 @@ var configManager = null;
 var stateViewer = null;
 var fileManager = null;
 
-const httpPrefix = "";//"http://192.168.1.107";
+const httpPrefix = "";
 
 //#region REACTJS
 
@@ -94,8 +94,7 @@ class DeviceList extends React.Component {
             key: genUUID(),
             value: this.props.selectedDeviceId,
             onChange: (elem) => this.props.onSet(elem.target.value)
-        },
-            this.state.devices.concat(this.props.deviceId).map(device => e("option", { key: genUUID(), value: device }, device)));
+        }, this.state.devices.concat(this.props.deviceId).map(device => e("option", { key: genUUID(), value: device }, device)));
     }
 }
 
@@ -398,10 +397,9 @@ class MainAppState extends React.Component {
                     fetch(`${httpPrefix}${request.url}`, {
                         method: 'post',
                         signal: abort.signal
-                    })
-                        .then(data => data.json())
-                        .then(fromVersionedToPlain)
-                        .then(jstats => {
+                    }).then(data => data.json())
+                      .then(fromVersionedToPlain)
+                      .then(jstats => {
                             requests = requests.filter(req => req != request);
                             if (request.path) {
                                 newState[request.path] = Object.values(jstats);
@@ -446,6 +444,7 @@ class MainAppState extends React.Component {
                 }
             });
         } else if (this.state.selectedDeviceId) {
+
             fetch(`${httpPrefix}/lfs/status/${this.state.selectedDeviceId}.json`, {
                 method: 'get',
                 signal: abort.signal
@@ -561,6 +560,7 @@ class StorageViewer extends React.Component {
                 key: genUUID(),
                 href: "#",
                 onClick: () => {
+                    console.log(`link:${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/"));
                     this.setState({ total: 0, loaded: false, path: `${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/") });
                 }
             }, file.name);
@@ -569,34 +569,37 @@ class StorageViewer extends React.Component {
         }
     }
 
-    GetFileStat(fileToFetch, fileStatsToFetch) {
-        var timer1 = setTimeout(() => pageControler.abort(), 3000);
-        fetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
-            method: 'post',
-            signal: pageControler.signal
-        }).then(data => {
-            data.json().then(jdata => {
-                fileToFetch.size = jdata.size;
-                this.setState({ files: this.state.files, total: this.state.total + jdata.size });
-                clearTimeout(timer1);
+    GetFileStat(fileStatsToFetch) {
+        if (fileStatsToFetch.length) {
+            var fileToFetch = fileStatsToFetch.pop()
+            var quitItNow = setTimeout(() => pageControler.abort(), 3000);
+            fetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
+                method: 'post',
+                signal: pageControler.signal
+            }).then(data => {
+                clearTimeout(quitItNow);
+                data.json().then(jdata => {
+                    fileToFetch.size = jdata.size;
+                    this.setState({ files: this.state.files, total: this.state.total + jdata.size });
+                });
+                if (fileStatsToFetch.length && !pageControler.signal.aborted) {
+                    this.GetFileStat(fileStatsToFetch);
+                }
+            }).catch(ex => {
+                clearTimeout(quitItNow);
+                if (!pageControler.signal.aborted)
+                    fileStatsToFetch.push(fileToFetch);
             });
-            this.setState({ files: this.state.files });
-            if (fileStatsToFetch.length) {
-                this.GetFileStat(fileStatsToFetch.pop(), fileStatsToFetch);
-            }
-        }).catch(ex => {
-            clearTimeout(timer1);
-            fileStatsToFetch.push(fileToFetch);
-        });
+        }
     }
 
     fetchFiles() {
-        var timer1 = setTimeout(() => pageControler.abort(), 3000);
+        var quitItNow = setTimeout(() => pageControler.abort(), 3000);
         fetch(`${httpPrefix}/files` + this.state.path, {
             method: 'post',
             signal: pageControler.signal
         }).then(data => {
-            clearInterval(timer1);
+            clearInterval(quitItNow);
             data.json()
                 .then(files => files.sort((f1, f2) => {
                     if (f1.ftype != f2.ftype) {
@@ -609,7 +612,7 @@ class StorageViewer extends React.Component {
                     var fileStatsToFetch = files.filter(file => file.ftype == "file" && file.size==0);
                     for (var idx = 0; idx < Math.min(3, fileStatsToFetch.length); idx++) {
                         if (fileStatsToFetch.length) {
-                            this.GetFileStat(fileStatsToFetch.pop(), fileStatsToFetch);
+                            this.GetFileStat(fileStatsToFetch);
                         }
                     }
                 });
@@ -1035,11 +1038,10 @@ function getJsonConfig() {
         }).then(data => {
             clearTimeout(timer);
             resolve(data.json());
-        })
-            .catch((err) => {
-                clearTimeout(timer);
-                reject(err);
-            });
+        }).catch((err) => {
+            clearTimeout(timer);
+            reject(err);
+        });
     });
 }
 

@@ -228,25 +228,30 @@ void TinyGPSPlus::theLoop(void *param)
   gpio_set_level(BLINK_GPIO, 1);
 
   ESP_LOGI(__FUNCTION__, "Waiting for GPS Initialization");
-  if (xEventGroupWaitBits(gps->eg,gpsEvent::initialized,pdFALSE,pdTRUE,1000/portTICK_PERIOD_MS) & gpsEvent::initialized) {
-    int wb;
-    if ((wb = uart_write_bytes(UART_NUM_2, (const char *)update_0_2_secs, sizeof(update_0_2_secs))) != sizeof(update_0_2_secs))
-    {
-      ESP_LOGW(__FUNCTION__, "Failed sending freq scaledown command (%d bytes), ret %d bytes", sizeof(update_0_2_secs), wb);
+  while (((bits=xEventGroupGetBits(gps->eg)) & gpsEvent::gpsRunning) &&
+         !(bits&gpsEvent::initialized)){
+    if (xEventGroupWaitBits(gps->eg,gpsEvent::initialized,pdFALSE,pdTRUE,1000/portTICK_PERIOD_MS) & gpsEvent::initialized) {
+      int wb;
+      if ((wb = uart_write_bytes(UART_NUM_2, (const char *)update_0_2_secs, sizeof(update_0_2_secs))) != sizeof(update_0_2_secs))
+      {
+        ESP_LOGW(__FUNCTION__, "Failed sending freq scaledown command (%d bytes), ret %d bytes", sizeof(update_0_2_secs), wb);
+      }
+      ESP_LOGI(__FUNCTION__, "Flagging protocols");
+      gps->flagProtocol(gps_protocol_t::GPS_GGA, pdTRUE);
+      gps->flagProtocol(gps_protocol_t::GPS_RMC, pdTRUE);
+      gps->flagProtocol(gps_protocol_t::GPS_GLL, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_GSA, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_GSV, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_VTG, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_GRS, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_GST, pdFALSE);
+      gps->flagProtocol(gps_protocol_t::GPS_ZDA, pdTRUE);
+    } else {
+      ESP_LOGW(__FUNCTION__, "GPS Not Initializing, rebooting GPS");
+      gps->gpsStop();
+      vTaskDelay(200/portTICK_PERIOD_MS);
+      gps->gpsStart();
     }
-
-    ESP_LOGI(__FUNCTION__, "Flagging protocols");
-    gps->flagProtocol(gps_protocol_t::GPS_GGA, pdTRUE);
-    gps->flagProtocol(gps_protocol_t::GPS_RMC, pdTRUE);
-    gps->flagProtocol(gps_protocol_t::GPS_GLL, pdFALSE);
-    gps->flagProtocol(gps_protocol_t::GPS_GSA, pdFALSE);
-    gps->flagProtocol(gps_protocol_t::GPS_GSV, pdFALSE);
-    gps->flagProtocol(gps_protocol_t::GPS_VTG, pdFALSE);
-    gps->flagProtocol(gps_protocol_t::GPS_GRS, pdFALSE);
-    gps->flagProtocol(gps_protocol_t::GPS_GST, pdFALSE);
-    gps->flagProtocol(gps_protocol_t::GPS_ZDA, pdTRUE);
-  } else {
-    ESP_LOGW(__FUNCTION__,"GPS is not initializing, assuming a restart without GPS reset");
   }
 
   gps->curFreqIdx = 0;

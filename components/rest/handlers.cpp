@@ -510,24 +510,17 @@ esp_err_t TheRest::app_handler(httpd_req_t *req)
         TheRest::GetServer()->bytesOut+=(favicon_ico_end - favicon_ico_start);
         return httpd_resp_send(req, (const char *)favicon_ico_start, favicon_ico_end - favicon_ico_start);
     }
-    if (endsWith(req->uri, "app.js"))
+    if (endsWith(req->uri, "app-min.js"))
     {
         httpd_resp_set_type(req, "text/javascript");
         TheRest::GetServer()->bytesOut+=(app_js_end - app_js_start - 1);
         return httpd_resp_send(req, (const char *)app_js_start, app_js_end - app_js_start - 1);
     }
-    if (endsWith(req->uri, "app.css"))
+    if (endsWith(req->uri, "app-min.css"))
     {
         httpd_resp_set_type(req, "text/css");
         TheRest::GetServer()->bytesOut+=(app_css_end - app_css_start - 1);
         return httpd_resp_send(req, (const char *)app_css_start, app_css_end - app_css_start - 1);
-    }
-
-    if (endsWith(req->uri, "configschema.json"))
-    {
-        httpd_resp_set_type(req, "text/json");
-        TheRest::GetServer()->bytesOut+=(jsonschema_end - jsonschema_start - 1);
-        return httpd_resp_send(req, (const char *)jsonschema_start, jsonschema_end - jsonschema_start - 1);
     }
 
     if (!endsWith(req->uri, "/") && !indexOf(req->uri, "/?"))
