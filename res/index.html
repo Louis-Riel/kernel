@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8"/>
     <link rel="icon" type="image/png" href="favicon.ico" />
-    <link rel="stylesheet" type="text/css" href="app-min.css" />
+    <link rel="stylesheet" type="text/css" href="dist/app-min.css" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.5.1/jsoneditor.min.css" rel="stylesheet" type="text/css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.5.1/jsoneditor.min.js"></script>
     <script src="https://unpkg.com/react@17/umd/react.development.js" crossorigin></script>
@@ -12,17 +12,6 @@
 </head>
 
 <body>
-    <div class="slider">
-        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');renderFolder(true)" href="#slide-1">SDCard</a>
-        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');refreshStatus(true)" href="#slide-2">Status</a>
-        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');refreshConfig(true)" href="#slide-3">Config</a>
-        <a onclick="document.querySelectorAll('div.slider > a').forEach(tab => tab.classList.remove('active'));this.classList.add('active');refreshSystem(true)" href="#slide-4">System</a>
-        <div class="slides">
-            <div id="slide-1" class="file_section"></div>
-            <div id="slide-2" class="system-config"></div>
-            <div id="slide-3" class="system-config"></div>
-            <div id="slide-4" class="logs"></div>
-            <script type="text/javascript" src="app-min.js"></script>
-        </div>
-    </div>
+    <div class="slider"></div>
+    <script type="text/javascript" src="dist/app-min.js"></script>
 </body>

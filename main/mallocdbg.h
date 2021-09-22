@@ -24,7 +24,7 @@ void dbgfree(const char* funcname,void* ptr);
 #define dmalloc(size) dbgmalloc(__FUNCTION__, size)
 #define ldfree(ptr) dbgfree(__FUNCTION__,ptr)
 #else
-#define dmalloc(sz) malloc(sz)
+#define dmalloc(sz) heap_caps_malloc(sz, MALLOC_CAP_SPIRAM)
 #define ldfree(ptr) free(ptr)
 #endif
 

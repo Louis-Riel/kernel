@@ -91,7 +91,8 @@ enum purpose_t {
 enum state_change_t {
   MAIN = BIT0,
   GPS = BIT1,
-  WIFI = BIT2
+  THREADS = BIT2,
+  WIFI = BIT3
 };
 
 struct gpio_driver_t {
@@ -132,6 +133,7 @@ class AppConfig {
 public:
   AppConfig(const char* filePath);
   AppConfig(cJSON* json, AppConfig* root);
+  ~AppConfig();
 
   static AppConfig* GetAppConfig();
   static AppConfig* GetAppStatus();

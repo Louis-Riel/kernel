@@ -36,7 +36,6 @@ protected:
     void InitDevice();
     void RefrestState();
     EventHandlerDescriptor* BuildHandlerDescriptors();
-    static cJSON* BuildStatus(void* instance);
     cJSON* status;
 private:
     AppConfig* config;

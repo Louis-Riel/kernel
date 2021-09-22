@@ -30,7 +30,7 @@ Pin::Pin(AppConfig* config)
     const char* pname = config->GetStringProperty("pinName");
     ldfree(name);
     uint32_t sz = strlen(pname)+1;
-    name = (char*)malloc(200);
+    name = (char*)dmalloc(200);
     if (sz > 0){
         sprintf(name,"%s pin(%d)",pname,pinNo);
     } else {
@@ -47,6 +47,12 @@ Pin::Pin(AppConfig* config)
     ESP_LOGV(__FUNCTION__,"Pin(%d):%s at idx:%d",pinNo,name,numPins);
     pins[numPins++]=this;
     InitDevice();
+    cJSON* sjson = NULL;
+    AppConfig* apin = new AppConfig(sjson=ManagedDevice::BuildStatus(this),AppConfig::GetAppStatus());
+    apin->SetPinNoProperty("pinNo",pinNo);
+    apin->SetBoolProperty("state",false);
+    pinStatus = apin->GetPropertyHolder("state");
+    delete apin;
 }
 
 EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
@@ -83,24 +89,11 @@ void Pin::InitDevice(){
     ESP_ERROR_CHECK(gpio_isr_handler_add(pinNo, pinHandler, this));
 }
 
-cJSON* Pin::BuildStatus(void* instance){
-    Pin* pin = (Pin*) instance;
-    ESP_LOGV(__FUNCTION__,"Pin(%d):%s GetStatus",pin->pinNo,pin->name);
-
-    cJSON* sjson = NULL;
-    AppConfig* apin = new AppConfig(sjson=ManagedDevice::BuildStatus(instance),AppConfig::GetAppStatus());
-    apin->SetPinNoProperty("pinNo",pin->pinNo);
-    apin->SetStringProperty("name",pin->name);
-    apin->SetBoolProperty("state",pin->state);
-    pin->pinStatus = apin->GetPropertyHolder("state");
-    delete apin;
-    return sjson;
-}
-
 void Pin::RefrestState(){
     bool curState = gpio_get_level(pinNo);
     if (curState != state) {
-        cJSON_SetIntValue(pinStatus,curState);
+        if (pinStatus)
+            cJSON_SetIntValue(pinStatus,curState);
         state=curState;
         ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, eventBase,state?"On":"Off");
         PostEvent((void*)&pinNo,sizeof(pinNo),state ? eventIds::ON : eventIds::OFF);

@@ -27,7 +27,6 @@ table.greyGridTable caption {
     font-family: monospace;
     font-size: x-large;
     background: linear-gradient(to left, #040404, #222b21);
-    width: max-content;
 }
 
 .file {
@@ -49,7 +48,7 @@ table.greyGridTable thead * {
     background: #181d17;
     border-bottom: 2px solid #c0c0c0;
     position: sticky;
-    top: 20px;
+    top: 19px;
     color: aqua;
     padding-top: 8px;
 }

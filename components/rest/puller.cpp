@@ -383,7 +383,7 @@ void extractClientTar(char *tarFName)
                     {
                         buf[header.size] = 0;
                         if ((devid == NULL) && endsWith(header.name,"current.json")){
-                            msg = cJSON_ParseWithLength(buf,JSON_BUFFER_SIZE);
+                            msg = cJSON_ParseWithLength(buf,header.size);
                             devid = cJSON_GetObjectItemCaseSensitive(msg, "deviceid");
                             if (cJSON_HasObjectItem(devid,"value")) {
                                 devid = cJSON_GetObjectItem(devid,"value");

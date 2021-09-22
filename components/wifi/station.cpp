@@ -80,7 +80,7 @@ TheWifi::~TheWifi(){
 
 
 TheWifi::TheWifi(AppConfig* appcfg)
-    :ManagedDevice("TheWifi","TheWifi",BuildStatus,HealthCheck)
+    :ManagedDevice("TheWifi","TheWifi",BuildStatus)
     ,eventGroup(xEventGroupCreate())
     ,cfg(appcfg)
     ,astate(AppConfig::GetAppStatus())
@@ -555,11 +555,6 @@ void time_sync_notification_cb(struct timeval *tv)
     sntp_set_sync_status(SNTP_SYNC_STATUS_COMPLETED);
 }
 
-cJSON* TheWifi::BuildStatus(void* instance){
-    AppConfig* state = AppConfig::GetAppStatus();
-    return state->GetJSONConfig("wifistat");
-}
-
 static void updateTime(void *param)
 {
     ESP_LOGV(__FUNCTION__, "Initializing SNTP");
@@ -848,12 +843,6 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
         }
     }
     AppConfig::SignalStateChange(state_change_t::WIFI);
-}
-
-bool TheWifi::HealthCheck(void* instance){
-    TheWifi* theWifi = (TheWifi*)instance;
-    
-    return ManagedDevice::HealthCheck(instance);
 }
 
 void wifiSallyForth(void *pvParameter)

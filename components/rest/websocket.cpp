@@ -62,11 +62,15 @@ cJSON* WebsocketManager::BuildStatus(void* instance){
 
   if (!cJSON_HasObjectItem(sjson,"clients")) {
     ESP_LOGV(__FUNCTION__,"First Status, creating array");
+    cJSON_AddArrayToObject(sjson,"clients");
   } else {
     ESP_LOGV(__FUNCTION__,"Refresh Status");
-    cJSON_DeleteItemFromObject(sjson,"clients");
+    cJSON* clients = cJSON_GetObjectItem(sjson,"clients");
+    while (cJSON_GetArraySize(clients)) {
+      cJSON_DeleteItemFromArray(clients,0);
+    }
   }
-  cJSON* jClients = cJSON_AddArrayToObject(sjson,"clients");
+  cJSON* jClients = cJSON_GetObjectItem(sjson,"clients");
 
   AppConfig* client=NULL;
   struct tm timeinfo;
@@ -78,8 +82,15 @@ cJSON* WebsocketManager::BuildStatus(void* instance){
       client = new AppConfig(cJSON_CreateObject(),AppConfig::GetAppStatus());
       localtime_r(&ws->clients[idx].lastTs, &timeinfo);
       strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
-      inet_ntop(AF_INET, &ws->clients[idx].addr, ipstr, sizeof(ipstr));
-      client->SetStringProperty("Address",ipstr);
+
+      socklen_t addr_size = sizeof(ws->clients[idx].addr);
+      if (getpeername(ws->clients[idx].fd, (struct sockaddr *)&ws->clients[idx].addr, &addr_size) < 0) {
+          ESP_LOGE(__FUNCTION__, "Error getting client IP");
+      } else {
+        inet_ntop(AF_INET6, &ws->clients[idx].addr.sin6_addr, ipstr, sizeof(ipstr));
+        client->SetStringProperty("Address",ipstr);
+      }
+
       client->SetStringProperty("LastTs",strftime_buf);
       client->SetLongProperty("Bytes",ws->clients[idx].bytesOut);
       client->SetBoolProperty("IsLive",ws->clients[idx].isLive);
@@ -119,6 +130,7 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
         ESP_LOGV(__FUNCTION__,"Client %d disconnected",idx);
       } else {
         clients[idx].bytesOut+=ws_pkt.len;
+        time(&clients[idx].lastTs);
       }
       hasLiveClients |= clients[idx].isLive;
     }
@@ -200,6 +212,8 @@ void WebsocketManager::statePoller(void *instance){
   EventGroupHandle_t stateEg = AppConfig::GetStateGroupHandle();
   ESP_LOGD(__FUNCTION__,"State poller started");
   EventBits_t bits = 0;
+  cJSON* gpsState = NULL;
+  cJSON* mainState = AppConfig::GetAppStatus()->GetJSONConfig(NULL);
   while (stateHandler && stateHandler->isLive) {
     bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,portMAX_DELAY);
     if (stateHandler && stateHandler->isLive){
@@ -207,11 +221,16 @@ void WebsocketManager::statePoller(void *instance){
       state = status_json();
       if (bits&state_change_t::GPS) {
         ESP_LOGV(__FUNCTION__,"gState Changed %d", bits);
-        cJSON_AddItemReferenceToObject(state,"gps",AppConfig::GetAppStatus()->GetJSONConfig("gps"));
+        if (gpsState == NULL) {
+          gpsState = AppConfig::GetAppStatus()->GetJSONConfig("gps");
+        }
+        cJSON_AddItemReferenceToObject(state,"gps",gpsState);
+      } else if (bits&state_change_t::THREADS) {
+        cJSON_AddItemToObject(state,"tasks",tasks_json());
       } else {
         ESP_LOGV(__FUNCTION__,"mState Changed %d", bits);
         cJSON* item;
-        cJSON_ArrayForEach(item,AppConfig::GetAppStatus()->GetJSONConfig(NULL)) {
+        cJSON_ArrayForEach(item,mainState) {
           if (state!= NULL){
             cJSON_AddItemReferenceToObject(state,item->string,AppConfig::GetAppStatus()->GetJSONConfig(item->string));
           } else {
@@ -250,7 +269,7 @@ esp_err_t TheRest::ws_handler(httpd_req_t *req) {
   esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 128);
   if (ret == ESP_OK) 
   {
-    GetServer()->bytesOut+=ws_pkt.len;
+    GetServer()->jBytesOut->valuedouble = GetServer()->jBytesOut->valueint+=ws_pkt.len;
     switch (ws_pkt.type)
     {
     case HTTPD_WS_TYPE_TEXT:

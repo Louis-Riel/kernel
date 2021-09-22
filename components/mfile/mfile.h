@@ -49,20 +49,18 @@ public:
     void Close();
     void Write(uint8_t* data, uint32_t len);
     bool IsOpen();
-    bool hasContent;
     esp_event_base_t GetEventBase();
+    const char *GetName();
 
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
 protected:
 
     EventHandlerDescriptor* BuildHandlerDescriptors();
-    static cJSON* BuildStatus(void*);
 
     cJSON* status;
+    cJSON* hasContent;
+    cJSON* bytesWritten;
     static QueueHandle_t eventQueue;
-
-    char* name;
-
     static MFile* openFiles[MAX_OPEN_FILES];
     static uint8_t numOpenFiles;
 private:

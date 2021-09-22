@@ -67,8 +67,6 @@ public:
     tcpip_adapter_ip_info_t staIp;
 
 protected:
-    static bool HealthCheck(void *instance);
-    static cJSON* BuildStatus(void* instance);
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     EventHandlerDescriptor* BuildHandlerDescriptors();
 

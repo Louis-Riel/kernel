@@ -76,10 +76,7 @@ protected:
   static bool HealthCheck(void *instance);
 
   EventHandlerDescriptor *BuildHandlerDescriptors();
-  static cJSON *BuildStatus(void *);
-  time_t processingTime;
-  uint32_t numRequests;
-
+  
   char *SendRequest(const char *url, esp_http_client_method_t method, size_t *len, char *charBuf);
   char *SendRequest(const char *url, esp_http_client_method_t method, size_t *len);
   char *PostRequest(const char *url, size_t *len);
@@ -115,8 +112,11 @@ private:
   char *ipAddr;
   EventGroupHandle_t app_eg;
   uint32_t healthCheckCount;
-  uint64_t bytesOut;
-  uint64_t bytesIn;
+
+  cJSON* jnumRequests;
+  cJSON* jprocessingTime_us;
+  cJSON* jBytesIn;
+  cJSON* jBytesOut;
 
   httpd_uri_t const restUris[10] =
       {

@@ -16,9 +16,6 @@ MFile::~MFile(){
 
 MFile::MFile()
     :ManagedDevice("MFile","MFile",BuildStatus)
-    ,fileStatus(mfile_state_t::MFILE_INIT)
-    ,hasContent(false)
-    ,name(NULL)
     ,file(NULL)
 {
     ESP_LOGV(__FUNCTION__,"Building MFile");
@@ -41,7 +38,14 @@ MFile::MFile(const char* fileName):MFile()
         strcpy(name, fileName);
         ESP_LOGV(__FUNCTION__,"file %s(%d)...",name, sz);
     } 
-    status = BuildStatus(this);
+    AppConfig* apin = new AppConfig(ManagedDevice::BuildStatus(this),AppConfig::GetAppStatus());
+    apin->SetIntProperty("status",mfile_state_t::MFILE_INIT);
+    apin->SetBoolProperty("hasContent",0);
+    apin->SetBoolProperty("bytesWritten",0);
+    status = apin->GetPropertyHolder("status");
+    hasContent = apin->GetPropertyHolder("hasContent");
+    bytesWritten = apin->GetPropertyHolder("bytesWritten");
+    delete apin;
 }
 
 EventHandlerDescriptor* MFile::BuildHandlerDescriptors(){
@@ -68,27 +72,13 @@ MFile* MFile::GetFile(const char* fileName){
 
     for (uint idx=0; idx < numOpenFiles; idx++) {
         MFile* file = openFiles[idx];
-        if (strcmp(fileName,file->name) == 0) {
-            ESP_LOGV(__FUNCTION__,"Pulling %s from open files as %d, %d open files",file->name,idx, numOpenFiles);
+        if (strcmp(fileName,file->GetName()) == 0) {
+            ESP_LOGV(__FUNCTION__,"Pulling %s from open files as %d, %d open files",file->GetName(),idx, numOpenFiles);
             return file;
         }
     }
     ESP_LOGV(__FUNCTION__,"Opening %s into open files as %d",fileName,numOpenFiles);
     return openFiles[numOpenFiles++]=new MFile(fileName);
-}
-
-cJSON* MFile::BuildStatus(void* instance){
-    MFile* theFile = (MFile*)instance;
-
-    cJSON* sjson = NULL;
-    AppConfig* apin = new AppConfig(sjson=ManagedDevice::BuildStatus(instance),AppConfig::GetAppStatus());
-    if (theFile->name)
-        apin->SetStringProperty("name",theFile->name);
-    apin->SetIntProperty("status",theFile->fileStatus);
-    apin->SetBoolProperty("open",theFile->IsOpen());
-    apin->SetBoolProperty("hasContent",theFile->hasContent);
-    delete apin;
-    return sjson;
 }
 
 void MFile::Open(const char* mode){
@@ -114,7 +104,7 @@ void MFile::Open(const char* mode){
 
     if (ret == 0)
     {
-        hasContent=st.st_size>0;
+        cJSON_SetIntValue(hasContent,st.st_size>0);
     }
 
     fileStatus = (mfile_state_t)(fileStatus|mfile_state_t::MFILE_OPENED);
@@ -144,6 +134,7 @@ bool MFile::IsOpen(){
 
 void MFile::Write(uint8_t* data, uint32_t len) {
     bool wasOpened = IsOpen();
+    bytesWritten->valuedouble = bytesWritten->valueint + len;
     if (!wasOpened) {
         Open("a");
     }
@@ -226,6 +217,11 @@ esp_event_base_t MFile::GetEventBase(){
     return MFile::eventBase;    
 }
 
+const char* MFile::GetName(){
+    return name;
+}
+
+
 BufferedFile::BufferedFile()
     :MFile(){
     ESP_ERROR_CHECK(esp_event_handler_instance_register(MFile::GetEventBase(), ESP_EVENT_ANY_ID, ProcessEvent, this, NULL));
@@ -283,7 +279,7 @@ BufferedFile* BufferedFile::GetOpenedFile(const char* fileName){
 
     for (uint idx=0; idx < numOpenFiles; idx++) {
         BufferedFile* file = (BufferedFile*)openFiles[idx];
-        if (strcmp(file->name,fileName) == 0) {
+        if (strcmp(file->GetName(),fileName) == 0) {
             return file;
         }
     }
@@ -303,7 +299,7 @@ BufferedFile* BufferedFile::GetFile(const char* fileName){
 
     for (uint idx=0; idx < numOpenFiles; idx++) {
         BufferedFile* file = (BufferedFile*)openFiles[idx];
-        if (strcmp(file->name,fileName) == 0) {
+        if (strcmp(file->GetName(),fileName) == 0) {
             return file;
         }
     }
@@ -317,13 +313,13 @@ void BufferedFile::WriteLine(uint8_t* data, uint32_t len) {
 }
 
 void BufferedFile::Write(uint8_t* data, uint32_t len) {
-    ESP_LOGV(__FUNCTION__,"Writing (%s)%d to %s",data,len,name);
+    ESP_LOGV(__FUNCTION__,"Writing (%s)%d to %s",data,len,GetName());
     if (buf == NULL) {
         buf = (uint8_t*)dmalloc(maxBufSize);
 
     }
     if (buf != NULL) {
-        hasContent=true;
+        cJSON_SetIntValue(hasContent,true);
         if ((pos+len)<maxBufSize) {
             memcpy(buf+pos,data,len);
             pos+=len;

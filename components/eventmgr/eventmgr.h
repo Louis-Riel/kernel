@@ -396,24 +396,24 @@ public:
             {
                 if ((runningBits = GetRunningBits()))
                 {
-                    ESP_LOGW(__FUNCTION__, "Error in creating thread for %s, retry %d, waiting on %d. %s", pcName, retryCtn, runningBits, esp_err_to_name(ret));
+                    ESP_LOGW(__FUNCTION__, "Error in creating thread for %s(0x%" PRIXPTR "), retry %d, waiting on %d. %s", pcName, (uintptr_t)thread->pvTaskCode, retryCtn, runningBits, esp_err_to_name(ret));
                     xEventGroupWaitBits(managedThreadBits, runningBits, pdFALSE, pdFALSE, portMAX_DELAY);
                 }
                 else
                 {
-                    ESP_LOGW(__FUNCTION__, "Error in creating thread for %s, retry %d. %s", pcName, retryCtn, esp_err_to_name(ret));
+                    ESP_LOGW(__FUNCTION__, "Error in creating thread for %s(0x%" PRIXPTR "), retry %d. %s", pcName, (uintptr_t)thread->pvTaskCode, retryCtn, esp_err_to_name(ret));
                 }
             }
             if (ret != pdPASS)
             {
-                ESP_LOGE(__FUNCTION__, "Failed in creating thread for %s. %s", pcName, esp_err_to_name(ret));
+                ESP_LOGE(__FUNCTION__, "Failed in creating thread for %s(0x%" PRIXPTR "). %s", pcName, (uintptr_t)thread->pvTaskCode, esp_err_to_name(ret));
                 dumpTheLogs((void*)true);
                 esp_restart();
             }
             if (pvCreatedTask != NULL)
             {
                 *pvCreatedTask = thread->pvCreatedTask;
-                AppConfig::SignalStateChange(state_change_t::MAIN);
+                AppConfig::SignalStateChange(state_change_t::THREADS);
             }
             return bitNo;
         }
@@ -498,16 +498,17 @@ public:
                                        tskIDLE_PRIORITY,
                                        &thread->pvCreatedTask)) == pdPASS)
                 {
-                    ESP_LOGV(__FUNCTION__, "Waiting for %s to finish", thread->pcName);
+                    ESP_LOGV(__FUNCTION__, "Waiting for %s(0x%" PRIXPTR ") to finish", thread->pcName, (uintptr_t)thread->pvTaskCode);
                     xEventGroupWaitBits(managedThreadBits, 1 << bitNo, pdFALSE, pdTRUE, portMAX_DELAY);
                     printMemStat();
-                    ESP_LOGV(__FUNCTION__, "Done running %s", thread->pcName);
+                    ESP_LOGV(__FUNCTION__, "Done running %s(0x%" PRIXPTR ")", thread->pcName, (uintptr_t)thread->pvTaskCode);
                     thread->isRunning = false;
+                    AppConfig::SignalStateChange(state_change_t::THREADS);
                     return ESP_OK;
                 }
                 else
                 {
-                    ESP_LOGE(__FUNCTION__, "Error running %s: %s stack depth:%d", thread->pcName, esp_err_to_name(ret), usStackDepth);
+                    ESP_LOGE(__FUNCTION__, "Error running %s(0x%" PRIXPTR "): %s stack depth:%d", thread->pcName, (uintptr_t)thread->pvTaskCode, esp_err_to_name(ret), usStackDepth);
                     dumpTheLogs((void*)true);
                     esp_restart();
                 }
@@ -541,7 +542,14 @@ protected:
         xEventGroupClearBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
         thread->started = true;
         thread->isRunning = true;
+
+        size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
         thread->pvTaskCode(thread->pvParameters);
+        size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+        if (diff > 0) {
+            ESP_LOGW(__FUNCTION__,"%s %d bytes memleak",thread->pcName,diff);
+        }
+
         thread->isRunning = false;
         ESP_LOGV(__FUNCTION__, "Done running the %s thread", thread->pcName);
         if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)

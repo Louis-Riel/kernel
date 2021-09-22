@@ -321,6 +321,37 @@ int tarClose(mtar_t *tar)
     return ESP_OK;
 }
 
+void DeleteTarFiles(void* param){
+    char* filesToDelete = (char*) param;
+    char* nextFile = lastIndexOf(filesToDelete,",");
+    if (nextFile){
+        *nextFile=0; //Remove trailng ,
+        nextFile = lastIndexOf(filesToDelete,",");
+        ESP_LOGD(__FUNCTION__,"Files to delete:%s",filesToDelete);
+        if (nextFile == NULL) {
+            nextFile = filesToDelete; //Assume there was only one file
+        } else {
+            nextFile++;
+        }
+    }
+    while (nextFile) {
+        deleteFile(nextFile);
+        if (nextFile == filesToDelete) {
+            ESP_LOGD(__FUNCTION__,"Done deleting");
+            break;
+        } else {
+            *(nextFile-1)=0; // remove comma of processed file
+            ESP_LOGV(__FUNCTION__,"FTD:%s",filesToDelete);
+            nextFile = lastIndexOf(filesToDelete,",");
+            if (nextFile == NULL) {
+                nextFile = filesToDelete; // last file to delete
+            } else {
+                nextFile++;
+            }
+        }
+    }
+}
+
 void BuildTar(void* param){
     mtar_t tar;
     char* filesToDelete = (char*)dmalloc(JSON_BUFFER_SIZE);
@@ -332,33 +363,8 @@ void BuildTar(void* param){
     tar.write = tarWrite;
     tarFiles(&tar,"/lfs",NULL,true,"current.bin",1024000,true,filesToDelete);
     if (mtar_close(&tar) == MTAR_ESUCCESS){
-        char* nextFile = lastIndexOf(filesToDelete,",");
-        if (nextFile){
-            *nextFile=0; //Remove trailng ,
-            nextFile = lastIndexOf(filesToDelete,",");
-            ESP_LOGD(__FUNCTION__,"Files to delete:%s",filesToDelete);
-            if (nextFile == NULL) {
-                nextFile = filesToDelete; //Assume there was only one file
-            } else {
-                nextFile++;
-            }
-        }
-        while (nextFile) {
-            deleteFile(nextFile);
-            if (nextFile == filesToDelete) {
-                ESP_LOGD(__FUNCTION__,"Done deleting");
-                break;
-            } else {
-                *(nextFile-1)=0; // remove comma of processed file
-                ESP_LOGV(__FUNCTION__,"FTD:%s",filesToDelete);
-                nextFile = lastIndexOf(filesToDelete,",");
-                if (nextFile == NULL) {
-                    nextFile = filesToDelete; // last file to delete
-                } else {
-                    nextFile++;
-                }
-            }
-        }
+        ESP_LOGD(__FUNCTION__,"Deleting %s",filesToDelete);
+        CreateBackgroundTask(DeleteTarFiles, "DeleteTarFiles", 4096, filesToDelete, tskIDLE_PRIORITY, NULL);
     } else {
         ESP_LOGE(__FUNCTION__,"Failed to close tar");
     }

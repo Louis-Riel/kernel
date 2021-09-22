@@ -16,24 +16,30 @@ void restSallyForth(void *pvParameter) {
 }
 
 TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
-    : ManagedDevice("TheRest","TheRest",BuildStatus,HealthCheck),
-      processingTime(0),
-      numRequests(0),
+    : ManagedDevice("TheRest","TheRest",BuildStatus),
       eventGroup(xEventGroupCreate()),
       wifiEventGroup(evtGrp),
       restConfig(HTTPD_DEFAULT_CONFIG()),
       gwAddr(NULL),
       ipAddr(NULL),
       app_eg(getAppEG()),
-      healthCheckCount(0),
-      bytesOut(0),
-      bytesIn(0)
+      healthCheckCount(0)
 {
     if (restInstance == NULL)
     {
         deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
         ESP_LOGD(__FUNCTION__, "First Rest for %d", deviceId);
         restInstance = this;
+        AppConfig* apin = new AppConfig(ManagedDevice::BuildStatus(this),AppConfig::GetAppStatus());
+        apin->SetIntProperty("numRequests",0);
+        apin->SetIntProperty("processingTime_us",0);
+        apin->SetIntProperty("BytesIn",0);
+        apin->SetIntProperty("BytesOut",0);
+        jnumRequests = apin->GetPropertyHolder("numRequests");
+        jprocessingTime_us = apin->GetPropertyHolder("processingTime_us");
+        jBytesIn = apin->GetPropertyHolder("BytesIn");
+        jBytesOut = apin->GetPropertyHolder("BytesOut");
+        delete apin;
     }
     if (xEventGroupGetBits(eventGroup) & HTTP_SERVING)
     {
@@ -51,8 +57,8 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     if ((gwAddr == NULL) && (ipAddr == NULL))
     {
         TheWifi *theWifi = TheWifi::GetInstance();
-        ipAddr = (char *)malloc(16);
-        gwAddr = (char *)malloc(16);
+        ipAddr = (char *)dmalloc(16);
+        gwAddr = (char *)dmalloc(16);
         sprintf(ipAddr, IPSTR, IP2STR(&theWifi->staIp.ip));
         sprintf(gwAddr, IPSTR, IP2STR(&theWifi->staIp.gw));
         ESP_LOGD(__FUNCTION__, "Ip:%s Gw:%s", ipAddr, gwAddr);
@@ -96,7 +102,7 @@ bool TheRest::routeHttpTraffic(const char *reference_uri, const char *uri_to_mat
     {
         ESP_LOGV(__FUNCTION__,"* match for %s",uri_to_match);
         if (restInstance) {
-            restInstance->numRequests++;
+            restInstance->jnumRequests->valuedouble = restInstance->jnumRequests->valueint++;
         }
         return true;
     }
@@ -165,7 +171,7 @@ bool TheRest::routeHttpTraffic(const char *reference_uri, const char *uri_to_mat
     }
     ESP_LOGV(__FUNCTION__,"%s ref:%s uri:%s",matches ? "matches" : "no match",reference_uri,uri_to_match);
     if (matches && restInstance) {
-        restInstance->numRequests++;
+        restInstance->jnumRequests->valuedouble = restInstance->jnumRequests->valueint++;
     }
     return matches;
 }
@@ -214,20 +220,6 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
     return SendRequest(url, method, len, NULL);
 }
 
-cJSON* TheRest::BuildStatus(void* instance){
-    TheRest* theRest = (TheRest*)instance;
-
-    cJSON* sjson = NULL;
-    AppConfig* apin = new AppConfig(sjson=ManagedDevice::BuildStatus(instance),AppConfig::GetAppStatus());
-    apin->SetIntProperty("numRequests",theRest->numRequests);
-    apin->SetLongProperty("processingTime_us",theRest->processingTime);
-    apin->SetLongProperty("BytesIn",theRest->bytesIn);
-    apin->SetLongProperty("BytesOut",theRest->bytesOut);
-    delete apin;
-    return sjson;
-}
-
-
 char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, size_t *len, char *charBuf)
 {
     esp_http_client_handle_t client = NULL;
@@ -253,8 +245,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         ((hlen = esp_http_client_fetch_headers(client)) >= 0) &&
         ((retCode = esp_http_client_get_status_code(client)) == 200))
     {
-        int bufLen = isPreAllocated ? *len : hlen > 0 ? hlen + 1
-                                                      : JSON_BUFFER_SIZE;
+        int bufLen = isPreAllocated ? *len : hlen > 0 ? hlen + 1 : JSON_BUFFER_SIZE;
         char *retVal = isPreAllocated ? charBuf : (char *)dmalloc(bufLen);
 
         int chunckLen = isPreAllocated ? min(JSON_BUFFER_SIZE, *len) : hlen ? hlen
@@ -273,7 +264,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         ldfree((void *)config);
-        bytesIn+=*len;
+        jBytesIn->valuedouble = jBytesIn->valueint+=*len;
         return retVal;
     }
     else
@@ -486,8 +477,13 @@ esp_err_t TheRest::rest_handler(httpd_req_t *req)
         {
             ESP_LOGV(__FUNCTION__, "rest handled (%d)%s <- %s idx:%d", req->method, theUri.uri, req->uri, idx);
             time_t start = esp_timer_get_time();
+            size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
             esp_err_t ret = theUri.handler(req);
-            restInstance->processingTime+=(esp_timer_get_time()-start);
+            size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+            if (diff > 0) {
+                ESP_LOGW(__FUNCTION__,"%s %d bytes memleak",req->uri,diff);
+            }
+            restInstance->jprocessingTime_us->valuedouble = restInstance->jprocessingTime_us->valueint+=(esp_timer_get_time()-start);
             return ret;
         }
     }
@@ -512,23 +508,9 @@ bool TheRest::HealthCheck(void* instance){
     sprintf(url,"http://%s/status/",theRest->ipAddr);
     size_t len=0;
     char* resp = theRest->SendRequest(url,HTTP_METHOD_POST,&len);
+    ldfree(url);
     if ((len > 0)){
-        cJSON* jtmp = cJSON_Parse(resp);
-        AppConfig* atmp = new AppConfig(jtmp,NULL);
-
-        if (atmp->HasProperty("freeram")){
-            if ( atmp->GetIntProperty("freeram") < 500000) {
-                ESP_LOGE(theRest->name,"Running low on memory");
-                return false;
-            }
-        } else {
-            ESP_LOGE(theRest->name,"Unexpected response from healthcheck");
-            return false;
-        }
-        ESP_LOGV(theRest->name,"Req validated");
         ldfree(resp);
-        ldfree(atmp);
-        cJSON_Delete(jtmp);
         theRest->healthCheckCount++;
         return ManagedDevice::HealthCheck(instance);
     }

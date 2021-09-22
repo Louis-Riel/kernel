@@ -78,8 +78,13 @@ AppConfig::AppConfig(cJSON *json, AppConfig *root)
     , json(json)
     , filePath(root == NULL ? NULL : root->filePath)
     , root(root == NULL ? this : root)
-    , sema(xSemaphoreCreateRecursiveMutex())
+    , sema(root == NULL ? xSemaphoreCreateRecursiveMutex() : root->sema)
 {
+}
+
+AppConfig::~AppConfig() {
+  if (root == this)
+    vSemaphoreDelete(sema);
 }
 
 EventGroupHandle_t AppConfig::GetStateGroupHandle()
@@ -389,12 +394,14 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
     if (parJson == NULL) {
       ESP_LOGE(__FUNCTION__,"Missing parent json");
       xSemaphoreGiveRecursive(sema);
+      ldfree(parPath);
       return NULL;
     }
   } else {
     if (json == NULL) {
       ESP_LOGE(__FUNCTION__,"Missing parent json.");
       xSemaphoreGiveRecursive(sema);
+      ldfree(parPath);
       return NULL;
     }
   }
@@ -415,6 +422,7 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
     ret = cJSON_GetObjectItem(parJson, ctmp1?ctmp1+1:parPath);
   }
   xSemaphoreGiveRecursive(sema);
+  ldfree(parPath);
   return ret;
 }
 
@@ -505,7 +513,6 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
     if (holder != NULL)
     {
       ESP_LOGV(__FUNCTION__,"%s found through recursion",path);
-      ldfree(propPath);
       prop = cJSON_GetObjectItem(holder, lastSlash + 1);
     }
     else
@@ -513,12 +520,11 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
       char* ctmp = cJSON_Print(json);
       if (ctmp){
         ESP_LOGE(__FUNCTION__, "Cannot get property holder for %s in %s", propPath, ctmp);
-        ldfree(ctmp);
       } else {
         ESP_LOGE(__FUNCTION__, "Cannot get property holder for %s unparsable json", propPath);
       }
-      ldfree(propPath);
     }
+    ldfree(propPath);
   }
   else
   {
@@ -593,6 +599,7 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
   }
 
   cJSON *holder = GetJSONConfig(json, path, false);
+  bool hasChanges = false;
   char* parPath = (char*) dmalloc(strlen(path)+1);
   strcpy(parPath,*path=='/'?path+1:path);
   char* ctmp1 = indexOf(parPath,"/");
@@ -609,12 +616,16 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
       ESP_LOGV(__FUNCTION__, "Added versioned string for %s to %s", path, value);
       cJSON_AddStringToObject(holder, "value",value);
       cJSON_AddNumberToObject(holder, "version",0);
+      hasChanges = true;
     } else {
       ESP_LOGV(__FUNCTION__, "Added straight up string for %s to %s(%s) parPath:%s", path, value, ctmp1?ctmp1+1:path, parPath);
+      hasChanges = true;
       cJSON_AddStringToObject(ctmp1?GetJSONConfig(parPath):json,ctmp1?ctmp1+1:path,value);
     }
+    ldfree(parPath);
   } else if (cJSON_IsObject(holder))
   {
+    ldfree(parPath);
     cJSON *val = cJSON_GetObjectItem(holder, "value");
     cJSON *version = cJSON_GetObjectItem(holder, "version");
     if (!val || !version) {
@@ -626,23 +637,22 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
         ESP_LOGV(__FUNCTION__, "Setting versioned %s to %s", path, value);
         cJSON_SetValuestring(holder, value);
         cJSON_SetIntValue(version, version->valueint + 1);
+        hasChanges = true;
       } else {
         ESP_LOGV(__FUNCTION__, "No change for %s to %s", path, value);
-        xSemaphoreGiveRecursive(sema);
-        return;
       }
     }
   }
   else if (strcmp(holder->valuestring, value) != 0)
   {
     cJSON_SetValuestring(holder, value);
+    hasChanges = true;
     ESP_LOGV(__FUNCTION__, "Update straight up string for %s to %s", path, value);
   } else {
     ESP_LOGV(__FUNCTION__, "No change for %s to %s", path, value);
-    xSemaphoreGiveRecursive(sema);
-    return;
   }
-  SaveAppConfig();
+  if (hasChanges)
+    SaveAppConfig();
   xSemaphoreGiveRecursive(sema);
 }
 
@@ -707,8 +717,10 @@ void AppConfig::SetIntProperty(const char *path, int value)
     }
     SaveAppConfig();
     xSemaphoreGiveRecursive(sema);
+    ldfree(parPath);
     return;
   }
+  ldfree(parPath);
 
   if (cJSON_IsObject(holder))
   {
@@ -723,7 +735,7 @@ void AppConfig::SetIntProperty(const char *path, int value)
     if (val->valueint != value)
     {
       ESP_LOGV(__FUNCTION__, "Setting versioned %s to %d", path, value);
-      cJSON_SetNumberValue(holder, value);
+      cJSON_SetIntValue(holder, value);
       cJSON_SetIntValue(version, version->valueint + 1);
     } else {
       ESP_LOGV(__FUNCTION__, "No change for %s to %d", path, value);
@@ -731,7 +743,7 @@ void AppConfig::SetIntProperty(const char *path, int value)
   }
   else if (holder->valueint != value)
   {
-    cJSON_SetNumberHelper(holder, value);
+    cJSON_SetIntValue(holder, value);
     ESP_LOGV(__FUNCTION__, "Update straight up int for %s to %d", path, value);
   } else {
     ESP_LOGV(__FUNCTION__, "No change for %s to %d", path, value);
@@ -800,8 +812,10 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
     }
     SaveAppConfig();
     xSemaphoreGiveRecursive(sema);
+    ldfree(parPath);
     return;
   }
+  ldfree(parPath);
 
   if (cJSON_IsObject(holder))
   {

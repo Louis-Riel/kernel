@@ -76,7 +76,12 @@ void ManagedDevice::UpdateStatuses(){
   for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
     if (runningInstances[idx] && runningInstances[idx]->statusFnc){
       ESP_LOGV(__FUNCTION__,"Refreshing %s",runningInstances[idx]->GetName());
+      size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
       runningInstances[idx]->status = runningInstances[idx]->statusFnc(runningInstances[idx]);
+      size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+      if (diff > 0) {
+          ESP_LOGW(__FUNCTION__,"%s %d bytes memleak",runningInstances[idx]->GetName(),diff);
+      }
       ESP_LOGV(__FUNCTION__,"Refreshed %s",runningInstances[idx]->GetName());
     }
   }
@@ -103,10 +108,15 @@ bool ManagedDevice::ValidateDevices(){
   bool hasIssues = false;
   for (uint32_t idx = 0; idx < MAX_NUM_DEVICES; idx++) {
     if (runningInstances[idx]) {
+      size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
       if (!runningInstances[idx]->hcFnc(runningInstances[idx])){
         hasIssues = true;
         numErrors++;
         lastErrorTs = esp_timer_get_time();
+      }
+      size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+      if (diff > 0) {
+          ESP_LOGW(__FUNCTION__,"hc:%s %d bytes memleak",runningInstances[idx]->name,diff);
       }
     }
   }
@@ -139,13 +149,12 @@ bool ManagedDevice::HealthCheck(void* instance){
     ESP_LOGE(__FUNCTION__,"Running low on mem: %d",freeMem);
     return false;
   }
-  char* tmp = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(NULL));
-  if (tmp){
-      ldfree(tmp);
-  } else {
-      ESP_LOGE(__FUNCTION__,"Some suckyness is afoot");
-      return false;
+
+  if (cJSON_IsInvalid(dev->status)){
+    ESP_LOGE(__FUNCTION__,"Invalid status for %s",dev->name);
+    return false;
   }
+
   ESP_LOGV(dev->name,"All good");
   return true;
 }

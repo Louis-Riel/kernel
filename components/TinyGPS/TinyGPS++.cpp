@@ -589,21 +589,8 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
   xEventGroupSetBits(eg, gpsEvent::gpsRunning);
   CreateBackgroundTask(uart_event_task, "uart_event_task", 8196, this, tskIDLE_PRIORITY, NULL);
   ESP_LOGV(__FUNCTION__, "UART Initialized");
-
-  if (woke)
-  {
-    gpsResume();
-    ESP_LOGD(__FUNCTION__, "llng:%3.7f,llat:%3.7f,lspeed:%f, lcourse:%f",
-             lastLocation.lng(),
-             lastLocation.lat(),
-             lastSpeed.kmph(),
-             lastCourse.deg());
-  }
-  else
-  {
-    xEventGroupClearBits(eg, gpsEvent::msg);
-    CreateBackgroundTask(TinyGPSPlus::theLoop, "theLoop", 8196, this, tskIDLE_PRIORITY, NULL);
-  }
+  xEventGroupClearBits(eg, gpsEvent::msg);
+  CreateBackgroundTask(TinyGPSPlus::theLoop, "theLoop", 8196, this, tskIDLE_PRIORITY, NULL);
 }
 
 TinyGPSPlus::~TinyGPSPlus()
@@ -1029,10 +1016,10 @@ bool TinyGPSPlus::isSignificant()
   //}
 
   val = distanceTo(lastLocation);
-  if (val > fmax(250, speed.kmph() * 50))
+  if (val > fmax(250, speed.kmph() * 30))
   {
     ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::significantDistanceChange, &val, sizeof(val), portMAX_DELAY));
-    lastLocation = location;
+    isc=true;
   }
 
   if (isc)
