@@ -199,7 +199,7 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
     char* openPos=sourceShadow;
     char* closePos=NULL;
     char* lastClosePos=NULL;
-    char strftime_buf[64];
+    char* strftime_buf = (char*)dmalloc(64);
     cJSON* jtmp=NULL;
     memset(retCursor,0,retLen);
     struct tm timeinfo;
@@ -255,7 +255,7 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
             }
             break;
         case EventHandlerDescriptor::templateType_t::CurrentDate:
-            strftime(strftime_buf, sizeof(strftime_buf), "%Y/%m/%d %H:%M:%S", &timeinfo);
+            strftime(strftime_buf, 64, "%Y/%m/%d %H:%M:%S", &timeinfo);
             strcpy(retCursor, strftime_buf);
             ESP_LOGV(__FUNCTION__,"added datetime:%s", retCursor);
             break;
@@ -270,9 +270,9 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
             ESP_LOGV(__FUNCTION__,"added Batterry:%s", retCursor);
             break;
         case EventHandlerDescriptor::templateType_t::CurrentDateNoSpace:
-            strftime(strftime_buf, sizeof(strftime_buf), "%Y-%m-%d", &timeinfo);
+            strftime(strftime_buf, 64, "%Y-%m-%d", &timeinfo);
             strcpy(retCursor, strftime_buf);
-            ESP_LOGV(__FUNCTION__,"added datetime:%s", retCursor);
+            ESP_LOGV(__FUNCTION__,"added datetime:%s - %s", retCursor, strftime_buf);
             break;
         case EventHandlerDescriptor::templateType_t::Invalid:
             break;
@@ -292,5 +292,6 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
     }
 
     ldfree(srcCursor);
+    ldfree(strftime_buf);
     return retVal;
 }

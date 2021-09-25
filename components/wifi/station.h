@@ -60,7 +60,6 @@ public:
     static TheWifi* GetInstance();
     static EventGroupHandle_t GetEventGroup();
     AppConfig* cfg;
-    AppConfig* astate;
     AppConfig* stationStat;
     AppConfig* apStat;
     tcpip_adapter_ip_info_t apIp;
@@ -88,7 +87,6 @@ private:
     Aper *GetAper(uint8_t *mac);
     
     EventGroupHandle_t              s_app_eg;
-    SemaphoreHandle_t bitMutex;
     esp_event_handler_instance_t wifiEvtHandler;
     esp_event_handler_instance_t ipEvtHandler;
     uint32_t healthCheckCount;

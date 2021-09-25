@@ -92,7 +92,8 @@ enum state_change_t {
   MAIN = BIT0,
   GPS = BIT1,
   THREADS = BIT2,
-  WIFI = BIT3
+  WIFI = BIT3,
+  EVENT = BIT4
 };
 
 struct gpio_driver_t {

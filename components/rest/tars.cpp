@@ -323,11 +323,12 @@ int tarClose(mtar_t *tar)
 
 void DeleteTarFiles(void* param){
     char* filesToDelete = (char*) param;
+    ESP_LOGV(__FUNCTION__,"Deleting %s",filesToDelete);
     char* nextFile = lastIndexOf(filesToDelete,",");
     if (nextFile){
         *nextFile=0; //Remove trailng ,
         nextFile = lastIndexOf(filesToDelete,",");
-        ESP_LOGD(__FUNCTION__,"Files to delete:%s",filesToDelete);
+        ESP_LOGV(__FUNCTION__,"Files to delete:%s",filesToDelete);
         if (nextFile == NULL) {
             nextFile = filesToDelete; //Assume there was only one file
         } else {
@@ -335,9 +336,10 @@ void DeleteTarFiles(void* param){
         }
     }
     while (nextFile) {
+        ESP_LOGV(__FUNCTION__,"nextFile:%s",filesToDelete);
         deleteFile(nextFile);
         if (nextFile == filesToDelete) {
-            ESP_LOGD(__FUNCTION__,"Done deleting");
+            ESP_LOGV(__FUNCTION__,"Done deleting");
             break;
         } else {
             *(nextFile-1)=0; // remove comma of processed file
@@ -350,6 +352,7 @@ void DeleteTarFiles(void* param){
             }
         }
     }
+    ldfree(filesToDelete);
 }
 
 void BuildTar(void* param){
@@ -364,11 +367,10 @@ void BuildTar(void* param){
     tarFiles(&tar,"/lfs",NULL,true,"current.bin",1024000,true,filesToDelete);
     if (mtar_close(&tar) == MTAR_ESUCCESS){
         ESP_LOGD(__FUNCTION__,"Deleting %s",filesToDelete);
-        CreateBackgroundTask(DeleteTarFiles, "DeleteTarFiles", 4096, filesToDelete, tskIDLE_PRIORITY, NULL);
+        CreateWokeBackgroundTask(DeleteTarFiles, "DeleteTarFiles", 4096, filesToDelete, tskIDLE_PRIORITY, NULL);
     } else {
         ESP_LOGE(__FUNCTION__,"Failed to close tar");
     }
-    ldfree(filesToDelete);
     xEventGroupSetBits(TheRest::GetEventGroup(),TAR_FINILIZED);
 }
 

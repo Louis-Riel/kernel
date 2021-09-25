@@ -2,7 +2,7 @@
 
 const e = React.createElement;
 
-const httpPrefix = "";//"http://192.168.1.107";
+const httpPrefix = "http://192.168.1.107";
 
 //#region SHA-1
 /*
@@ -266,26 +266,25 @@ class DeviceList extends React.Component {
         super(props);
         this.state = {
             devices: this.props.devices,
-            loaded: false,
-            loading: false
+            loaded: false
         };
     }
 
     componentDidMount() {
-        if (!this.state.loading && !this.state.loaded && !this.state.devices.length) {
-            this.state.loading = true;
-            fetch(`${httpPrefix}/files/lfs/status`, {
-                method: 'post'
-            }).then(data => data.json().then(statuses => {
-                this.state.error = null;
-                this.state.loaded = true;
-                this.state.loading = false;
-                this.state.devices = statuses.filter(fentry => fentry.ftype == "file" && fentry.name != "current.json")
-                    .map(fentry => parseInt(fentry.name.substr(0, fentry.name.indexOf("."))));
-                this.props.onSetDeviceList(this.state.devices);
-            })
-                .catch(err => this.setState({ loaded: false, error: err })));
+        if (!this.state.loaded && !this.state.devices.length) {
+            this.getDevices();
         }
+    }
+
+    getDevices() {
+        fetch(`${httpPrefix}/files/lfs/config`, {method: 'post'})
+            .then(data => data.json())
+            .then(json => json.filter(fentry => fentry.ftype == "file"))
+            .then(devFiles => {
+                this.setState({ loaded:false, devices: devFiles.map(devFile=> devFile.name.substr(0,devFile.name.indexOf("."))) });
+                this.props.onGotDevices(this.state.devices);
+            })
+            .catch(err => {console.error(err);this.setState({error: err})});
     }
 
     render() {
@@ -293,14 +292,11 @@ class DeviceList extends React.Component {
             key: genUUID(),
             value: this.props.selectedDeviceId,
             onChange: (elem) => this.props.onSet(elem.target.value)
-        }, this.state.devices.concat(this.props.deviceId).map(device => e("option", { key: genUUID(), value: device }, device)));
+        }, this.state.devices ? this.state.devices.map(device => e("option", { key: genUUID(), value: device, value: this.state.selectedDeviceId }, device)):"Loading...");
     }
 }
 class IntInput extends React.Component {
     toggleChange = (elem) => {
-        this.setState({
-            value: elem.target.value
-        });
         if (this.props.onChange) {
             this.props.onChange(elem.target.value);
         }
@@ -315,13 +311,11 @@ class IntInput extends React.Component {
 class ROProp extends React.Component {
     constructor(props) {
         super(props);
-        this.state = this.props.json;
-
         this.id = this.props.id || genUUID();
     }
 
     getValue() {
-        var val = this.props.json && this.props.json[this.props.name] && this.props.json[this.props.name]["version"] ? this.props.json[this.props.name]["value"] : this.props.json[this.props.name];
+        var val = this.props.value && this.props.value.version ? this.props.value.value : this.props.value;
         if (IsNumberValue(val)) {
             if (isFloat(val)) {
                 if ((this.props.name.toLowerCase() != "lattitude") &&
@@ -511,7 +505,7 @@ class AppState extends React.Component {
                     } else if (typeof json[fld] == 'object') {
                         return e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld] });
                     } else {
-                        return e(ROProp, { key: genUUID(), json: json, name: fld, label: fld });
+                        return e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld });
                     }
                 });
         } else if (this.state && this.state.error) {
@@ -538,19 +532,24 @@ class MainAppState extends React.Component {
         super(props);
         this.state = {
             statuses: {},
-            devices: [],
             loading: this.props.loading,
             loaded: this.props.loaded,
             error: null,
             selectedDeviceId: 0,
-            deviceId: 0,
             refreshFrequency: 10,
             autoRefresh: false
         };
-
-        this.componentDidUpdate(null, null, null);
+        if (this.props.registerStateCallback) {
+            this.props.registerStateCallback(this.updateMainStatus.bind(this));
+        }
     }
 
+    componentDidMount() {
+        if (this.props.active) {
+            document.getElementById("Status").scrollIntoView()
+        }
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
+    }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (!this.state.loading && !this.state.loaded) {
@@ -562,67 +561,22 @@ class MainAppState extends React.Component {
         }
     }
 
-    setupWs(running) {
-        if (running) {
-            if (this.ws == null) {
-                console.log("Creating ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-                this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-                var stopItWithThatShit = setTimeout(() => {
-                    console.warn("WS Timeout");
-                    this.ws.close();
-                }, 3000);
-                this.ws.onmessage = (event) => {
-                    clearTimeout(stopItWithThatShit);
-                    if (event && event.data) {
-                        if (event.data[0] == "{") {
-                            this.state.statuses[this.state.deviceId] = Object.assign(Object.assign({}, 
-                                                                                      this.state.statuses[this.state.deviceId]), 
-                                                                                      fromVersionedToPlain(JSON.parse(event.data)))
-                            this.setState({ statuses: this.state.statuses });
-                        } else if (event.data.match(/.*\) ([^:]*)/g)) {
-                            if (this.props.AddLogLine)
-                                this.props.AddLogLine(event.data);
-                        }
-                    }
-                    stopItWithThatShit = setTimeout(() => {
-                        this.ws.close();
-                    }, 3000);
-                };
-                this.ws.onopen = () => {
-                    clearTimeout(stopItWithThatShit);
-                    console.log("Connected");
-                    this.ws.send("Connect");
-                    stopItWithThatShit = setTimeout(() => {
-                        console.warn("WS Timeout on open");
-                        this.ws.close();
-                    }, 3000);
-                };
-                this.ws.onerror = (err) => {
-                    clearTimeout(stopItWithThatShit);
-                    this.ws.close();
-                };
-                this.ws.onclose = (evt => {
-                    clearTimeout(stopItWithThatShit);
-                    console.log("log closed");
-                    this.ws = null;
-                    this.setState({autoRefresh:false});
-                })
+    updateMainStatus(stat) {
+        if (stat){
+            const flds = Object.keys(stat);
+            for (const fld in flds) {
+                this.state.statuses["current"][flds[fld]] = stat[flds[fld]];    
             }
+            this.setState({statuses:this.state.statuses});
         } else {
-            if (this.ws != null) {
-                console.log("Closing ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-                this.ws.close();
-                this.ws = null;
-            } else {
-                this.setState({autoRefresh:false});
-            }
+            this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
         }
     }
 
     updateStatuses(requests, newState) {
         var abort = new AbortController()
         var timer = setTimeout(() => abort.abort(), 4000);
-        if (this.state.selectedDeviceId == (this.state.deviceId || 0)) {
+        if (this.props.selectedDeviceId == "current") {
             Promise.all(requests.map(request => {
                 return new Promise((resolve, reject) => {
                     fetch(`${httpPrefix}${request.url}`, {
@@ -637,9 +591,6 @@ class MainAppState extends React.Component {
                             } else {
                                 Object.assign(newState, jstats);
                             }
-                            if (!this.state.deviceId && jstats.deviceid) {
-                                this.setState({ deviceId: jstats.deviceid, selectedDeviceId: jstats.deviceid });
-                            }
                             resolve({ path: request.path, stat: jstats });
                         }).catch(err => {
                             request.retryCnt = (request.retryCnt | 0) + 1;
@@ -650,8 +601,8 @@ class MainAppState extends React.Component {
                 });
             })).then(results => {
                 clearTimeout(timer);
-                document.getElementById(this.props.id).style.opacity = 1;
-                this.state.statuses[this.state.deviceId] = this.orderResults(newState)
+                document.getElementById("Status").style.opacity = 1;
+                this.state.statuses[this.props.selectedDeviceId] = this.orderResults(newState)
                 this.setState({
                     error: null,
                     loading: false,
@@ -662,7 +613,7 @@ class MainAppState extends React.Component {
                 clearTimeout(timer);
                 if (err.code != 20) {
                     var errors = requests.filter(req => req.error);
-                    document.getElementById(this.props.id).style.opacity = 0.5
+                    document.getElementById("Status").style.opacity = 0.5
                     if (errors[0].waitFor) {
                         setTimeout(() => {
                             if (err.message != "Failed to fetch")
@@ -674,13 +625,13 @@ class MainAppState extends React.Component {
                     }
                 }
             });
-        } else if (this.state.selectedDeviceId) {
-            fetch(`${httpPrefix}/lfs/status/${this.state.selectedDeviceId}.json`, {
+        } else if (this.props.selectedDeviceId) {
+            fetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
                 method: 'get',
                 signal: abort.signal
             }).then(data => data.json()).then(fromVersionedToPlain)
                 .then(cfg => {
-                    this.state.statuses[this.state.selectedDeviceId] = this.orderResults(cfg);
+                    this.state.statuses[this.props.selectedDeviceId] = this.orderResults(cfg);
                     this.setState({ statuses: this.state.statuses, loading: false, loaded: true });
                 })
         }
@@ -696,33 +647,10 @@ class MainAppState extends React.Component {
 
     render() {
         return [
-            e(ControlPanel, {
-                key: genUUID(),
-                deviceId: this.state.deviceId,
-                devices: this.state.devices,
-                selectedDeviceId: this.state.selectedDeviceId,
-                onSetDevice: (val) => this.setState({ selectedDeviceId: val, loaded: false }),
-                onRefreshDevice: (elem) => this.setState({loaded: false}),
-                onSetDeviceList: (devs) => this.state.devices = devs,
-                onAutoRefresh: (toggle) => this.setState({autoRefresh: toggle}),
-                refreshFrequency: this.state.refreshFrequency,
-                onChangeFreq: (value) => this.setState({refreshFrequency:value}),
-                periodicOn: (elem) => {
-                    if (!this.state?.interval)
-                        this.setState({ interval: setInterval(() => this.setState({ loaded: false, loading: false }),this.state.refreshFrequency*1000) });
-                },
-                periodicOff: (elem) => {
-                    if (this.state?.interval)
-                        this.setState({ interval: clearTimeout(this.state?.interval) })
-                },
-                interval: this.state.interval,
-                autoRefresh: this.state.autoRefresh
-            }),
-            e(AppState, { 
+            e(AppState, {
                 key: genUUID(), 
-                json: this.state.statuses[this.state.selectedDeviceId], 
-                deviceId: this.state.selectedDeviceId, 
-                devices: this.state.devices
+                json: this.state.statuses[this.props.selectedDeviceId], 
+                selectedDeviceId: this.props.selectedDeviceId
             })
         ];
     }
@@ -772,6 +700,12 @@ class ConfigPage extends React.Component {
         this.componentDidUpdate(null, null, null);
     }
 
+    componentDidMount() {
+        if (this.props.active) {
+            document.getElementById("Config").scrollIntoView()
+        }
+    }
+    
     getJsonConfig(devid) {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
@@ -813,21 +747,11 @@ class ConfigPage extends React.Component {
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (!this.state.loaded && !this.state.loading && !this.state.error) {
             this.state.loading = true;
-            if (!this.state.deviceId) {
-                this.getDevices().then(res => this.setState({deviceId:this.state.deviceId, 
-                                                                  statuses:this.state.statuses,
-                                                                  loaded:true, 
-                                                                  loading:false,
-                                                                  error:null}))
-                                 .catch(err => {
-                                     console.error(err);
-                                     this.setState({loaded:false,loading:false,error:err});
-                                 });
-            } else {
-                fetch(`${httpPrefix}/config/${this.state.deviceId}`, {method: 'post'})
+            if (this.props.selectedDeviceId) {
+                fetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":"/"+this.props.selectedDeviceId}`, {method: 'post'})
                     .then(data => data.json()).then(fromVersionedToPlain)
                     .then(json => {
-                        this.state.deviceConfigs[this.state.deviceId] = json;
+                        this.state.deviceConfigs[this.props.selectedDeviceId] = json;
                         this.setState({
                             deviceConfigs: this.state.deviceConfigs,
                             loading: false,
@@ -852,11 +776,7 @@ class ConfigPage extends React.Component {
 
     render() {
         return e("form", { onSubmit: form => this.SaveForm(form), key: `f${this.id}`, action: "/config", method: "post" }, [
-            e("fieldset", { key: genUUID() }, [
-                e("select", { key: genUUID(), name: "deviceid", value: this.state.deviceId, onChange: (elem) => { this.setState({ deviceId: parseInt(elem.target.value) }); return true; } },
-                    Object.keys(this.state.deviceConfigs).map(devId => e("option", { key: genUUID(), value: devId }, devId))),
-                e(ConfigEditor, { key: genUUID(), deviceId: this.state.deviceId, deviceConfig: this.state.deviceConfigs[this.state.deviceId] })
-            ]),
+            e(ConfigEditor, { key: genUUID(), deviceId: this.state.deviceId, deviceConfig: this.state.deviceConfigs[this.props.selectedDeviceId] }),
             e("button", { key: genUUID() }, "Save"),
             e("button", { key: genUUID(), onClick:(elem) => this.setState({loaded:false, loading:false, error:null}) }, "Refresh")
         ]);
@@ -866,49 +786,224 @@ class ControlPanel extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            periodicRefreshed: false,
+            loaded: this.props.loaded,
+            error: null,
             refreshFrequency: this.props.refreshFrequency,
-            autoRefresh: false
-        };
-        this.ws = null;
-        this.id = this.props.id || genUUID();
+            devices: [],
+            selectedDeviceId: this.props.selectedDeviceId
+        }
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevState && prevState.selectedDeviceId && (prevState.selectedDeviceId != this.state.selectedDeviceId)) {
+            if (this.props.onSelectedDeviceId) {
+                this.props.onSelectedDeviceId(this.state.selectedDeviceId);
+            }
+        }
+    }
+    
+    setupWs(running) {
+      this.state.autoRefresh=running;
+      if (running) {
+          if (this.ws == null) {
+              this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
+              var stopItWithThatShit = setTimeout(() => {
+                  console.warn("WS Timeout");
+                  this.ws.close();
+              }, 3000);
+              this.ws.onmessage = (event) => {
+                  clearTimeout(stopItWithThatShit);
+                  if (event && event.data) {
+                      if (event.data[0] == "{") {
+                        if (event.data.startsWith('{"eventBase"'))
+                          this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
+                        else
+                          this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
+                      } else if (event.data.match(/.*\) ([^:]*)/g)) {
+                        this.AddLogLine(event.data);
+                      }
+                  }
+                  stopItWithThatShit = setTimeout(() => {
+                      this.ws.close();
+                  }, 3000);
+              };
+              this.ws.onopen = () => {
+                  clearTimeout(stopItWithThatShit);
+                  this.ws.send("Connect");
+                  stopItWithThatShit = setTimeout(() => {
+                      console.warn("WS Timeout on open");
+                      this.ws.close();
+                  }, 3000);
+              };
+              this.ws.onerror = (err) => {
+                  clearTimeout(stopItWithThatShit);
+                  this.ws.close();
+              };
+              this.ws.onclose = (evt => {
+                  clearTimeout(stopItWithThatShit);
+                  this.ws = null;
+                  this.setState({autoRefresh:false});
+              })
+          }
+      } else {
+          if (this.ws != null) {
+              this.ws.close();
+              this.ws = null;
+          } else {
+            this.state.autoRefresh=false;
+          }
+      }
+    }
+    
+    
+    AddLogLine(ln) {
+      if (ln && this.props.callbacks.logCBFn) {
+        this.props.callbacks.logCBFn.forEach(logCBFn=>logCBFn(ln));
+      }
+    }
+    
+    UpdateState(state) {
+      if (this.props.callbacks.stateCBFn) {
+        this.props.callbacks.stateCBFn.forEach(stateCBFn=>stateCBFn(state));
+      }
+    }
+  
+    ProcessEvent(event) {
+        if (this.props.callbacks.eventCBFn) {
+            this.props.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn(event));
+        }
     }
 
     render() {
-        return e('fieldset', { key: genUUID(), id: "controls", key: this.id }, [
+     return e('fieldset', { key: genUUID(), className:`slides`, id: "controls", key: this.id }, [
             e('legend', { key: genUUID(), id: `lg${this.id}` }, 'Controls'),
-            e(BoolInput, { 
-                key: genUUID(), 
-                label: "Periodic Refresh", 
-                onOn: this.props.periodicOn, 
-                onOff: this.props.periodicOff,
-                initialState: ()=>this.props.interval!=null && this.props.interval!=undefined
-            }),
-            e(IntInput, {
-                key: genUUID(),
-                label: "Freq(sec)", 
-                value: this.state.refreshFrequency, 
-                id: "refreshFreq",
-                onChange: (val) => this.props.onChangeFreq ? this.props.onChangeFreq(val):null
-            }),
-            e(BoolInput, {
-                key: genUUID(),
-                label: "Auto Refresh",
-                onOn: (elem)=>this.props.onAutoRefresh(true),
-                onOff: (elem)=>this.props.onAutoRefresh(false),
-                id: "autorefresh",
-                initialState: () => this.props.autoRefresh
-            }),
-            e("button", { key: genUUID(), onClick: elem => this.props.onRefreshDevice() }, "Refresh"),
-            e(DeviceList, {
-                key: genUUID(),
-                selectedDeviceId: this.props.selectedDeviceId,
-                deviceId: this.props.deviceId,
-                devices: this.props.devices,
-                onSetDeviceList: this.props.onSetDeviceList,
-                onSet: this.props.onSetDevice
-            })
+                e(BoolInput, { 
+                    key: genUUID(), 
+                    label: "Periodic Refresh", 
+                    onOn: (elem => this.state?.interval ? null: this.state.interval= setInterval(() => this.UpdateState(null),this.state.refreshFrequency*1000) ),
+                    onOff: (elem => this.state?.interval ? this.state.interval= clearTimeout(this.state?.interval)  : null),
+                    initialState: ()=>this.state.interval!=null && this.state.interval!=undefined
+                }),
+                e(IntInput, {
+                    key: genUUID(),
+                    label: "Freq(sec)", 
+                    value: this.state.refreshFrequency, 
+                    id: "refreshFreq",
+                    onChange: (val) => this.state.refreshFrequency=val
+                }),
+                e(BoolInput, {
+                    key: genUUID(),
+                    label: "Auto Refresh",
+                    onOn: (elem)=>this.setupWs(true),
+                    onOff: (elem)=>this.setupWs(false),
+                    id: "autorefresh",
+                    initialState: () => this.state.autoRefresh
+                }),
+                e("button", { key: genUUID(), onClick: elem => this.UpdateState(null) }, "Refresh"),
+                e(DeviceList, {
+                    key: genUUID(),
+                    selectedDeviceId: this.state.selectedDeviceId,
+                    devices: this.state.devices,
+                    onSet: val=>this.setState({selectedDeviceId:val}),
+                    onGotDevices: devices => { this.state.selectedDeviceId?this.setState({devices:devices}):this.setState({selectedDeviceId:"current", devices:devices})}
+                })]);
+    }
+}
+class Event extends React.Component {
+    render() {
+        console.log(this.props);
+        return e("details",{key: genUUID() ,className: "event"},[
+            e("summary",{key: genUUID()},[
+                e("div",{key: genUUID(), className:"eventBase"},this.props.eventBase),
+                e("div",{key: genUUID(), className:"eventId"},this.props.eventId)
+            ]),
+            Object.keys(this.props)
+                  .filter(fld => !Array.isArray(this.props[fld]) && 
+                                 (typeof this.props[fld] !== 'object') &&
+                                 (fld != "eventBase") && (fld != "eventId"))
+                  .map(fld => e("details", {key: genUUID(),className:fld},[e("summary",{key: genUUID(),className:fld},fld),this.props[fld]]))
         ]);
+    }
+}class LiveEvent extends React.Component {
+    render() {
+        return e("div",{key: genUUID() ,className: "liveEvent"},[
+            e("div",{key: genUUID() ,className: "eventBase"},this.props.eventBase),
+            e("div",{key: genUUID() ,className: "eventId"},this.props.eventId)
+        ]);
+    }
+}
+
+class LiveEventPannel extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            lastEvents: []
+        };
+        if (this.props.registerEventCallback) {
+            this.props.registerEventCallback(this.ProcessEvent.bind(this));
+        }
+    }
+
+    ProcessEvent(evt) {
+        this.state.lastEvents.push(evt);
+        while (this.state.lastEvents.length > 100) {
+            this.state.lastEvents.shift();
+        }
+        this.setState({lastEvents:this.state.lastEvents});
+    }
+
+    render() {
+        return  e("div", { key: genUUID() ,className: "eventPanel" }, [
+            e("div", { key: genUUID(), className:"control" }, [
+                e("div",{ key: genUUID()}, `${this.state.lastEvents.length} event${this.state.lastEvents.length?'s':''}`),
+                e("button",{ key: genUUID(), onClick: elem => this.setState({lastEvents:[]})},"Clear")
+            ]),
+            e("div",{ key: genUUID(), className:"eventList"},this.state.lastEvents.map(event => e(LiveEvent,{ key: genUUID(), eventBase:event.eventBase, eventId:event.eventId})).reverse())
+        ])
+
+    }
+}
+
+class EventsPage extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            events: [],
+            programs: []
+        };
+    }
+    
+    componentDidMount() {
+        if (this.props.active) {
+            document.getElementById("Events").scrollIntoView()
+        }
+        this.getJsonConfig().then(cfg => this.setState({events: cfg.events,programs:cfg.programs}));
+    }
+
+    getJsonConfig() {
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
+            fetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
+                method: 'post',
+                signal: this.props.pageControler.signal
+            }).then(data => {
+                clearTimeout(timer);
+                return data.json();
+            }).then( data => resolve(fromVersionedToPlain(data))).catch((err) => {
+                clearTimeout(timer);
+                reject(err);
+            });
+        });
+    }
+
+    render() {
+        return [
+            e("div", { key: genUUID() ,className: "designer" },[
+                e("details",{ key: genUUID() ,className: "configuredEvents" }, [e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), this.state.events?.map(event => e(Event,{ key: genUUID(),...event}))]),
+                e("details",{ key: genUUID() ,className: "programs"},[e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), this.state.programs?.map(program => e(Program,{ key: genUUID(),...program}))])
+            ]),
+            e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
+        ];
     }
 }
 class FirmwareUpdater extends React.Component {
@@ -998,7 +1093,35 @@ class FirmwareUpdater extends React.Component {
         );
     }
 }
+class ProgramLine extends React.Component {
+    render() {
+        return Array.isArray(this.props.value) ? 
+            e("details",{key: genUUID(),className:`arrayfield ${this.props.name}`},
+                e("summary",{key: genUUID(),className:"name"}, this.props.name),
+                    this.props.value.map(progl => e("div",{key: genUUID(),className:`arrayItem`},
+                    Object.keys(progl).map(fld => e(ProgramLine,{key: genUUID(),name:fld,value:progl[fld]}))))
+            ): 
+            typeof this.props.value === 'object' ? 
+                e("details",{key: genUUID(),className:`object ${this.props.name}`},[
+                    e("summary",{key: genUUID(),className:`object name`},this.props.name),
+                        Object.keys(this.props.value).map(fld => 
+                            e("details",{key: genUUID(),className:"name"},[
+                                e("summary",{key: genUUID()}, fld),
+                                e("div",{key: genUUID(),className:fld},this.props.value[fld])
+                            ]))
+                ]):
+                e("details",{key: genUUID(),className:this.props.name},[e("summary",{key: genUUID()},this.props.name), this.props.value]);
+    }
+}
 
+class Program extends React.Component {
+    render() {
+        return e("details",{key: genUUID() ,className: "program"},[
+            e("summary",{key: genUUID(),className:"name"},this.props.name),
+            Object.keys(this.props).filter(fld => fld != "name").map(fld => e(ProgramLine,{key: genUUID(),name:fld,value:this.props[fld]}))
+        ]);
+    }
+}
 class StorageViewer extends React.Component {
     constructor(props) {
         super(props);
@@ -1090,6 +1213,9 @@ class StorageViewer extends React.Component {
     }
 
     componentDidMount() {
+        if (this.props.active) {
+            document.getElementById("Storage").scrollIntoView()
+        }
         document.getElementById(this.id).querySelectorAll("thd").forEach(th => th.addEventListener('click', (() => {
             const table = document.getElementsByClassName("file-table")[0].getElementsByTagName("tbody")[0];
             Array.from(table.querySelectorAll('tr:nth-child(n+2)'))
@@ -1152,12 +1278,26 @@ class LogLine extends React.Component {
             date: msg.substr(3, 12),
             function: msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1"),
         }
-        this.state.msg = this.props.logln.substr(this.props.logln.indexOf(this.state.function) + this.state.function.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/.\[..\n$/g, "")
+        this.state.msg = this.props.logln.substr(this.props.logln.indexOf(this.state.function) + this.state.function.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/.\[..\n$/g, "");
+    }
+
+    isScrolledIntoView()
+    {
+        var rect = this.logdiv.getBoundingClientRect();
+        var elemTop = rect.top;
+        var elemBottom = rect.bottom;
+    
+        return (elemTop >= 0) && (elemBottom <= window.innerHeight);
+    }
+
+    componentDidMount() {
+        if (this.isScrolledIntoView() && document.getElementById("Logs").classList.contains("active"))
+            this.logdiv.scrollIntoView();
     }
 
     render() {
-        return e("div", { key: genUUID(), className: `log LOG${this.state.level}` }, [
-            e("div", { key: genUUID(), className: "LOGLEVEL" }, this.state.level),
+        return e("div", { key: genUUID() , className: `log LOG${this.state.level}` }, [
+            e("div", { key: genUUID(), ref: ref => this.logdiv = ref, className: "LOGLEVEL" }, this.state.level),
             e("div", { key: genUUID(), className: "LOGDATE" }, this.state.date),
             e("div", { key: genUUID(), className: "LOGFUNCTION" }, this.state.function),
             e("div", { key: genUUID(), className: "LOGLINE" }, this.state.msg)
@@ -1165,7 +1305,7 @@ class LogLine extends React.Component {
     }
 }
 
-class SystemPage extends React.Component {
+class LogLines extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
@@ -1177,12 +1317,21 @@ class SystemPage extends React.Component {
     }
 
     AddLogLine(logln) {
-        this.state.logLines.push(e(LogLine, { key: genUUID(), logln: logln }));
-        if (this.loaded)
-            this.setState({ logLines: this.state.logLines });
+        this.state.logLines.push(logln);
+        this.setState({ logLines: this.state.logLines });
     }
+
+    render() {
+        return e("div", { key: genUUID(), className: "loglines" }, this.state.logLines.map(logln => e(LogLine,{ key: genUUID(), logln:logln})))
+    }
+}
+
+class SystemPage extends React.Component {
+
     componentDidMount() {
-        this.loaded = true;
+        if (this.props.active) {
+            document.getElementById("Logs").scrollIntoView()
+        }
     }
 
     SendCommand(body) {
@@ -1201,9 +1350,9 @@ class SystemPage extends React.Component {
                 e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'reboot' }) }, "Reboot"),
                 e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'parseFiles' }) }, "Parse Files"),
                 e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
+                e(FirmwareUpdater, { key: genUUID() })
             ]),
-            e(FirmwareUpdater, { key: genUUID() }),
-            e("div", { key: genUUID(), className: "loglines" }, this.state.logLines)
+            e(LogLines, { key: genUUID(), registerLogCallback:this.props.registerLogCallback })
         ];
     }
 }
@@ -1214,30 +1363,65 @@ class MainApp extends React.Component {
       tabs: { Storage: {active: true}, 
               Status:  {active: false}, 
               Config:  {active: false}, 
-              Logs:    {active: false} }
+              Logs:    {active: false},
+              Events:  {active: false}
+            },
+      callbacks: {
+        stateCBFn: [],
+        logCBFn: [],
+        eventCBFn: []
+      },
+      selectedDeviceId: "current"
     };
     this.id = this.props.id || genUUID();
     this.logCBFn = null;
   }
+
+  componentDidMount(){
+    Object.keys(this.state.tabs).filter(tab => this.state.tabs[tab].active).forEach(this.setActiveTab.bind(this));
+  }
+
   setActiveTab(tab) {
     this.state.tabs[tab].active = true;
     Object.keys(this.state.tabs)
       .filter(ttab => ttab != tab)
       .forEach(ttab => (this.state.tabs[ttab].active = false));
-    Object.keys(this.state.tabs).forEach(ttab =>
-      this.state.tabs[ttab].active
-        ? document.getElementById(`a${ttab}`).classList.add("active")
-        : document.getElementById(`a${ttab}`).classList.remove("active"));
+    Object.keys(this.state.tabs).forEach(ttab => {
+      var section = document.getElementById(`${ttab}`);
+      var link = document.getElementById(`a${ttab}`);
+      if (this.state.tabs[ttab].active){
+        link.classList.add("active")
+        if (section)
+          section.classList.add("active")
+        if ((tab == "Config") || (tab == "Status") || (tab == "Events")){
+          document.getElementById("controls").classList.remove("hidden");
+          document.querySelector("div.slides").classList.remove("expanded");
+        } else {
+          document.getElementById("controls").classList.add("hidden");
+          document.querySelector("div.slides").classList.add("expanded");
+        }
+      } else{
+        link.classList.remove("active")
+        if (section)
+          section.classList.remove("active")
+      }
+    });
   }
 
-  AddLogLine(ln) {
-    if (ln && this.logCBFn) {
-      this.logCBFn(ln);
-    }
+  registerStateCallback(stateCBFn) {
+    this.state.callbacks.stateCBFn.push(stateCBFn);
   }
 
   registerLogCallback(logCBFn) {
-    this.logCBFn = logCBFn;
+    this.state.callbacks.logCBFn.push(logCBFn);
+    }
+
+  registerEventCallback(eventCBFn) {
+    this.state.callbacks.eventCBFn.push(eventCBFn);
+  }
+
+  onSelectedDeviceId(deviceId) {
+    this.setState({selectedDeviceId:deviceId});
   }
 
   render() {
@@ -1246,12 +1430,15 @@ class MainApp extends React.Component {
                                                      id: `a${tab}`,
                                                      className: this.state.tabs[tab].active ? "active" : "",
                                                      onClick: () => this.setActiveTab(tab),href: `#${tab}`},tab)),
-      e("div", { key: genUUID(), className: "slides" }, [
-        e("div",{ className: "file_section", id: "Storage", key: genUUID() },e(StorageViewer, {pageControler: this.props.pageControler,path: "/",cols: ["Name", "Size"]})),
-        e("div",{ className: "system-config", id: "Status", key: genUUID() },e(MainAppState, { pageControler: this.props.pageControler, AddLogLine: this.AddLogLine.bind(this) })),
-        e("div",{ className: "system-config", id: "Config", key: genUUID() },e(ConfigPage, { pageControler: this.props.pageControler })),
-        e("div",{ className: "logs", id: "Logs", key: genUUID() },e(SystemPage, { pageControler: this.props.pageControler, registerLogCallback:this.registerLogCallback.bind(this) }))
-      ])
+      e("div", { key: genUUID()},[
+      e(ControlPanel, { key: genUUID(), selectedDeviceId: this.state.selectedDeviceId, onSelectedDeviceId: this.onSelectedDeviceId.bind(this), callbacks: this.state.callbacks }),
+      e("div", { key: genUUID(), className: `slides${this.state.tabs.Config.active || this.state.tabs.Status.active ? "" : " expanded"}` }, this.state.selectedDeviceId ? [
+        e("div",{ className: "file_section",  id: "Storage", key: genUUID() },e(StorageViewer, { active: this.state.tabs.Storage.active, pageControler: this.props.pageControler,path: "/",cols: ["Name", "Size"]})),
+        e("div",{ className: "system-config", id: "Status",  key: genUUID() },e(MainAppState,  { active: this.state.tabs.Status.active, pageControler: this.props.pageControler, selectedDeviceId: this.state.selectedDeviceId, registerStateCallback:this.registerStateCallback.bind(this) })),
+        e("div",{ className: "system-config", id: "Config",  key: genUUID() },e(ConfigPage,    { active: this.state.tabs.Config.active, pageControler: this.props.pageControler, selectedDeviceId: this.state.selectedDeviceId })),
+        e("div",{ className: "logs",          id: "Logs",    key: genUUID() },e(SystemPage,    { active: this.state.tabs.Logs.active, pageControler: this.props.pageControler,   selectedDeviceId: this.state.selectedDeviceId, registerLogCallback:this.registerLogCallback.bind(this) })),
+        e("div",{ className: "events",        id: "Events",  key: genUUID() },e(EventsPage,    { active: this.state.tabs.Events.active, pageControler: this.props.pageControler, selectedDeviceId: this.state.selectedDeviceId, registerEventCallback:this.registerEventCallback.bind(this) }))
+      ]:[])])
     ];
   }
 }
@@ -1260,6 +1447,7 @@ ReactDOM.render(
   e(MainApp, {
     key: genUUID(),
     className: "slider",
+    refreshFrequency: 10,
     pageControler: new AbortController()
   }),
   document.querySelector(".slider")

@@ -28,14 +28,14 @@ WebsocketManager::WebsocketManager():
   memset(clients,0,sizeof(clients));
   ESP_LOGV(__FUNCTION__,"Created Websocket");
   CreateBackgroundTask(QueueHandler,"WebsocketQH",4096, NULL, tskIDLE_PRIORITY, NULL);
-  CreateBackgroundTask(statePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
-  registerLogCallback(logCallback,stateHandler);
+  CreateBackgroundTask(StatePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
+  registerLogCallback(LogCallback,stateHandler);
   BuildStatus(this);
 };
 
 WebsocketManager::~WebsocketManager(){
   ESP_LOGD(__FUNCTION__,"State Poller Done");
-  unregisterLogCallback(logCallback);
+  unregisterLogCallback(LogCallback);
   ESP_LOGD(__FUNCTION__,"Unregistered log callback");
   vQueueDelete(msgQueue);
   ldfree(logBuffer);
@@ -198,17 +198,23 @@ time_t GetTime() {
   return esp_timer_get_time() / 1000LL;
 }
 
-bool WebsocketManager::logCallback(void* instance, char* logData){
-  if (stateHandler && stateHandler->isLive) {
-    if (logData) {
-      strcpy(stateHandler->logBuffer,logData);
-      return xQueueSend(stateHandler->msgQueue,stateHandler->logBuffer,portMAX_DELAY);
-    }
+bool WebsocketManager::LogCallback(void* instance, char* logData){
+  if (stateHandler && stateHandler->isLive && logData) {
+    strcpy(stateHandler->logBuffer,logData);
+    return xQueueSend(stateHandler->msgQueue,stateHandler->logBuffer,portMAX_DELAY);
   }
   return false;
 };
 
-void WebsocketManager::statePoller(void *instance){
+bool WebsocketManager::EventCallback(char *event){
+  if (stateHandler && stateHandler->isLive && event) {
+    return xQueueSend(stateHandler->msgQueue,event,portMAX_DELAY);
+  }
+  return false;
+}
+
+
+void WebsocketManager::StatePoller(void *instance){
   EventGroupHandle_t stateEg = AppConfig::GetStateGroupHandle();
   ESP_LOGD(__FUNCTION__,"State poller started");
   EventBits_t bits = 0;

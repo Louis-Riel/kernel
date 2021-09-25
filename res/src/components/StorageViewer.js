@@ -90,6 +90,9 @@ class StorageViewer extends React.Component {
     }
 
     componentDidMount() {
+        if (this.props.active) {
+            document.getElementById("Storage").scrollIntoView()
+        }
         document.getElementById(this.id).querySelectorAll("thd").forEach(th => th.addEventListener('click', (() => {
             const table = document.getElementsByClassName("file-table")[0].getElementsByTagName("tbody")[0];
             Array.from(table.querySelectorAll('tr:nth-child(n+2)'))

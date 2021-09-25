@@ -413,7 +413,6 @@ public:
   void gpsPause();
   void gpsStop();
   void gpsStart();
-  TaskHandle_t runners[255];
   uint8_t stackTask();
   gpio_num_t enPin();
   void unStackTask(uint8_t taskHandle);
@@ -463,7 +462,6 @@ private:
   uint32_t passedChecksumCount;
   gpio_num_t enpin;
   uint8_t curFreqIdx;
-  uint8_t numRunners;
   TinyGPSCustom* gpTxt;
   uint8_t gpsWarmTime;
   uint8_t toBeFreqIdx;

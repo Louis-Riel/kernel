@@ -1,8 +1,5 @@
 class IntInput extends React.Component {
     toggleChange = (elem) => {
-        this.setState({
-            value: elem.target.value
-        });
         if (this.props.onChange) {
             this.props.onChange(elem.target.value);
         }

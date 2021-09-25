@@ -17,7 +17,7 @@ class AppState extends React.Component {
                     } else if (typeof json[fld] == 'object') {
                         return e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld] });
                     } else {
-                        return e(ROProp, { key: genUUID(), json: json, name: fld, label: fld });
+                        return e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld });
                     }
                 });
         } else if (this.state && this.state.error) {
@@ -44,19 +44,24 @@ class MainAppState extends React.Component {
         super(props);
         this.state = {
             statuses: {},
-            devices: [],
             loading: this.props.loading,
             loaded: this.props.loaded,
             error: null,
             selectedDeviceId: 0,
-            deviceId: 0,
             refreshFrequency: 10,
             autoRefresh: false
         };
-
-        this.componentDidUpdate(null, null, null);
+        if (this.props.registerStateCallback) {
+            this.props.registerStateCallback(this.updateMainStatus.bind(this));
+        }
     }
 
+    componentDidMount() {
+        if (this.props.active) {
+            document.getElementById("Status").scrollIntoView()
+        }
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
+    }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (!this.state.loading && !this.state.loaded) {
@@ -68,67 +73,22 @@ class MainAppState extends React.Component {
         }
     }
 
-    setupWs(running) {
-        if (running) {
-            if (this.ws == null) {
-                console.log("Creating ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-                this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-                var stopItWithThatShit = setTimeout(() => {
-                    console.warn("WS Timeout");
-                    this.ws.close();
-                }, 3000);
-                this.ws.onmessage = (event) => {
-                    clearTimeout(stopItWithThatShit);
-                    if (event && event.data) {
-                        if (event.data[0] == "{") {
-                            this.state.statuses[this.state.deviceId] = Object.assign(Object.assign({}, 
-                                                                                      this.state.statuses[this.state.deviceId]), 
-                                                                                      fromVersionedToPlain(JSON.parse(event.data)))
-                            this.setState({ statuses: this.state.statuses });
-                        } else if (event.data.match(/.*\) ([^:]*)/g)) {
-                            if (this.props.AddLogLine)
-                                this.props.AddLogLine(event.data);
-                        }
-                    }
-                    stopItWithThatShit = setTimeout(() => {
-                        this.ws.close();
-                    }, 3000);
-                };
-                this.ws.onopen = () => {
-                    clearTimeout(stopItWithThatShit);
-                    console.log("Connected");
-                    this.ws.send("Connect");
-                    stopItWithThatShit = setTimeout(() => {
-                        console.warn("WS Timeout on open");
-                        this.ws.close();
-                    }, 3000);
-                };
-                this.ws.onerror = (err) => {
-                    clearTimeout(stopItWithThatShit);
-                    this.ws.close();
-                };
-                this.ws.onclose = (evt => {
-                    clearTimeout(stopItWithThatShit);
-                    console.log("log closed");
-                    this.ws = null;
-                    this.setState({autoRefresh:false});
-                })
+    updateMainStatus(stat) {
+        if (stat){
+            const flds = Object.keys(stat);
+            for (const fld in flds) {
+                this.state.statuses["current"][flds[fld]] = stat[flds[fld]];    
             }
+            this.setState({statuses:this.state.statuses});
         } else {
-            if (this.ws != null) {
-                console.log("Closing ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-                this.ws.close();
-                this.ws = null;
-            } else {
-                this.setState({autoRefresh:false});
-            }
+            this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
         }
     }
 
     updateStatuses(requests, newState) {
         var abort = new AbortController()
         var timer = setTimeout(() => abort.abort(), 4000);
-        if (this.state.selectedDeviceId == (this.state.deviceId || 0)) {
+        if (this.props.selectedDeviceId == "current") {
             Promise.all(requests.map(request => {
                 return new Promise((resolve, reject) => {
                     fetch(`${httpPrefix}${request.url}`, {
@@ -143,9 +103,6 @@ class MainAppState extends React.Component {
                             } else {
                                 Object.assign(newState, jstats);
                             }
-                            if (!this.state.deviceId && jstats.deviceid) {
-                                this.setState({ deviceId: jstats.deviceid, selectedDeviceId: jstats.deviceid });
-                            }
                             resolve({ path: request.path, stat: jstats });
                         }).catch(err => {
                             request.retryCnt = (request.retryCnt | 0) + 1;
@@ -156,8 +113,8 @@ class MainAppState extends React.Component {
                 });
             })).then(results => {
                 clearTimeout(timer);
-                document.getElementById(this.props.id).style.opacity = 1;
-                this.state.statuses[this.state.deviceId] = this.orderResults(newState)
+                document.getElementById("Status").style.opacity = 1;
+                this.state.statuses[this.props.selectedDeviceId] = this.orderResults(newState)
                 this.setState({
                     error: null,
                     loading: false,
@@ -168,7 +125,7 @@ class MainAppState extends React.Component {
                 clearTimeout(timer);
                 if (err.code != 20) {
                     var errors = requests.filter(req => req.error);
-                    document.getElementById(this.props.id).style.opacity = 0.5
+                    document.getElementById("Status").style.opacity = 0.5
                     if (errors[0].waitFor) {
                         setTimeout(() => {
                             if (err.message != "Failed to fetch")
@@ -180,13 +137,13 @@ class MainAppState extends React.Component {
                     }
                 }
             });
-        } else if (this.state.selectedDeviceId) {
-            fetch(`${httpPrefix}/lfs/status/${this.state.selectedDeviceId}.json`, {
+        } else if (this.props.selectedDeviceId) {
+            fetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
                 method: 'get',
                 signal: abort.signal
             }).then(data => data.json()).then(fromVersionedToPlain)
                 .then(cfg => {
-                    this.state.statuses[this.state.selectedDeviceId] = this.orderResults(cfg);
+                    this.state.statuses[this.props.selectedDeviceId] = this.orderResults(cfg);
                     this.setState({ statuses: this.state.statuses, loading: false, loaded: true });
                 })
         }
@@ -202,33 +159,10 @@ class MainAppState extends React.Component {
 
     render() {
         return [
-            e(ControlPanel, {
-                key: genUUID(),
-                deviceId: this.state.deviceId,
-                devices: this.state.devices,
-                selectedDeviceId: this.state.selectedDeviceId,
-                onSetDevice: (val) => this.setState({ selectedDeviceId: val, loaded: false }),
-                onRefreshDevice: (elem) => this.setState({loaded: false}),
-                onSetDeviceList: (devs) => this.state.devices = devs,
-                onAutoRefresh: (toggle) => this.setState({autoRefresh: toggle}),
-                refreshFrequency: this.state.refreshFrequency,
-                onChangeFreq: (value) => this.setState({refreshFrequency:value}),
-                periodicOn: (elem) => {
-                    if (!this.state?.interval)
-                        this.setState({ interval: setInterval(() => this.setState({ loaded: false, loading: false }),this.state.refreshFrequency*1000) });
-                },
-                periodicOff: (elem) => {
-                    if (this.state?.interval)
-                        this.setState({ interval: clearTimeout(this.state?.interval) })
-                },
-                interval: this.state.interval,
-                autoRefresh: this.state.autoRefresh
-            }),
-            e(AppState, { 
+            e(AppState, {
                 key: genUUID(), 
-                json: this.state.statuses[this.state.selectedDeviceId], 
-                deviceId: this.state.selectedDeviceId, 
-                devices: this.state.devices
+                json: this.state.statuses[this.props.selectedDeviceId], 
+                selectedDeviceId: this.props.selectedDeviceId
             })
         ];
     }

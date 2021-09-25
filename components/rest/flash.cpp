@@ -141,7 +141,6 @@ void TheRest::CheckUpgrade(void* param){
     if (needsUpgrade) {
         ESP_LOGI(__FUNCTION__,"Needs an upgrade...");
         if (theRest->DownloadFirmware(serverMd5)){
-            //0x00010000
             const esp_partition_t * part  = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, "factory");
             if (part != NULL){
                 esp_err_t err = esp_ota_set_boot_partition(part);

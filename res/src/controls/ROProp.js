@@ -1,13 +1,11 @@
 class ROProp extends React.Component {
     constructor(props) {
         super(props);
-        this.state = this.props.json;
-
         this.id = this.props.id || genUUID();
     }
 
     getValue() {
-        var val = this.props.json && this.props.json[this.props.name] && this.props.json[this.props.name]["version"] ? this.props.json[this.props.name]["value"] : this.props.json[this.props.name];
+        var val = this.props.value && this.props.value.version ? this.props.value.value : this.props.value;
         if (IsNumberValue(val)) {
             if (isFloat(val)) {
                 if ((this.props.name.toLowerCase() != "lattitude") &&

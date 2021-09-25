@@ -358,64 +358,67 @@ void extractClientTar(char *tarFName)
 {
     ESP_LOGD(__FUNCTION__, "Parsing File %s", tarFName);
     mtar_t tar;
-    mtar_header_t header;
+    mtar_header_t* header = (mtar_header_t*)dmalloc(sizeof(mtar_header_t));
     int ret = mtar_open(&tar, tarFName, "r");
     char *buf = (char *)dmalloc(JSON_BUFFER_SIZE);
     uint32_t len = 0;
     uint32_t chunkLen = 0;
-    char fname[255];
+    char* fname = (char *)dmalloc(255);
     FILE *fw = NULL;
     struct stat st;
     if (ret == MTAR_ESUCCESS)
     {
         cJSON *msg = NULL;
         cJSON *devid = NULL;
-        while ((ret = mtar_read_header(&tar, &header)) != MTAR_ENULLRECORD)
+        while ((ret = mtar_read_header(&tar, header)) != MTAR_ENULLRECORD)
         {
-            if ((header.type == MTAR_TREG) && (header.size > 0))
+            if ((header->type == MTAR_TREG) && (header->size > 0))
             {
-                ESP_LOGD(__FUNCTION__, "File %s (%d bytes)", header.name, header.size);
+                ESP_LOGD(__FUNCTION__, "File %s (%d bytes)", header->name, header->size);
                 len = 0;
-                if (endsWith(header.name, ".json"))
+                if (endsWith(header->name, ".json"))
                 {
-                    ret = mtar_read_data(&tar, buf, header.size);
+                    ret = mtar_read_data(&tar, buf, header->size);
                     if ((ret == MTAR_ESUCCESS) && (buf[0] == '{'))
                     {
-                        buf[header.size] = 0;
-                        if ((devid == NULL) && endsWith(header.name,"current.json")){
-                            msg = cJSON_ParseWithLength(buf,header.size);
-                            devid = cJSON_GetObjectItemCaseSensitive(msg, "deviceid");
-                            if (cJSON_HasObjectItem(devid,"value")) {
-                                devid = cJSON_GetObjectItem(devid,"value");
+                        buf[header->size] = 0;
+                        if ((devid == NULL) && endsWith(header->name,"current.json")){
+                            msg = cJSON_ParseWithLength(buf,header->size);
+                            if (msg) {
+                                devid = cJSON_GetObjectItemCaseSensitive(msg, "deviceid");
+                                if (cJSON_HasObjectItem(devid,"value")) {
+                                    devid = cJSON_GetObjectItem(devid,"value");
+                                }
+                                cJSON_Delete(msg);
                             }
                         }
                         if (devid != NULL)
                         {
-                            sprintf(fname, "/sdcard/%s/%d.json", indexOf(header.name,"config") ? "config" : "status", devid->valueint);
+                            sprintf(fname, "/sdcard/%s/%d.json", indexOf(header->name,"config") ? "config" : "status", devid->valueint);
                             ret = stat(fname, &st);
                             if (ret == 0){
-                                if (st.st_size != header.size){
-                                    ESP_LOGD(__FUNCTION__, "Saved as %s (tar %d bytes, file %d bytes)\n", fname, header.size, (int)st.st_size);
+                                if (st.st_size != header->size){
+                                    ESP_LOGD(__FUNCTION__, "Saved as %s (tar %d bytes, file %d bytes)\n", fname, header->size, (int)st.st_size);
                                     fw = fOpenCd(fname, "w", true);
-                                    fWrite(buf, 1, header.size, fw);
+                                    fWrite(buf, 1, header->size, fw);
                                     fClose(fw);
                                 } else {
-                                    ESP_LOGD(__FUNCTION__, "Skippng %s (header %d bytes,file %d bytes).", fname, header.size, (int)st.st_size);
+                                    ESP_LOGD(__FUNCTION__, "Skippng %s (header %d bytes,file %d bytes).", fname, header->size, (int)st.st_size);
                                 }
                             }
                         } else{
-                            sprintf(fname, "/sdcard/ucf/%s", header.name);
+                            sprintf(fname, "/sdcard/ucf/%s", header->name);
                         }
                     }
                 }
                 else
                 {
-                    if (endsWith(header.name, ".log"))
+                    if (endsWith(header->name, ".log"))
                     {
                         if ((devid != NULL) && (devid->valueint > 0)) {
-                            sprintf(fname, "/sdcard/logs/%d/%s", devid->valueint, lastIndexOf(header.name, "/") + 1);
+                            sprintf(fname, "/sdcard/logs/%d/%s", devid->valueint, lastIndexOf(header->name, "/") + 1);
                         } else {
-                            sprintf(fname, "/sdcard/%s", indexOf(header.name, "/") + 1);
+                            sprintf(fname, "/sdcard/%s", indexOf(header->name, "/") + 1);
                         }
                         for (char *fchar = lastIndexOf(fname, "/"); *fchar != 0; fchar++)
                         {
@@ -429,12 +432,12 @@ void extractClientTar(char *tarFName)
                                 break;
                             }
                         }
-                    } else if (endsWith(header.name, ".csv"))
+                    } else if (endsWith(header->name, ".csv"))
                     {
                         if (devid != NULL) {
-                            sprintf(fname, "/sdcard/csv/%d/%s", devid->valueint, lastIndexOf(header.name, "/") + 1);
+                            sprintf(fname, "/sdcard/csv/%d/%s", devid->valueint, lastIndexOf(header->name, "/") + 1);
                         } else {
-                            sprintf(fname, "/sdcard/csv/%s", lastIndexOf(header.name, "/") + 1);
+                            sprintf(fname, "/sdcard/csv/%s", lastIndexOf(header->name, "/") + 1);
                         }
                         for (char *fchar = lastIndexOf(fname, "/"); *fchar != 0; fchar++)
                         {
@@ -450,56 +453,55 @@ void extractClientTar(char *tarFName)
                         }
                     } else {
                         if (devid != NULL) {
-                            sprintf(fname, "/sdcard/ocf/%d/%s", devid->valueint, lastIndexOf(header.name, "/") + 1);
+                            sprintf(fname, "/sdcard/ocf/%d/%s", devid->valueint, lastIndexOf(header->name, "/") + 1);
                         } else {
-                            sprintf(fname, "/sdcard/ocf/%s", lastIndexOf(header.name, "/") + 1);
+                            sprintf(fname, "/sdcard/ocf/%s", lastIndexOf(header->name, "/") + 1);
                         }
                     }
                 }
                 ret = stat(fname, &st);
-                if (((ret == 0) && (st.st_size != header.size)) || (ret != 0)){
+                if (((ret == 0) && (st.st_size != header->size)) || (ret != 0)){
                     fw = fOpenCd(fname, "w", true);
                     if (fw != NULL)
                     {
                         len=0;
-                        while (len < header.size)
+                        while (len < header->size)
                         {
-                            chunkLen = fmin(header.size - len, 8192);
+                            chunkLen = fmin(header->size - len, 8192);
                             mtar_read_data(&tar, buf, chunkLen);
                             fWrite(buf, 1, chunkLen, fw);
                             len += chunkLen;
                         }
                         fClose(fw);
-                        ESP_LOGD(__FUNCTION__, "Saved as %s (tar header %d bytes, file %d bytes, wrote %d bytes)\n", fname, header.size, (int)st.st_size, len);
+                        ESP_LOGD(__FUNCTION__, "Saved as %s (tar header %d bytes, file %d bytes, wrote %d bytes)\n", fname, header->size, (int)st.st_size, len);
                     }
                     else
                     {
                         ESP_LOGE(__FUNCTION__, "Cannot write %s", fname);
                     }
                 } else {
-                    ESP_LOGD(__FUNCTION__, "Skippng %s (%d bytes)..", fname, header.size);
+                    ESP_LOGD(__FUNCTION__, "Skippng %s (%d bytes)..", fname, header->size);
                 }
             }
             if ((ret = mtar_next(&tar)) != MTAR_ESUCCESS)
             {
-                ESP_LOGE(__FUNCTION__, "Error reading %s %s", header.name, mtar_strerror(ret));
+                ESP_LOGE(__FUNCTION__, "Error reading %s %s", header->name, mtar_strerror(ret));
                 break;
             }
         }
         if (ret != MTAR_ENULLRECORD)
         {
-            ESP_LOGE(__FUNCTION__, "Error parsing %s %s", header.name, mtar_strerror(ret));
+            ESP_LOGE(__FUNCTION__, "Error parsing %s %s", header->name, mtar_strerror(ret));
         }
         mtar_close(&tar);
-        if (msg) {
-            cJSON_Delete(msg);
-        }
     }
     else
     {
         ESP_LOGE(__FUNCTION__, "Cannot unter the tar %s:%s", tarFName, mtar_strerror(ret));
     }
     ldfree(buf);
+    ldfree(fname);
+    ldfree(header);
 }
 
 cJSON* GetDeviceConfig(esp_ip4_addr_t *ipInfo) {
@@ -567,14 +569,14 @@ void pullStation(void *pvParameter)
     esp_ip4_addr_t *ipInfo = (esp_ip4_addr_t *)pvParameter;
     int retryCtn = 10;
     cJSON* jcfg = NULL;
-    char tarFName[255];
+    char* tarFName= (char*)dmalloc(255);
     bool isAllGood = false;
     while (((jcfg = GetDeviceConfig(ipInfo)) == NULL) && (retryCtn-- >= 0))
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 
-    char strftime_buf[64];
+    char* strftime_buf = (char*)dmalloc(64);
     if (jcfg)
     {
         AppConfig* cfg = new AppConfig(jcfg,NULL);
@@ -674,6 +676,8 @@ void pullStation(void *pvParameter)
         extractClientTar(tarFName);
         CreateWokeBackgroundTask(commitTripToDisk, "commitTripToDisk", 4096, NULL, tskIDLE_PRIORITY, NULL);
     }
+    ldfree(tarFName);
+    ldfree(strftime_buf);
 }
 
 typedef struct

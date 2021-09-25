@@ -17,8 +17,9 @@ public:
   bool RegisterClient(httpd_handle_t hd, int fd);
   void ProcessMessage(uint8_t *msg);
   static void QueueHandler(void *instance);
-  static void statePoller(void *instance);
-  static bool logCallback(void *instance, char *logData);
+  static void StatePoller(void *instance);
+  static bool EventCallback(char *event);
+  static bool LogCallback(void *instance, char *logData);
   static bool HasOpenedWs();
 
   TaskHandle_t queueTask;

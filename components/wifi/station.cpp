@@ -70,11 +70,12 @@ TheWifi::~TheWifi(){
     if (ap_netif)
         esp_wifi_clear_default_wifi_driver_and_handlers(ap_netif);
     vEventGroupDelete(eventGroup);
-    vSemaphoreDelete(bitMutex);
     EventManager::EventManager::UnRegisterEventHandler(handlerDescriptors);
     xEventGroupClearBits(s_app_eg, app_bits_t::WIFI_ON);
     xEventGroupSetBits(s_app_eg, app_bits_t::WIFI_OFF);
     theInstance=NULL;
+    delete stationStat;
+    delete apStat;
     ESP_LOGD(__FUNCTION__, "Stopd");
 }
 
@@ -83,14 +84,12 @@ TheWifi::TheWifi(AppConfig* appcfg)
     :ManagedDevice("TheWifi","TheWifi",BuildStatus)
     ,eventGroup(xEventGroupCreate())
     ,cfg(appcfg)
-    ,astate(AppConfig::GetAppStatus())
     ,s_app_eg(getAppEG())
-    ,bitMutex(xSemaphoreCreateMutex())
     ,healthCheckCount(0)
 {
     theInstance = this;
-    stationStat = astate->GetConfig("/wifi/station");
-    apStat = astate->GetConfig("/wifi/ap");
+    stationStat = AppConfig::GetAppStatus()->GetConfig("/wifi/station");
+    apStat = AppConfig::GetAppStatus()->GetConfig("/wifi/ap");
 
     if (handlerDescriptors == NULL)
         EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
@@ -569,18 +568,14 @@ static void updateTime(void *param)
     memset(&timeinfo,0,sizeof(timeinfo));
     int retry = 0;
     const int retry_count = 10;
-    EventGroupHandle_t evtGrp = TheWifi::GetEventGroup();
 
-    while ((evtGrp = TheWifi::GetEventGroup()) &&
-           (xEventGroupGetBits(evtGrp)&WIFI_CONNECTED_BIT) && 
-           (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET && ++retry < retry_count))
-    {
+    for (xEventGroupWaitBits(TheWifi::GetEventGroup(),WIFI_CONNECTED_BIT,pdFALSE,pdFALSE,2000/portTICK_PERIOD_MS); 
+        (sntp_get_sync_status() == SNTP_SYNC_STATUS_RESET) && (retry++ < retry_count);
+        vTaskDelay(2000 / portTICK_PERIOD_MS)) {
         ESP_LOGV(__FUNCTION__, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
-    if ((evtGrp = TheWifi::GetEventGroup()) &&
-        (xEventGroupGetBits(evtGrp)&WIFI_CONNECTED_BIT) && 
-        (sntp_get_sync_status() != SNTP_SYNC_STATUS_RESET)){
+
+    if (sntp_get_sync_status() != SNTP_SYNC_STATUS_RESET){
         time(&now);
         localtime_r(&now, &timeinfo);
     }
@@ -588,13 +583,11 @@ static void updateTime(void *param)
 
 void TheWifi::ParseStateBits(AppConfig* state) {
     if (xEventGroupGetBits(s_app_eg) & app_bits_t::WIFI_ON){
-        xSemaphoreTake(bitMutex,portMAX_DELAY);
         EventBits_t bits = xEventGroupGetBits(eventGroup);
         state->SetBoolProperty("Connected",bits & WIFI_CONNECTED_BIT);
         state->SetBoolProperty("Scanning",bits & WIFI_SCANING_BIT);
         state->SetBoolProperty("Up",bits & WIFI_STA_UP_BIT);
         state->SetBoolProperty("Station",bits & WIFI_STA_CONFIGURED);
-        xSemaphoreGive(bitMutex);
     }
 }
 

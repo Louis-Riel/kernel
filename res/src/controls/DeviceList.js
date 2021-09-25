@@ -3,26 +3,25 @@ class DeviceList extends React.Component {
         super(props);
         this.state = {
             devices: this.props.devices,
-            loaded: false,
-            loading: false
+            loaded: false
         };
     }
 
     componentDidMount() {
-        if (!this.state.loading && !this.state.loaded && !this.state.devices.length) {
-            this.state.loading = true;
-            fetch(`${httpPrefix}/files/lfs/status`, {
-                method: 'post'
-            }).then(data => data.json().then(statuses => {
-                this.state.error = null;
-                this.state.loaded = true;
-                this.state.loading = false;
-                this.state.devices = statuses.filter(fentry => fentry.ftype == "file" && fentry.name != "current.json")
-                    .map(fentry => parseInt(fentry.name.substr(0, fentry.name.indexOf("."))));
-                this.props.onSetDeviceList(this.state.devices);
-            })
-                .catch(err => this.setState({ loaded: false, error: err })));
+        if (!this.state.loaded && !this.state.devices.length) {
+            this.getDevices();
         }
+    }
+
+    getDevices() {
+        fetch(`${httpPrefix}/files/lfs/config`, {method: 'post'})
+            .then(data => data.json())
+            .then(json => json.filter(fentry => fentry.ftype == "file"))
+            .then(devFiles => {
+                this.setState({ loaded:false, devices: devFiles.map(devFile=> devFile.name.substr(0,devFile.name.indexOf("."))) });
+                this.props.onGotDevices(this.state.devices);
+            })
+            .catch(err => {console.error(err);this.setState({error: err})});
     }
 
     render() {
@@ -30,6 +29,6 @@ class DeviceList extends React.Component {
             key: genUUID(),
             value: this.props.selectedDeviceId,
             onChange: (elem) => this.props.onSet(elem.target.value)
-        }, this.state.devices.concat(this.props.deviceId).map(device => e("option", { key: genUUID(), value: device }, device)));
+        }, this.state.devices ? this.state.devices.map(device => e("option", { key: genUUID(), value: device, value: this.state.selectedDeviceId }, device)):"Loading...");
     }
 }

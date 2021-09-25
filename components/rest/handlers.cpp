@@ -359,7 +359,12 @@ void parseFolderForTars(const char *folder)
             {
                 sprintf(fileName, "%s/%s", folder, di->d_name);
                 ESP_LOGV(__FUNCTION__, "filelist:%s", fileName);
+                size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
                 extractClientTar(fileName);
+                size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+                if (diff > 0) {
+                    ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","extractClientTar",diff);
+                }
                 unlink(fileName);
             }
         }
@@ -374,8 +379,18 @@ void parseFolderForTars(const char *folder)
 
 void parseFiles(void *param)
 {
+    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
     parseFolderForTars("/sdcard/tars");
+    size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+    if (diff > 0) {
+        ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","parseFolderForTars",diff);
+    }
+    stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
     commitTripToDisk(NULL);
+    diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+    if (diff > 0) {
+        ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","commitTripToDisk",diff);
+    }
 }
 
 esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
@@ -862,7 +877,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
 
                 if (newState)
                 {
-                    char fName[200];
+                    char* fName = (char*)dmalloc(200);
                     sprintf(fName, "/lfs/status/%s.json", indexOf(req->uri, "/status/") + 8);
                     ESP_LOGD(__FUNCTION__, "Saving as %s", fName);
                     FILE *sFile = fOpenCd(fName, "w", true);
@@ -878,6 +893,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
                         ESP_LOGE(__FUNCTION__, "Cannot open %s", fName);
                     }
                     cJSON_Delete(newState);
+                    ldfree(fName);
                 }
                 else
                 {

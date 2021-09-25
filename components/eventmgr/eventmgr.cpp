@@ -1,4 +1,5 @@
 #include "eventmgr.h"
+#include "route.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -7,6 +8,8 @@ static EventManager* runningInstance=NULL;
 EventManager::EventManager(cJSON* cfg, cJSON* programs)
 :config(cfg)
 ,programs(programs)
+,jevt(NULL)
+,eventBuffer(NULL)
 ,eventQueue(xQueueCreate(20, sizeof(postedEvent_t)))
 {
     memset(eventInterpretors,0,sizeof(void*)*MAX_NUM_EVENTS);
@@ -92,10 +95,33 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
             ESP_LOGV(__FUNCTION__,"Event %s %s",desc->baseName, desc->eventName);
         }
     }
+    EventManager* evtMgr = EventManager::GetInstance();
+    if (WebsocketManager::HasOpenedWs()){
+        cJSON* jevt = cJSON_CreateObject();
+
+        if (evtMgr->eventBuffer == NULL) {
+            evtMgr->eventBuffer = (char*) dmalloc(JSON_BUFFER_SIZE);
+            jevt=cJSON_CreateObject();
+        }
+
+        cJSON_AddStringToObject(jevt,"eventBase",postedEvent->base);
+        EventDescriptor_t* edesc = EventHandlerDescriptor::GetEventDescriptor(postedEvent->base,postedEvent->id);
+        if (edesc != NULL) {
+            cJSON_AddStringToObject(jevt,"eventId",edesc->eventName);
+            if (cJSON_PrintPreallocated(jevt,evtMgr->eventBuffer,JSON_BUFFER_SIZE,false)){
+                WebsocketManager::EventCallback(evtMgr->eventBuffer);
+            }
+        }
+    } else if (evtMgr->eventBuffer) {
+        ldfree(evtMgr->eventBuffer);
+        cJSON_Delete(evtMgr->jevt);
+        evtMgr->jevt=NULL;
+        evtMgr->eventBuffer = NULL;
+    }
     EventInterpretor* interpretor;
     uint8_t idx =0;
     while ((idx < MAX_NUM_EVENTS) && 
-           ((interpretor = EventManager::GetInstance()->eventInterpretors[idx++])!=NULL)) {
+           ((interpretor = evtMgr->eventInterpretors[idx++])!=NULL)) {
         if (interpretor->IsValid(postedEvent->base,postedEvent->id,postedEvent->event_data)){
             ESP_LOGV(__FUNCTION__,"Running event at idx %d for %s",idx-1, postedEvent->base);
             if (interpretor->IsProgram()) {

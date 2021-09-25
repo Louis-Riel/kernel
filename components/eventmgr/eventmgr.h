@@ -174,6 +174,8 @@ private:
 
     cJSON *config;
     cJSON *programs;
+    cJSON* jevt;
+    char* eventBuffer;
     static void EventPoller(void* param);
     static void ProcessEvent(postedEvent_t* postedEvent);
     static void EventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);

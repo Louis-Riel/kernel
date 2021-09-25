@@ -380,8 +380,8 @@ void TinyGPSPlus::theLoop(void *param)
     if (bits & gpsEvent::msg)
     {
       gps->processEncoded();
-    }
-
+      gpio_set_level(BLINK_GPIO, 1);
+    } 
     if (bits & gpsEvent::locationChanged)
     {
       gpio_set_level(BLINK_GPIO, 1);
@@ -532,7 +532,6 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
     , passedChecksumCount(0)
     , enpin(enpin)
     , curFreqIdx(0)
-    , numRunners(0)
     , gpTxt(new TinyGPSCustom(*this, "GPTXT", 4)), gpsWarmTime(3), toBeFreqIdx(0), app_eg(getAppEG())
 {
   instance = this;
@@ -574,8 +573,6 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
   ESP_ERROR_CHECK(gpio_set_direction(enpin, GPIO_MODE_OUTPUT));
 
   gpsStart();
-
-  memset(runners, 0, sizeof(runners));
 
   ESP_LOGV(__FUNCTION__, "Initializing UART");
 
