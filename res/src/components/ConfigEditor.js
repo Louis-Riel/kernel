@@ -3,18 +3,16 @@ class ConfigEditor extends React.Component {
         super(props);
         this.state = {
             loaded: false,
-            deviceId: this.props.deviceId,
-            deviceConfig: this.props.deviceConfig
         };
 
         this.id = this.props.id || genUUID();
     }
     componentDidMount() {
-        if (this.state.deviceConfig) {
+        if (this.props.deviceConfig) {
             this.jsonEditor = new JSONEditor(this.container, {
-                onChangeJSON: json => Object.assign(this.state.deviceConfig, json)
+                onChangeJSON: json => Object.assign(this.props.deviceConfig, json)
             });
-            this.jsonEditor.set(this.state.deviceConfig || {});
+            this.jsonEditor.set(this.props.deviceConfig || {});
         } else {
             this.container.innerText = "Loading...";
         }
@@ -22,7 +20,7 @@ class ConfigEditor extends React.Component {
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (this.jsonEditor) {
-            this.jsonEditor.set(this.state.deviceConfig);
+            this.jsonEditor.set(this.props.deviceConfig);
         }
     }
 
@@ -109,17 +107,18 @@ class ConfigPage extends React.Component {
     }
 
     SaveForm(form) {
-        this.getJsonConfig(this.state.deviceId).then(vcfg => fromPlainToVersionned(this.state.deviceConfigs[this.state.deviceId], vcfg))
-            .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + this.state.deviceId, {
+        this.getJsonConfig(this.props.selectedDeviceId).then(vcfg => fromPlainToVersionned(this.state.deviceConfigs[this.props.selectedDeviceId], vcfg))
+            .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + this.props.selectedDeviceId, {
                 method: 'put',
                 body: JSON.stringify(cfg)
-            }).then(console.log));
+            }).then(res => alert(JSON.stringify(res)))
+              .catch(res => alert(JSON.stringify(res))));
         form.preventDefault();
     }
 
     render() {
         return e("form", { onSubmit: form => this.SaveForm(form), key: `f${this.id}`, action: "/config", method: "post" }, [
-            e(ConfigEditor, { key: genUUID(), deviceId: this.state.deviceId, deviceConfig: this.state.deviceConfigs[this.props.selectedDeviceId] }),
+            e(ConfigEditor, { key: genUUID(), deviceId: this.props.selectedDeviceId, deviceConfig: this.state.deviceConfigs[this.props.selectedDeviceId] }),
             e("button", { key: genUUID() }, "Save"),
             e("button", { key: genUUID(), onClick:(elem) => this.setState({loaded:false, loading:false, error:null}) }, "Refresh")
         ]);

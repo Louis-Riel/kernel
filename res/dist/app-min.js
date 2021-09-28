@@ -2,7 +2,7 @@
 
 const e = React.createElement;
 
-const httpPrefix = "http://192.168.1.107";
+const httpPrefix = "";//"http://192.168.1.107";
 
 //#region SHA-1
 /*
@@ -490,7 +490,6 @@ class AppState extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            json: this.props.json,
             error: null
         };
         this.id = this.props.id || genUUID();
@@ -660,18 +659,16 @@ class ConfigEditor extends React.Component {
         super(props);
         this.state = {
             loaded: false,
-            deviceId: this.props.deviceId,
-            deviceConfig: this.props.deviceConfig
         };
 
         this.id = this.props.id || genUUID();
     }
     componentDidMount() {
-        if (this.state.deviceConfig) {
+        if (this.props.deviceConfig) {
             this.jsonEditor = new JSONEditor(this.container, {
-                onChangeJSON: json => Object.assign(this.state.deviceConfig, json)
+                onChangeJSON: json => Object.assign(this.props.deviceConfig, json)
             });
-            this.jsonEditor.set(this.state.deviceConfig || {});
+            this.jsonEditor.set(this.props.deviceConfig || {});
         } else {
             this.container.innerText = "Loading...";
         }
@@ -679,7 +676,7 @@ class ConfigEditor extends React.Component {
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (this.jsonEditor) {
-            this.jsonEditor.set(this.state.deviceConfig);
+            this.jsonEditor.set(this.props.deviceConfig);
         }
     }
 
@@ -766,17 +763,18 @@ class ConfigPage extends React.Component {
     }
 
     SaveForm(form) {
-        this.getJsonConfig(this.state.deviceId).then(vcfg => fromPlainToVersionned(this.state.deviceConfigs[this.state.deviceId], vcfg))
-            .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + this.state.deviceId, {
+        this.getJsonConfig(this.props.selectedDeviceId).then(vcfg => fromPlainToVersionned(this.state.deviceConfigs[this.props.selectedDeviceId], vcfg))
+            .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + this.props.selectedDeviceId, {
                 method: 'put',
                 body: JSON.stringify(cfg)
-            }).then(console.log));
+            }).then(res => alert(JSON.stringify(res)))
+              .catch(res => alert(JSON.stringify(res))));
         form.preventDefault();
     }
 
     render() {
         return e("form", { onSubmit: form => this.SaveForm(form), key: `f${this.id}`, action: "/config", method: "post" }, [
-            e(ConfigEditor, { key: genUUID(), deviceId: this.state.deviceId, deviceConfig: this.state.deviceConfigs[this.props.selectedDeviceId] }),
+            e(ConfigEditor, { key: genUUID(), deviceId: this.props.selectedDeviceId, deviceConfig: this.state.deviceConfigs[this.props.selectedDeviceId] }),
             e("button", { key: genUUID() }, "Save"),
             e("button", { key: genUUID(), onClick:(elem) => this.setState({loaded:false, loading:false, error:null}) }, "Refresh")
         ]);
@@ -909,19 +907,83 @@ class ControlPanel extends React.Component {
                 })]);
     }
 }
+class TypedField extends React.Component {
+    render(){
+        return [
+            e("div",{key: genUUID(),className:this.props.type},this.props.type),
+            this.props.path ? e("div",{key: genUUID(),className:"path"},this.props.path):null
+        ];
+    }
+}
+
+class LitteralField extends React.Component {
+    render(){
+        return e("div",{key: genUUID(),className:"litteral"},this.props.value);
+    }
+}
+
+class EventField extends React.Component {
+    render(){
+        return e("div",{key: genUUID(),className:"conditionField"},this.props.name ? 
+            e(TypedField,{key: genUUID(),type:this.props.name, value:this.props.value,path:this.props.path}):
+            e(LitteralField,{key: genUUID(),value:this.props.value}) 
+        );
+    }
+}
+
+class EventCondition extends React.Component {
+    render(){
+        return e("div",{key: genUUID(),className:"condition"},[
+            e(EventField,{key: genUUID(),...this.props.src}),
+            e("div",{key: genUUID(),className:"operator"},this.props.operator),
+            e(EventField,{key: genUUID(),...this.props.comp})
+        ]);
+    }
+}
+
+class EventConditions extends React.Component {
+    render(){
+        return e("details",{key: genUUID(), className:`conditions ${this.props.conditions.length == 0 ? "hidden":""}`},[
+                e("summary",{key: genUUID()},"Conditions"),
+                this.props.conditions.map(cond=>e(EventCondition,{key: genUUID(),...cond}))
+            ]);
+    }
+}
+
+class EventLine extends React.Component {
+    render() {
+        if (this.props.name == "conditions") {
+            return e(EventConditions,{key: genUUID(),className:this.props.name,conditions:this.props.value});
+        }
+        return Array.isArray(this.props.value) ? 
+            this.props.value.length > 0 ? 
+                e("details",{key: genUUID(),className:`arrayfield ${this.props.name}`},
+                    e("summary",{key: genUUID(),className:"name"}, this.props.name),
+                        this.props.value.map(progl => e("div",{key: genUUID(),className:`arrayItem`},
+                        Object.keys(progl).map(fld => e(EventLine,{key: genUUID(),name:fld,value:progl[fld]}))))
+                ): null :
+            typeof this.props.value === 'object' ?
+                Object.keys(this.props.value).length > 0 ?
+                    e("details",{key: genUUID(),className:`object ${this.props.name}`},[
+                        e("summary",{key: genUUID(),className:`object name`},this.props.name),
+                            Object.keys(this.props.value).map(fld => 
+                                e("details",{key: genUUID(),className:"name"},[
+                                    e("summary",{key: genUUID()}, fld),
+                                    e("div",{key: genUUID(),className:fld},this.props.value[fld])
+                                ]))
+                    ]):null:
+                e("details",{key: genUUID(),className:this.props.name},[e("summary",{key: genUUID()},this.props.name), this.props.value]);
+    }
+}
+
+
 class Event extends React.Component {
     render() {
-        console.log(this.props);
         return e("details",{key: genUUID() ,className: "event"},[
-            e("summary",{key: genUUID()},[
-                e("div",{key: genUUID(), className:"eventBase"},this.props.eventBase),
-                e("div",{key: genUUID(), className:"eventId"},this.props.eventId)
-            ]),
-            Object.keys(this.props)
-                  .filter(fld => !Array.isArray(this.props[fld]) && 
-                                 (typeof this.props[fld] !== 'object') &&
-                                 (fld != "eventBase") && (fld != "eventId"))
-                  .map(fld => e("details", {key: genUUID(),className:fld},[e("summary",{key: genUUID(),className:fld},fld),this.props[fld]]))
+            e("summary",{key: genUUID(),className:"name"},[
+                e("div",{key: genUUID(),className:"eventBase"},this.props.eventBase),
+                e("div",{key: genUUID(),className:"eventId"},this.props.eventId)
+            ]),Object.keys(this.props).filter(fld => fld != "name").map(fld => e(EventLine,{key: genUUID(),name:fld,value:this.props[fld]}))
         ]);
     }
 }class LiveEvent extends React.Component {
@@ -1122,37 +1184,47 @@ class Program extends React.Component {
         ]);
     }
 }
+class SFile extends React.Component {
+    render() {
+        return  e("tr", { key: genUUID(), className: this.props.file.ftype }, [
+            e("td", { key: genUUID() }, this.props.getFileLink(this.props.file)),
+            e("td", { key: genUUID() }, this.props.file.ftype != "file" ? "" : this.props.file.size),
+            e("td", { key: genUUID() }, this.props.path == "/" ? null : e("a", {
+                key: genUUID(),
+                href: "#",
+                onClick: () => {
+                    fetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
+                        method: 'post',
+                        headers: {
+                            ftype: this.props.file.ftype == "file" ? "file" : "directory",
+                            operation: "delete"
+                        }
+                    }).then(this.setState({ loaded: false }))
+                      .catch(err => {
+                        console.error(err);
+                      });
+                }
+            }, "Del"))]);
+    }
+}
+
 class StorageViewer extends React.Component {
     constructor(props) {
         super(props);
         this.state = { loaded: false, path: this.props.path, files: null };
 
         this.id = this.props.id || genUUID();
-        this.fetchFiles();
-        this.mainDiv = document.createElement("div");
     }
 
     getSystemFolders() {
-        return [e("tr", { key: genUUID(), className: "folder" }, [e("td", { key: genUUID() }, this.getFileLink({
-            name: "..",
-            folder: dirname(this.state.path),
-            ftype: "folder",
-            size: 0,
-        })), e("td", { key: genUUID() }), , e("td", { key: genUUID() })])]
-    }
-
-    getFileLink(file) {
-        if (file.ftype == "folder") {
-            return e("a", {
-                key: genUUID(),
-                href: "#",
-                onClick: () => {
-                    this.setState({ total: 0, loaded: false, path: `${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/") });
-                }
-            }, file.name);
-        } else {
-            return e("a", { href: `${httpPrefix}${this.state.path}/${file.name}` }, file.name);
-        }
+        return [
+        this.state.path != "/" ?
+            {
+                ftype: "folder",
+                name: "..",
+                folder: dirname(this.state.path)
+            }: null
+        ];
     }
 
     GetFileStat(fileStatsToFetch) {
@@ -1205,14 +1277,32 @@ class StorageViewer extends React.Component {
         }).catch(console.error);
     }
 
+    getFileLink(file) {
+        if (file.ftype == "folder") {
+            return e("a", {
+                key: genUUID(),
+                href: "#",
+                onClick: () => {
+                    this.setState({ total: 0, loaded: false, path: `${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/") });
+                }
+            }, file.name);
+        } else {
+            return e("a", { href: `${httpPrefix}${this.state.path}/${file.name}` }, file.name);
+        }
+    }
+
     componentDidUpdate(prevProps, prevState) {
         if (!this.state.loaded) {
             this.state.loaded = true;
+        }
+
+        if (prevState && (prevState.path != this.state.path)) {
             this.fetchFiles();
         }
     }
 
     componentDidMount() {
+        this.fetchFiles();
         if (this.props.active) {
             document.getElementById("Storage").scrollIntoView()
         }
@@ -1224,49 +1314,25 @@ class StorageViewer extends React.Component {
         })));
     }
 
-    getFiles() {
-        if (!this.state.files) {
-            return e("tr", { key: genUUID() }, [e("td", { key: genUUID() }, "Loading..."), e("td", { key: genUUID() })])
-        } else {
-            return this.getSystemFolders()
-                .concat(this.state.files.map(file => e("tr", { key: genUUID(), className: file.ftype }, [
-                    e("td", { key: genUUID() }, this.getFileLink(file)),
-                    e("td", { key: genUUID() }, file.ftype != "file" ? "" : file.size),
-                    e("td", { key: genUUID() }, this.state.path == "/" ? null : e("a", {
-                        key: genUUID(),
-                        href: "#",
-                        onClick: () => {
-                            fetch(`${httpPrefix}/stat${this.state.path === "/" ? "" : this.state.path}/${file.name}`, {
-                                method: 'post',
-                                headers: {
-                                    ftype: file.ftype == "file" ? "file" : "directory",
-                                    operation: "delete"
-                                }
-                            })
-                                .then(this.setState({ loaded: false }))
-                                .catch(err => {
-                                    console.error(err);
-                                });
-                        }
-                    }, "Del"))
-                ])));
-        }
-    }
-
     getTableHeader() {
         return e("thead", { key: genUUID() }, e("tr", { key: genUUID() }, this.props.cols.map(col => e("th", { key: genUUID() }, col)).concat(e("th", { key: genUUID() }, "Op"))));
     }
 
     render() {
-        return [
-            this.mainDiv = e("div", { key: genUUID(), id: this.id, className: "file-table" }, e("table", { key: genUUID(), className: "greyGridTable" }, [
+        return e("div", { key: genUUID(), id: this.id, className: "file-table" }, e("table", { key: genUUID(), className: "greyGridTable" }, [
                 e("caption", { key: genUUID() }, this.state.path),
                 this.getTableHeader(),
-                e("tbody", { key: genUUID() }, this.getFiles()),
-                e("tfoot", { key: genUUID() }, e("tr", { key: genUUID() }, [e("td", { key: genUUID() }, "Total"), e("td", { key: genUUID() }, this.state.total)]))
-            ]))
-
-        ];
+                e("tbody", { key: genUUID() }, this.state.files && this.state.files.length > 0 ? 
+                    this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ key: genUUID(), file:file, path:this.state.path, getFileLink:this.getFileLink.bind(this) })):
+                    e("tr", { key: genUUID() }, [
+                        e("td", { key: genUUID() }, "Loading..."), 
+                        e("td", { key: genUUID() })
+                    ])),
+                e("tfoot", { key: genUUID() }, e("tr", { key: genUUID() }, [
+                    e("td", { key: genUUID() }, "Total"), 
+                    e("td", { key: genUUID() }, this.state.total)
+                ]))
+            ]));
     }
 }
 class LogLine extends React.Component {

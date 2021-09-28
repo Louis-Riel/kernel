@@ -64,15 +64,10 @@ public:
   static void SendTar(void *params);
   static esp_err_t SendConfig(char *addr, cJSON *cfg);
   static esp_err_t HandleWifiCommand(httpd_req_t *req);
-
-  enum restEvents_t
-  {
-    UPDATE_CONFIG,
-    SEND_STATUS,
-    CHECK_UPGRADE
-  };
+  static cJSON* status_json();
 
 protected:
+  const char* hcUrl;
   static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
   static bool HealthCheck(void *instance);
 
@@ -112,12 +107,13 @@ private:
   char *gwAddr;
   char *ipAddr;
   EventGroupHandle_t app_eg;
-  uint32_t healthCheckCount;
-
+  
+  cJSON* jnumErrors;
   cJSON* jnumRequests;
   cJSON* jprocessingTime_us;
   cJSON* jBytesIn;
   cJSON* jBytesOut;
+  cJSON* jNumHc;
 
   httpd_uri_t const restUris[10] =
       {

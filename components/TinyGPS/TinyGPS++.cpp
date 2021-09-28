@@ -1116,7 +1116,8 @@ bool TinyGPSPlus::endOfTermHandler()
 
       if (altitude.isValid() && altitude.isUpdated() && (location.lat() != 0) && (location.lng() != 0))
       {
-        ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::locationChanged, NULL, 0, portMAX_DELAY));
+        double dtmp = TinyGPSPlus::distanceBetween(location.lat(), location.lng(), lastLocation.lat(), lastLocation.lng());
+        ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::locationChanged, &dtmp, sizeof(dtmp), portMAX_DELAY));
         AppConfig::SignalStateChange(state_change_t::GPS);
       }
       return true;

@@ -224,7 +224,7 @@ void WebsocketManager::StatePoller(void *instance){
     bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,portMAX_DELAY);
     if (stateHandler && stateHandler->isLive){
       cJSON* state = NULL;
-      state = status_json();
+      state = TheRest::status_json();
       if (bits&state_change_t::GPS) {
         ESP_LOGV(__FUNCTION__,"gState Changed %d", bits);
         if (gpsState == NULL) {

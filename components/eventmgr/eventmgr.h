@@ -88,6 +88,8 @@ enum class compare_origin_t
 {
     Invalid,
     Event,
+    State,
+    Config,
     Litteral
 };
 
@@ -104,6 +106,10 @@ private:
     static compare_entity_type_t GetEntityType(cJSON *json, const char *fldName);
     static compare_origin_t GetOriginType(cJSON *json, const char *fldName);
 
+    double GetDoubleValue(bool isSrc,compare_origin_t origin,void *event_data);
+    int GetIntValue(bool isSrc,compare_origin_t origin,void *event_data);
+    const char* GetStringValue(bool isSrc,compare_origin_t origin, void *event_data);
+
     compare_operation_t compareOperation;
     compare_entity_type_t valType;
     compare_origin_t valOrigin;
@@ -112,9 +118,12 @@ private:
     std::regex regexp;
     bool isValid;
     char *compStrVal;
-    char *eventJsonPropName;
+    char *valJsonPropName;
+    char *compJsonPropName;
     int32_t compIntValue;
     double compDblValue;
+    cJSON* srcJson;
+    cJSON* compJson;
 };
 
 class EventInterpretor
@@ -218,12 +227,16 @@ class ManagedThreads
 {
 public:
     ManagedThreads()
-        : managedThreadBits(xEventGroupCreate()) 
-        ,threads((ManagedThreads::mThread_t **)dmalloc(32 * sizeof(void *))), numThreadSlot(0)
+        :managedThreadBits(xEventGroupCreate()) 
+        ,threadSema(xSemaphoreCreateMutex())
+        ,threads((ManagedThreads::mThread_t **)dmalloc(32 * sizeof(void *)))
+        ,numThreadSlot(0)
     {
-        memset(&threads[0], 0, 32 * sizeof(void *));
+        memset(threads, 0, 32 * sizeof(void *));
         xEventGroupSetBits(managedThreadBits,0xffff);
     }
+
+    static ManagedThreads* GetInstance();
 
     uint8_t NumAllocatedThreads()
     {
@@ -371,10 +384,16 @@ public:
             ESP_LOGW(__FUNCTION__, "Cannot run %s as it is already running", pcName);
             return UINT8_MAX;
         }
-        uint8_t bitNo = GetFreeBit();
+        ESP_LOGV(__FUNCTION__, "Running %s", pcName);
+        xSemaphoreTake(threadSema,portMAX_DELAY);
+        uint8_t bitNo = GetFreeBit(pcName);
         if (bitNo != UINT8_MAX)
         {
+            ESP_LOGV(__FUNCTION__, "Running %s(%d)", pcName,bitNo);
             mThread_t *thread = threads[bitNo];
+            if (thread->pcName) {
+                ldfree(thread->pcName);
+            }
             thread->pcName = (char *)dmalloc(strlen(pcName) + 1);
             strcpy(thread->pcName, pcName);
             thread->pvTaskCode = pvTaskCode;
@@ -383,8 +402,9 @@ public:
             thread->uxPriority = uxPriority;
             thread->bitNo = bitNo;
             thread->waitToSleep = waitToSleep;
+            thread->started = true;
+            xSemaphoreGive(thread->parent->threadSema);
             xEventGroupClearBits(managedThreadBits, 1 << bitNo);
-            ESP_LOGV(__FUNCTION__, "Running %s", pcName);
 
             BaseType_t ret = pdPASS;
             uint8_t retryCtn = 10;
@@ -462,27 +482,33 @@ public:
             return ESP_ERR_INVALID_STATE;
         }
 
-        uint8_t bitNo = GetFreeBit();
+        xSemaphoreTake(threadSema,portMAX_DELAY);
+        uint8_t bitNo = GetFreeBit(pcName);
         if (bitNo != UINT8_MAX)
         {
+            ESP_LOGV(__FUNCTION__, "Running %s(%d)", pcName,bitNo);
             mThread_t *thread = threads[bitNo];
+            if (thread->pcName) {
+                ldfree(thread->pcName);
+            }
             thread->pcName = (char *)dmalloc(strlen(pcName) + 1);
             strcpy(thread->pcName, pcName);
             thread->pvTaskCode = pvTaskCode;
             thread->pvParameters = pvParameters;
             thread->usStackDepth = usStackDepth;
-            thread->bitNo = bitNo;
-            thread->isRunning = true;
-            thread->started = true;
             thread->waitToSleep = waitToSleep;
+            thread->started = true;
+            xSemaphoreGive(thread->parent->threadSema);
             xEventGroupClearBits(managedThreadBits, 1 << bitNo);
-            ESP_LOGV(__FUNCTION__, "Running %s", thread->pcName);
             printMemStat();
             BaseType_t ret = ESP_OK;
             if (onMainThread)
             {
                 ESP_LOGD(__FUNCTION__, "Starting the %s service", thread->pcName);
+                thread->isRunning = true;
                 thread->pvTaskCode(thread->pvParameters);
+                thread->isRunning = false;
+                thread->started = false;
                 ESP_LOGV(__FUNCTION__, "Done initializing the %s service", thread->pcName);
                 if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
                 {
@@ -521,6 +547,7 @@ public:
 
 protected:
     EventGroupHandle_t managedThreadBits;
+    SemaphoreHandle_t threadSema;
     struct mThread_t
     {
         TaskFunction_t pvTaskCode;
@@ -531,10 +558,11 @@ protected:
         TaskHandle_t pvCreatedTask;
         uint8_t bitNo;
         bool isRunning;
+        bool allocated;
         bool started;
         bool waitToSleep;
         ManagedThreads *parent;
-    } * *threads;
+    } **threads;
     uint8_t numThreadSlot;
 
     static void runThread(void *param)
@@ -542,17 +570,17 @@ protected:
         mThread_t *thread = (mThread_t *)param;
         ESP_LOGV(__FUNCTION__, "Running the %s thread", thread->pcName);
         xEventGroupClearBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
-        thread->started = true;
         thread->isRunning = true;
 
         size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
         thread->pvTaskCode(thread->pvParameters);
         size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
-        if (diff > 0) {
+        if (diff != 0) {
             ESP_LOGW(__FUNCTION__,"%s %d bytes memleak",thread->pcName,diff);
         }
 
         thread->isRunning = false;
+        thread->started = false;
         ESP_LOGV(__FUNCTION__, "Done running the %s thread", thread->pcName);
         if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
         {
@@ -595,50 +623,65 @@ protected:
         return ret;
     }
 
-    uint8_t GetFreeBit()
+    uint8_t GetFreeBit(const char* name)
     {
+        uint8_t freeThread = UINT8_MAX;
+        uint8_t unallocatedThread = UINT8_MAX;
+        uint8_t lastRunning = UINT8_MAX;
+        uint8_t ret = UINT8_MAX;
         for (uint8_t idx = 0; idx < 32; idx++)
         {
-            if ((threads[idx] == NULL) || (threads[idx]->started && !threads[idx]->isRunning))
-            {
-                if (threads[idx])
-                {
-                    if (threads[idx]->pcName)
-                        ldfree((void *)threads[idx]->pcName);
-                    memset(threads[idx], 0, sizeof(mThread_t));
-                    threads[idx]->parent = this;
+            if ((threads[idx] == NULL) || !threads[idx]->allocated) {
+                unallocatedThread = idx;
+                break;
+            } else {
+                if (!threads[idx]->started) {
+                    freeThread=idx;
                 }
-                else
-                {
-                    threads[idx] = (mThread_t *)dmalloc(sizeof(mThread_t));
-                    memset(threads[idx], 0, sizeof(mThread_t));
-                    threads[idx]->parent = this;
+                if (name && strcmp(name,threads[idx]->pcName) == 0) {
+                    lastRunning = idx;
                 }
-                return idx;
             }
         }
-        return UINT8_MAX;
+        ESP_LOGV(__FUNCTION__,"freeThread(%d) unallocatedThread(%d) lastRunning(%d)",freeThread, unallocatedThread, lastRunning);
+
+        if (name && (lastRunning != UINT8_MAX) && threads[lastRunning]->isRunning) {
+            ESP_LOGW(__FUNCTION__,"%s already running", name);
+        } else if (freeThread == UINT8_MAX) {
+            if (unallocatedThread != UINT8_MAX){
+                ESP_LOGV(__FUNCTION__,"Allocating new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == NULL);
+                threads[unallocatedThread] = (mThread_t*)dmalloc(sizeof(mThread_t));
+                memset(threads[unallocatedThread],0,sizeof(mThread_t));
+                threads[unallocatedThread]->parent = this;
+                threads[unallocatedThread]->allocated = true;
+                ESP_LOGD(__FUNCTION__,"Allocated new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == NULL);
+                ret = unallocatedThread;
+            } else {
+                ESP_LOGE(__FUNCTION__,"No more free slots");
+            }
+        } else {
+            ret = freeThread;
+        }
+        return ret;
     }
 };
-
-static ManagedThreads managedThreads;
 
 static BaseType_t CreateForegroundTask(
     TaskFunction_t pvTaskCode,
     const char *const pcName,
     void *const pvParameters)
 {
-    return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, 8192, pvParameters, false, false, false);
+    return ManagedThreads::GetInstance()->CreateInlineManagedTask(pvTaskCode, pcName, 8192, pvParameters, false, false, false);
 };
 
 static void WaitToSleepExceptFor(const char* name)
 {
-    managedThreads.WaitToSleepExceptFor(name);
+    ManagedThreads::GetInstance()->WaitToSleepExceptFor(name);
 }
 
 static void WaitToSleep()
 {
-    managedThreads.WaitToSleep();
+    ManagedThreads::GetInstance()->WaitToSleep();
 }
 
 static uint8_t CreateBackgroundTask(
@@ -649,7 +692,7 @@ static uint8_t CreateBackgroundTask(
     UBaseType_t uxPriority,
     TaskHandle_t *const pvCreatedTask)
 {
-    return managedThreads.CreateBackgroundManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pvCreatedTask, false, false);
+    return ManagedThreads::GetInstance()->CreateBackgroundManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pvCreatedTask, false, false);
 };
 
 static uint8_t CreateWokeBackgroundTask(
@@ -660,7 +703,7 @@ static uint8_t CreateWokeBackgroundTask(
     UBaseType_t uxPriority,
     TaskHandle_t *const pvCreatedTask)
 {
-    return managedThreads.CreateBackgroundManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pvCreatedTask, false, true);
+    return ManagedThreads::GetInstance()->CreateBackgroundManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pvCreatedTask, false, true);
 };
 
 #endif

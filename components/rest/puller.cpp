@@ -481,6 +481,13 @@ void extractClientTar(char *tarFName)
                     }
                 } else {
                     ESP_LOGD(__FUNCTION__, "Skippng %s (%d bytes)..", fname, header->size);
+                        len=0;
+                        while (len < header->size)
+                        {
+                            chunkLen = fmin(header->size - len, 8192);
+                            mtar_read_data(&tar, buf, chunkLen);
+                            len += chunkLen;
+                        }
                 }
             }
             if ((ret = mtar_next(&tar)) != MTAR_ESUCCESS)

@@ -16,29 +16,32 @@ void restSallyForth(void *pvParameter) {
 }
 
 TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
-    : ManagedDevice("TheRest","TheRest",BuildStatus),
+    : ManagedDevice("TheRest","TheRest",BuildStatus,HealthCheck),
       eventGroup(xEventGroupCreate()),
       wifiEventGroup(evtGrp),
       restConfig(HTTPD_DEFAULT_CONFIG()),
       gwAddr(NULL),
       ipAddr(NULL),
-      app_eg(getAppEG()),
-      healthCheckCount(0)
+      app_eg(getAppEG())
 {
     if (restInstance == NULL)
     {
         deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
         ESP_LOGD(__FUNCTION__, "First Rest for %d", deviceId);
         restInstance = this;
-        AppConfig* apin = new AppConfig(ManagedDevice::BuildStatus(this),AppConfig::GetAppStatus());
+        AppConfig* apin = new AppConfig((status = ManagedDevice::BuildStatus(this)),AppConfig::GetAppStatus());
         apin->SetIntProperty("numRequests",0);
+        apin->SetIntProperty("numHealthChecks",0);
         apin->SetIntProperty("processingTime_us",0);
         apin->SetIntProperty("BytesIn",0);
         apin->SetIntProperty("BytesOut",0);
+        apin->SetIntProperty("Failures",0);
         jnumRequests = apin->GetPropertyHolder("numRequests");
         jprocessingTime_us = apin->GetPropertyHolder("processingTime_us");
         jBytesIn = apin->GetPropertyHolder("BytesIn");
         jBytesOut = apin->GetPropertyHolder("BytesOut");
+        jnumErrors = apin->GetPropertyHolder("Failures");
+        jNumHc = apin->GetPropertyHolder("numHealthChecks");
         delete apin;
     }
     if (xEventGroupGetBits(eventGroup) & HTTP_SERVING)
@@ -64,10 +67,12 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         ESP_LOGD(__FUNCTION__, "Ip:%s Gw:%s", ipAddr, gwAddr);
     }
 
+    hcUrl = (char*)dmalloc(30);
+    sprintf((char*)hcUrl,"http://192.168.4.1/status/");
     restConfig.uri_match_fn = this->routeHttpTraffic;
     restConfig.lru_purge_enable = true;
 
-    ESP_LOGI(__FUNCTION__, "Starting server on port %d ip%s gw:%s", restConfig.server_port, ipAddr, gwAddr);
+    ESP_LOGI(__FUNCTION__, "Starting server on port %d ip%s gw:%s", restConfig.server_port, ipAddr, restInstance->gwAddr);
     esp_err_t ret = ESP_FAIL;
     if ((ret = httpd_start(&server, &restConfig)) == ESP_OK)
     {
@@ -77,6 +82,8 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &restPutUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &appUri));
         xEventGroupSetBits(eventGroup, HTTP_SERVING);
+        xEventGroupSetBits(app_eg,app_bits_t::REST);
+        PostEvent(NULL,0,HTTP_SERVING);
     }
     else
     {
@@ -86,12 +93,15 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
 
 TheRest::~TheRest()
 {
+    ESP_LOGD(__FUNCTION__,"Rest resting");
     vEventGroupDelete(eventGroup);
     if (handlerDescriptors != NULL)
         EventManager::UnRegisterEventHandler((handlerDescriptors = BuildHandlerDescriptors()));
 
     httpd_stop(server);
     xEventGroupClearBits(getAppEG(), app_bits_t::REST);
+    ldfree(ipAddr);
+    ldfree(gwAddr);
     restInstance=NULL;
 }
 
@@ -178,7 +188,9 @@ bool TheRest::routeHttpTraffic(const char *reference_uri, const char *uri_to_mat
 
 TheRest *TheRest::GetServer()
 {
-    deviceId ? deviceId : deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
+    if (restInstance && !deviceId)
+        deviceId ? deviceId : deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
+
     return restInstance;
 }
 
@@ -191,18 +203,6 @@ void TheRest::GetServer(void *evtGrp)
 void TheRest::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
 {
     ESP_LOGV(__FUNCTION__, "Event %s-%d", base, id);
-
-    switch (id)
-    {
-    case restEvents_t::CHECK_UPGRADE:
-        break;
-    case restEvents_t::SEND_STATUS:
-        break;
-    case restEvents_t::UPDATE_CONFIG:
-        break;
-    default:
-        break;
-    }
 }
 
 char *TheRest::PostRequest(const char *url, size_t *len)
@@ -222,6 +222,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
 
 char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, size_t *len, char *charBuf)
 {
+    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
     esp_http_client_handle_t client = NULL;
     esp_http_client_config_t *config = NULL;
     bool isPreAllocated = charBuf != NULL;
@@ -252,7 +253,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
                                                                             : JSON_BUFFER_SIZE;
         *len = 0;
         memset(retVal, 0, bufLen);
-        ESP_LOGV(__FUNCTION__, "Downloading isPreAllocated:%d hlen:%d chunckLen:%d buflen:%d len: %d bytes of data for %s", isPreAllocated, hlen, chunckLen, bufLen, (int)*len, url);
+        ESP_LOGD(__FUNCTION__, "Downloading isPreAllocated:%d hlen:%d chunckLen:%d buflen:%d len: %d bytes of data for %s", isPreAllocated, hlen, chunckLen, bufLen, (int)*len, url);
         while ((chunckLen = esp_http_client_read(client, retVal + *len, chunckLen)) > 0)
         {
             ESP_LOGV(__FUNCTION__, "Chunck %d bytes of data for %s. Totlen:%d", chunckLen, url, *len);
@@ -265,10 +266,15 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         esp_http_client_cleanup(client);
         ldfree((void *)config);
         jBytesIn->valuedouble = jBytesIn->valueint+=*len;
+        size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+        if (diff > 0) {
+            ESP_LOGW(__FUNCTION__,"%s %d bytes memleak1",url,diff);
+        }
         return retVal;
     }
     else
     {
+        jnumErrors->valueint = jnumErrors->valuedouble++;
         ESP_LOGE(__FUNCTION__, "Failed sending request(%s). client is %snull, err:%s, hlen:%d, retCode:%d, len:%d", config->url, client ? "not " : "", esp_err_to_name(err), hlen, retCode, *len);
     }
 
@@ -277,6 +283,10 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         esp_http_client_cleanup(client);
     }
     ldfree((void *)config);
+    size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+    if (diff > 0) {
+        ESP_LOGW(__FUNCTION__,"%s %d bytes memleak2",url,diff);
+    }
     return NULL;
 }
 
@@ -364,15 +374,9 @@ esp_err_t TheRest::SendConfig(char *addr, cJSON *cfg)
 
 void TheRest::MergeConfig(void *param)
 {
-    TheRest *rest = NULL;
-    while ((rest = restInstance) == NULL)
-    {
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-    }
-    xEventGroupWaitBits(rest->eventGroup, HTTP_SERVING, pdFALSE, pdTRUE, portMAX_DELAY);
-    ESP_LOGD(__FUNCTION__, "Merging Config");
-    uint32_t addr = ipaddr_addr(rest->gwAddr);
-    cJSON *newCfg = rest->GetDeviceConfig((esp_ip4_addr *)&addr, deviceId);
+    ESP_LOGD(__FUNCTION__, "Merging Config %d %d",restInstance == NULL, restInstance == NULL ? 0 : restInstance->gwAddr==NULL);
+    uint32_t addr = ipaddr_addr(restInstance->gwAddr);
+    cJSON *newCfg = restInstance->GetDeviceConfig((esp_ip4_addr *)&addr, deviceId);
     cJSON *curCfg = AppConfig::GetAppConfig()->GetJSONConfig(NULL);
     if (newCfg)
     {
@@ -380,7 +384,7 @@ void TheRest::MergeConfig(void *param)
         {
             AppConfig::GetAppConfig()->SetAppConfig(newCfg);
             ESP_LOGD(__FUNCTION__, "Updated config from server");
-            TheRest::SendConfig(rest->gwAddr, newCfg);
+            TheRest::SendConfig(restInstance->gwAddr, newCfg);
         }
         else
         {
@@ -391,21 +395,15 @@ void TheRest::MergeConfig(void *param)
     else
     {
         ESP_LOGW(__FUNCTION__, "Cannot get config from " IPSTR " for devid %d", IP2STR((esp_ip4_addr *)&addr), deviceId);
-        TheRest::SendConfig(rest->gwAddr, curCfg);
+        TheRest::SendConfig(restInstance->gwAddr, curCfg);
     }
 }
 
 void TheRest::SendStatus(void *param)
 {
-    TheRest *rest = NULL;
-    while ((rest = restInstance) == NULL)
-    {
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-    }
-    xEventGroupWaitBits(rest->eventGroup, HTTP_SERVING, pdFALSE, pdTRUE, portMAX_DELAY);
     ESP_LOGV(__FUNCTION__, "Sending status");
     esp_err_t ret = ESP_FAIL;
-    uint32_t addr = ipaddr_addr(rest->gwAddr);
+    uint32_t addr = ipaddr_addr(restInstance->gwAddr);
     esp_http_client_config_t *config = (esp_http_client_config_t *)dmalloc(sizeof(esp_http_client_config_t));
     memset(config, 0, sizeof(esp_http_client_config_t));
     config->url = (char *)dmalloc(60);
@@ -458,9 +456,16 @@ EventHandlerDescriptor *TheRest::BuildHandlerDescriptors()
 {
     ESP_LOGV(__FUNCTION__, "TheRest: BuildHandlerDescriptors");
     EventHandlerDescriptor *handler = ManagedDevice::BuildHandlerDescriptors();
-    handler->AddEventDescriptor(restEvents_t::CHECK_UPGRADE, "CHECK_UPGRADE");
-    handler->AddEventDescriptor(restEvents_t::SEND_STATUS, "SEND_STATUS");
-    handler->AddEventDescriptor(restEvents_t::UPDATE_CONFIG, "UPDATE_CONFIG");
+    handler->AddEventDescriptor(restServerState_t::DOWNLOAD_FINISHED, "DOWNLOAD_FINISHED");
+    handler->AddEventDescriptor(restServerState_t::TAR_BUFFER_FILLED, "TAR_BUFFER_FILLED");
+    handler->AddEventDescriptor(restServerState_t::TAR_BUFFER_SENT, "TAR_BUFFER_SENT");
+    handler->AddEventDescriptor(restServerState_t::TAR_BUILD_DONE, "TAR_BUILD_DONE");
+    handler->AddEventDescriptor(restServerState_t::TAR_SEND_DONE, "TAR_SEND_DONE");
+    handler->AddEventDescriptor(restServerState_t::HTTP_SERVING, "HTTP_SERVING");
+    handler->AddEventDescriptor(restServerState_t::GETTING_TRIP_LIST, "GETTING_TRIP_LIST");
+    handler->AddEventDescriptor(restServerState_t::GETTING_TRIPS, "GETTING_TRIPS");
+    handler->AddEventDescriptor(restServerState_t::DOWNLOAD_STARTED, "DOWNLOAD_STARTED");
+    handler->AddEventDescriptor(restServerState_t::DOWNLOAD_FINISHED, "DOWNLOAD_FINISHED");
     ESP_LOGV(__FUNCTION__, "TheRest: Done BuildHandlerDescriptors");
     return handler;
 }
@@ -499,20 +504,28 @@ EventGroupHandle_t TheRest::GetEventGroup()
 
 bool TheRest::HealthCheck(void* instance){
     TheRest* theRest = (TheRest*)instance;
+    theRest->jNumHc->valueint = theRest->jNumHc->valuedouble++;
+    if (theRest->jnumErrors->valueint > 5) {
+        ESP_LOGW(__FUNCTION__,"Gettin' outa dodge after %d errors",theRest->jnumErrors->valueint);
+        return false;
+    }
+    return true;
+
     if (xEventGroupGetBits(theRest->app_eg) & app_bits_t::TRIPS_SYNCING) {
         ESP_LOGD(__FUNCTION__,"Skipping healthcheck whilst synching");
         return true;
     }
 
-    char* url = (char*)dmalloc(50);
-    sprintf(url,"http://%s/status/",theRest->ipAddr);
+    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
     size_t len=0;
-    char* resp = theRest->SendRequest(url,HTTP_METHOD_POST,&len);
-    ldfree(url);
-    if ((len > 0)){
+    char* resp = theRest->SendRequest(theRest->hcUrl,HTTP_METHOD_POST,&len);
+    if (len > 0){
         ldfree(resp);
-        theRest->healthCheckCount++;
-        return ManagedDevice::HealthCheck(instance);
+        size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+        if (diff > 0) {
+            ESP_LOGW(__FUNCTION__,"TheRest::HealthCheck %d bytes memleak",diff);
+        }
+        return true;
     }
     if (WebsocketManager::HasOpenedWs()) {
         ESP_LOGW(__FUNCTION__,"Ignoring error since we have web sockets");

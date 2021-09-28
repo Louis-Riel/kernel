@@ -2,7 +2,6 @@ class AppState extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            json: this.props.json,
             error: null
         };
         this.id = this.props.id || genUUID();

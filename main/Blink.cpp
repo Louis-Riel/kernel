@@ -562,10 +562,11 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   lastDpTs = now;
   sampleBatteryVoltage();
   char* ctmp;
+  double dtmp;
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:
-    ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, %3.6f, %4.2f Bat:%f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters(), getBatteryVoltage());
+    ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, speed: %3.6f, Altitude:%4.2f Bat:%f diff:%.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters(), getBatteryVoltage(), *((double *)event_data));
     if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
       ctmp = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig("gps"));
       ESP_LOGV(__FUNCTION__,"The j:%s",ctmp);
@@ -966,14 +967,17 @@ static void serviceLoop(void *param)
   ESP_LOGV(__FUNCTION__, "wait:%s", bits);
   EventGroupHandle_t app_eg = getAppEG();
   AppConfig *appCfg = AppConfig::GetAppConfig();
+  ESP_LOGI(__FUNCTION__, "ServiceLoop started");
   while (true)
   {
     serviceBits = (APP_SERVICE_BITS & xEventGroupWaitBits(app_eg, waitMask, pdFALSE, pdFALSE, portMAX_DELAY));
-    for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++)
-    {
-      bits[idx] = serviceBits & (1 << idx) ? '1' : '0';
+    if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
+      for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++)
+      {
+        bits[idx] = serviceBits & (1 << idx) ? '1' : '0';
+      }
+      ESP_LOGV(__FUNCTION__, "curr::%s %d", bits, serviceBits);
     }
-    ESP_LOGV(__FUNCTION__, "curr:%s %d", bits, serviceBits);
     if (serviceBits & app_bits_t::WIFI_ON && !TheWifi::GetInstance())
     {
       CreateForegroundTask(wifiSallyForth, "WifiSallyForth", NULL);
@@ -992,9 +996,9 @@ static void serviceLoop(void *param)
       ESP_LOGV(__FUNCTION__,"Turning Rest On");
       CreateForegroundTask(restSallyForth, "restSallyForth", TheWifi::GetEventGroup());
     }
-    else if ((serviceBits & (app_bits_t::REST | app_bits_t::WIFI_OFF)) && TheRest::GetServer())
+    else if (((serviceBits & (app_bits_t::REST | app_bits_t::WIFI_OFF)) == (app_bits_t::REST | app_bits_t::WIFI_OFF)) && TheRest::GetServer())
     {
-      ESP_LOGV(__FUNCTION__,"Turning Rest Off if on %d",TheRest::GetServer()!=NULL);
+      ESP_LOGD(__FUNCTION__,"Turning Rest Off if on %d",TheRest::GetServer()!=NULL);
       if (TheRest *theRest = TheRest::GetServer())
       {
         delete theRest;
@@ -1044,11 +1048,13 @@ static void serviceLoop(void *param)
       }
     }
     waitMask = (APP_SERVICE_BITS ^ serviceBits);
-    for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++)
-    {
-      bits[idx] = waitMask & (1 << idx) ? '1' : '0';
+    if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
+      for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++)
+      {
+        bits[idx] = serviceBits & (1 << idx) ? '1' : '0';
+      }
+      ESP_LOGV(__FUNCTION__, "curr:%s %d", bits, serviceBits);
     }
-    ESP_LOGV(__FUNCTION__, "wait:%s %d", bits, waitMask);
     if (!waitMask)
     {
       waitMask = APP_SERVICE_BITS;
@@ -1157,8 +1163,6 @@ void app_main(void)
     }
     ESP_LOGV(__FUNCTION__, "Starting bumps:%d, lastMovement:%d", bumpCnt, CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ);
     configureMotionDetector();
-
-    //CreateWokeBackgroundTask(commitTripToDisk, "commitTripToDisk", 4096, NULL, tskIDLE_PRIORITY, NULL);
 
     ConfigurePins(appcfg);
     EventGroupHandle_t app_eg = getAppEG();

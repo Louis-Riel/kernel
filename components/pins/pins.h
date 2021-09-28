@@ -31,6 +31,7 @@ protected:
     static void queuePoller(void *arg);
     static void pinHandler(void *arg);
     static QueueHandle_t eventQueue;
+    static bool HealthCheck(void* instance);
     gpio_num_t pinNo;
     uint32_t flags;
     void InitDevice();

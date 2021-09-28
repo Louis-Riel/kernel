@@ -122,11 +122,12 @@ void TheRest::CheckUpgrade(void* param){
     memset(localMd5,0,33);
     memset(serverMd5,0,33);
     size_t len;
-    TheRest* theRest = GetServer();
-    if (theRest->GetLocalMD5(localMd5)) {
+    TheRest* restInstance = TheRest::GetServer();
+
+    if (restInstance->GetLocalMD5(localMd5)) {
         len=33;
-        sprintf(url,"http://%s/ota/getmd5",theRest->gwAddr);
-        theRest->SendRequest(url,HTTP_METHOD_POST,&len,serverMd5);
+        sprintf(url,"http://%s/ota/getmd5",restInstance->gwAddr);
+        restInstance->SendRequest(url,HTTP_METHOD_POST,&len,serverMd5);
         if (strlen(serverMd5) == strlen(localMd5)) {
             ESP_LOGD(__FUNCTION__,"local:%s server:%s",localMd5,serverMd5);
             needsUpgrade = strcmp(localMd5,serverMd5)!=0;
@@ -140,7 +141,7 @@ void TheRest::CheckUpgrade(void* param){
     }
     if (needsUpgrade) {
         ESP_LOGI(__FUNCTION__,"Needs an upgrade...");
-        if (theRest->DownloadFirmware(serverMd5)){
+        if (restInstance->DownloadFirmware(serverMd5)){
             const esp_partition_t * part  = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, "factory");
             if (part != NULL){
                 esp_err_t err = esp_ota_set_boot_partition(part);

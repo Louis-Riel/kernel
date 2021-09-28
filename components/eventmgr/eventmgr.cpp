@@ -149,3 +149,11 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
     xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
 }
 
+static ManagedThreads* theInstance = NULL;
+
+ManagedThreads* ManagedThreads::GetInstance() {
+    if (theInstance == NULL) {
+        theInstance = new ManagedThreads();
+    }
+    return theInstance;
+}

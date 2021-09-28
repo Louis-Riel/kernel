@@ -28,6 +28,7 @@ sdmmc_card_t *card = NULL;
 const char mount_point[] = "/sdcard";
 int8_t numSdCallers = -1;
 wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
+static SemaphoreHandle_t storageSema = xSemaphoreCreateMutex();
 
 static uint32_t numOpenFiles = 0;
 
@@ -192,6 +193,7 @@ bool initSDMMCSDCard()
 
 bool deinitSPISDCard(bool log)
 {
+  xSemaphoreTake(storageSema,portMAX_DELAY);
   if (numSdCallers >= 0)
     numSdCallers--;
   if (log)
@@ -227,20 +229,24 @@ bool deinitSPISDCard(bool log)
         appState->SetStateProperty("/sdcard/state", item_state_t::ERROR);
         if (log)
           ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
+        xSemaphoreGive(storageSema);
         return false;
       }
       spi_bus_free(SPI2_HOST);
       xEventGroupClearBits(app_eg, SDCARD_MOUNTED);
       appState->SetStateProperty("/sdcard/state", item_state_t::INACTIVE);
     }
+    xSemaphoreGive(storageSema);
     return true;
   }
   else
   {
     if (log)
       ESP_LOGV(__FUNCTION__, "Postponing SD card umount");
+    xSemaphoreGive(storageSema);
     return ESP_OK;
   }
+  xSemaphoreGive(storageSema);
 }
 
 bool deinitSPISDCard()
@@ -383,6 +389,7 @@ esp_err_t setupLittlefs()
 
 bool initSPISDCard(bool log)
 {
+  xSemaphoreTake(storageSema,portMAX_DELAY);
   ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   if (numSdCallers <= 0)
   {
@@ -411,6 +418,7 @@ bool initSPISDCard(bool log)
           if (log)
             ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
           numSdCallers = 0;
+          xSemaphoreGive(storageSema);
           return ret;
         }
         if (log)
@@ -478,6 +486,7 @@ bool initSPISDCard(bool log)
             free(spiffState);
             free(sdcState);
             free(cfg);
+            xSemaphoreGive(storageSema);
             return true;
           }
 
@@ -504,6 +513,7 @@ bool initSPISDCard(bool log)
           free(spiffState);
           free(sdcState);
           free(cfg);
+          xSemaphoreGive(storageSema);
           return true;
         }
       }
@@ -551,6 +561,7 @@ bool initSPISDCard(bool log)
     if (log)
       ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   }
+  xSemaphoreGive(storageSema);
   return true;
 }
 

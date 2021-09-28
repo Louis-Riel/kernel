@@ -199,7 +199,7 @@ void EventInterpretor::RunProgram(void *event_data, const char* programName){
             free(aitem);
         }
         if (threads) {
-            managedThreads.WaitForThreads(threads);
+            ManagedThreads::GetInstance()->WaitForThreads(threads);
             ESP_LOGD(__FUNCTION__,"Program %s done %d",programName, threads);
         } else {
             ESP_LOGW(__FUNCTION__,"No threads started");
@@ -263,7 +263,7 @@ static BaseType_t CreateWokeInlineTask(
     const uint32_t usStackDepth,
     void *const pvParameters)
 {
-    return managedThreads.CreateInlineManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, false, true);
+    return ManagedThreads::GetInstance()->CreateInlineManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, false, true);
 }
 
 cJSON* EventInterpretor::GetParams(){
@@ -372,7 +372,18 @@ uint8_t EventInterpretor::RunMethod(const char* method, void *event_data, bool i
 }
 
 EventCondition::EventCondition(cJSON *json)
-    : compareOperation(GetCompareOperator(json)), valType(GetEntityType(json, "src")), valOrigin(GetOriginType(json, "src")), compType(GetEntityType(json, "comp")), compOrigin(GetOriginType(json, "comp")), isValid(true), compStrVal(NULL), eventJsonPropName(NULL), compIntValue(0), compDblValue(0.0)
+    : compareOperation(GetCompareOperator(json))
+    , valType(GetEntityType(json, "src"))
+    , valOrigin(GetOriginType(json, "src"))
+    , compType(GetEntityType(json, "comp"))
+    , compOrigin(GetOriginType(json, "comp"))
+    , compStrVal(NULL)
+    , valJsonPropName(NULL)
+    , compJsonPropName(NULL)
+    , compIntValue(0)
+    , compDblValue(0.0)
+    , srcJson(NULL)
+    , compJson(NULL)
 {
     cJSON *comp = cJSON_GetObjectItem(json, "comp");
 
@@ -386,20 +397,72 @@ EventCondition::EventCondition(cJSON *json)
 
     if (isValid)
     {
-        switch (compType)
-        {
-        case compare_entity_type_t::Fractional:
-            compDblValue = cJSON_GetObjectItem(comp, "value")->valuedouble;
-            break;
-        case compare_entity_type_t::Integer:
-            compIntValue = cJSON_GetObjectItem(comp, "value")->valueint;
-            break;
-        case compare_entity_type_t::String:
-            compStrVal = cJSON_GetObjectItem(comp, "value")->valuestring;
-            break;
-        default:
-            isValid = false;
-            break;
+        if ((valOrigin == compare_origin_t::Config) || (valOrigin == compare_origin_t::State)) {
+            ESP_LOGV(__FUNCTION__,"val json config(%d)",(int)valOrigin);
+            if (cJSON_HasObjectItem(cJSON_GetObjectItem(json,"src"),"path")) {
+                const char* ctmp = cJSON_GetStringValue(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(json,"src"),"path"),"value"));
+                if (ctmp && strlen(ctmp)) {
+                    valJsonPropName = (char*)dmalloc(strlen(ctmp)+1);
+                    strcpy(valJsonPropName,ctmp);
+                    ESP_LOGV(__FUNCTION__,"val json config(%s)",valJsonPropName);
+                    if (indexOf(valJsonPropName,"/") > valJsonPropName){
+                        ESP_LOGV(__FUNCTION__,"val source json config(%s) is in memory",valJsonPropName);
+                        AppConfig* cfg = valOrigin == compare_origin_t::Config ? AppConfig::GetAppConfig() : AppConfig::GetAppStatus();
+                        srcJson = cfg->GetPropertyHolder(valJsonPropName);
+                    }
+                } else {
+                    isValid = false;
+                    char *stmp = cJSON_PrintUnformatted(json);
+                    ESP_LOGW(__FUNCTION__,"Empty source path property in %s",stmp);
+                    ldfree(stmp);
+                }
+            } else {
+                isValid = false;
+                char *stmp = cJSON_PrintUnformatted(json);
+                ESP_LOGW(__FUNCTION__,"Missing source path property in %s",stmp);
+                ldfree(stmp);
+            }
+        }
+        if ((compOrigin == compare_origin_t::Config) || (compOrigin == compare_origin_t::State)) {
+            if (cJSON_HasObjectItem(cJSON_GetObjectItem(json,"comp"),"path")) {
+                const char* ctmp = cJSON_GetStringValue(cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(json,"comp"),"path"),"value"));
+                if (ctmp && strlen(ctmp)) {
+                    compJsonPropName = (char*)dmalloc(strlen(ctmp)+1);
+                    strcpy(compJsonPropName,ctmp);
+                    if (indexOf(compJsonPropName,"/") > compJsonPropName){
+                        AppConfig* cfg = compOrigin == compare_origin_t::Config ? AppConfig::GetAppConfig() : AppConfig::GetAppStatus();
+                        compJson = cfg->GetPropertyHolder(compJsonPropName);
+                    }
+                } else {
+                    char *stmp = cJSON_PrintUnformatted(json);
+                    ESP_LOGW(__FUNCTION__,"Empty comp path property in %s",stmp);
+                    ldfree(stmp);
+                    isValid = false;
+                }
+            } else {
+                char *stmp = cJSON_PrintUnformatted(json);
+                ESP_LOGW(__FUNCTION__,"Missing comp path property in %s",stmp);
+                ldfree(stmp);
+                isValid = false;
+            }
+        }
+
+        if (compOrigin == compare_origin_t::Litteral){
+            switch (compType)
+            {
+            case compare_entity_type_t::Fractional:
+                compDblValue = cJSON_GetObjectItem(comp, "value")->valuedouble;
+                break;
+            case compare_entity_type_t::Integer:
+                compIntValue = cJSON_GetObjectItem(comp, "value")->valueint;
+                break;
+            case compare_entity_type_t::String:
+                compStrVal = cJSON_GetObjectItem(comp, "value")->valuestring;
+                break;
+            default:
+                isValid = false;
+                break;
+            }
         }
     }
     else
@@ -415,7 +478,7 @@ void EventCondition::PrintState()
 {
     if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE)
     {
-        ESP_LOGV(__FUNCTION__, "isValid:%d compareOperation:%d valType:%d valOrigin:%d,compType:%d compOrigin:%d compStrVal:%s eventJsonPropName:%s compIntValue:%d compDblValue:%f",
+        ESP_LOGV(__FUNCTION__, "isValid:%d compareOperation:%d valType:%d valOrigin:%d,compType:%d compOrigin:%d compStrVal:%s compIntValue:%d compDblValue:%f valJsonPropName:%s compJsonPropName:%s",
                  isValid,
                  (int)compareOperation,
                  (int)valType,
@@ -423,10 +486,93 @@ void EventCondition::PrintState()
                  (int)compType,
                  (int)compOrigin,
                  compStrVal == NULL ? "*null*" : compStrVal,
-                 eventJsonPropName == NULL ? "*null*" : eventJsonPropName,
                  compIntValue,
-                 compDblValue);
+                 compDblValue,
+                 valJsonPropName == NULL ? "*null*":valJsonPropName,
+                 compJsonPropName == NULL ? "*null*":compJsonPropName);
     }
+}
+
+double EventCondition::GetDoubleValue(bool isSrc,compare_origin_t origin, void *event_data) {
+    cJSON* json = NULL;
+    double retVal=0.0;
+    switch (origin)
+    {
+    case compare_origin_t::Config :
+    case compare_origin_t::State :
+        if ((origin == compare_origin_t::State) && (srcJson == NULL)) {
+            json = TheRest::status_json();
+            retVal = cJSON_GetNumberValue(cJSON_GetObjectItem(json,isSrc?valJsonPropName:compJsonPropName));
+            cJSON_Delete(json);
+        } else {
+            retVal = cJSON_GetNumberValue(isSrc?srcJson:compJson);
+        }
+        ESP_LOGV(__FUNCTION__,"Getting double %s value from json %s (%d):%f",isSrc?"src":"dest",isSrc?valJsonPropName==NULL?"null":valJsonPropName:compJsonPropName==NULL?"null":compJsonPropName,json==NULL,retVal);
+        return retVal;
+        break;
+    case compare_origin_t::Event :
+        ESP_LOGV(__FUNCTION__,"Getting double %s value from event:%f",isSrc?"src":"dest",*((double *)event_data));
+        return  *((double *)event_data);
+        break;
+    case compare_origin_t::Litteral :
+        ESP_LOGV(__FUNCTION__,"Getting litteral double %s value:%f",isSrc?"src":"dest",compDblValue);
+        return compDblValue;
+        break;
+    default:
+        ESP_LOGW(__FUNCTION__,"Invalid double");
+        break;
+    }
+    return 0.0;
+}
+
+int EventCondition::GetIntValue(bool isSrc,compare_origin_t origin, void *event_data) {
+    cJSON* json = NULL;
+    int retVal=0;
+    switch (origin)
+    {
+    case compare_origin_t::Config :
+    case compare_origin_t::State :
+        if ((origin == compare_origin_t::State) && (srcJson == NULL)) {
+            json = TheRest::status_json();
+            retVal = cJSON_GetNumberValue(cJSON_GetObjectItem(json,isSrc?valJsonPropName:compJsonPropName));
+            cJSON_Delete(json);
+        } else {
+            retVal = cJSON_GetNumberValue(isSrc?srcJson:compJson);
+        }
+        ESP_LOGV(__FUNCTION__,"Getting double %s value from json %s (%d):%d",isSrc?"src":"dest",isSrc?valJsonPropName==NULL?"null":valJsonPropName:compJsonPropName==NULL?"null":compJsonPropName,json==NULL,retVal);
+        return retVal;
+        break;
+    case compare_origin_t::Event :
+        return  *((int *)event_data);
+        break;
+    case compare_origin_t::Litteral :
+        return compIntValue;
+        break;
+    default:
+        ESP_LOGW(__FUNCTION__,"Invalid int");
+        break;
+    }
+    return 0;
+}
+
+const char* EventCondition::GetStringValue(bool isSrc,compare_origin_t origin, void *event_data) {
+    switch (origin)
+    {
+    case compare_origin_t::Config :
+    case compare_origin_t::State :
+        return cJSON_GetStringValue(isSrc?srcJson:compJson);
+        break;
+    case compare_origin_t::Event :
+        return  (const char *)event_data;
+        break;
+    case compare_origin_t::Litteral :
+        return compStrVal;
+        break;
+    default:
+        ESP_LOGW(__FUNCTION__,"Invalid Str");
+        break;
+    }
+    return "";
 }
 
 bool EventCondition::IsEventCompliant(void *event_data)
@@ -435,30 +581,26 @@ bool EventCondition::IsEventCompliant(void *event_data)
     {
         return false;
     }
-    double dcval = 0.0;
-    int icval = 0;
-    char *scval = NULL;
     PrintState();
     switch (compType)
     {
     case compare_entity_type_t::Fractional:
-        dcval = *((double *)event_data);
         switch (compareOperation)
         {
         case compare_operation_t::Equal:
-            return dcval == compDblValue;
+            return GetDoubleValue(true,valOrigin,event_data) == GetDoubleValue(false,compOrigin,event_data);
             break;
         case compare_operation_t::Bigger:
-            return dcval > compDblValue;
+            return GetDoubleValue(true,valOrigin,event_data) > GetDoubleValue(false,compOrigin,event_data);
             break;
         case compare_operation_t::BiggerOrEqual:
-            return dcval >= compDblValue;
+            return GetDoubleValue(true,valOrigin,event_data) >= GetDoubleValue(false,compOrigin,event_data);
             break;
         case compare_operation_t::Smaller:
-            return dcval < compDblValue;
+            return GetDoubleValue(true,valOrigin,event_data) < GetDoubleValue(false,compOrigin,event_data);
             break;
         case compare_operation_t::SmallerOrEqual:
-            return dcval <= compDblValue;
+            return GetDoubleValue(true,valOrigin,event_data) <= GetDoubleValue(false,compOrigin,event_data);
             break;
         default:
             return false;
@@ -466,29 +608,22 @@ bool EventCondition::IsEventCompliant(void *event_data)
         }
         break;
     case compare_entity_type_t::Integer:
-        icval = *((int *)event_data);
-        ;
         switch (compareOperation)
         {
         case compare_operation_t::Equal:
-            ESP_LOGV(__FUNCTION__, "%d==%d", icval, compIntValue);
-            return icval == compIntValue;
+            return GetIntValue(true,valOrigin,event_data) == GetIntValue(false,compOrigin,event_data);
             break;
         case compare_operation_t::Bigger:
-            ESP_LOGV(__FUNCTION__, "%d>%d", icval, compIntValue);
-            return icval > compIntValue;
+            return GetIntValue(true,valOrigin,event_data) > GetIntValue(false,compOrigin,event_data);
             break;
         case compare_operation_t::BiggerOrEqual:
-            ESP_LOGV(__FUNCTION__, "%d>=%d", icval, compIntValue);
-            return icval >= compIntValue;
+            return GetIntValue(true,valOrigin,event_data) >= GetIntValue(false,compOrigin,event_data);
             break;
         case compare_operation_t::Smaller:
-            ESP_LOGV(__FUNCTION__, "%d<%d", icval, compIntValue);
-            return icval < compIntValue;
+            return GetIntValue(true,valOrigin,event_data) < GetIntValue(false,compOrigin,event_data);
             break;
         case compare_operation_t::SmallerOrEqual:
-            ESP_LOGV(__FUNCTION__, "%d<=%d", icval, compIntValue);
-            return icval <= compIntValue;
+            return GetIntValue(true,valOrigin,event_data) <= GetIntValue(false,compOrigin,event_data);
             break;
         default:
             return false;
@@ -496,14 +631,13 @@ bool EventCondition::IsEventCompliant(void *event_data)
         }
         break;
     case compare_entity_type_t::String:
-        scval = (char *)event_data;
         switch (compareOperation)
         {
         case compare_operation_t::Equal:
-            return strcmp(scval, compStrVal) == 0;
+            return strcmp(GetStringValue(true,valOrigin,event_data), GetStringValue(false,compOrigin,event_data)) == 0;
             break;
         case compare_operation_t::RexEx:
-            return std::regex_search(std::string(scval), regexp, std::regex_constants::match_default);
+            return std::regex_search(GetStringValue(true,valOrigin,event_data), regexp, std::regex_constants::match_default);
             break;
         default:
             return false;
@@ -616,7 +750,12 @@ compare_origin_t EventCondition::GetOriginType(cJSON *json, const char *fldName)
     }
     if (cJSON_HasObjectItem(val, "name"))
     {
-        return compare_origin_t::Event;
+        if (strcmp(cJSON_GetStringValue(cJSON_GetObjectItem(val,"name")) ,"event")== 0)
+            return compare_origin_t::Event;
+        if (strcmp(cJSON_GetStringValue(cJSON_GetObjectItem(val,"name")) ,"state")== 0)
+            return compare_origin_t::State;
+        if (strcmp(cJSON_GetStringValue(cJSON_GetObjectItem(val,"name")) ,"config")== 0)
+            return compare_origin_t::Config;
     }
     return compare_origin_t::Litteral;
 }

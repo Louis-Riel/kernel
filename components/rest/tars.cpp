@@ -16,15 +16,17 @@
 
 typedef struct
 {
+    uint8_t memBuf[JSON_BUFFER_SIZE*2];
     uint8_t *tarBuf;
     uint8_t *sendBuf;
     uint32_t bufLen;
     uint32_t sendLen;
     httpd_req_t *req;
     uint32_t len;
+    EventGroupHandle_t eventGroup;
 } sendTarParams;
 
-sendTarParams sp;
+//sendTarParams sp;
 
 esp_err_t tarString(mtar_t *tar, const char *path, const char *data)
 {
@@ -70,7 +72,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     ESP_LOGD(__FUNCTION__, "Parsing %s", path);
     struct timeval tv_start, tv_end, tv_open, tv_stat, tv_rstart, tv_rend, tv_wstart, tv_wend;
 
-    if (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (theFolder = openDir(path)) != NULL)
+    if ((theFolder = openDir(path)) != NULL)
     {
         sprintf(kmlFileName, "%s/", path+1);
         tarStat = mtar_write_dir_header(tar, kmlFileName);
@@ -236,56 +238,52 @@ int tarRead(mtar_t *tar, void *data, unsigned size)
 
 int tarCount(mtar_t *tar, const void *data, unsigned size)
 {
+    sendTarParams* sp = (sendTarParams*)tar->stream;
     if (size == 0)
     {
         ESP_LOGW(__FUNCTION__, "empty set");
         return ESP_OK;
     }
-    sp.len+=size;
+    sp->len+=size;
     return ESP_OK;
 }
 
 int tarWrite(mtar_t *tar, const void *data, unsigned size)
 {
+    sendTarParams* sp = (sendTarParams*)tar->stream;
     if (size == 0)
     {
         ESP_LOGW(__FUNCTION__, "empty set");
         return ESP_OK;
     }
 
-    if (sp.bufLen + size >= HTTP_CHUNK_SIZE)
+    if (sp->bufLen + size >= JSON_BUFFER_SIZE)
     {
-        EventGroupHandle_t eventGroup = TheRest::GetEventGroup();
-        if (xEventGroupGetBits(eventGroup) & TAR_SEND_DONE)
+        if (xEventGroupGetBits(sp->eventGroup) & TAR_SEND_DONE)
         {
             ESP_LOGE(__FUNCTION__, "SendeR Died");
             return ESP_FAIL;
         }
 
-        ESP_LOGV(__FUNCTION__, "Preparing chunck of %d", sp.bufLen);
-        sp.sendLen = sp.bufLen;
-        if (sp.sendBuf == NULL)
-        {
-            sp.sendBuf = (uint8_t *)dmalloc(HTTP_BUF_SIZE);
+        ESP_LOGV(__FUNCTION__, "Preparing chunck of %d", sp->bufLen);
+
+        if (sp->sendBuf != NULL){
+            ESP_LOGV(__FUNCTION__, "Waiting for TAR_BUFFER_SENT");
+            xEventGroupWaitBits(sp->eventGroup, TAR_BUFFER_SENT, pdTRUE, pdTRUE, portMAX_DELAY);
         }
-        memcpy(sp.sendBuf, (const void *)sp.tarBuf, sp.bufLen);
-        sp.bufLen = 0;
-        xEventGroupSetBits(eventGroup, TAR_BUFFER_FILLED);
-        ESP_LOGV(__FUNCTION__, "Waiting for TAR_BUFFER_SENT");
-        xEventGroupWaitBits(eventGroup, TAR_BUFFER_SENT, pdTRUE, pdTRUE, portMAX_DELAY);
+
+        sp->sendBuf = sp->tarBuf;
+        sp->sendLen = sp->bufLen;
+
+        xEventGroupSetBits(sp->eventGroup, TAR_BUFFER_FILLED);
+
+        sp->tarBuf = sp->tarBuf == sp->memBuf ? &sp->memBuf[JSON_BUFFER_SIZE] : sp->memBuf;
+        sp->bufLen = 0;
     }
-    if (size > 1)
-    {
-        ESP_LOGV(__FUNCTION__, "chunck: %d buflen:%d tot:%d", size, sp.bufLen, sp.len);
-        memcpy(sp.tarBuf + sp.bufLen, data, size);
-        sp.bufLen += size;
-        sp.len += size;
-    }
-    else
-    {
-        *(sp.tarBuf + sp.bufLen++) = *((uint8_t *)data);
-        sp.len++;
-    }
+    //ESP_LOGV(__FUNCTION__, "chunck: %d buflen:%d tot:%d", size, sp->bufLen, sp->len);
+    memcpy(sp->tarBuf + sp->bufLen, data, size);
+    sp->bufLen += size;
+    sp->len += size;
     return ESP_OK;
 }
 
@@ -301,23 +299,29 @@ int tarCountClose(mtar_t *tar){
 
 int tarClose(mtar_t *tar)
 {
-    EventGroupHandle_t eventGroup = TheRest::GetEventGroup();
-    if (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (sp.bufLen > 0)){
-        ESP_LOGD(__FUNCTION__, "Closing Tar, waiting for final chunck");
-        sp.sendLen = sp.bufLen;
-        memcpy(sp.sendBuf, (const void *)sp.tarBuf, sp.bufLen);
-        sp.bufLen = 0;
-        xEventGroupSetBits(eventGroup, TAR_BUFFER_FILLED);
-        xEventGroupWaitBits(eventGroup, TAR_BUFFER_SENT, pdTRUE, pdTRUE, portMAX_DELAY);
+    sendTarParams* sp = (sendTarParams*)tar->stream;
+
+    if (sp->sendBuf && (xEventGroupGetBits(sp->eventGroup) & TAR_SEND_DONE) && (sp->bufLen > 0)) {
+        ESP_LOGE(__FUNCTION__, "Closing Tar, Cannot send final chunck of %d as sender died", sp->bufLen);
+        xEventGroupSetBits(sp->eventGroup, TAR_BUILD_DONE);
+        return ESP_FAIL;
     }
-    xEventGroupSetBits(eventGroup, TAR_BUILD_DONE);
-    ESP_LOGD(__FUNCTION__, "Closing Tar");
-    xEventGroupWaitBits(eventGroup, TAR_SEND_DONE, pdFALSE, pdTRUE, portMAX_DELAY);
-    ESP_LOGD(__FUNCTION__, "Wrote %d bytes", sp.len);
-    if (sp.sendBuf != NULL)
-        ldfree(sp.sendBuf);
-    if (sp.tarBuf != NULL)
-        ldfree(sp.tarBuf);
+
+    if (sp->bufLen > 0){
+        ESP_LOGV(__FUNCTION__, "Closing Tar, waiting for final chunck of %d", sp->bufLen);
+
+        if (sp->sendBuf)
+            xEventGroupWaitBits(sp->eventGroup, TAR_BUFFER_SENT, pdFALSE, pdFALSE, portMAX_DELAY);
+
+        ESP_LOGV(__FUNCTION__, "Closing Tar, sending final chunck of %d", sp->bufLen);
+        sp->sendBuf = sp->tarBuf;
+        sp->sendLen = sp->bufLen;
+        xEventGroupSetBits(sp->eventGroup, TAR_BUFFER_FILLED);
+    }
+
+    ESP_LOGD(__FUNCTION__, "Wrote %d bytes", sp->len);
+    xEventGroupSetBits(sp->eventGroup, TAR_BUILD_DONE);
+
     return ESP_OK;
 }
 
@@ -356,22 +360,17 @@ void DeleteTarFiles(void* param){
 }
 
 void BuildTar(void* param){
-    mtar_t tar;
+    mtar_t* tar = (mtar_t*)param;
     char* filesToDelete = (char*)dmalloc(JSON_BUFFER_SIZE);
     memset(filesToDelete,0,JSON_BUFFER_SIZE);
-    memset(&tar, 0, sizeof(tar));
-    tar.read = tarRead;
-    tar.close = tarClose;
-    tar.seek = tarSeek;
-    tar.write = tarWrite;
-    tarFiles(&tar,"/lfs",NULL,true,"current.bin",1024000,true,filesToDelete);
-    if (mtar_close(&tar) == MTAR_ESUCCESS){
+    tarFiles(tar,"/lfs",NULL,true,"current.bin",1024000,true,filesToDelete);
+    if (mtar_close(tar) == MTAR_ESUCCESS){
         ESP_LOGD(__FUNCTION__,"Deleting %s",filesToDelete);
         CreateWokeBackgroundTask(DeleteTarFiles, "DeleteTarFiles", 4096, filesToDelete, tskIDLE_PRIORITY, NULL);
     } else {
+        ldfree(filesToDelete);
         ESP_LOGE(__FUNCTION__,"Failed to close tar");
     }
-    xEventGroupSetBits(TheRest::GetEventGroup(),TAR_FINILIZED);
 }
 
 void MeasureTar(void* param){
@@ -389,13 +388,14 @@ void TheRest::SendTar(void* param)
 {
     dumpTheLogs(NULL);
     BufferedFile::FlushAll();
-    xEventGroupSetBits(getAppEG(),app_bits_t::TRIPS_SYNCING);
+
     TheRest* rest = GetServer();
 
     esp_http_client_handle_t client = NULL;
-    esp_http_client_config_t *config = NULL;
-
+    esp_http_client_config_t *config = (esp_http_client_config_t *)dmalloc(sizeof(esp_http_client_config_t));
+    memset(config, 0, sizeof(esp_http_client_config_t));
     char* url = (char*)dmalloc(255);
+
     sprintf(url, "http://%s/sdcard/tars/%s/", rest->gwAddr, rest->ipAddr);
 
     struct tm timeinfo;
@@ -407,67 +407,79 @@ void TheRest::SendTar(void* param)
     localtime_r(&now, &timeinfo);
     strftime(url+strlen(url), 255-strlen(url), "%Y/%m/%d/%H-%M-%S.tar", &timeinfo);
 
-    config = (esp_http_client_config_t *)dmalloc(sizeof(esp_http_client_config_t));
-    memset(config, 0, sizeof(esp_http_client_config_t));
-    config->url = url;
     config->method = esp_http_client_method_t::HTTP_METHOD_PUT;
     config->timeout_ms = 30000;
     config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
     config->max_redirection_count = 0;
     config->port = 80;
+    config->url = url;
 
-    EventGroupHandle_t eventGroup = TheRest::GetEventGroup();
     uint32_t len=0;
-    sp.tarBuf = (uint8_t *)dmalloc(HTTP_BUF_SIZE);
-    sp.sendBuf = NULL;
-    sp.bufLen = 0;
-    sp.len = 0;
-    xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
-    xEventGroupClearBits(eventGroup, TAR_BUFFER_SENT);
-    xEventGroupClearBits(eventGroup, TAR_BUILD_DONE);
-    xEventGroupClearBits(eventGroup, TAR_FINILIZED);
-    uint32_t totLen = sp.len;
-    sp.bufLen = 0;
-    sp.len = 0;
-    CreateBackgroundTask(BuildTar,"BuildTar",8192, NULL, tskIDLE_PRIORITY,NULL);
-    xEventGroupWaitBits(eventGroup, TAR_BUFFER_FILLED, pdFALSE, pdFALSE, portMAX_DELAY);
+
+    sendTarParams* sp = (sendTarParams*)dmalloc(sizeof(sendTarParams));
+    memset(sp,0,sizeof(sendTarParams));
+    sp->eventGroup = TheRest::GetEventGroup();
     
-    ESP_LOGV(__FUNCTION__, "Sending %d bytes tar to %s", totLen, url);
+    xEventGroupSetBits(sp->eventGroup,app_bits_t::TRIPS_SYNCING);
+
+    sp->sendBuf = NULL;
+    sp->tarBuf = sp->memBuf;
+    sp->bufLen = 0;
+    sp->len = 0;
+    xEventGroupClearBits(sp->eventGroup, TAR_BUFFER_FILLED);
+    xEventGroupClearBits(sp->eventGroup, TAR_BUFFER_SENT);
+    xEventGroupClearBits(sp->eventGroup, TAR_BUILD_DONE);
+    xEventGroupClearBits(sp->eventGroup, TAR_SEND_DONE);
+    uint32_t totLen = sp->len;
+    sp->bufLen = 0;
+    sp->len = 0;
+
+    mtar_t tar;
+    tar.read = tarRead;
+    tar.close = tarClose;
+    tar.seek = tarSeek;
+    tar.write = tarWrite;
+    tar.stream = sp;
+
+    CreateBackgroundTask(BuildTar,"BuildTar",8192, &tar, tskIDLE_PRIORITY,NULL);
+    
+    ESP_LOGV(__FUNCTION__, "Connecting to %s", url);
     if ((client = esp_http_client_init(config)) &&
         ((err = esp_http_client_set_header(client, "Content-Type","application/x-tar")) == ESP_OK) &&
         ((err = esp_http_client_open(client, 20000000) == ESP_OK))) {
         
-        ESP_LOGD(__FUNCTION__, "Connected to %s", url);
+        ESP_LOGD(__FUNCTION__, "Sending to %s", url);
         EventBits_t theBits = 0;
 
-        while ((theBits=xEventGroupWaitBits(eventGroup, TAR_BUFFER_FILLED|TAR_BUILD_DONE, pdFALSE, pdFALSE, portMAX_DELAY)))
+        while ((theBits=xEventGroupWaitBits(sp->eventGroup, TAR_BUFFER_FILLED, pdTRUE, pdTRUE, portMAX_DELAY)))
         {
-            if (sp.sendLen > 0)
+            if (sp->sendLen > 0)
             {
                 //printf(".");
-                ESP_LOGV(__FUNCTION__, "Sending chunk of %d", sp.sendLen);
-                len += sp.sendLen;
-                sentLen = esp_http_client_write(client,(const char *)sp.sendBuf, sp.sendLen);
-
-                if (sentLen == sp.sendLen)
-                {
-                    sp.sendLen = 0;
-                    xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
-                    xEventGroupSetBits(eventGroup, TAR_BUFFER_SENT);
-                    ESP_LOGV(__FUNCTION__, "Sent chunk of %d", sp.sendLen);
+                ESP_LOGV(__FUNCTION__, "Sending chunk of %d", sp->sendLen);
+                len += sp->sendLen;
+                sentLen=0;
+                while((sentLen = esp_http_client_write(client,(const char *)sp->sendBuf, sp->sendLen))!= sp->sendLen) {
+                    ESP_LOGE(__FUNCTION__, "Chunked %d response, sent: %d", sp->sendLen, sentLen);
+                    if (sentLen <= 0) {
+                        break;
+                    }
+                    sp->sendBuf+=sentLen;
+                    sp->sendLen-=sentLen;
                 }
-                else
-                {
-                    ESP_LOGE(__FUNCTION__, "Chunk len %d won't go, sent: %d", sp.sendLen, sentLen);
-                    sp.sendLen = 0;
-                    xEventGroupClearBits(eventGroup, TAR_BUFFER_FILLED);
-                    xEventGroupSetBits(eventGroup, TAR_BUFFER_SENT);
+                if (sentLen == -1) {
                     break;
                 }
-            } else if (theBits&TAR_BUFFER_FILLED) {
+
+                if (sentLen == sp->sendLen)
+                {
+                    ESP_LOGV(__FUNCTION__, "Sent chunk of %d", sp->sendLen);
+                }
+                xEventGroupSetBits(sp->eventGroup, TAR_BUFFER_SENT);
+            } else {
                 ESP_LOGW(__FUNCTION__,"Got an empty chunck");
             }
-            if (xEventGroupGetBits(eventGroup) & TAR_BUILD_DONE)
+            if (xEventGroupGetBits(sp->eventGroup) & TAR_BUILD_DONE)
             {
                 break;
             }
@@ -476,14 +488,15 @@ void TheRest::SendTar(void* param)
         esp_http_client_read(client,buf,20);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
-        xEventGroupSetBits(eventGroup, TAR_SEND_DONE);
-        ldfree(config);
+        xEventGroupSetBits(sp->eventGroup, TAR_SEND_DONE);
         ESP_LOGD(__FUNCTION__, "Sent %d to %s", len, url);
-        ldfree(url);
     } else {
         ESP_LOGE(__FUNCTION__,"Error whilst sending tar:%s hlen:%d",esp_err_to_name(err), hlen);
     }
-    xEventGroupWaitBits(eventGroup,TAR_FINILIZED,pdFALSE,pdFALSE,portMAX_DELAY);
+    ESP_LOGD(__FUNCTION__, "Done sending to %s", url);
     xEventGroupClearBits(getAppEG(),app_bits_t::TRIPS_SYNCING);
+    ldfree((void*)config->url);
+    ldfree(config);
+    ldfree(sp);
 }
 

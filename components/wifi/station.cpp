@@ -654,16 +654,17 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             }
             memcpy(&theWifi->staIp, &event->ip_info, sizeof(theWifi->staIp));
             xEventGroupSetBits(evtGrp, WIFI_CONNECTED_BIT);
+            //xEventGroupSetBits(s_app_eg, REST);
             xEventGroupClearBits(evtGrp, WIFI_DISCONNECTED_BIT);
             theWifi->ParseStateBits(theWifi->stationStat);
             initSPISDCard();
 
-            CreateBackgroundTask(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, &timeHandle);
-            xEventGroupSetBits(s_app_eg,app_bits_t::REST);
+            if (!theWifi->isSidPuller((const char *)theWifi->wifi_config.sta.ssid,true)) 
+                CreateBackgroundTask(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, &timeHandle);
 
-           // CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
+            //CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
 
-            //restSallyForth(evtGrp);
+            restSallyForth(evtGrp);
             break;
         case IP_EVENT_STA_LOST_IP:
             ESP_LOGI(__FUNCTION__, "lost ip");
@@ -752,6 +753,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             char ipaddt[16];
             sprintf(ipaddt,IPSTR, IP2STR(&theWifi->staIp.ip));
             ESP_LOGD(__FUNCTION__, "AP ip::%s", ipaddt);
+            xEventGroupSetBits(s_app_eg, REST);
             theWifi->ParseStateBits(theWifi->apStat);
             theWifi->apStat->SetStringProperty("Ip", ipaddt);
             break;
@@ -840,7 +842,6 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
 
 void wifiSallyForth(void *pvParameter)
 {
-    dumpTheLogs(NULL);
     if (TheWifi::GetInstance() == NULL) {
         theInstance = new TheWifi(AppConfig::GetAppConfig());
     }

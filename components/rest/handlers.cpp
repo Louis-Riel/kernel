@@ -63,7 +63,7 @@ cJSON *tasks_json()
     return tasks;
 }
 
-cJSON *status_json()
+cJSON* TheRest::status_json()
 {
     ESP_LOGV(__FUNCTION__, "Status Handler");
     deviceId ? deviceId : deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
@@ -311,6 +311,7 @@ esp_err_t TheRest::HandleWifiCommand(httpd_req_t *req)
     }
     else
     {
+        TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += rlen;
         *(postData + rlen) = 0;
         ESP_LOGD(__FUNCTION__, "Got %s", postData);
         cJSON *jresponse = cJSON_ParseWithLength(postData, JSON_BUFFER_SIZE);
@@ -405,6 +406,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
     }
     else
     {
+        TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += rlen;
         *(postData + rlen) = 0;
         ESP_LOGD(__FUNCTION__, "Got %s", postData);
         cJSON *jresponse = cJSON_ParseWithLength(postData, rlen);
@@ -670,6 +672,7 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
         len += curLen;
     }
     ESP_LOGV(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
+    TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += len;
 
     if (!endsWith(req->uri, "config"))
     {
@@ -868,6 +871,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
             {
                 len += curLen;
             }
+            TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += len;
 
             if (len)
             {
@@ -932,10 +936,11 @@ esp_err_t TheRest::download_handler(httpd_req_t *req)
     }
     dest->Close();
     delete dest;
+    
     ESP_LOGV(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
     if (endsWith(req->uri, "tar"))
         CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
-    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+    TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += 2;
     ldfree(postData);
     return httpd_resp_send(req, "OK", 2);
 }
@@ -1041,6 +1046,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             do
             {
                 len = httpd_req_recv(req, (char *)img + curLen, MESSAGE_BUFFER_SIZE);
+                TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += len;
                 if (len < 0)
                 {
                     ESP_LOGE(__FUNCTION__, "Error occurred during receiving: errno %d", errno);
