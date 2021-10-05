@@ -170,7 +170,7 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
     EventDescriptor_t* ed=NULL;
     postedEvent.eventDataType=(ed=EventHandlerDescriptor::GetEventDescriptor(base,id)) == NULL ? event_data_type_tp::Unknown : ed->dataType;
     if (!ed) {
-        ESP_LOGW(__FUNCTION__,"No desciptor for %s %d", base, id);
+        ESP_LOGV(__FUNCTION__,"No desciptor for %s %d", base, id);
     } else {
         ESP_LOGV(__FUNCTION__,"type for %s %s is %d", base, ed->eventName, (int)ed->dataType);
         if ((ed->dataType == event_data_type_tp::JSON) ||

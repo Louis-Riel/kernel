@@ -61,7 +61,7 @@ class StorageViewer extends React.Component {
                 }        
             }).catch(ex => {
                 clearTimeout(quitItNow);
-                reject(ex);
+                console.err(ex);
             });
         } else {
             this.setState({ loaded: true, files: this.state.files, total: this.state.total });

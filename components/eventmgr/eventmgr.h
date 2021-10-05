@@ -587,7 +587,7 @@ protected:
         thread->pvTaskCode(thread->pvParameters);
         size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
         if (diff != 0) {
-            ESP_LOGW(__FUNCTION__,"%s %d bytes memleak",thread->pcName,diff);
+            ESP_LOGV(__FUNCTION__,"%s %d bytes memleak",thread->pcName,diff);
         }
 
         thread->isRunning = false;

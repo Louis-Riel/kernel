@@ -113,7 +113,7 @@ const char *AppConfig::GetActiveStorage()
   AppConfig* stat = GetAppStatus();
   if (stat->activeStorage == NULL)
     return stat->SPIFFPATH;
-  return stat->activeStorage == NULL ? stat->SPIFFPATH:stat->SPIFFPATH;
+  return stat->activeStorage == NULL ? stat->SPIFFPATH:stat->activeStorage;
 }
 
 bool AppConfig::isValid()

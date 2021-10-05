@@ -5,9 +5,9 @@
 
 //#define LOG_BUF_SIZE 10240
 //#define LOG_BUF_ULIMIT 8000
-#define LOG_BUF_SIZE 102400
-#define LOG_BUF_ULIMIT 102000
-#define LOG_FNAME_LEN 100
+#define LOG_BUF_SIZE   102400
+#define LOG_BUF_ULIMIT 100000
+#define LOG_LN_SIZE 16384
 
 #include "../build/config/sdkconfig.h"
 #include <stdio.h>
@@ -42,7 +42,7 @@ typedef enum {
 void initLog();
 void dumpLogs();
 void dumpTheLogs(void* params);
-char* getLogFName();
+const char* getLogFName();
 typedef bool (*LogFunction_t)( void * ,char * );
 void registerLogCallback( LogFunction_t callback, void* param);
 void unregisterLogCallback( LogFunction_t callback);

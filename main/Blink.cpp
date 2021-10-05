@@ -1130,6 +1130,8 @@ void app_main(void)
     {
       ESP_LOGD(__FUNCTION__, "Device Id %d", appcfg->GetIntProperty("deviceid"));
     }
+    //Register event managers
+    new BufferedFile();
 
     initLog();
     sampleBatteryVoltage();
@@ -1189,10 +1191,6 @@ void app_main(void)
       ESP_LOGD(__FUNCTION__,"No IR");
     }
     
-
-    //Register event managers
-    new BufferedFile();
-
     CreateBackgroundTask(serviceLoop, "ServiceLoop", 8192, NULL, tskIDLE_PRIORITY, NULL);
     //xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
     //xEventGroupClearBits(app_eg,app_bits_t::WIFI_OFF);

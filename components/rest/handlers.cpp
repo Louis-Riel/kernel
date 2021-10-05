@@ -458,7 +458,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
         {
             if (endsWith(path, "log"))
             {
-                char *clfn = getLogFName();
+                const char *clfn = getLogFName();
                 if (!clfn && (strlen(clfn) > 0) && endsWith(clfn, path))
                 {
                     ESP_LOGD(__FUNCTION__, "Not moving %s as is it active(%s)", path, clfn);

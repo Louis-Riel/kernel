@@ -3,84 +3,62 @@
 #include "esp_log.h"
 #include "time.h"
 #include "eventmgr.h"
+#include "mfile.h"
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-char* logBuff = NULL;
-char* logfname = NULL;
-uint32_t logBufPos;
 static LogFunction_t callbacks[5];
 static void* params[5];
 static SemaphoreHandle_t logMutex = xSemaphoreCreateMutex();
+static BufferedFile* logFile = NULL;
+static char* curLogLine = NULL;
+static char* curLogBuf = NULL;
+static TaskHandle_t dltask = NULL;
+static EventGroupHandle_t app_eg = xEventGroupCreate();
+static bool buildingLogf = false;
+const char* EMPTY_STRING = "";
 
-char* getLogFName(){
-    return logfname;
+const char* getLogFName(){
+    if (logFile) {
+        return logFile->GetName();
+    }
+    return EMPTY_STRING;
 }
 
-static TaskHandle_t dltask = NULL;
-
 void dumpTheLogs(void* params){
-    bool isAp = GetAppConfig()->IsAp();
-    if (logBufPos == 0) {
-        printf("\nNo logs to dump\n");
-        dltask=NULL;
-        return;
-    }
     if (xEventGroupGetBits(getAppEG())&app_bits_t::TRIPS_SYNCING) {
-        ESP_LOGD(__FUNCTION__,"Not flushing whilst dumping");
-        dltask=NULL;
-        *logBuff=0;
-        logBufPos=0;
+        printf("\nNot flushing whilst dumping'n");
         return;
     }
-    if (dltask == NULL) {
-        dltask = (TaskHandle_t)1; //Just not null
+
+    if (!logFile) {
+        printf("\nNot flushing whilst dumping'n");
+        return;
     }
 
     xSemaphoreTake(logMutex,portMAX_DELAY);
-    uint8_t* db = (uint8_t*)dmalloc(logBufPos);
-    uint32_t len = logBufPos;
-    if (db) {
-        memccpy(db,logBuff,sizeof(uint8_t),logBufPos);
-        *logBuff=0;
-        logBufPos=0;
+    bool isAp = GetAppConfig()->IsAp();
+    if (dltask == NULL) {
+        dltask = (TaskHandle_t)1; //Just not null
     }
-    xSemaphoreGive(logMutex);
-
-    if (len && initSPISDCard(true)) {
-        FILE* fw = NULL;
-
-        struct tm timeinfo;
-        time_t now = ::time(NULL);
-
-        localtime_r(&now, &timeinfo);
-        
-        if ((strlen(logfname) == 0) || (indexOf(logfname,"1970") && (timeinfo.tm_year > 1970))){
-            char lpath[255];
-            sprintf(lpath,"%s/logs/%s-%%Y-%%m-%%d_%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),isAp?"TRACKER":"PULLER");
-            strftime(logfname, 254, lpath, &timeinfo);
-        }
-
-        size_t bc = __UINT32_MAX__;
-        if (((fw = fOpenCdL(logfname,"a",true,false)) != NULL) &&
-            ((bc=fWrite((void*)db,1,len,fw)) == len)) {
-            if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG){
-                fprintf(stdout,"\nWritten %d into %s\n",len,logfname);
-            }
-        } else if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG) {
-            fprintf(stderr,"\nLogs not written to %s fw:%d len:%d",logfname,fw!=NULL,bc);
-        }
-        fClose(fw);
-        deinitSPISDCard(false);
-    } else {
-        ESP_LOGD(__FUNCTION__,"No logs to dump I think %d",len);
-    }
+    logFile->Flush();
     dltask = NULL;
-    ldfree(db);
+    xSemaphoreGive(logMutex);
 }
 
 void dumpLogs(){
-    if (dltask == NULL)
+    if (xEventGroupGetBits(getAppEG())&app_bits_t::TRIPS_SYNCING) {
+        ESP_LOGD(__FUNCTION__,"Not flushing whilst dumping");
+        return;
+    }
+
+    if (!logFile) {
+        ESP_LOGW(__FUNCTION__,"No logs");
+        return;
+    }
+
+    if (dltask == NULL) {
         CreateWokeBackgroundTask(dumpTheLogs, "dumpLogs", 4096, (void*)true, tskIDLE_PRIORITY, &dltask);
+    }
 }
 
 void registerLogCallback( LogFunction_t callback, void* param) {
@@ -103,10 +81,49 @@ void unregisterLogCallback( LogFunction_t callback) {
 }
 
 int loggit(const char *fmt, va_list args) {
-    char* curLogLine = logBuff+logBufPos;
-    xSemaphoreTake(logMutex,portMAX_DELAY);
     if (*fmt != 'V'){
-        logBufPos+=vsprintf(logBuff+logBufPos,fmt,args);
+        xSemaphoreTake(logMutex,portMAX_DELAY);
+        if (!logFile) {
+            struct tm timeinfo = { 0 };
+            time_t now;
+            time(&now);
+            localtime_r(&now, &timeinfo);
+
+            if (!buildingLogf && ((timeinfo.tm_year > 70) || (curLogBuf && (strlen(curLogBuf) >= LOG_BUF_ULIMIT)))) {
+                buildingLogf = true;
+                char* lpath=(char*)dmalloc(255);
+                char* logfname=(char*)dmalloc(355);
+                sprintf(lpath,"%s/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
+                localtime_r(&now, &timeinfo);
+                strftime(logfname, 254, lpath, &timeinfo);
+                logFile = new BufferedFile(logfname);
+                ldfree(lpath);
+                ldfree(logfname);
+            }
+            if (!curLogBuf) {
+                curLogBuf = (char*)dmalloc(LOG_BUF_SIZE);
+                *curLogBuf=0;
+                curLogLine = curLogBuf;
+            }
+        }
+
+        if (logFile) {
+            if (curLogBuf) {
+                if (*curLogBuf != 0) {
+                    logFile->Write((uint8_t*)curLogBuf,strlen(curLogBuf));
+                }
+                ldfree(curLogBuf);
+                curLogBuf=NULL;
+                curLogLine=(char*)dmalloc(LOG_LN_SIZE);
+                *curLogLine=0;
+            }
+            vsprintf(curLogLine,fmt,args);
+            logFile->Write((uint8_t*)curLogLine,strlen(curLogLine));
+        } else {
+            curLogLine+=vsprintf(curLogLine,fmt,args);
+            *curLogLine=0;
+        }
+
         for (int idx=0; idx < 5; idx++){
             if (callbacks[idx] != NULL) {
                 if (!callbacks[idx](params[idx],curLogLine)){
@@ -114,23 +131,16 @@ int loggit(const char *fmt, va_list args) {
                 }
             }
         }
+        xSemaphoreGive(logMutex);
     }
-    if (logBufPos >= LOG_BUF_ULIMIT) {
-        dumpLogs();
-    }
-    xSemaphoreGive(logMutex);
     return vprintf(fmt, args);
 }
 
 void initLog() {
-    logBuff = (char*)dmalloc(LOG_BUF_SIZE);
-    logfname = (char*)dmalloc(LOG_FNAME_LEN);
-    memset(logBuff,0,LOG_BUF_SIZE);
-    memset(logfname,0,LOG_FNAME_LEN);
-    logBufPos=0;
+    curLogLine = NULL;
+    curLogBuf = NULL;
     esp_log_set_vprintf(loggit);
 }
-static EventGroupHandle_t app_eg = xEventGroupCreate();
 
 EventGroupHandle_t getAppEG() {
   return app_eg;

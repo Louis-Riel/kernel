@@ -2,6 +2,8 @@
 #include "math.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
 
 MFile* MFile::openFiles[];
 uint8_t MFile::numOpenFiles=0;
@@ -41,7 +43,7 @@ MFile::MFile(const char* fileName):MFile()
     AppConfig* apin = new AppConfig(ManagedDevice::BuildStatus(this),AppConfig::GetAppStatus());
     apin->SetIntProperty("status",mfile_state_t::MFILE_INIT);
     apin->SetBoolProperty("hasContent",0);
-    apin->SetBoolProperty("bytesWritten",0);
+    apin->SetIntProperty("bytesWritten",0);
     status = apin->GetPropertyHolder("status");
     hasContent = apin->GetPropertyHolder("hasContent");
     bytesWritten = apin->GetPropertyHolder("bytesWritten");
@@ -134,14 +136,14 @@ bool MFile::IsOpen(){
 
 void MFile::Write(uint8_t* data, uint32_t len) {
     bool wasOpened = IsOpen();
-    bytesWritten->valuedouble = bytesWritten->valueint + len;
     if (!wasOpened) {
         Open("a");
     }
     if (file != NULL)
     {
-        ESP_LOGV(__FUNCTION__,"Writing %d in %s",len,data);
+        ESP_LOGV(__FUNCTION__,"Writing %d",len);
         fWrite(data,sizeof(uint8_t),len,file);
+        bytesWritten->valuedouble = bytesWritten->valueint = bytesWritten->valueint + len;
     }
     if (!wasOpened){
         Close();
@@ -221,6 +223,14 @@ const char* MFile::GetName(){
     return name;
 }
 
+cJSON* MFile::BuildStatus(void *instance){
+    return ManagedDevice::BuildStatus(instance);
+}
+
+
+const char* BufferedFile::GetName(){
+    return MFile::GetName();
+}
 
 BufferedFile::BufferedFile()
     :MFile(){
@@ -235,10 +245,14 @@ BufferedFile::BufferedFile(const char* fileName)
     ret = stat(fileName, &st);
     isNewOrEmpty = (ret != 0) || (st.st_size==0);
     if (ret == ESP_OK) {
-        ESP_LOGD(__FUNCTION__,"Opening file %s is new or empty:%d, size:%li",fileName, isNewOrEmpty, st.st_size);
+        ESP_LOGV(__FUNCTION__,"Opening file %s is new or empty:%d, size:%li",fileName, isNewOrEmpty, st.st_size);
     } else {
-        ESP_LOGD(__FUNCTION__,"Creating file %s is new or empty:%d",fileName, isNewOrEmpty);
+        ESP_LOGV(__FUNCTION__,"Creating file %s is new or empty:%d",fileName, isNewOrEmpty);
     }
+    AppConfig* apin = new AppConfig(MFile::BuildStatus(this),AppConfig::GetAppStatus());
+    apin->SetIntProperty("bytesCached",0);
+    bytesCached = apin->GetPropertyHolder("bytesCached");
+    delete apin;
 }
 
 
@@ -247,6 +261,7 @@ void BufferedFile::Flush() {
         ESP_LOGV(__FUNCTION__,"Flushing");
         MFile::Write(buf,pos);
         pos=0;
+        cJSON_SetIntValue(bytesCached,pos);
     }
 }
 
@@ -313,30 +328,33 @@ void BufferedFile::WriteLine(uint8_t* data, uint32_t len) {
 }
 
 void BufferedFile::Write(uint8_t* data, uint32_t len) {
-    ESP_LOGV(__FUNCTION__,"Writing (%s)%d to %s",data,len,GetName());
     if (buf == NULL) {
         buf = (uint8_t*)dmalloc(maxBufSize);
-
     }
     if (buf != NULL) {
         cJSON_SetIntValue(hasContent,true);
-        if ((pos+len)<maxBufSize) {
-            memcpy(buf+pos,data,len);
-            pos+=len;
-        } else {
-            uint32_t chunckSize = maxBufSize-pos;
-            uint32_t dataPos=0;
-            uint32_t remaining=len;
-            while (remaining>0){
-                memcpy(buf+pos,data+dataPos,chunckSize);
-                pos+=chunckSize;
-                dataPos+=chunckSize;
-                remaining-=chunckSize;
-                if (pos == (maxBufSize-1)){
+        uint32_t remaining=len;
+        uint32_t dataPos=0;
+        while (remaining>0){
+            if ((pos+remaining) >= maxBufSize) {
+                ESP_LOGV(__FUNCTION__,"Flushing for first chuck");
+                Flush();
+            }
+
+            if ((pos+len) > maxBufSize) {
+                if (pos > 0) {
+                    ESP_LOGV(__FUNCTION__,"Flushing for next chuck");
                     Flush();
                 }
-                chunckSize=remaining>maxBufSize?maxBufSize:remaining;
+                MFile::Write(data+dataPos,maxBufSize);
+                dataPos+=maxBufSize;
+            } else {
+                memcpy(buf+pos,data,len);
+                pos+=len;
+                ESP_LOGV(__FUNCTION__,"Buffered %d",pos);
+                cJSON_SetIntValue(bytesCached,bytesCached->valueint+len);
             }
+            remaining-=len;
         }
     }
 }

@@ -19,6 +19,7 @@
 #include "eventmgr.h"
 
 #define MAX_OPEN_FILES 5
+#define MFILE_BUFFER_SIZE 30720
 
 enum fileEventIds {
     WRITE,
@@ -56,6 +57,7 @@ public:
 protected:
 
     EventHandlerDescriptor* BuildHandlerDescriptors();
+    static cJSON *BuildStatus(void *instance);
 
     cJSON* status;
     cJSON* hasContent;
@@ -80,13 +82,15 @@ public:
     void Close();
     static void FlushAll();
     static void CloseAll();
+    const char *GetName();
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
 protected:
+    cJSON* bytesCached;
 
 private:
     bool isNewOrEmpty;
     uint8_t* buf = NULL;
-    uint32_t maxBufSize = 8092;
+    uint32_t maxBufSize = MFILE_BUFFER_SIZE;
     uint32_t pos = 0;
     char eol = 10;
 };

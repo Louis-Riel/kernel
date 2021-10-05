@@ -262,7 +262,7 @@ esp_err_t setupLittlefs()
   esp_err_t ret = esp_vfs_littlefs_register(&conf);
   AppConfig *appState = AppConfig::GetAppStatus();
   ESP_LOGV(__FUNCTION__, "lfs mounted %d", ret);
-  AppConfig *spiffState = appState->GetConfig("/spiff");
+  AppConfig *spiffState = appState->GetConfig("/lfs");
   if (ret != ESP_OK)
   {
     spiffState->SetStateProperty("state", item_state_t::ERROR);
@@ -391,7 +391,7 @@ bool initSPISDCard(bool log)
   if (numSdCallers <= 0)
   {
     AppConfig *appState = AppConfig::GetAppStatus();
-    AppConfig *spiffState = appState->GetConfig("spiff");
+    AppConfig *spiffState = appState->GetConfig("lfs");
     AppConfig *sdcState = appState->GetConfig("sdcard");
     EventGroupHandle_t app_eg = getAppEG();
     esp_err_t ret = ESP_FAIL;
@@ -477,7 +477,7 @@ bool initSPISDCard(bool log)
                                        "Make sure SD card lines have pull-up resistors in place.",
                          esp_err_to_name(ret));
             }
-            AppConfig::GetAppStatus()->SetStateProperty("/sdcard/state", item_state_t::ERROR);
+            sdcState->SetStateProperty("state", item_state_t::ERROR);
             xEventGroupSetBits(app_eg, SDCARD_ERROR);
             spi_bus_free(SPI2_HOST);
             free(spiffState);
@@ -491,7 +491,7 @@ bool initSPISDCard(bool log)
             sdmmc_card_print_info(stdout, card);
           if (log)
             ESP_LOGD(__FUNCTION__, "SD card mounted %d", (int)card);
-          AppConfig::GetAppStatus()->SetStateProperty("/sdcard/state", item_state_t::ACTIVE);
+          sdcState->SetStateProperty("state", item_state_t::ACTIVE);
           xEventGroupSetBits(app_eg, SDCARD_MOUNTED);
         }
         else if (ret == ESP_ERR_INVALID_STATE)
@@ -503,7 +503,7 @@ bool initSPISDCard(bool log)
         }
         else
         {
-          AppConfig::GetAppStatus()->SetStateProperty("/sdcard/state", item_state_t::ERROR);
+          sdcState->SetStateProperty("state", item_state_t::ERROR);
           xEventGroupSetBits(app_eg, SDCARD_MOUNTED);
           if (log)
             ESP_LOGE(__FUNCTION__, "Error initing SPI bus %s", esp_err_to_name(ret));
@@ -810,9 +810,9 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
               if (strcmp(AppConfig::GetAppConfig()->GetStringProperty("clienttype"),"Tracker") == 0){
                 deleteFile("/lfs/firmware/current.bin");
               }
-              deinitSPISDCard();
               dumpTheLogs((void*)true);
-              esp_restart();
+              deinitSPISDCard();
+              esp_system_abort("Flashing");
             }
             else
             {
