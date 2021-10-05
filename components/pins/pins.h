@@ -21,10 +21,9 @@ public:
     ~Pin();
     static void PollPins();
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
-    bool state;
     bool isRtcGpio;
     enum eventIds {
-        ON,OFF,TRIGGER
+        OFF,ON,TRIGGER
     };
 protected:
     static uint8_t numPins;

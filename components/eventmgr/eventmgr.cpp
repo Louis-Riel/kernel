@@ -8,7 +8,6 @@ static EventManager* runningInstance=NULL;
 EventManager::EventManager(cJSON* cfg, cJSON* programs)
 :config(cfg)
 ,programs(programs)
-,jevt(NULL)
 ,eventBuffer(NULL)
 ,eventQueue(xQueueCreate(20, sizeof(postedEvent_t)))
 {
@@ -97,25 +96,43 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
     }
     EventManager* evtMgr = EventManager::GetInstance();
     if (WebsocketManager::HasOpenedWs()){
-        cJSON* jevt = cJSON_CreateObject();
-
-        if (evtMgr->eventBuffer == NULL) {
-            evtMgr->eventBuffer = (char*) dmalloc(JSON_BUFFER_SIZE);
-            jevt=cJSON_CreateObject();
-        }
-
-        cJSON_AddStringToObject(jevt,"eventBase",postedEvent->base);
         EventDescriptor_t* edesc = EventHandlerDescriptor::GetEventDescriptor(postedEvent->base,postedEvent->id);
         if (edesc != NULL) {
+            cJSON* jevt = cJSON_CreateObject();
+
+            if (evtMgr->eventBuffer == NULL) {
+                evtMgr->eventBuffer = (char*) dmalloc(JSON_BUFFER_SIZE);
+            }
+            cJSON_AddStringToObject(jevt,"eventBase",postedEvent->base);
             cJSON_AddStringToObject(jevt,"eventId",edesc->eventName);
+            cJSON* jpl = NULL;
+            switch (postedEvent->eventDataType)
+            {
+            case event_data_type_tp::JSON:
+                jpl = cJSON_Parse((const char*)postedEvent->event_data);
+                if (jpl) {
+                    cJSON_AddItemToObject(jevt,"data",jpl);
+                } else {
+                    ESP_LOGW(__FUNCTION__,"Cannot jsonify data for %s %s %s",edesc->baseName,edesc->eventName, (char*)postedEvent->event_data);
+                }
+                break;
+            case event_data_type_tp::String:
+                cJSON_AddStringToObject(jevt,"data",(char*)postedEvent->event_data);
+                break;
+            case event_data_type_tp::Number:
+                cJSON_AddNumberToObject(jevt,"data",*(int*)postedEvent->event_data);
+                break;
+            default:
+                ESP_LOGW(__FUNCTION__,"Unknown event data type for %s-%s",edesc->baseName,edesc->eventName);
+                break;
+            }
             if (cJSON_PrintPreallocated(jevt,evtMgr->eventBuffer,JSON_BUFFER_SIZE,false)){
                 WebsocketManager::EventCallback(evtMgr->eventBuffer);
             }
+            cJSON_Delete(jevt);
         }
     } else if (evtMgr->eventBuffer) {
         ldfree(evtMgr->eventBuffer);
-        cJSON_Delete(evtMgr->jevt);
-        evtMgr->jevt=NULL;
         evtMgr->eventBuffer = NULL;
     }
     EventInterpretor* interpretor;
@@ -133,6 +150,10 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
             }
         }
     }
+    if ((postedEvent->eventDataType == event_data_type_tp::JSON) ||
+        (postedEvent->eventDataType == event_data_type_tp::String)){
+        ldfree(postedEvent->event_data);
+    }
 }
 
 void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
@@ -146,7 +167,22 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
     postedEvent.base=base;
     postedEvent.id=id;
     postedEvent.event_data=event_data;
-    xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
+    EventDescriptor_t* ed=NULL;
+    postedEvent.eventDataType=(ed=EventHandlerDescriptor::GetEventDescriptor(base,id)) == NULL ? event_data_type_tp::Unknown : ed->dataType;
+    if (!ed) {
+        ESP_LOGW(__FUNCTION__,"No desciptor for %s %d", base, id);
+    } else {
+        ESP_LOGV(__FUNCTION__,"type for %s %s is %d", base, ed->eventName, (int)ed->dataType);
+        if ((ed->dataType == event_data_type_tp::JSON) ||
+            (ed->dataType == event_data_type_tp::String)) {
+            postedEvent.event_data=malloc(strlen((char*)event_data)+1);
+            strcpy((char*)postedEvent.event_data,(char*)event_data);
+            ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent.event_data);
+            xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
+        } else {
+            xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
+        } 
+    }
 }
 
 static ManagedThreads* theInstance = NULL;

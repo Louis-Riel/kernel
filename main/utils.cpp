@@ -236,17 +236,14 @@ bool deinitSPISDCard(bool log)
       xEventGroupClearBits(app_eg, SDCARD_MOUNTED);
       appState->SetStateProperty("/sdcard/state", item_state_t::INACTIVE);
     }
-    xSemaphoreGive(storageSema);
-    return true;
   }
   else
   {
     if (log)
       ESP_LOGV(__FUNCTION__, "Postponing SD card umount");
-    xSemaphoreGive(storageSema);
-    return ESP_OK;
   }
   xSemaphoreGive(storageSema);
+  return true;
 }
 
 bool deinitSPISDCard()

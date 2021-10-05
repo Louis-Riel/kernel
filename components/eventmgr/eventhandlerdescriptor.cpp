@@ -26,13 +26,18 @@ EventHandlerDescriptor::EventHandlerDescriptor(esp_event_base_t eventBase,const 
 }
 
 bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName){
+    return AddEventDescriptor(id,eventName,event_data_type_tp::Unknown);
+}
+
+bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName,event_data_type_tp dtp){
     EventDescriptor_t* desc = GetEventDescriptor(eventBase,id);
     if (desc == NULL) {
         ESP_LOGV(__FUNCTION__,"Caching event descriptor %s(%d) registered in %s at idx %d", eventName,id,this->eventBase,EventHandlerDescriptor::numCacheEntries);
         desc=&EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries];
         EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].id = id;
         EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].baseName = name;
-        EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries++].eventName = eventName;
+        EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].eventName = eventName;
+        EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries++].dataType = dtp;
     }
 
     if (desc){
@@ -42,6 +47,7 @@ bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName
                 descriptor->id = desc->id;
                 descriptor->eventName = desc->eventName;
                 descriptor->baseName = desc->baseName;
+                descriptor->dataType = desc->dataType;
                 ESP_LOGV(__FUNCTION__,"Event descriptor %s(%d) registered in %s at idx %d", eventName,id,this->eventBase, idx);
                 return true;
             }
@@ -59,7 +65,7 @@ char* EventHandlerDescriptor::GetName(){
     return this->name;
 }
 
-cJSON* EventHandlerDescriptor::GetEventBaseEvents(const char* base, const char* filter) {
+cJSON* EventHandlerDescriptor::GetEventBaseEvents(esp_event_base_t base, const char* filter) {
     cJSON* ret = cJSON_CreateArray();
     for (int idx = 0; idx < numCacheEntries; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
@@ -86,7 +92,7 @@ cJSON* EventHandlerDescriptor::GetEventBaseEvents(const char* base, const char* 
     return ret;
 }
 
-EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(const char* base,const char* eventName) {
+EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(esp_event_base_t base,const char* eventName) {
     ESP_LOGV(__FUNCTION__,"GetEventDescriptor %s(%s)", eventName, base);
     for (int idx = 0; idx < numCacheEntries; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];

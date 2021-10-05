@@ -21,7 +21,7 @@ Pin::~Pin(){
 }
 
 Pin::Pin(AppConfig* config)
-    :ManagedDevice("DigitalPin","DigitalPin",BuildStatus,HealthCheck),
+    :ManagedDevice("DigitalPin","DigitalPin",BuildStatus),
     pinNo(config->GetPinNoProperty("pinNo")),
     flags(config->GetIntProperty("driverFlags")),
     config(config),
@@ -50,16 +50,17 @@ Pin::Pin(AppConfig* config)
     cJSON* sjson = NULL;
     AppConfig* apin = new AppConfig(sjson=ManagedDevice::BuildStatus(this),AppConfig::GetAppStatus());
     apin->SetPinNoProperty("pinNo",pinNo);
-    apin->SetBoolProperty("state",false);
+    apin->SetIntProperty("state",gpio_get_level(pinNo));
     pinStatus = apin->GetPropertyHolder("state");
+
     delete apin;
 }
 
 EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
   ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
   EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
-  handler->AddEventDescriptor(eventIds::OFF,"OFF");
-  handler->AddEventDescriptor(eventIds::ON,"ON");
+  handler->AddEventDescriptor(eventIds::OFF,"OFF",event_data_type_tp::Number);
+  handler->AddEventDescriptor(eventIds::ON,"ON",event_data_type_tp::Number);
   handler->AddEventDescriptor(eventIds::TRIGGER,"TRIGGER");
   return handler;
 }
@@ -83,7 +84,7 @@ void Pin::InitDevice(){
     }
     isRtcGpio = rtc_gpio_is_valid_gpio(pinNo);
     ESP_LOGD(__FUNCTION__, "Pin %d: RTC:%d", pinNo, isRtcGpio);
-    ESP_LOGD(__FUNCTION__, "Pin %d: Level:%d", pinNo, state=gpio_get_level(pinNo));
+    ESP_LOGD(__FUNCTION__, "Pin %d: Level:%d", pinNo, gpio_get_level(pinNo));
     ESP_LOGV(__FUNCTION__, "Pin %d: 0x%" PRIXPTR "", pinNo,(uintptr_t)this);
     ESP_LOGV(__FUNCTION__, "Numpins %d", numPins);
     if (isRtcGpio)
@@ -91,13 +92,12 @@ void Pin::InitDevice(){
 }
 
 void Pin::RefrestState(){
-    bool curState = gpio_get_level(pinNo);
-    if (curState != state) {
-        if (pinStatus)
-            cJSON_SetIntValue(pinStatus,curState);
-        state=curState;
-        ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, eventBase,state?"On":"Off");
-        PostEvent((void*)&pinNo,sizeof(pinNo),state ? eventIds::ON : eventIds::OFF);
+    int curState = gpio_get_level(pinNo);
+    if (curState != pinStatus->valueint) {
+        cJSON_SetIntValue(pinStatus,curState);
+        ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, eventBase,pinStatus->valueint?"On":"Off");
+        AppConfig::SignalStateChange(state_change_t::EVENT);
+        PostEvent((void*)&pinNo,sizeof(pinNo),pinStatus->valueint ? eventIds::ON : eventIds::OFF);
     }
 }
 
@@ -138,6 +138,10 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
                     ESP_LOGV(__FUNCTION__,"%d:Checking %s %d",idx, pins[idx]->name,pins[idx]->pinNo);
                     if (pins[idx]->pinNo == pinNo) {
                         pin = pins[idx];
+                        if (pin && pin->flags&gpio_driver_t::driver_type_t::digital_in) {
+                            return;
+                        }
+
                         break;
                     }
                 } else {
@@ -160,18 +164,18 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
                     state = 1;
                     break;
                 case Pin::eventIds::OFF:
-                    ESP_LOGD(__FUNCTION__,"Turning %s OFF",pin->name);
+                    ESP_LOGV(__FUNCTION__,"Turning %s OFF",pin->name);
                     state = 0;
                     break;
                 default:
                     ESP_LOGE(__FUNCTION__,"Invalid event id for %s",pin->name);
                     break;
                 }
-                if ((state <= 1) && (state != pin->state)) {
+                if ((state <= 1) && (state != pin->pinStatus->valueint)) {
                     gpio_set_level(pin->pinNo,state);
-                    ESP_LOGV(__FUNCTION__,"Pin %s from %d to %d",pin->name,pin->state,state);
+                    ESP_LOGV(__FUNCTION__,"Pin %s from %d to %d",pin->name,pin->pinStatus->valueint,state);
                     if (!pin->isRtcGpio) {
-                        pin->state=state;
+                        cJSON_SetIntValue(pin->pinStatus,state);
                         //pin->PostEvent((void*)&pinNo,sizeof(pinNo),state ? eventIds::ON : eventIds::OFF);
                     }
                 }
@@ -186,6 +190,13 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
 
 bool Pin::HealthCheck(void* instance){
     Pin* thePin = (Pin*)instance;
-
-    return thePin->state == gpio_get_level(thePin->pinNo);
+    int curState = gpio_get_level(thePin->pinNo);
+    if (thePin->pinStatus && thePin->pinStatus->valueint != curState) {
+        ESP_LOGW(__FUNCTION__,"State discrepancy on pin %s, expected %d got %d",thePin->GetName(), thePin->pinStatus->valueint, curState);
+        cJSON_SetIntValue(thePin->pinStatus,curState);
+        ESP_LOGW(__FUNCTION__,"State discrepancy fixed on pin %s, %d == %d",thePin->GetName(), thePin->pinStatus->valueint, curState);
+        thePin->PostEvent((void*)&thePin->pinNo,sizeof(thePin->pinNo),thePin->pinStatus->valueint ? eventIds::ON : eventIds::OFF);
+        return false;
+    }
+    return true;
 }

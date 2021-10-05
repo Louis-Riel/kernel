@@ -110,6 +110,7 @@ bool ManagedDevice::ValidateDevices(){
     if (runningInstances[idx]) {
       size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
       if (!runningInstances[idx]->hcFnc(runningInstances[idx])){
+        ESP_LOGW(__FUNCTION__,"HC Failed for %s",runningInstances[idx]->GetName());
         hasIssues = true;
         numErrors++;
         lastErrorTs = esp_timer_get_time();

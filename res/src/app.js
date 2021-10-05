@@ -13,10 +13,20 @@ class MainApp extends React.Component {
         logCBFn: [],
         eventCBFn: []
       },
+      pageControler: this.GetPageControler(),
       selectedDeviceId: "current"
     };
-    this.id = this.props.id || genUUID();
-    this.logCBFn = null;
+  }
+
+  GetPageControler() {
+    var ret = new AbortController();
+    ret.onabort = this.OnAbort;
+    return ret;
+  }
+
+  OnAbort() {
+    console.log("Abort!!!!");
+    this.state.pageControler= this.GetPageControler();
   }
 
   componentDidMount(){
@@ -56,7 +66,7 @@ class MainApp extends React.Component {
 
   registerLogCallback(logCBFn) {
     this.state.callbacks.logCBFn.push(logCBFn);
-    }
+  }
 
   registerEventCallback(eventCBFn) {
     this.state.callbacks.eventCBFn.push(eventCBFn);
@@ -68,18 +78,18 @@ class MainApp extends React.Component {
 
   render() {
     return [
-      Object.keys(this.state.tabs).map(tab => e("a",{key: genUUID(),
+      e("div",{ key: genUUID(), className:"tabs"}, Object.keys(this.state.tabs).map(tab => e("a",{key: genUUID(),
                                                      id: `a${tab}`,
                                                      className: this.state.tabs[tab].active ? "active" : "",
-                                                     onClick: () => this.setActiveTab(tab),href: `#${tab}`},tab)),
-      e("div", { key: genUUID()},[
+                                                     onClick: () => this.setActiveTab(tab),href: `#${tab}`},tab))),
+      e("div", { key: genUUID(), className:"slide"},[
       e(ControlPanel, { key: genUUID(), selectedDeviceId: this.state.selectedDeviceId, onSelectedDeviceId: this.onSelectedDeviceId.bind(this), callbacks: this.state.callbacks }),
       e("div", { key: genUUID(), className: `slides${this.state.tabs.Config.active || this.state.tabs.Status.active ? "" : " expanded"}` }, this.state.selectedDeviceId ? [
-        e("div",{ className: "file_section",  id: "Storage", key: genUUID() },e(StorageViewer, { active: this.state.tabs.Storage.active, pageControler: this.props.pageControler,path: "/",cols: ["Name", "Size"]})),
-        e("div",{ className: "system-config", id: "Status",  key: genUUID() },e(MainAppState,  { active: this.state.tabs.Status.active, pageControler: this.props.pageControler, selectedDeviceId: this.state.selectedDeviceId, registerStateCallback:this.registerStateCallback.bind(this) })),
-        e("div",{ className: "system-config", id: "Config",  key: genUUID() },e(ConfigPage,    { active: this.state.tabs.Config.active, pageControler: this.props.pageControler, selectedDeviceId: this.state.selectedDeviceId })),
-        e("div",{ className: "logs",          id: "Logs",    key: genUUID() },e(SystemPage,    { active: this.state.tabs.Logs.active, pageControler: this.props.pageControler,   selectedDeviceId: this.state.selectedDeviceId, registerLogCallback:this.registerLogCallback.bind(this) })),
-        e("div",{ className: "events",        id: "Events",  key: genUUID() },e(EventsPage,    { active: this.state.tabs.Events.active, pageControler: this.props.pageControler, selectedDeviceId: this.state.selectedDeviceId, registerEventCallback:this.registerEventCallback.bind(this) }))
+        e("div",{ className: "file_section",  id: "Storage", key: genUUID() },e(StorageViewer, { active: this.state.tabs.Storage.active, pageControler: this.state.pageControler,path: "/",cols: ["Name", "Size"]})),
+        e("div",{ className: "system-config", id: "Status",  key: genUUID() },e(MainAppState,  { active: this.state.tabs.Status.active, pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, registerStateCallback:this.registerStateCallback.bind(this) })),
+        e("div",{ className: "system-config", id: "Config",  key: genUUID() },e(ConfigPage,    { active: this.state.tabs.Config.active, pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId })),
+        e("div",{ className: "logs",          id: "Logs",    key: genUUID() },e(SystemPage,    { active: this.state.tabs.Logs.active, pageControler: this.state.pageControler,   selectedDeviceId: this.state.selectedDeviceId, registerLogCallback:this.registerLogCallback.bind(this) })),
+        e("div",{ className: "events",        id: "Events",  key: genUUID() },e(EventsPage,    { active: this.state.tabs.Events.active, pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, registerEventCallback:this.registerEventCallback.bind(this) }))
       ]:[])])
     ];
   }
@@ -89,8 +99,7 @@ ReactDOM.render(
   e(MainApp, {
     key: genUUID(),
     className: "slider",
-    refreshFrequency: 10,
-    pageControler: new AbortController()
+    refreshFrequency: 10
   }),
   document.querySelector(".slider")
 );

@@ -8,10 +8,16 @@ class StateTable extends React.Component {
         };
         this.id = this.props.id || genUUID();
     }
+    SortTable(th) {
+        var table,tbody;
+        Array.from((tbody=(table=th.target.closest("table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n)'))
+                 .sort(comparer(Array.from(th.target.parentNode.children).indexOf(th.target), this.asc = !this.asc))
+                 .forEach(tr => tbody.appendChild(tr));
+    }
 
     BuildHead(json) {
         if (json) {
-            return [e("thead", { key: genUUID(), }, e("tr", { key: genUUID() },
+            return [e("thead", { key: genUUID(), onClick: this.SortTable.bind(this) }, e("tr", { key: genUUID() },
                 json.flatMap(row => Object.keys(row))
                     .concat(this.props.cols)
                     .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
@@ -22,7 +28,7 @@ class StateTable extends React.Component {
                                 this.state.sortedOn = fld;
                             }
                         }
-                        return e("td", { key: genUUID() }, fld);
+                        return e("th", { key: genUUID() }, fld);
                     }))), e("caption", { key: genUUID() }, this.props.label)];
         } else {
             return null;

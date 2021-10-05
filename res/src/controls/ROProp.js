@@ -38,8 +38,8 @@ class ROProp extends React.Component {
         if (now.getFullYear() <= 1970) 
             now.setTime(now.getTime() + now.getTimezoneOffset() * 60 * 1000);
             
-        var today = now.toDateString();
-        var time = now.toLocaleTimeString();
+        var today = now.toLocaleDateString('en-US',{dateStyle:"short"});
+        var time = now.toLocaleTimeString('en-US',{hour12:false});
         var hrs = now.getHours();
         var min = now.getMinutes();
         var sec = now.getSeconds();
@@ -58,7 +58,7 @@ class ROProp extends React.Component {
 
         var canvas = input.querySelector(`canvas`) || input.appendChild(document.createElement("canvas"));
         canvas.height = 100;
-        canvas.width = 100;
+        canvas.width = 110;
         var ctx = canvas.getContext("2d");
         ctx.strokeStyle = '#00ffff';
         ctx.lineWidth = 4;
@@ -74,18 +74,18 @@ class ROProp extends React.Component {
         ctx.clearRect(0, 0, rect.width, rect.height);
 
         ctx.beginPath();
-        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad((hrs * 30) - 90));
+        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad(270+((hrs>12?hrs-12:hrs)*30)));
         ctx.stroke();
 
         ctx.beginPath();
-        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad((smoothmin * 6) - 90));
+        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad(270+(smoothmin * 6)));
         ctx.stroke();
 
         //Date
-        ctx.font = "8px Helvetica";
+        ctx.font = "12px Helvetica";
         ctx.fillStyle = 'rgba(00, 255, 255, 1)'
         var txtbx = ctx.measureText(today);
-        ctx.fillText(today, (rect.width / 2) - txtbx.width / 2, rect.height * .55);
+        ctx.fillText(today, (rect.width / 2) - txtbx.width / 2, rect.height * .65);
 
         //Time
         ctx.font = "12px Helvetica";

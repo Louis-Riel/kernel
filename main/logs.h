@@ -33,10 +33,11 @@ typedef enum {
  WIFI_OFF = BIT10,
  GPS_OFF = BIT11,
  HIBERNATE = BIT12,
- MAX_APP_BITS = 13
+ IR = BIT13,
+ MAX_APP_BITS = 14
 } app_bits_t;
 
-#define APP_SERVICE_BITS (app_bits_t::WIFI_ON|app_bits_t::WIFI_OFF|app_bits_t::REST|app_bits_t::GPS_ON|app_bits_t::HIBERNATE)
+#define APP_SERVICE_BITS (app_bits_t::WIFI_ON|app_bits_t::WIFI_OFF|app_bits_t::REST|app_bits_t::GPS_ON|app_bits_t::HIBERNATE|app_bits_t::IR)
 
 void initLog();
 void dumpLogs();

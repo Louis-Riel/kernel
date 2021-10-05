@@ -28,16 +28,16 @@ public:
   {
     httpd_handle_t hd;
     int fd;
-    bool isLive = false;
-    uint8_t errorCount = 0;
-    uint64_t bytesOut = 0;
-    time_t lastTs = 0;
-    sockaddr_in6 addr;
+    time_t lastTs;
+    cJSON* jBytesIn;
+    cJSON* jBytesOut;
+    cJSON* jLastTs;
+    cJSON* jIsLive;
+    cJSON* jAddr;
   } clients[5];
 
 protected:
   static bool HealthCheck(void *instance);
-  static cJSON *BuildStatus(void *instance);
 
   EventHandlerDescriptor *BuildHandlerDescriptors();
 
@@ -47,6 +47,7 @@ private:
   char *logBuffer;
   char *stateBuffer;
   uint8_t emptyString;
+  cJSON* jClients;
 };
 
 class TheRest : ManagedDevice

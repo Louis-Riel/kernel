@@ -594,7 +594,7 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                     ESP_LOGD(__FUNCTION__, "Deleting %s", fname);
                     if (fileType[0] == 'f')
                     {
-                        ESP_LOGD(__FUNCTION__, "%s is a file", fname);
+                        ESP_LOGV(__FUNCTION__, "%s is a file", fname);
                         if (deleteFile(fname))
                         {
                             ret = httpd_resp_send(req, "OK", 2);
@@ -608,7 +608,7 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                     }
                     else
                     {
-                        ESP_LOGD(__FUNCTION__, "%s is a folder", fname);
+                        ESP_LOGV(__FUNCTION__, "%s is a folder", fname);
                         if (rmDashFR(fname))
                         {
                             ret = httpd_resp_send(req, "OK", 3);
@@ -674,7 +674,7 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
     ESP_LOGV(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
     TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += len;
 
-    if (!endsWith(req->uri, "config"))
+    if (!endsWith(req->uri, "config") && !endsWith(req->uri, "config/"))
     {
         devId = atoi(indexOf(req->uri + 1, "/") + 1);
         ESP_LOGV(__FUNCTION__, "Remote devid:%d Post len:%d", devId, len);

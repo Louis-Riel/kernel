@@ -22,7 +22,7 @@ table.greyGridTable tfoot {
 
 table.greyGridTable caption {
     position: sticky;
-    top: -10px;
+    top: -11px;
     height: 30px;
     font-family: monospace;
     font-size: x-large;
@@ -48,7 +48,7 @@ table.greyGridTable thead * {
     background: #181d17;
     border-bottom: 2px solid #c0c0c0;
     position: sticky;
-    top: 19px;
+    top: 18px;
     color: aqua;
     padding-top: 8px;
 }
@@ -75,7 +75,7 @@ table.greyGridTable tfoot td {
 }
 
 fieldset {
-    width: inherit;
+    /* width: inherit; */
 }
 
 .site-header {
@@ -113,33 +113,47 @@ fieldset {
     opacity: 0.5;
 }
 
+.loading {
+    background-color: #dedbdb4d -webkit-user-select: none -moz-user-select: none -ms-user-select: none;
+    user-select: none;
+    opacity: 0.5;
+    transition-delay: 0.5s;
+}
+
 textarea {
+    user-select: none;
     font-size: small !important;
 }
 
 label {
     font-style: italic;
     font-size: small;
+    background: linear-gradient(to bottom, #2d332d, #091308);
+    margin-top: 10px;
 }
 
 * {
-    box-sizing: border-box;
+    /* box-sizing: border-box; */
 }
 
-.slider {
+div.slider {
     overflow: hidden;
-    color: chartreuse;
+    color: #97ea44;
     padding-top: 5px;
+    /* width: 100%; */
+    /* height: -webkit-fill-available; */
 }
 
-.slides {
+div.slides {
     display: flex;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
     position: relative;
     transition: opacity 1s;
-    max-height: 93%;
+    /* height: 95%; */
+    /* width: 100%; */
+    /* display: flex; */
 }
 
 .slides::-webkit-scrollbar {
@@ -163,12 +177,12 @@ label {
     transform-origin: center center;
     transition: transform 0.5s;
     overflow: auto;
-    width: 100%;
+    width: 99%;
     border: solid;
     border-color: silver;
     padding-left: 15px;
     padding-top: 10px;
-    max-height: 100%;
+    /* max-height: 100%; */
 }
 
 .author-info {
@@ -196,15 +210,15 @@ img {
     height: 100%;
 }
 
-div.slider>a {
-    height: 150px;
+div.tabs>a {
+    /* height: 150px; */
     text-decoration: none;
     border-top-left-radius: 25%;
     border-top-right-radius: 25%;
     margin-left: 15px;
     padding-left: 10px;
     padding-right: 10px;
-    color: #7fff02;
+    color: aquamarine;
     background-color: #242d23;
 }
 
@@ -239,12 +253,13 @@ body {
 
 .system-config fieldset label {
     float: left;
+    /* height: fit-content; */
 }
 
 .system-config fieldset label>input,
 textarea,
 select {
-    width: 90%;
+    /* width: 90%; */
     font-size: large;
 }
 
@@ -253,16 +268,25 @@ textarea,
 select,
 option {
     background-color: #212621;
-    color: greenyellow;
+    color: #12e0fc;
 }
 
 .slides fieldset {
     border-style: none;
     background: linear-gradient(to bottom, #151a15, #273426);
+    float: left;
+    /* max-width: 100%; */
 }
 
 .slides fieldset>fieldset {
-    border-style: double;
+    /* border-style: double; */
+    border-radius: 10px;
+    /* display: flex; */
+    /* height: fit-content; */
+    /* width: fit-content; */
+    /* max-width: 100%; */
+    /* flex-direction: column; */
+    background: linear-gradient(to bottom, #2d332d, #091308);
 }
 
 table.greyGridTable a {
@@ -294,11 +318,13 @@ th {
 
 button {
     background-color: #374635;
-    color: #76ff02;
+    color: #ccfca3;
     font: caption;
-    border-radius: 42%;
-    padding-top: 5px;
+    border-radius: 20px;
+    padding: 5px;
     padding-bottom: 5px;
+    height: fit-content;
+    margin: 5px;
 }
 
 .log div {
@@ -358,7 +384,7 @@ label.table {
 
 label>div.value {
     margin-top: 10px;
-    font-size: large;
+    /* font-size: large; */
     white-space: pre-wrap;
 }
 
@@ -387,7 +413,7 @@ caption div.controls button {
 summary {
     clear: both;
     font-size: large;
-    background-color: #495248;
+    /* background-color: #495248; */
 }
 
 details>details {
@@ -400,7 +426,7 @@ summary>label {
     padding-top: 7px;
 }
 
-div.slider>a.active {
+div.tabs>a.active {
     background-color: #3d4d3b;
     padding-left: 20px;
     padding-right: 20px;
@@ -503,14 +529,16 @@ form .jsoneditor-frame {
     width: 100%;
 }
 
-div.slider,
-.slider>div {
+div.slider {
     width: 100%;
     height: 100%;
+    /* margin-bottom: 35px; */
+    display: flex;
+    flex-direction: column;
 }
 
 fieldset.slides label {
-    width: 200px;
+    /* width: 200px; */
 }
 
 fieldset.slides .label {
@@ -527,15 +555,21 @@ fieldset.slides input {
 
 .hidden {
     visibility: hidden;
-    display: none;
+    display: none !important;
 }
 
 .expanded {
-    max-height: 100%;
+    /* max-height: 100%; */
 }
 
-div.slider > div {
-    height: 94%;
+div.slider > div.slide {
+    max-height: 95%;
+    /* display: flex; */
+    /* flex: 1 1 auto; */
+    /* width: 100%; */
+    display: flex;
+    flex-direction: column;
+    background-color: #181f18;
 }
 
 .eventPanel {
@@ -553,19 +587,20 @@ div.slider > div {
     border-style: dotted;
     padding: 5px;
     border-radius: 20%;
-    display: flex;
+    /* display: flex; */
     width: fit-content;
+    font-size: small;
 }
 
 .eventBase {
-    font-size: small;
+    /* font-size: small; */
     color: aqua;
     margin-right: 5px;
 }
 
 .eventId {
-    font-size: small;
-    color: azure;
+    /* font-size: small; */
+    color: #5fdfc0;
 }
 
 .control {
@@ -627,7 +662,7 @@ details {
     border: 1px solid #aaa;
     border-radius: 4px;
     padding: .5em .5em .5em;
-    background: linear-gradient(to bottom, #495248, #393d39);
+    /* background: linear-gradient(to bottom, #495248, #393d39); */
     /* background-color: #495248; */
 }
 
@@ -648,4 +683,67 @@ summary div {
 
 .conditionField {
     display: flex;
+}
+
+.data .description {display: flex;}
+
+.propName {
+    color: cyan;
+    margin-right: 5px;
+}
+
+details.data {
+    color: aquamarine;
+    border: none;
+}
+
+.liveEvent .description {
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+.slide tbody {
+    /* font-size: small; */
+}
+
+.tabs {
+    height: 35px;
+    flex: 0 1 auto;
+    /* flex-direction: row; */
+}
+
+fieldset#controls {
+    display: flex;
+    flex-direction: row;
+    align-content: stretch;
+    justify-content: space-evenly;
+    border-style: none;
+}
+
+label.table {
+    width: both;
+}
+
+label.table table {
+    width: max-content;
+}
+
+label.table {
+    background: none;
+}
+
+legend {
+    color: aquamarine;
+    padding-top: 15px;
+}
+
+div.value {
+    /* color: red; */
+    /* font-variant-caps: unicase; */
+    font-family: monospace;
+    /* font-size: small; */
+}
+
+#controls label {
+    background: none;
 }

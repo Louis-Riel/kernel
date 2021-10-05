@@ -50,7 +50,7 @@ class ConfigPage extends React.Component {
     getJsonConfig(devid) {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
-            fetch(`${httpPrefix}/config${devid?`/${devid}`:""}`, {
+            fetch(`${httpPrefix}/config${devid&&devid!="current"?`/${devid}`:""}`, {
                 method: 'post',
                 signal: this.props.pageControler.signal
             }).then(data => {
@@ -108,8 +108,8 @@ class ConfigPage extends React.Component {
 
     SaveForm(form) {
         this.getJsonConfig(this.props.selectedDeviceId).then(vcfg => fromPlainToVersionned(this.state.deviceConfigs[this.props.selectedDeviceId], vcfg))
-            .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + this.props.selectedDeviceId, {
-                method: 'put',
+            .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + (this.props.selectedDeviceId == "current" ? "" : this.props.selectedDeviceId), {
+            method: 'put',
                 body: JSON.stringify(cfg)
             }).then(res => alert(JSON.stringify(res)))
               .catch(res => alert(JSON.stringify(res))));

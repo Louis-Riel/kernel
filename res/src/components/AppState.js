@@ -10,7 +10,14 @@ class AppState extends React.Component {
     Parse(json) {
         if (json) {
             return Object.keys(json)
-                .map(fld => {
+                .sort((f1,f2)=>{
+                    var f1s = Array.isArray(json[f1]) ? 5 : typeof json[f1] == 'object' ? 4 : IsDatetimeValue(f1) ? 2 : 3;
+                    var f2s = Array.isArray(json[f2]) ? 5 : typeof json[f2] == 'object' ? 4 : IsDatetimeValue(f2) ? 2 : 3;
+                    if (f1s == f2s) {
+                        return f1.localeCompare(f2);
+                    }
+                    return f1s>f2s?1:f2s>f1s?-1:0;
+                }).map(fld => {
                     if (Array.isArray(json[fld])) {
                         return e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] });
                     } else if (typeof json[fld] == 'object') {
@@ -31,9 +38,9 @@ class AppState extends React.Component {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         }
         if (this.props.label != null) {
-            return e("fieldset", { name: `/${this.state.path}`, id: `fs${this.id}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.props.json)]);
+            return e("fieldset", { id: `fs${this.id}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.props.json)]);
         } else {
-            return e("fieldset", { name: `/${this.state.path}`, id: `fs${this.id}` }, this.Parse(this.props.json));
+            return e("fieldset", { id: `fs${this.id}` }, this.Parse(this.props.json));
         }
     }
 }

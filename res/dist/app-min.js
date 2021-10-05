@@ -348,8 +348,8 @@ class ROProp extends React.Component {
         if (now.getFullYear() <= 1970) 
             now.setTime(now.getTime() + now.getTimezoneOffset() * 60 * 1000);
             
-        var today = now.toDateString();
-        var time = now.toLocaleTimeString();
+        var today = now.toLocaleDateString('en-US',{dateStyle:"short"});
+        var time = now.toLocaleTimeString('en-US',{hour12:false});
         var hrs = now.getHours();
         var min = now.getMinutes();
         var sec = now.getSeconds();
@@ -368,7 +368,7 @@ class ROProp extends React.Component {
 
         var canvas = input.querySelector(`canvas`) || input.appendChild(document.createElement("canvas"));
         canvas.height = 100;
-        canvas.width = 100;
+        canvas.width = 110;
         var ctx = canvas.getContext("2d");
         ctx.strokeStyle = '#00ffff';
         ctx.lineWidth = 4;
@@ -384,18 +384,18 @@ class ROProp extends React.Component {
         ctx.clearRect(0, 0, rect.width, rect.height);
 
         ctx.beginPath();
-        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad((hrs * 30) - 90));
+        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad(270+((hrs>12?hrs-12:hrs)*30)));
         ctx.stroke();
 
         ctx.beginPath();
-        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad((smoothmin * 6) - 90));
+        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad(270+(smoothmin * 6)));
         ctx.stroke();
 
         //Date
-        ctx.font = "8px Helvetica";
+        ctx.font = "12px Helvetica";
         ctx.fillStyle = 'rgba(00, 255, 255, 1)'
         var txtbx = ctx.measureText(today);
-        ctx.fillText(today, (rect.width / 2) - txtbx.width / 2, rect.height * .55);
+        ctx.fillText(today, (rect.width / 2) - txtbx.width / 2, rect.height * .65);
 
         //Time
         ctx.font = "12px Helvetica";
@@ -422,10 +422,16 @@ class StateTable extends React.Component {
         };
         this.id = this.props.id || genUUID();
     }
+    SortTable(th) {
+        var table,tbody;
+        Array.from((tbody=(table=th.target.closest("table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n)'))
+                 .sort(comparer(Array.from(th.target.parentNode.children).indexOf(th.target), this.asc = !this.asc))
+                 .forEach(tr => tbody.appendChild(tr));
+    }
 
     BuildHead(json) {
         if (json) {
-            return [e("thead", { key: genUUID(), }, e("tr", { key: genUUID() },
+            return [e("thead", { key: genUUID(), onClick: this.SortTable.bind(this) }, e("tr", { key: genUUID() },
                 json.flatMap(row => Object.keys(row))
                     .concat(this.props.cols)
                     .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
@@ -436,7 +442,7 @@ class StateTable extends React.Component {
                                 this.state.sortedOn = fld;
                             }
                         }
-                        return e("td", { key: genUUID() }, fld);
+                        return e("th", { key: genUUID() }, fld);
                     }))), e("caption", { key: genUUID() }, this.props.label)];
         } else {
             return null;
@@ -498,7 +504,14 @@ class AppState extends React.Component {
     Parse(json) {
         if (json) {
             return Object.keys(json)
-                .map(fld => {
+                .sort((f1,f2)=>{
+                    var f1s = Array.isArray(json[f1]) ? 5 : typeof json[f1] == 'object' ? 4 : IsDatetimeValue(f1) ? 2 : 3;
+                    var f2s = Array.isArray(json[f2]) ? 5 : typeof json[f2] == 'object' ? 4 : IsDatetimeValue(f2) ? 2 : 3;
+                    if (f1s == f2s) {
+                        return f1.localeCompare(f2);
+                    }
+                    return f1s>f2s?1:f2s>f1s?-1:0;
+                }).map(fld => {
                     if (Array.isArray(json[fld])) {
                         return e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] });
                     } else if (typeof json[fld] == 'object') {
@@ -519,9 +532,9 @@ class AppState extends React.Component {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         }
         if (this.props.label != null) {
-            return e("fieldset", { name: `/${this.state.path}`, id: `fs${this.id}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.props.json)]);
+            return e("fieldset", { id: `fs${this.id}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.props.json)]);
         } else {
-            return e("fieldset", { name: `/${this.state.path}`, id: `fs${this.id}` }, this.Parse(this.props.json));
+            return e("fieldset", { id: `fs${this.id}` }, this.Parse(this.props.json));
         }
     }
 }
@@ -706,7 +719,7 @@ class ConfigPage extends React.Component {
     getJsonConfig(devid) {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
-            fetch(`${httpPrefix}/config${devid?`/${devid}`:""}`, {
+            fetch(`${httpPrefix}/config${devid&&devid!="current"?`/${devid}`:""}`, {
                 method: 'post',
                 signal: this.props.pageControler.signal
             }).then(data => {
@@ -764,8 +777,8 @@ class ConfigPage extends React.Component {
 
     SaveForm(form) {
         this.getJsonConfig(this.props.selectedDeviceId).then(vcfg => fromPlainToVersionned(this.state.deviceConfigs[this.props.selectedDeviceId], vcfg))
-            .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + this.props.selectedDeviceId, {
-                method: 'put',
+            .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + (this.props.selectedDeviceId == "current" ? "" : this.props.selectedDeviceId), {
+            method: 'put',
                 body: JSON.stringify(cfg)
             }).then(res => alert(JSON.stringify(res)))
               .catch(res => alert(JSON.stringify(res))));
@@ -988,9 +1001,18 @@ class Event extends React.Component {
     }
 }class LiveEvent extends React.Component {
     render() {
-        return e("div",{key: genUUID() ,className: "liveEvent"},[
-            e("div",{key: genUUID() ,className: "eventBase"},this.props.eventBase),
-            e("div",{key: genUUID() ,className: "eventId"},this.props.eventId)
+        return e("summary",{key: genUUID() ,className: "liveEvent"},[
+            e("div",{key: genUUID() ,className: "description"},[
+                e("div",{key: genUUID() ,className: "eventBase"},this.props.eventBase),
+                e("div",{key: genUUID() ,className: "eventId"},this.props.eventId)
+            ]),
+            this.props.data ? 
+                e("details",{key: genUUID() ,className: "data"},Object.keys(this.props.data).map(prop => 
+                    e("div",{key: genUUID() ,className: "description"},[
+                        e("div",{key: genUUID() ,className: "propName"},prop),
+                        e("div",{key: genUUID() ,className: prop},this.props.data[prop])
+                    ])
+                )): null
         ]);
     }
 }
@@ -1020,7 +1042,7 @@ class LiveEventPannel extends React.Component {
                 e("div",{ key: genUUID()}, `${this.state.lastEvents.length} event${this.state.lastEvents.length?'s':''}`),
                 e("button",{ key: genUUID(), onClick: elem => this.setState({lastEvents:[]})},"Clear")
             ]),
-            e("div",{ key: genUUID(), className:"eventList"},this.state.lastEvents.map(event => e(LiveEvent,{ key: genUUID(), eventBase:event.eventBase, eventId:event.eventId})).reverse())
+            e("div",{ key: genUUID(), className:"eventList"},this.state.lastEvents.map(event => e(LiveEvent,{ key: genUUID(), ...event})).reverse())
         ])
 
     }
@@ -1189,7 +1211,7 @@ class SFile extends React.Component {
         return  e("tr", { key: genUUID(), className: this.props.file.ftype }, [
             e("td", { key: genUUID() }, this.props.getFileLink(this.props.file)),
             e("td", { key: genUUID() }, this.props.file.ftype != "file" ? "" : this.props.file.size),
-            e("td", { key: genUUID() }, this.props.path == "/" ? null : e("a", {
+            e("td", { key: genUUID() }, this.props.path == "/" || this.props.file.name == ".." ? null : e("a", {
                 key: genUUID(),
                 href: "#",
                 onClick: () => {
@@ -1199,7 +1221,7 @@ class SFile extends React.Component {
                             ftype: this.props.file.ftype == "file" ? "file" : "directory",
                             operation: "delete"
                         }
-                    }).then(this.setState({ loaded: false }))
+                    }).then(this.props.OnDelete ? this.props.OnDelete():null)
                       .catch(err => {
                         console.error(err);
                       });
@@ -1238,16 +1260,18 @@ class StorageViewer extends React.Component {
                 clearTimeout(quitItNow);
                 data.json().then(jdata => {
                     fileToFetch.size = jdata.size;
-                    this.setState({ files: this.state.files, total: this.state.total + jdata.size });
+                    this.state.total += jdata.size;
+                    this.setState({ loaded: true, files: this.state.files, total: this.state.total });
                 });
                 if (fileStatsToFetch.length && !this.props.pageControler.signal.aborted) {
                     this.GetFileStat(fileStatsToFetch);
-                }
+                }        
             }).catch(ex => {
                 clearTimeout(quitItNow);
-                if (!this.props.pageControler.signal.aborted)
-                    fileStatsToFetch.push(fileToFetch);
+                reject(ex);
             });
+        } else {
+            this.setState({ loaded: true, files: this.state.files, total: this.state.total });
         }
     }
 
@@ -1264,10 +1288,9 @@ class StorageViewer extends React.Component {
                         return f1.ftype == "folder" ? 1 : -1;
                     }
                     return f1.name == f2.name ? 0 : f1.name > f2.name ? 1 : -1;
-                }))
-                .then(files => {
-                    this.setState({ loaded: true, files: files });
-                    var fileStatsToFetch = files.filter(file => file.ftype == "file" && file.size==0);
+                })).then(files => {
+                    this.setState({ loaded: true, files: files, total: files.reduce((e1,e2) => e1 + e2.size,0) });
+                    var fileStatsToFetch = files.filter(file => file.ftype == "file" && !file.size);
                     for (var idx = 0; idx < Math.min(3, fileStatsToFetch.length); idx++) {
                         if (fileStatsToFetch.length) {
                             this.GetFileStat(fileStatsToFetch);
@@ -1306,28 +1329,45 @@ class StorageViewer extends React.Component {
         if (this.props.active) {
             document.getElementById("Storage").scrollIntoView()
         }
-        document.getElementById(this.id).querySelectorAll("thd").forEach(th => th.addEventListener('click', (() => {
-            const table = document.getElementsByClassName("file-table")[0].getElementsByTagName("tbody")[0];
-            Array.from(table.querySelectorAll('tr:nth-child(n+2)'))
-                .sort(comparer(Array.from(th.parentNode.children).indexOf(th), this.asc = !this.asc))
-                .forEach(tr => table.appendChild(tr));
-        })));
     }
 
+    SortTable(th) {
+        var table,tbody;
+        Array.from((tbody=(table=th.target.closest("div.file-table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n+2)'))
+                 .sort(comparer(Array.from(th.target.parentNode.children).indexOf(th.target), this.asc = !this.asc))
+                 .forEach(tr => tbody.appendChild(tr));
+                }
+
     getTableHeader() {
-        return e("thead", { key: genUUID() }, e("tr", { key: genUUID() }, this.props.cols.map(col => e("th", { key: genUUID() }, col)).concat(e("th", { key: genUUID() }, "Op"))));
+        return e("thead", { key: genUUID() }, e("tr", { key: genUUID() }, this.props.cols.map(col => e("th", { key: genUUID(), onClick: this.SortTable.bind(this) }, col)).concat(e("th", { key: genUUID() }, "Op"))));
     }
 
     render() {
-        return e("div", { key: genUUID(), id: this.id, className: "file-table" }, e("table", { key: genUUID(), className: "greyGridTable" }, [
+        return e("div", { key: genUUID(), 
+                          id: this.id, 
+                          className: `file-table ${this.state.loaded?"":"loading"}` }, e("table", { key: genUUID(), className: "greyGridTable" }, [
                 e("caption", { key: genUUID() }, this.state.path),
                 this.getTableHeader(),
                 e("tbody", { key: genUUID() }, this.state.files && this.state.files.length > 0 ? 
-                    this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ key: genUUID(), file:file, path:this.state.path, getFileLink:this.getFileLink.bind(this) })):
-                    e("tr", { key: genUUID() }, [
-                        e("td", { key: genUUID() }, "Loading..."), 
-                        e("td", { key: genUUID() })
-                    ])),
+                    this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ 
+                        key: genUUID(), 
+                        file:file, 
+                        path:this.state.path, 
+                        getFileLink:this.getFileLink.bind(this),
+                        OnDelete: ()=>this.fetchFiles()
+                    })):this.state.path == "/" ?
+                        e("tr", { key: genUUID() }, [
+                            e("td", { key: genUUID() }, "Loading..."), 
+                            e("td", { key: genUUID() })
+                        ]):
+                        this.getSystemFolders().map(file => e(SFile,{ 
+                            key: genUUID(), 
+                            file:file, 
+                            path:this.state.path, 
+                            getFileLink:this.getFileLink.bind(this),
+                            OnDelete: ()=>this.fetchFiles()
+                        }))
+                    ),
                 e("tfoot", { key: genUUID() }, e("tr", { key: genUUID() }, [
                     e("td", { key: genUUID() }, "Total"), 
                     e("td", { key: genUUID() }, this.state.total)
@@ -1437,10 +1477,20 @@ class MainApp extends React.Component {
         logCBFn: [],
         eventCBFn: []
       },
+      pageControler: this.GetPageControler(),
       selectedDeviceId: "current"
     };
-    this.id = this.props.id || genUUID();
-    this.logCBFn = null;
+  }
+
+  GetPageControler() {
+    var ret = new AbortController();
+    ret.onabort = this.OnAbort;
+    return ret;
+  }
+
+  OnAbort() {
+    console.log("Abort!!!!");
+    this.state.pageControler= this.GetPageControler();
   }
 
   componentDidMount(){
@@ -1480,7 +1530,7 @@ class MainApp extends React.Component {
 
   registerLogCallback(logCBFn) {
     this.state.callbacks.logCBFn.push(logCBFn);
-    }
+  }
 
   registerEventCallback(eventCBFn) {
     this.state.callbacks.eventCBFn.push(eventCBFn);
@@ -1492,18 +1542,18 @@ class MainApp extends React.Component {
 
   render() {
     return [
-      Object.keys(this.state.tabs).map(tab => e("a",{key: genUUID(),
+      e("div",{ key: genUUID(), className:"tabs"}, Object.keys(this.state.tabs).map(tab => e("a",{key: genUUID(),
                                                      id: `a${tab}`,
                                                      className: this.state.tabs[tab].active ? "active" : "",
-                                                     onClick: () => this.setActiveTab(tab),href: `#${tab}`},tab)),
-      e("div", { key: genUUID()},[
+                                                     onClick: () => this.setActiveTab(tab),href: `#${tab}`},tab))),
+      e("div", { key: genUUID(), className:"slide"},[
       e(ControlPanel, { key: genUUID(), selectedDeviceId: this.state.selectedDeviceId, onSelectedDeviceId: this.onSelectedDeviceId.bind(this), callbacks: this.state.callbacks }),
       e("div", { key: genUUID(), className: `slides${this.state.tabs.Config.active || this.state.tabs.Status.active ? "" : " expanded"}` }, this.state.selectedDeviceId ? [
-        e("div",{ className: "file_section",  id: "Storage", key: genUUID() },e(StorageViewer, { active: this.state.tabs.Storage.active, pageControler: this.props.pageControler,path: "/",cols: ["Name", "Size"]})),
-        e("div",{ className: "system-config", id: "Status",  key: genUUID() },e(MainAppState,  { active: this.state.tabs.Status.active, pageControler: this.props.pageControler, selectedDeviceId: this.state.selectedDeviceId, registerStateCallback:this.registerStateCallback.bind(this) })),
-        e("div",{ className: "system-config", id: "Config",  key: genUUID() },e(ConfigPage,    { active: this.state.tabs.Config.active, pageControler: this.props.pageControler, selectedDeviceId: this.state.selectedDeviceId })),
-        e("div",{ className: "logs",          id: "Logs",    key: genUUID() },e(SystemPage,    { active: this.state.tabs.Logs.active, pageControler: this.props.pageControler,   selectedDeviceId: this.state.selectedDeviceId, registerLogCallback:this.registerLogCallback.bind(this) })),
-        e("div",{ className: "events",        id: "Events",  key: genUUID() },e(EventsPage,    { active: this.state.tabs.Events.active, pageControler: this.props.pageControler, selectedDeviceId: this.state.selectedDeviceId, registerEventCallback:this.registerEventCallback.bind(this) }))
+        e("div",{ className: "file_section",  id: "Storage", key: genUUID() },e(StorageViewer, { active: this.state.tabs.Storage.active, pageControler: this.state.pageControler,path: "/",cols: ["Name", "Size"]})),
+        e("div",{ className: "system-config", id: "Status",  key: genUUID() },e(MainAppState,  { active: this.state.tabs.Status.active, pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, registerStateCallback:this.registerStateCallback.bind(this) })),
+        e("div",{ className: "system-config", id: "Config",  key: genUUID() },e(ConfigPage,    { active: this.state.tabs.Config.active, pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId })),
+        e("div",{ className: "logs",          id: "Logs",    key: genUUID() },e(SystemPage,    { active: this.state.tabs.Logs.active, pageControler: this.state.pageControler,   selectedDeviceId: this.state.selectedDeviceId, registerLogCallback:this.registerLogCallback.bind(this) })),
+        e("div",{ className: "events",        id: "Events",  key: genUUID() },e(EventsPage,    { active: this.state.tabs.Events.active, pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, registerEventCallback:this.registerEventCallback.bind(this) }))
       ]:[])])
     ];
   }
@@ -1513,8 +1563,7 @@ ReactDOM.render(
   e(MainApp, {
     key: genUUID(),
     className: "slider",
-    refreshFrequency: 10,
-    pageControler: new AbortController()
+    refreshFrequency: 10
   }),
   document.querySelector(".slider")
 );

@@ -228,6 +228,7 @@ void TinyGPSPlus::theLoop(void *param)
   gpio_set_level(BLINK_GPIO, 1);
 
   ESP_LOGI(__FUNCTION__, "Waiting for GPS Initialization");
+  bool loged = false;
   while (((bits=xEventGroupGetBits(gps->eg)) & gpsEvent::gpsRunning) &&
          !(bits&gpsEvent::initialized)){
     if (xEventGroupWaitBits(gps->eg,gpsEvent::initialized,pdFALSE,pdTRUE,1000/portTICK_PERIOD_MS) & gpsEvent::initialized) {
@@ -247,7 +248,10 @@ void TinyGPSPlus::theLoop(void *param)
       gps->flagProtocol(gps_protocol_t::GPS_GST, pdFALSE);
       gps->flagProtocol(gps_protocol_t::GPS_ZDA, pdTRUE);
     } else {
-      ESP_LOGW(__FUNCTION__, "GPS Not Initializing, rebooting GPS");
+      if (!loged){
+        ESP_LOGW(__FUNCTION__, "GPS Not Initializing, rebooting GPS");
+        loged = true;
+      }
       gps->gpsStop();
       vTaskDelay(200/portTICK_PERIOD_MS);
       gps->gpsStart();
@@ -953,13 +957,28 @@ bool TinyGPSPlus::isSignificant()
 {
   if (!location.isValid() ||
       !speed.isValid() ||
-      !lastSpeed.isValid() ||
       !course.isValid() ||
-      !lastCourse.isValid())
+      (location.lat() == location.lng()))
   {
+    ESP_LOGD(__FUNCTION__,"invalid loc data location:%d speed:%d lastSpeed:%d course:%d lastCourse:%d",
+    location.isValid(),
+    speed.isValid(),
+    lastSpeed.isValid(),
+    course.isValid(),
+    lastCourse.isValid());
     return false;
   }
+
   bool isc = false;
+  if (!lastCourse.isValid()) {
+    lastCourse = course;
+    isc=true;
+  }
+
+  if (!lastSpeed.isValid()) {
+    lastSpeed = speed;
+    isc=true;
+  }
   double val = abs(speed.kmph() - lastSpeed.kmph());
   if (speed.kmph() > 0.0)
   {
@@ -1114,7 +1133,7 @@ bool TinyGPSPlus::endOfTermHandler()
       for (TinyGPSCustom *p = customCandidates; p != NULL && strcmp(p->sentenceName, customCandidates->sentenceName) == 0; p = p->next)
         p->commit();
 
-      if (altitude.isValid() && altitude.isUpdated() && (location.lat() != 0) && (location.lng() != 0))
+      if (altitude.isValid() && altitude.isUpdated() && (location.lat() != 0) && (location.lng() != 0) && (location.lat() != location.lng()))
       {
         double dtmp = TinyGPSPlus::distanceBetween(location.lat(), location.lng(), lastLocation.lat(), lastLocation.lng());
         ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::locationChanged, &dtmp, sizeof(dtmp), portMAX_DELAY));
@@ -1344,6 +1363,8 @@ void TinyGPSLocation::commit()
   {
     cJSON_SetNumberValue(jlat, lat());
     cJSON_SetNumberValue(jlng, lng());
+  } else {
+    ESP_LOGW(__FUNCTION__,"No GPS long/lat json stat");
   }
 }
 

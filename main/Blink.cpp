@@ -34,6 +34,7 @@
 #include "route.h"
 #include "../components/pins/pins.h"
 #include "mfile.h"
+#include "../components/IR/ir.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -566,7 +567,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
   switch (id)
   {
   case TinyGPSPlus::gpsEvent::locationChanged:
-    ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, speed: %3.6f, Altitude:%4.2f Bat:%f diff:%.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters(), getBatteryVoltage(), *((double *)event_data));
+    ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, speed: %3.6f, Altitude:%4.2f, Course:%4.2f Bat:%f diff:%.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters(), gps->course.deg(), getBatteryVoltage(), *((double *)event_data));
     if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
       ctmp = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig("gps"));
       ESP_LOGV(__FUNCTION__,"The j:%s",ctmp);
@@ -694,10 +695,10 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     isStopped = true;
     break;
   case TinyGPSPlus::gpsEvent::gpsPaused:
-    ESP_LOGV(__FUNCTION__, "Battery %f", getBatteryVoltage());
+    ESP_LOGV(__FUNCTION__, "BatteryP %f", getBatteryVoltage());
     break;
   case TinyGPSPlus::gpsEvent::gpsResumed:
-    ESP_LOGV(__FUNCTION__, "Battery %f", getBatteryVoltage());
+    ESP_LOGV(__FUNCTION__, "BatteryR %f", getBatteryVoltage());
     break;
   case TinyGPSPlus::gpsEvent::atSyncPoint:
     ESP_LOGD(__FUNCTION__, "atSyncPoint");
@@ -881,7 +882,7 @@ void print_wakeup_reason()
       ESP_LOGD(__FUNCTION__, "Wakeup caused by Wifi");
       break;
     }
-  }
+  } 
 }
 int32_t GenerateDevId()
 {
@@ -978,6 +979,9 @@ static void serviceLoop(void *param)
       }
       ESP_LOGV(__FUNCTION__, "curr::%s %d", bits, serviceBits);
     }
+    if (serviceBits & app_bits_t::IR && !IRDecoder::IsRunning()) {
+      new IRDecoder(appCfg->GetConfig("IR"));
+    } 
     if (serviceBits & app_bits_t::WIFI_ON && !TheWifi::GetInstance())
     {
       CreateForegroundTask(wifiSallyForth, "WifiSallyForth", NULL);
@@ -1014,7 +1018,8 @@ static void serviceLoop(void *param)
     ESP_LOGV(__FUNCTION__,"Checking GPS");
     if (serviceBits & (app_bits_t::GPS_ON) &&
         !TinyGPSPlus::runningInstance() &&
-        (appCfg->HasProperty("/gps/rxPin")))
+        appCfg->HasProperty("/gps/rxPin") && 
+        appCfg->GetIntProperty("/gps/rxPin"))
     {
       //CreateForegroundTask(gpsSallyForth, "gpsSallyForth", appCfg);
       if (TinyGPSPlus::runningInstance() == NULL){
@@ -1109,17 +1114,17 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     nvs_flash_init();
 
-    if (appcfg->GetStringProperty("wifitype") == NULL)
-    {
-      ESP_LOGE(__FUNCTION__, "We have invalid configuration, resetting to default");
-      appcfg->ResetAppConfig(false);
-    }
+    bool firstRun = false;
 
     if (appcfg->GetIntProperty("deviceid") <= 0)
     {
-      ESP_LOGD(__FUNCTION__, "Seeding device id");
+      firstRun=true;
+      appcfg->ResetAppConfig(false);
       uint32_t did;
       appcfg->SetIntProperty("deviceid", (did = GenerateDevId()));
+      char* ctmp = cJSON_Print(appcfg->GetJSONConfig(NULL));
+      ESP_LOGD(__FUNCTION__, "Seeding device id to %d/%d %s",did,appcfg->GetIntProperty("deviceid"),ctmp);
+      ldfree(ctmp);
     }
     if (appcfg->GetIntProperty("deviceid") > 0)
     {
@@ -1161,20 +1166,30 @@ void app_main(void)
         Hibernate();
       }
     }
-    ESP_LOGV(__FUNCTION__, "Starting bumps:%d, lastMovement:%d", bumpCnt, CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ);
-    configureMotionDetector();
+    //ESP_LOGV(__FUNCTION__, "Starting bumps:%d, lastMovement:%d", bumpCnt, CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ);
+    //configureMotionDetector();
 
+    bool isTracker = appcfg->HasProperty("clienttype") && strcasecmp(appcfg->GetStringProperty("clienttype"),"tracker")==0;
     ConfigurePins(appcfg);
     EventGroupHandle_t app_eg = getAppEG();
-    ESP_LOGV(__FUNCTION__,"gps rx pin:%d",appcfg->GetIntProperty("/gps/rxPin"));
+    ESP_LOGD(__FUNCTION__,"gps rx pin:%d",appcfg->GetIntProperty("/gps/rxPin"));
     if (appcfg->GetIntProperty("/gps/rxPin"))
       xEventGroupSetBits(app_eg, app_bits_t::GPS_ON);
-
-    if (appcfg->IsAp())
+    
+    if (appcfg->IsAp() || firstRun || !isTracker)
     {
       xEventGroupSetBits(app_eg, app_bits_t::WIFI_ON);
       xEventGroupClearBits(app_eg, app_bits_t::WIFI_OFF);
     }
+
+    if (appcfg->HasProperty("/IR/pinNo")) {
+      ESP_LOGD(__FUNCTION__,"Starting IR");
+      xEventGroupSetBits(app_eg, app_bits_t::IR);
+    } else {
+      ESP_LOGD(__FUNCTION__,"No IR");
+    }
+    
+
     //Register event managers
     new BufferedFile();
 
@@ -1187,4 +1202,7 @@ void app_main(void)
     ESP_LOGE(__FUNCTION__, "caps integrity error");
   }
   ESP_LOGD(__FUNCTION__, "Battery: %f", getBatteryVoltage());
+  //vTaskDelay(30000/portTICK_PERIOD_MS);
+  //CreateBackgroundTask(TheRest::MergeConfig, "MergeConfig", 8192, NULL, tskIDLE_PRIORITY, NULL);
+
 }

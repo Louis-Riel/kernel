@@ -21,7 +21,7 @@ static TaskHandle_t dltask = NULL;
 void dumpTheLogs(void* params){
     bool isAp = GetAppConfig()->IsAp();
     if (logBufPos == 0) {
-        ESP_LOGD(__FUNCTION__,"No logs to dump");
+        printf("\nNo logs to dump\n");
         dltask=NULL;
         return;
     }

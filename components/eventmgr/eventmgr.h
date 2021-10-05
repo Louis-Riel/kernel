@@ -23,11 +23,21 @@
 #define MAX_NUM_DEVICES 50
 #define MAX_THREADS 20
 
+enum class event_data_type_tp 
+{
+    Unknown,
+    JSON,
+    String,
+    Number,
+    NumEntries
+};
+
 struct EventDescriptor_t
 {
     int32_t id;
     const char *eventName;
     char *baseName;
+    event_data_type_tp dataType;
 };
 
 class EventHandlerDescriptor
@@ -35,9 +45,10 @@ class EventHandlerDescriptor
 public:
     EventHandlerDescriptor(esp_event_base_t base, const char *name);
     bool AddEventDescriptor(int32_t id, const char *name);
-    static EventDescriptor_t *GetEventDescriptor(const char *base,const char *eventName);
+    bool AddEventDescriptor(int32_t id, const char *name, event_data_type_tp dtp);
+    static EventDescriptor_t *GetEventDescriptor(esp_event_base_t base,const char *eventName);
     static EventDescriptor_t *GetEventDescriptor(esp_event_base_t base, uint32_t id);
-    static cJSON *GetEventBaseEvents(const char *base, const char *filter);
+    static cJSON *GetEventBaseEvents(esp_event_base_t base, const char *filter);
     static char *GetParsedValue(const char *value);
     char *GetName();
     const char *GetEventName(int32_t id);
@@ -179,11 +190,11 @@ private:
         esp_event_base_t base;
         int32_t id;
         void *event_data;
+        event_data_type_tp eventDataType;
     };
 
     cJSON *config;
     cJSON *programs;
-    cJSON* jevt;
     char* eventBuffer;
     static void EventPoller(void* param);
     static void ProcessEvent(postedEvent_t* postedEvent);
@@ -654,7 +665,7 @@ protected:
                 memset(threads[unallocatedThread],0,sizeof(mThread_t));
                 threads[unallocatedThread]->parent = this;
                 threads[unallocatedThread]->allocated = true;
-                ESP_LOGD(__FUNCTION__,"Allocated new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == NULL);
+                ESP_LOGV(__FUNCTION__,"Allocated new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == NULL);
                 ret = unallocatedThread;
             } else {
                 ESP_LOGE(__FUNCTION__,"No more free slots");

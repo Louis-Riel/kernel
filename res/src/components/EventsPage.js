@@ -1,8 +1,17 @@
 class LiveEvent extends React.Component {
     render() {
-        return e("div",{key: genUUID() ,className: "liveEvent"},[
-            e("div",{key: genUUID() ,className: "eventBase"},this.props.eventBase),
-            e("div",{key: genUUID() ,className: "eventId"},this.props.eventId)
+        return e("summary",{key: genUUID() ,className: "liveEvent"},[
+            e("div",{key: genUUID() ,className: "description"},[
+                e("div",{key: genUUID() ,className: "eventBase"},this.props.eventBase),
+                e("div",{key: genUUID() ,className: "eventId"},this.props.eventId)
+            ]),
+            this.props.data ? 
+                e("details",{key: genUUID() ,className: "data"},Object.keys(this.props.data).map(prop => 
+                    e("div",{key: genUUID() ,className: "description"},[
+                        e("div",{key: genUUID() ,className: "propName"},prop),
+                        e("div",{key: genUUID() ,className: prop},this.props.data[prop])
+                    ])
+                )): null
         ]);
     }
 }
@@ -32,7 +41,7 @@ class LiveEventPannel extends React.Component {
                 e("div",{ key: genUUID()}, `${this.state.lastEvents.length} event${this.state.lastEvents.length?'s':''}`),
                 e("button",{ key: genUUID(), onClick: elem => this.setState({lastEvents:[]})},"Clear")
             ]),
-            e("div",{ key: genUUID(), className:"eventList"},this.state.lastEvents.map(event => e(LiveEvent,{ key: genUUID(), eventBase:event.eventBase, eventId:event.eventId})).reverse())
+            e("div",{ key: genUUID(), className:"eventList"},this.state.lastEvents.map(event => e(LiveEvent,{ key: genUUID(), ...event})).reverse())
         ])
 
     }
