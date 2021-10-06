@@ -415,23 +415,7 @@ void extractClientTar(char *tarFName)
                 {
                     if (endsWith(header->name, ".log"))
                     {
-                        if ((devid != NULL) && (devid->valueint > 0)) {
-                            sprintf(fname, "/sdcard/logs/%d/%s", devid->valueint, lastIndexOf(header->name, "/") + 1);
-                        } else {
-                            sprintf(fname, "/sdcard/%s", indexOf(header->name, "/") + 1);
-                        }
-                        for (char *fchar = lastIndexOf(fname, "/"); *fchar != 0; fchar++)
-                        {
-                            if (*fchar == '-')
-                            {
-                                *fchar = '/';
-                            }
-                            if (*fchar == '_')
-                            {
-                                *fchar = '/';
-                                break;
-                            }
-                        }
+                        sprintf(fname, "/sdcard/%s", indexOf(header->name, "/") + 1);
                     } else if (endsWith(header->name, ".csv"))
                     {
                         if (devid != NULL) {

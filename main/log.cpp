@@ -34,6 +34,7 @@ void dumpTheLogs(void* params){
         sprintf(lpath,"%s/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
         localtime_r(&now, &timeinfo);
         strftime(logfname, 254, lpath, &timeinfo);
+        //printf("\nlogname1:%s\n",logfname);
         logFile = new BufferedFile(logfname);
         ldfree(lpath);
         ldfree(logfname);
@@ -93,13 +94,16 @@ int loggit(const char *fmt, va_list args) {
             time(&now);
             localtime_r(&now, &timeinfo);
 
-            if (!buildingLogf && ((timeinfo.tm_year > 70) || (curLogBuf && (strlen(curLogBuf) >= LOG_BUF_ULIMIT)))) {
+            if (!buildingLogf && 
+                ((timeinfo.tm_year > 70) || (curLogBuf && (strlen(curLogBuf) >= LOG_BUF_ULIMIT))) &&
+                AppConfig::HasActiveStorage()) {
                 buildingLogf = true;
                 char* lpath=(char*)dmalloc(255);
                 char* logfname=(char*)dmalloc(355);
                 sprintf(lpath,"%s/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
                 localtime_r(&now, &timeinfo);
                 strftime(logfname, 254, lpath, &timeinfo);
+                //printf("\nlogname2:%s\n",logfname);
                 logFile = new BufferedFile(logfname);
                 ldfree(lpath);
                 ldfree(logfname);

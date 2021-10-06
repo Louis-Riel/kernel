@@ -372,6 +372,7 @@ public:
         {
             ESP_LOGD(__FUNCTION__, "Waiting for threads %d", bitsToWaitFor);
             xEventGroupWaitBits(managedThreadBits, bitsToWaitFor, false, true, portMAX_DELAY);
+            ESP_LOGD(__FUNCTION__, "Threads %d done", bitsToWaitFor);
         }
         else
         {

@@ -649,7 +649,7 @@ void TinyGPSPlus::CalcChecksum(uint8_t *Message, uint8_t Length)
 
 void TinyGPSPlus::flagProtocol(gps_protocol_t protocol, bool state)
 {
-  ESP_LOGD(__FUNCTION__, "%s protocol %s", state ? "Enabling" : "Disabling", gps_protocol_name[protocol]);
+  ESP_LOGV(__FUNCTION__, "%s protocol %s", state ? "Enabling" : "Disabling", gps_protocol_name[protocol]);
   uint8_t cmd[16];
   memccpy(cmd, GPS_ON_OFF, 0, 16);
   cmd[7] = protocol;
@@ -677,7 +677,7 @@ void TinyGPSPlus::processEncoded(void)
       ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::gpsResumed, NULL, 0, portMAX_DELAY));
     }
   }
-  if (date.isValid() && time.isValid() && time.isUpdated())
+  if (date.isValid() && time.isValid() && time.isUpdated() && !(xEventGroupGetBits(getAppEG()) & app_bits_t::WIFI_ON))
   {
     struct tm tm;
 
@@ -807,7 +807,8 @@ void TinyGPSPlus::uart_event_task(void *pvParameters)
           if (ret != ESP_OK) {
             ESP_LOGE(__FUNCTION__,"Error flushing UART:%s",esp_err_to_name(ret));
           }
-          ESP_LOGV(__FUNCTION__, "Flushed UART");
+          ESP_LOGD(__FUNCTION__, "Flushed UART");
+          gps->skipNext=true;
         }
         break;
       }
@@ -996,6 +997,24 @@ bool TinyGPSPlus::isSignificant()
   }
 
   bool isc = false;
+
+  double val;
+
+  if (!lastLocation.isValid() || ((lastLocation.lat() == lastLocation.lng()) && (lastLocation.lat() == 0.0))){
+    lastLocation = location;
+    isc=true;
+  }
+  
+  if ((val=distanceBetween(location,lastLocation)) > 50000) {
+    ESP_LOGW(__FUNCTION__,"Dodgy gps coords lat:%f lng:%f llat:%f llng:%f",location.lat(),location.lng(),lastLocation.lat(),lastLocation.lng());
+    return false;
+  }
+  if (val > fmax(250, speed.kmph() * 30))
+  {
+    ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::significantDistanceChange, &val, sizeof(val), portMAX_DELAY));
+    isc=true;
+  }
+
   if (!lastCourse.isValid()) {
     lastCourse = course;
     isc=true;
@@ -1005,7 +1024,7 @@ bool TinyGPSPlus::isSignificant()
     lastSpeed = speed;
     isc=true;
   }
-  double val = abs(speed.kmph() - lastSpeed.kmph());
+  val = abs(speed.kmph() - lastSpeed.kmph());
   if (speed.kmph() > 0.0)
   {
     if (lastSpeed.val == 0)
@@ -1050,18 +1069,11 @@ bool TinyGPSPlus::isSignificant()
     isc = true;
   }
 
-  //val=abs(altitude.meters() - lastAltitude.meters() );
-  //if (val > 5) {
-  //  ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::significantAltitudeChange,&val,sizeof(val),portMAX_DELAY));
-  //  lastAltitude=altitude;
-  //  isc= true;
-  //}
-
-  val = distanceTo(lastLocation);
-  if (val > fmax(250, speed.kmph() * 30))
-  {
-    ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::significantDistanceChange, &val, sizeof(val), portMAX_DELAY));
-    isc=true;
+  val=abs(altitude.meters() - lastAltitude.meters() );
+  if (val > 5) {
+    ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::significantAltitudeChange,&val,sizeof(val),portMAX_DELAY));
+    lastAltitude=altitude;
+    isc= true;
   }
 
   if (isc)

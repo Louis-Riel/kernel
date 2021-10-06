@@ -142,6 +142,7 @@ public:
   static void ResetAppConfig(bool save);
   void SaveAppConfig();
   static const char* GetActiveStorage();
+  static bool HasActiveStorage();
 
   bool isValid();
   bool isItemObject(const char* path);

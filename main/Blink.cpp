@@ -540,6 +540,10 @@ void doHibernate(void *param)
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF));
   //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
   //CLEAR_PERI_REG_MASK(RTC_CNTL_BROWN_OUT_REG, RTC_CNTL_BROWN_OUT_RST_ENA);
+  if (gps) {
+    delete gps;
+  }
+
   dumpTheLogs((void*)true);
   ESP_LOGV(__FUNCTION__, "Waiting for sleepers");
   WaitToSleepExceptFor("doHibernate");

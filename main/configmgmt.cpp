@@ -31,7 +31,7 @@ AppConfig::AppConfig(const char *filePath)
     , root(this)
     , sema(xSemaphoreCreateRecursiveMutex())
 {
-  activeStorage=SPIFFPATH;
+  activeStorage=NULL;
 
   if ((configInstance == NULL) && (filePath != NULL))
   {
@@ -108,11 +108,19 @@ AppConfig *AppConfig::GetAppStatus()
   return statusInstance;
 }
 
+bool AppConfig::HasActiveStorage()
+{
+  AppConfig* stat = GetAppStatus();
+  return stat->activeStorage != NULL;
+}
+
 const char *AppConfig::GetActiveStorage()
 {
   AppConfig* stat = GetAppStatus();
-  if (stat->activeStorage == NULL)
-    return stat->SPIFFPATH;
+  if ((stat->activeStorage == NULL) && 
+       stat->HasProperty("/sdcard/state")) {  
+    stat->activeStorage = stat->GetStateProperty("/sdcard/state") == item_state_t::ACTIVE?stat->SDPATH:stat->SPIFFPATH;
+  }
   return stat->activeStorage == NULL ? stat->SPIFFPATH:stat->activeStorage;
 }
 
