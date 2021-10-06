@@ -469,6 +469,7 @@ private:
   EventGroupHandle_t app_eg;
   AppConfig* gpsStatus;
   cJSON* gpsVersion;
+  bool skipNext;
 
   // internal utilities
   int fromHex(char a);

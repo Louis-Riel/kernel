@@ -490,24 +490,26 @@ void doHibernate(void *param)
   ESP_LOGV(__FUNCTION__, "Deep Sleeping %d", bumpCnt);
   hibernate = true;
   BufferedFile::FlushAll();
-  uint64_t ext_wakeup_pin_mask = 0;
+  uint64_t ext_wakeup_on_pin_mask = 0;
+  uint64_t ext_wakeup_off_pin_mask = 0;
   int curLvl = 0;
   for (int idx = 0; idx < numWakePins; idx++)
   {
     curLvl = gpio_get_level(wakePins[idx]);
-    ESP_LOGV(__FUNCTION__, "Pin %d is %d", wakePins[idx], curLvl);
+    ESP_LOGD(__FUNCTION__, "Pin %d is %d", wakePins[idx], curLvl);
     if (curLvl == 0)
     {
       ESP_ERROR_CHECK(rtc_gpio_pulldown_en(wakePins[idx]));
-      ext_wakeup_pin_mask |= (1ULL << wakePins[idx]);
+      ext_wakeup_on_pin_mask |= (1ULL << wakePins[idx]);
     }
   }
-  if (ext_wakeup_pin_mask != 0)
+  if (ext_wakeup_on_pin_mask != 0)
   {
-    ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
+    ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_on_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
   }
   else
   {
+    ESP_ERROR_CHECK(rtc_gpio_pulldown_en(wakePins[0]));
     ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[0], 0));
   }
 

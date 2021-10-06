@@ -459,21 +459,27 @@ void TheRest::SendTar(void* param)
                 ESP_LOGV(__FUNCTION__, "Sending chunk of %d", sp->sendLen);
                 len += sp->sendLen;
                 sentLen=0;
-                while((sentLen = esp_http_client_write(client,(const char *)sp->sendBuf, sp->sendLen))!= sp->sendLen) {
-                    ESP_LOGE(__FUNCTION__, "Chunked %d response, sent: %d", sp->sendLen, sentLen);
-                    if (sentLen <= 0) {
+                while((sentLen = esp_http_client_write(client,(const char *)sp->sendBuf, sp->sendLen)) != -1)
+                {
+                    if (sentLen > 0) {
+                        sp->sendBuf+=sentLen;
+                        sp->sendLen-=sentLen;
+                        if (sp->sendLen <= 0 ) {
+                            ESP_LOGV(__FUNCTION__, "Sent chunk of %d", sp->sendLen);
+                            break;
+                        }
+                    } else {
+                        ESP_LOGW(__FUNCTION__,"Failed sending %d",sp->sendLen);
                         break;
                     }
-                    sp->sendBuf+=sentLen;
-                    sp->sendLen-=sentLen;
                 }
-                if (sentLen == -1) {
+                if (sentLen <= 0) {
+                    ESP_LOGE(__FUNCTION__, "Client disconnected:%d",sentLen);
                     break;
                 }
 
                 if (sentLen == sp->sendLen)
                 {
-                    ESP_LOGV(__FUNCTION__, "Sent chunk of %d", sp->sendLen);
                 }
                 xEventGroupSetBits(sp->eventGroup, TAR_BUFFER_SENT);
             } else {

@@ -136,14 +136,12 @@ void TinyGPSPlus::waitOnStop(void *param)
 {
   TinyGPSPlus *gps = (TinyGPSPlus *)param;
   ESP_LOGD(__FUNCTION__, "We are stopped, checking bumps");
-  if (xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdFALSE, 5000 / portTICK_PERIOD_MS) & gpsEvent::locationChanged)
+  if ((xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdFALSE, 5000 / portTICK_PERIOD_MS) & gpsEvent::locationChanged) && (gps->speed.kmph() > 5))
   {
     ESP_LOGD(__FUNCTION__, "We are not so stopped, not using bump bumps");
   }
   else
   {
-    gps->gpsPause();
-
     uint64_t ext_wakeup_pin_mask = 0;
     int curLvl = 0;
     for (int idx = 0; idx < numWakePins; idx++)
@@ -155,41 +153,54 @@ void TinyGPSPlus::waitOnStop(void *param)
         ext_wakeup_pin_mask |= (1ULL << wakePins[idx]);
       }
     }
+    int32_t timeToGo = sleepTimes[gps->curFreqIdx] * 1000;
     if (xEventGroupGetBits(getAppEG()) & app_bits_t::WIFI_ON)
     {
       ESP_LOGD(__FUNCTION__, "We are stopped with wifi on, waiting on bumps");
-      int32_t timeToGo = sleepTimes[gps->curFreqIdx] * 1000;
       while ((timeToGo > 0) && !(xEventGroupWaitBits(gps->eg, gpsEvent::outSyncPoint, pdFALSE, pdTRUE, 500 / portTICK_PERIOD_MS) & gpsEvent::outSyncPoint))
       {
+        gps->gpsPause();
         gpio_set_level(BLINK_GPIO, 0);
         xEventGroupWaitBits(gps->eg, gpsEvent::outSyncPoint, pdFALSE, pdTRUE, 300 / portTICK_PERIOD_MS);
         gpio_set_level(BLINK_GPIO, 1);
+        gps->gpsResume();
         timeToGo -= 804;
       }
       gpio_set_level(BLINK_GPIO, 1);
     }
     else
     {
-      ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(SLEEP_TIMEOUT * 1000000));
-      if (ext_wakeup_pin_mask != 0)
-      {
-        ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
+      esp_sleep_wakeup_cause_t wcause = esp_sleep_wakeup_cause_t::ESP_SLEEP_WAKEUP_TIMER;
+      while ((timeToGo > 0) && (wcause == esp_sleep_wakeup_cause_t::ESP_SLEEP_WAKEUP_TIMER)){
+        ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(SLEEP_TIMEOUT * 1000000));
+        if (ext_wakeup_pin_mask != 0)
+        {
+          ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_HIGH));
+        }
+        else
+        {
+          ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[0], 0));
+        }
+        WaitToSleep();
+        ESP_LOGD(__FUNCTION__, "Sleeping %d secs on stop", SLEEP_TIMEOUT);
+        gps->gpsPause();
+        ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
+        esp_light_sleep_start();
+        ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, NULL, 0, portMAX_DELAY));
+        //gpio_set_level(BLINK_GPIO, 0);
+        print_the_wakeup_reason();
+        wcause = esp_sleep_get_wakeup_cause();
+        gps->gpsResume();
+        timeToGo -= 804;
+        if (!(xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdFALSE, 5000 / portTICK_PERIOD_MS) & gpsEvent::locationChanged))
+        {
+          ESP_LOGD(__FUNCTION__, "We are stopped, lost GPS signal");
+          break;
+        }
       }
-      else
-      {
-        ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(wakePins[numWakePins - 1], curLvl == 0 ? 1 : 0));
-      }
-      WaitToSleep();
-      ESP_LOGD(__FUNCTION__, "Sleeping %d secs on stop", SLEEP_TIMEOUT);
-      ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
-      esp_light_sleep_start();
-      ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, NULL, 0, portMAX_DELAY));
-      //gpio_set_level(BLINK_GPIO, 0);
-      print_the_wakeup_reason();
     }
     gps->toBeFreqIdx = 0;
     gps->adjustRate();
-    gps->gpsResume();
   }
 }
 
@@ -283,6 +294,7 @@ void TinyGPSPlus::theLoop(void *param)
     {
       ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
       //gps->gpsPause();
+      gps->skipNext=true;
       esp_light_sleep_start();
       //gps->gpsResume();
       ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, NULL, 0, portMAX_DELAY));
@@ -537,6 +549,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
     , enpin(enpin)
     , curFreqIdx(0)
     , gpTxt(new TinyGPSCustom(*this, "GPTXT", 4)), gpsWarmTime(3), toBeFreqIdx(0), app_eg(getAppEG())
+    , skipNext(false)
 {
   instance = this;
   AppConfig* stat = AppConfig::GetAppStatus()->GetConfig("gps");
@@ -575,6 +588,9 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
   ESP_ERROR_CHECK(gpio_hold_dis(enpin));
   ESP_ERROR_CHECK(gpio_reset_pin(enpin));
   ESP_ERROR_CHECK(gpio_set_direction(enpin, GPIO_MODE_OUTPUT));
+  for (int idx = 0; idx < numWakePins; idx++){
+    ESP_ERROR_CHECK(gpio_set_direction(wakePins[idx], GPIO_MODE_INPUT));
+  }
 
   gpsStart();
 
@@ -633,14 +649,18 @@ void TinyGPSPlus::CalcChecksum(uint8_t *Message, uint8_t Length)
 
 void TinyGPSPlus::flagProtocol(gps_protocol_t protocol, bool state)
 {
-  ESP_LOGV(__FUNCTION__, "%s protocol %s", state ? "Enabling" : "Disabling", gps_protocol_name[protocol]);
+  ESP_LOGD(__FUNCTION__, "%s protocol %s", state ? "Enabling" : "Disabling", gps_protocol_name[protocol]);
   uint8_t cmd[16];
   memccpy(cmd, GPS_ON_OFF, 0, 16);
   cmd[7] = protocol;
   cmd[9] = state ? 1 : 0;
   CalcChecksum(cmd, 16);
   uint32_t wb = uart_write_bytes(UART_NUM_2, (const char *)cmd, 16);
-  ESP_LOGV(__FUNCTION__, "Wrote %d bytes", wb);
+  if (wb != 16) {
+    ESP_LOGW(__FUNCTION__,"Failed setting protocol %d",protocol);
+  } else{
+    ESP_LOGV(__FUNCTION__, "Wrote %d bytes", wb);
+  }
 };
 
 void TinyGPSPlus::processEncoded(void)
@@ -696,6 +716,7 @@ void TinyGPSPlus::uart_event_task(void *pvParameters)
   int pos = 0;
   uint32_t loopNo = 0;
   int msgLen = 0;
+  esp_err_t ret = ESP_OK;
   ESP_LOGD(__FUNCTION__, "uart[%d] starting:", UART_NUM_2);
   while (xEventGroupGetBitsFromISR(gps->eg) & gpsEvent::gpsRunning)
   {
@@ -750,38 +771,43 @@ void TinyGPSPlus::uart_event_task(void *pvParameters)
         ESP_LOGE(__FUNCTION__, "uart frame error");
         break;
       case UART_PATTERN_DET:
-        uart_get_buffered_data_len(UART_NUM_2, &buffered_size);
-        pos = uart_pattern_pop_pos(UART_NUM_2);
         loopNo = 0;
-        if (pos == -1)
-        {
-          ESP_LOGW(__FUNCTION__, "Flushing UART");
-          uart_flush_input(UART_NUM_2);
-          ESP_LOGD(__FUNCTION__, "Flushed UART");
-        }
-        else
-        {
-          while (pos > 0)
-          {
-            msgLen = uart_read_bytes(UART_NUM_2, dtmp, pos, 100 / portTICK_PERIOD_MS);
-            if (msgLen > 1)
+        while (((ret = uart_get_buffered_data_len(UART_NUM_2, &buffered_size)) ==  ESP_OK) && 
+                (buffered_size > 0) &&
+                ((pos = uart_pattern_pop_pos(UART_NUM_2)) > 0) &&
+                ((msgLen = uart_read_bytes(UART_NUM_2, dtmp, pos, 100 / portTICK_PERIOD_MS)) > 0)) {
+          loopNo++;
+          if (!gps->skipNext){
+            ESP_LOGV(__FUNCTION__, "[UART PATTERN DETECTED%d] pos:%d, buffered size:%d msglen:%d  %s", loopNo, pos, buffered_size, msgLen, dtmp);
+            for (int idx = 0; idx < msgLen; idx++)
             {
-              ESP_LOGV(__FUNCTION__, "[UART PATTERN DETECTED%d] pos:%d, buffered size:%d msglen:%d  %s", loopNo++, pos, buffered_size, msgLen, dtmp);
-              for (int idx = 1; idx < msgLen; idx++)
+              if (gps->encode(dtmp[idx]))
               {
-                if (gps->encode(dtmp[idx]))
-                {
-                  ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::msg, dtmp + 1, msgLen, portMAX_DELAY));
-                }
+                ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::msg, dtmp + 1, msgLen, portMAX_DELAY));
               }
             }
-            else
-            {
-              ESP_LOGV(__FUNCTION__, "Got an empty message");
-            }
-            uart_get_buffered_data_len(UART_NUM_2, &buffered_size);
-            pos = uart_pattern_pop_pos(UART_NUM_2);
+          } else {
+            gps->skipNext = false;
           }
+        }
+        if (loopNo == 0)
+        {
+          if (ret != ESP_OK) {
+            ESP_LOGE(__FUNCTION__,"Error parsing UART:%s",esp_err_to_name(ret));
+          }
+          if (buffered_size <= 0){
+            ESP_LOGW(__FUNCTION__, "Empty buffer");
+          }
+          if (pos <= 0){
+            ESP_LOGV(__FUNCTION__, "No pattern in %d bytes",buffered_size);
+          } else if (msgLen <= 0){
+            ESP_LOGW(__FUNCTION__, "Failed to read %d bytes, read %d",buffered_size, msgLen);
+          }
+          ret = uart_flush_input(UART_NUM_2);
+          if (ret != ESP_OK) {
+            ESP_LOGE(__FUNCTION__,"Error flushing UART:%s",esp_err_to_name(ret));
+          }
+          ESP_LOGV(__FUNCTION__, "Flushed UART");
         }
         break;
       }

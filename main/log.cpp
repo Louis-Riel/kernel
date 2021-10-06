@@ -25,18 +25,22 @@ const char* getLogFName(){
 }
 
 void dumpTheLogs(void* params){
-    if (xEventGroupGetBits(getAppEG())&app_bits_t::TRIPS_SYNCING) {
-        printf("\nNot flushing whilst dumping'n");
-        return;
-    }
-
     if (!logFile) {
-        printf("\nNot flushing whilst dumping'n");
-        return;
+        struct tm timeinfo;
+        time_t now = 0;
+        time(&now);
+        char* lpath=(char*)dmalloc(255);
+        char* logfname=(char*)dmalloc(355);
+        sprintf(lpath,"%s/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
+        localtime_r(&now, &timeinfo);
+        strftime(logfname, 254, lpath, &timeinfo);
+        logFile = new BufferedFile(logfname);
+        ldfree(lpath);
+        ldfree(logfname);
+        ESP_LOGD(__FUNCTION__,"Flusing logs");
     }
 
     xSemaphoreTake(logMutex,portMAX_DELAY);
-    bool isAp = GetAppConfig()->IsAp();
     if (dltask == NULL) {
         dltask = (TaskHandle_t)1; //Just not null
     }
