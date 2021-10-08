@@ -38,16 +38,14 @@ void dumpTheLogs(void* params){
         logFile = new BufferedFile(logfname);
         ldfree(lpath);
         ldfree(logfname);
-        ESP_LOGD(__FUNCTION__,"Flusing logs");
+        ESP_LOGD(__FUNCTION__,"Flushing logs");
     }
 
-    xSemaphoreTake(logMutex,portMAX_DELAY);
     if (dltask == NULL) {
         dltask = (TaskHandle_t)1; //Just not null
     }
     logFile->Flush();
     dltask = NULL;
-    xSemaphoreGive(logMutex);
 }
 
 void dumpLogs(){

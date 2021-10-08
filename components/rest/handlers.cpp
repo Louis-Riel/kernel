@@ -361,12 +361,13 @@ void parseFolderForTars(const char *folder)
                 sprintf(fileName, "%s/%s", folder, di->d_name);
                 ESP_LOGV(__FUNCTION__, "filelist:%s", fileName);
                 size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
-                extractClientTar(fileName);
+                if (extractClientTar(fileName)) {
+                    unlink(fileName);
+                }
                 size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
                 if (diff > 0) {
                     ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","extractClientTar",diff);
                 }
-                unlink(fileName);
             }
         }
         closeDir(tarFolder);
@@ -1129,7 +1130,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                 }
                                 else
                                 {
-                                    httpd_resp_send(req, "Flashing", 8);
+                                    httpd_resp_send(req, "Flashing...", 8);
                                     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 8;
                                     dumpLogs();
                                     WaitToSleep();
@@ -1141,7 +1142,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                         }
                         else
                         {
-                            ESP_LOGE(__FUNCTION__, "Cannot open /lfs/firmware/tobe.bin.md5");
+                            ESP_LOGE(__FUNCTION__, "Cannot open /lfs/firmware/tobe.bin.md5.");
                             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot open /lfs/firmware/tobe.bin.md5");
                         }
                     }

@@ -31,7 +31,7 @@ void restSallyForth(void *pvParameter);
 void pullStation(void *pvParameter);
 bool moveFolder(const char* folderName, const char* toFolderName);
 esp_err_t filedownload_event_handler(esp_http_client_event_t *evt);
-void extractClientTar(char* tarFName);
+bool extractClientTar(char* tarFName);
 cJSON* GetDeviceConfig(esp_ip4_addr_t *ipInfo,uint32_t deviceId);
 
 typedef enum{

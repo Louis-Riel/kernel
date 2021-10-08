@@ -40,13 +40,13 @@ AppConfig::AppConfig(const char *filePath)
     FILE *currentCfg = fOpen(filePath, "r");
     if (currentCfg == NULL)
     {
-      ESP_LOGD(__FUNCTION__, "Getting default config for %s", filePath);
+      ESP_LOGV(__FUNCTION__, "Getting default config for %s", filePath);
       json = cJSON_ParseWithLength((const char *)defaultconfig_json_start, defaultconfig_json_end - defaultconfig_json_start);
       SaveAppConfig(true);
     }
     else
     {
-      ESP_LOGD(__FUNCTION__, "Reading config at %s", filePath);
+      ESP_LOGV(__FUNCTION__, "Reading config at %s", filePath);
       struct stat fileStat;
       fstat(fileno(currentCfg), &fileStat);
       char *sjson = (char *)dmalloc(fileStat.st_size);
@@ -141,14 +141,14 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
   cJSON *newArrayItem = NULL;
   bool foundIt = false;
   uint8_t newIdx = 0, curIdx = 0;
-  ESP_LOGD(__FUNCTION__, "Parsing src:%d dest:%d", curConfig == NULL, newConfig == NULL);
+  ESP_LOGV(__FUNCTION__, "Parsing src:%d dest:%d", curConfig == NULL, newConfig == NULL);
 
   xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   cJSON_ArrayForEach(curCfgItem, curConfig)
   {
     if (curCfgItem && curCfgItem->string)
     {
-      ESP_LOGD(__FUNCTION__, "Parsing %s item id:%s", cJSON_IsArray(curCfgItem) ? "Array" : cJSON_IsObject(curCfgItem) ? "Object"
+      ESP_LOGV(__FUNCTION__, "Parsing %s item id:%s", cJSON_IsArray(curCfgItem) ? "Array" : cJSON_IsObject(curCfgItem) ? "Object"
                                                                                                                       : "Value",
               curCfgItem->string ? curCfgItem->string : "?");
 
@@ -157,14 +157,14 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
       if ((curCfgVerItem = cJSON_GetObjectItem(curCfgItem, "version")) &&
           (curCfgValItem = cJSON_GetObjectItem(curCfgItem, "value")))
       {
-        ESP_LOGD(__FUNCTION__, "Parsing %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
+        ESP_LOGV(__FUNCTION__, "Parsing %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
         int curVer = cJSON_GetNumberValue(curCfgVerItem);
         int newVer = -1;
         if ((newCfgItem != NULL) &&
             (newCfgVerItem = cJSON_GetObjectItem(newCfgItem, "version")) &&
             (newCfgValItem = cJSON_GetObjectItem(newCfgItem, "value")))
         {
-          ESP_LOGD(__FUNCTION__, "New %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
+          ESP_LOGV(__FUNCTION__, "New %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
           newVer = cJSON_GetNumberValue(newCfgVerItem);
           if (newVer > curVer)
           {
@@ -179,14 +179,14 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
         }
         else
         {
-          ESP_LOGD(__FUNCTION__, "Missing from new %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
+          ESP_LOGV(__FUNCTION__, "Missing from new %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
           cJSON_AddItemToObject(newCfgValItem, curCfgValItem->string, cJSON_Duplicate(curCfgValItem, true));
           cJSON_DeleteItemFromObject(curConfig, curCfgItem->string);
         }
       }
       else if (cJSON_IsArray(curCfgItem))
       {
-        ESP_LOGD(__FUNCTION__, "Parsing %s item id:%s", "Array field", curCfgItem->string ? curCfgItem->string : "?");
+        ESP_LOGV(__FUNCTION__, "Parsing %s item id:%s", "Array field", curCfgItem->string ? curCfgItem->string : "?");
         if (newCfgItem && cJSON_IsArray(newCfgItem))
         {
           curIdx = 0;
@@ -205,12 +205,12 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
             }
             if (foundIt)
             {
-              ESP_LOGD(__FUNCTION__, "****New %s item", "Array item");
+              ESP_LOGV(__FUNCTION__, "****New %s item", "Array item");
               MergeJSon(curArrayItem, newArrayItem);
             }
             else
             {
-              ESP_LOGD(__FUNCTION__, "Missing Array item from new %s item id:%d", "versioned field", curIdx);
+              ESP_LOGV(__FUNCTION__, "Missing Array item from new %s item id:%d", "versioned field", curIdx);
               cJSON_AddItemToArray(newCfgItem, cJSON_Duplicate(curArrayItem, true));
               cJSON_DeleteItemFromArray(curCfgItem, curIdx);
             }
@@ -219,7 +219,7 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
         }
         else
         {
-          ESP_LOGD(__FUNCTION__, "Missing Array field from new %s item id:%d", "versioned field", newIdx);
+          ESP_LOGV(__FUNCTION__, "Missing Array field from new %s item id:%d", "versioned field", newIdx);
           cJSON_AddItemToObject(newConfig, curCfgItem->string, cJSON_Duplicate(curCfgItem, true));
           cJSON_DeleteItemFromObject(curConfig, curCfgItem->string);
         }
@@ -228,19 +228,19 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
       {
         if (newCfgItem != NULL)
         {
-          ESP_LOGD(__FUNCTION__, "******Parsing %s item id:%s", "object field", curCfgItem->string ? curCfgItem->string : "?");
+          ESP_LOGV(__FUNCTION__, "******Parsing %s item id:%s", "object field", curCfgItem->string ? curCfgItem->string : "?");
           MergeJSon(curCfgItem, newCfgItem);
         }
         else
         {
-          ESP_LOGD(__FUNCTION__, "Missing object field from new %s item id:%s", "versioned field", curCfgItem->string);
+          ESP_LOGV(__FUNCTION__, "Missing object field from new %s item id:%s", "versioned field", curCfgItem->string);
           cJSON_AddItemToObject(newConfig, curCfgItem->string, cJSON_Duplicate(curCfgItem, true));
           cJSON_DeleteItemFromObject(curConfig, curCfgItem->string);
         }
       }
       else
       {
-        ESP_LOGD(__FUNCTION__, "Parsing %s item id:%s", "value field", curCfgItem->string ? curCfgItem->string : "?");
+        ESP_LOGV(__FUNCTION__, "Parsing %s item id:%s", "value field", curCfgItem->string ? curCfgItem->string : "?");
         if (newCfgItem != NULL)
         {
           cJSON_ReplaceItemInObject(curConfig, newCfgItem->string, cJSON_Duplicate(newCfgItem,true));
@@ -309,7 +309,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
     return;
   }
   xSemaphoreTakeRecursive(sema,portMAX_DELAY);
-  ESP_LOGD(__FUNCTION__, "Saving config %s",config->filePath);
+  ESP_LOGV(__FUNCTION__, "Saving config %s",config->filePath);
   version++;
   if (!skipMount)
   {
@@ -330,7 +330,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
         esp_littlefs_format("storage");
         esp_restart();
       } else {
-        ESP_LOGD(__FUNCTION__, "Wrote %d config bytes", wlen);
+        ESP_LOGV(__FUNCTION__, "Wrote %d config bytes", wlen);
       }
     }
     ldfree(sjson);
@@ -903,7 +903,7 @@ void AppConfig::SetStateProperty(const char *path, item_state_t value)
   if ((strcmp("/sdcard/state",path)==0) && (value == item_state_t::ACTIVE)){
     if (value == item_state_t::ACTIVE){
       activeStorage = SDPATH;
-      ESP_LOGD(__FUNCTION__,"Defined storage as %s", activeStorage);
+      ESP_LOGV(__FUNCTION__,"Defined storage as %s", activeStorage);
     }
   }
   SetIntProperty(path, (int)value);

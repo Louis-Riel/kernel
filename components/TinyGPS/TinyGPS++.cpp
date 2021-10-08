@@ -306,7 +306,7 @@ void TinyGPSPlus::theLoop(void *param)
   if (!(xEventGroupGetBits(gps->eg) & gpsEvent::gpsRunning))
   {
     xEventGroupSetBits(gps->eg, gpsEvent::gpsStopped);
-    ESP_LOGE(__FUNCTION__, "Cannot initialize the GPS");
+    ESP_LOGD(__FUNCTION__, "GPS stopped");
     return;
   }
 
@@ -1174,6 +1174,10 @@ bool TinyGPSPlus::endOfTermHandler()
       if (altitude.isValid() && altitude.isUpdated() && (location.lat() != 0) && (location.lng() != 0) && (location.lat() != location.lng()))
       {
         double dtmp = TinyGPSPlus::distanceBetween(location.lat(), location.lng(), lastLocation.lat(), lastLocation.lng());
+        if ((lastLocation.lat() != 0) && (dtmp > 50000)) {
+          ESP_LOGW(__FUNCTION__,"Dodgy gps coords lat:%f lng:%f llat:%f llng:%f",location.lat(),location.lng(),lastLocation.lat(),lastLocation.lng());
+          return false;
+        }
         ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::locationChanged, &dtmp, sizeof(dtmp), portMAX_DELAY));
         AppConfig::SignalStateChange(state_change_t::GPS);
       }

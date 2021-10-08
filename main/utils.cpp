@@ -14,10 +14,13 @@
 #include "esp32/rom/md5_hash.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
+#include "eventmgr.h"
 #include "/home/riell/esp-4.3/esp-idf/components/pthread/include/esp_pthread.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
+
+const char* logPath = "/lfs/logs";
 
 sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -59,7 +62,7 @@ bool startsWith(const char *str, const char *key)
   return true;
 }
 
-static const char *getErrorMsg(int32_t errCode)
+const char *getErrorMsg(int32_t errCode)
 {
   switch (errCode)
   {
@@ -213,7 +216,7 @@ bool deinitSPISDCard(bool log)
       } else {
           ESP_LOGD(__FUNCTION__, "lfs unmounted");
       }
-      appState->SetStateProperty("/spiff/state", item_state_t::INACTIVE);
+      appState->SetStateProperty("/lfs/state", item_state_t::INACTIVE);
       xEventGroupClearBits(app_eg, SPIFF_MOUNTED);
     }
     if (xEventGroupGetBits(app_eg) & SDCARD_MOUNTED)
@@ -251,6 +254,53 @@ bool deinitSPISDCard()
   return deinitSPISDCard(true);
 }
 
+struct dirFiles_t {
+  const dirFiles_t* root;
+  char* curDir;
+  uint32_t* bytesFree;
+};
+
+void CleanupLFS(void* param) {
+  dirFiles_t* files = (dirFiles_t*)param;
+  ESP_LOGD(__FUNCTION__,"Looking for files to cleanup in %s, free:%d",files->curDir,*files->bytesFree);
+
+  DIR *theFolder;
+  FILE *theFile;
+  struct dirent *fi;
+  struct stat fileStat;
+  char* cpath = (char*)dmalloc(300);
+
+  if ((theFolder = openDir(files->curDir)) != NULL) {
+    while (((fi = readDir(theFolder)) != NULL) && (*files->bytesFree < 1782579)) {
+      if (fi->d_type == DT_DIR) {
+        dirFiles_t* cfiles = (dirFiles_t *)dmalloc(sizeof(dirFiles_t));
+        cfiles->curDir = (char*)dmalloc(300);
+        sprintf(cfiles->curDir,"%s/%s",files->curDir,fi->d_name);
+        cfiles->root = files->root;
+        cfiles->bytesFree = files->bytesFree;
+        CleanupLFS(cfiles);
+      } else {
+        sprintf(cpath,"%s/%s",files->curDir,fi->d_name);
+        stat(cpath,&fileStat);
+        if (unlink(cpath) == 0) {
+          *files->bytesFree+=fileStat.st_size;
+          ESP_LOGD(__FUNCTION__,"Deleted %s(%ld/%d)",cpath,fileStat.st_size,*files->bytesFree);
+        } else {
+          ESP_LOGE(__FUNCTION__,"Failed to delete %s(%ld)",cpath,fileStat.st_size);
+        }  
+      }
+    }
+    closeDir(theFolder);
+  }
+
+  if (files->root == files) {
+    ldfree(files->bytesFree);
+  }
+  ldfree(cpath);
+  ldfree((void*)files->curDir);
+  ldfree(files);
+}
+
 esp_err_t setupLittlefs()
 {
   const esp_vfs_littlefs_conf_t conf = {
@@ -281,6 +331,15 @@ esp_err_t setupLittlefs()
   spiffState->SetIntProperty("total", total_bytes);
   spiffState->SetIntProperty("used", used_bytes);
   spiffState->SetIntProperty("free", total_bytes - used_bytes);
+  if (total_bytes - used_bytes < 1782579) {
+    dirFiles_t* dirFiles = (dirFiles_t*)dmalloc(sizeof(dirFiles_t));
+    dirFiles->curDir = (char*)dmalloc(300);
+    sprintf(dirFiles->curDir,"%s",logPath);
+    dirFiles->root = dirFiles;
+    dirFiles->bytesFree=(uint32_t*)dmalloc(sizeof(void*));
+    *dirFiles->bytesFree = AppConfig::GetAppStatus()->GetIntProperty("/lfs/free");
+    CleanupLFS(dirFiles);
+  }
   free(spiffState);
 
   ESP_LOGV(__FUNCTION__, "Space: %d/%d", used_bytes, total_bytes);
@@ -531,6 +590,15 @@ bool initSPISDCard(bool log)
         spiffState->SetIntProperty("total", total_bytes);
         spiffState->SetIntProperty("used", used_bytes);
         spiffState->SetIntProperty("free", total_bytes - used_bytes);
+        if (total_bytes - used_bytes < 1782579) {
+          dirFiles_t* dirFiles = (dirFiles_t*)dmalloc(sizeof(dirFiles_t));
+          dirFiles->curDir = (char*)dmalloc(300);
+          sprintf(dirFiles->curDir,"%s",logPath);
+          dirFiles->root = dirFiles;
+          dirFiles->bytesFree=(uint32_t*)dmalloc(sizeof(void*));
+          *dirFiles->bytesFree = AppConfig::GetAppStatus()->GetIntProperty("/lfs/free");
+          CreateBackgroundTask(CleanupLFS,"CleanupLFS",4096,(void*)dirFiles,tskIDLE_PRIORITY,NULL);
+        }
       }
     }
     state = sdcState->GetStateProperty("state");
@@ -598,7 +666,7 @@ bool rmDashFR(const char *folderName)
     if (!isABadDay)
     {
       ESP_LOGD(__FUNCTION__, "Deleting folder %s", folderName);
-      return unlink(folderName) == 0;
+      return rmdir(folderName) == 0;
     }
     else
     {
@@ -843,6 +911,7 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
 
 void UpgradeFirmware()
 {
+  initSPISDCard();
   struct stat md5St, fwSt;
   char md5fName[] = "/lfs/firmware/tobe.bin.md5";
   char fwfName[] = "/lfs/firmware/current.bin";
@@ -924,6 +993,7 @@ void UpgradeFirmware()
     AppConfig* stat = AppConfig::GetAppStatus();
     ESP_LOGD(__FUNCTION__, "No FW to update, running %s built on %s", stat->GetStringProperty("/build/ver"), stat->GetStringProperty("/build/date"));
   }
+  deinitSPISDCard();
 }
 
 void DisplayMemInfo(){

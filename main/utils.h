@@ -216,5 +216,6 @@ uint32_t GetNumOpenFiles();
 bool rmDashFR(const char* folderName);
 bool deleteFile(const char* fileName);
 void DisplayMemInfo();
+const char *getErrorMsg(int32_t errCode);
 
 #endif

@@ -544,8 +544,16 @@ void doHibernate(void *param)
     delete gps;
   }
 
+  if (TheRest::GetServer()) {
+    delete TheRest::GetServer();
+  }
+
+  if (TheWifi::GetInstance()) {
+    delete TheWifi::GetInstance();
+  }
+
   dumpTheLogs((void*)true);
-  ESP_LOGV(__FUNCTION__, "Waiting for sleepers");
+  ESP_LOGD(__FUNCTION__, "Waiting for sleepers");
   WaitToSleepExceptFor("doHibernate");
   ESP_LOGD(__FUNCTION__, "Hybernating");
   gpio_set_level(BLINK_GPIO, 1);
@@ -680,7 +688,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
         return;
       }
       ESP_LOGV(__FUNCTION__, "Lost GPS Signal and no bumps gps:%d sig:%d", gpsto, sito);
-      Hibernate();
+      xEventGroupSetBits(getAppEG(), app_bits_t::HIBERNATE);
     }
     break;
   case TinyGPSPlus::gpsEvent::wakingup:
@@ -1081,6 +1089,46 @@ void *spimalloc(size_t size)
   return heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
 }
 
+bool CleanupEmptyDirs(char* path) {
+  ESP_LOGV(__FUNCTION__,"Looking for files to cleanup in %s",path);
+
+  DIR *theFolder;
+  FILE *theFile;
+  struct dirent *fi;
+  struct stat fileStat;
+  char* cpath = (char*)dmalloc(300);
+  bool retVal = false;
+  int retCode = 0;
+
+  if ((theFolder = openDir(path)) != NULL) {
+    while ((fi = readDir(theFolder)) != NULL) {
+      if (fi->d_type == DT_DIR) {
+        sprintf(cpath,"%s/%s",path,fi->d_name);
+        if (!CleanupEmptyDirs(cpath)) {
+          ESP_LOGD(__FUNCTION__,"%s is empty, deleting",cpath);
+          if ((retCode = rmdir(cpath)) != 0) {
+            ESP_LOGE(__FUNCTION__, "failed in deleting %s %s(%d)", cpath, getErrorMsg(retCode), retCode);
+            retVal=true;
+          }
+        } else {
+          retVal=true;
+        }
+      } else {
+        ESP_LOGV(__FUNCTION__,"%s has %s, not deleting",path,fi->d_name);
+        ldfree(cpath);
+        closeDir(theFolder);
+        return true;
+      }
+    }
+    closeDir(theFolder);
+  } else {
+    ESP_LOGW(__FUNCTION__,"Cannot open %s",path);
+  }
+
+  ldfree(cpath);
+  return retVal;
+}
+
 void app_main(void)
 {
   ESP_LOGI(__FUNCTION__, "Starting App...");
@@ -1119,6 +1167,11 @@ void app_main(void)
     print_char_val_type(val_type);
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     nvs_flash_init();
+
+    initSPISDCard();
+    CleanupEmptyDirs("/lfs");
+    CleanupEmptyDirs("/sdcard");
+    deinitSPISDCard();
 
     bool firstRun = false;
 
@@ -1166,14 +1219,6 @@ void app_main(void)
       ESP_LOGD(__FUNCTION__, "Lat:%d %d Lng:%d %d", lastLatDeg, lastLatBil, lastLngDeg, lastLatBil);
     }
     print_wakeup_reason();
-    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER)
-    {
-      if (hibernate)
-      {
-        ESP_LOGD(__FUNCTION__, "re-sleeping...");
-        Hibernate();
-      }
-    }
     //ESP_LOGV(__FUNCTION__, "Starting bumps:%d, lastMovement:%d", bumpCnt, CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ);
     //configureMotionDetector();
 
@@ -1208,5 +1253,4 @@ void app_main(void)
   ESP_LOGD(__FUNCTION__, "Battery: %f", getBatteryVoltage());
   //vTaskDelay(30000/portTICK_PERIOD_MS);
   //CreateBackgroundTask(TheRest::MergeConfig, "MergeConfig", 8192, NULL, tskIDLE_PRIORITY, NULL);
-
 }

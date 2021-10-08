@@ -354,9 +354,10 @@ cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
     return json;
 }
 
-void extractClientTar(char *tarFName)
+bool extractClientTar(char *tarFName)
 {
     ESP_LOGD(__FUNCTION__, "Parsing File %s", tarFName);
+    bool retVal = true;
     mtar_t tar;
     mtar_header_t* header = (mtar_header_t*)dmalloc(sizeof(mtar_header_t));
     int ret = mtar_open(&tar, tarFName, "r");
@@ -374,7 +375,7 @@ void extractClientTar(char *tarFName)
         {
             if ((header->type == MTAR_TREG) && (header->size > 0))
             {
-                ESP_LOGD(__FUNCTION__, "File %s (%d bytes)", header->name, header->size);
+                ESP_LOGV(__FUNCTION__, "File %s (%d bytes)", header->name, header->size);
                 len = 0;
                 if (endsWith(header->name, ".json"))
                 {
@@ -435,6 +436,8 @@ void extractClientTar(char *tarFName)
                                 break;
                             }
                         }
+                    } else if (endsWith(header->name, "empty.txt")) {
+                        ESP_LOGD(__FUNCTION__,"%s is empty.", header->name);
                     } else {
                         if (devid != NULL) {
                             sprintf(fname, "/sdcard/ocf/%d/%s", devid->valueint, lastIndexOf(header->name, "/") + 1);
@@ -462,6 +465,7 @@ void extractClientTar(char *tarFName)
                     else
                     {
                         ESP_LOGE(__FUNCTION__, "Cannot write %s", fname);
+                        retVal = false;
                     }
                 } else {
                     ESP_LOGD(__FUNCTION__, "Skippng %s (%d bytes)..", fname, header->size);
@@ -477,22 +481,26 @@ void extractClientTar(char *tarFName)
             if ((ret = mtar_next(&tar)) != MTAR_ESUCCESS)
             {
                 ESP_LOGE(__FUNCTION__, "Error reading %s %s", header->name, mtar_strerror(ret));
+                retVal = false;
                 break;
             }
         }
         if (ret != MTAR_ENULLRECORD)
         {
             ESP_LOGE(__FUNCTION__, "Error parsing %s %s", header->name, mtar_strerror(ret));
+            retVal = false;
         }
         mtar_close(&tar);
     }
     else
     {
         ESP_LOGE(__FUNCTION__, "Cannot unter the tar %s:%s", tarFName, mtar_strerror(ret));
+        retVal = false;
     }
     ldfree(buf);
     ldfree(fname);
     ldfree(header);
+    return retVal;
 }
 
 cJSON* GetDeviceConfig(esp_ip4_addr_t *ipInfo) {

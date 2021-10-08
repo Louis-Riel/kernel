@@ -454,6 +454,12 @@ public:
         else
         {
             ESP_LOGE(__FUNCTION__, "No more bits for %s", pcName);
+            for (uint8_t idx = 0; idx < 32; idx++)
+            {
+                if ((threads[idx] != NULL) && threads[idx]->isRunning) {
+                    ESP_LOGD(__FUNCTION__,"%d-%s",idx,threads[idx]->pcName);
+                }
+            }
         }
 
         return UINT8_MAX;

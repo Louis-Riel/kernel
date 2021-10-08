@@ -71,11 +71,10 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     uint32_t fdpos = filesToDelete == NULL ? 0 : strlen(filesToDelete);
     ESP_LOGD(__FUNCTION__, "Parsing %s", path);
     struct timeval tv_start, tv_end, tv_open, tv_stat, tv_rstart, tv_rend, tv_wstart, tv_wend;
+    bool folderAdded=false;
 
     if ((theFolder = openDir(path)) != NULL)
     {
-        sprintf(kmlFileName, "%s/", path+1);
-        tarStat = mtar_write_dir_header(tar, kmlFileName);
         ESP_LOGV(__FUNCTION__, "Reading folder %s", path);
         while (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (tarStat == MTAR_ESUCCESS) && ((fi = readDir(theFolder)) != NULL))
         {
@@ -105,7 +104,6 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                     stat(theFName, &fileStat);
                     if (fileStat.st_size == 0) {
                         ESP_LOGW(__FUNCTION__,"Skipping empty file %s",theFName);
-                        unlink(theFName);
                         continue;
                     }
                     gettimeofday(&tv_start, NULL);
@@ -114,6 +112,11 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                     {
                         uint32_t startPos = tar->pos;
                         fcnt++;
+                        if (!folderAdded) {
+                            sprintf(kmlFileName, "%s/", path+1);
+                            tarStat = mtar_write_dir_header(tar, kmlFileName);
+                            folderAdded=true;
+                        }
                         ESP_LOGV(__FUNCTION__, "Adding %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
                         tarStat = mtar_write_file_header(tar, theFName + 1, fileStat.st_size);
                         ESP_LOGV(__FUNCTION__, "stat %s: %d files. file %s, ram %d len: %li", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), fileStat.st_size);
