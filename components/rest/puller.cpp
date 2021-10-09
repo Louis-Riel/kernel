@@ -669,7 +669,7 @@ void pullStation(void *pvParameter)
         tarFName[2] = 'd';
         tarFName[3] = 'c';
         extractClientTar(tarFName);
-        CreateWokeBackgroundTask(commitTripToDisk, "commitTripToDisk", 4096, NULL, tskIDLE_PRIORITY, NULL);
+        //CreateWokeBackgroundTask(commitTripToDisk, "commitTripToDisk", 4096, NULL, tskIDLE_PRIORITY, NULL);
     }
     ldfree(tarFName);
     ldfree(strftime_buf);

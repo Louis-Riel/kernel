@@ -939,8 +939,8 @@ esp_err_t TheRest::download_handler(httpd_req_t *req)
     delete dest;
     
     ESP_LOGV(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
-    if (endsWith(req->uri, "tar"))
-        CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
+    //if (endsWith(req->uri, "tar"))
+    //    CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
     TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += 2;
     ldfree(postData);
     return httpd_resp_send(req, "OK", 2);

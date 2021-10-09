@@ -1073,7 +1073,7 @@ bool TinyGPSPlus::isSignificant()
   if (val > 5) {
     ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::significantAltitudeChange,&val,sizeof(val),portMAX_DELAY));
     lastAltitude=altitude;
-    isc= true;
+    //isc= true;
   }
 
   if (isc)

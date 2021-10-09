@@ -398,7 +398,7 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
         case fileEventIds::WRITE:
         case fileEventIds::WRITE_LINE:
             if (efile && params && params->HasProperty("value")){
-                if (params->HasProperty("header") && efile->isNewOrEmpty) {
+                if (params->HasProperty("header") && !efile->hasContent->valueint) {
                     headerLine = (uint8_t*)EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("header"));
                     if (headerLine) {
                         ESP_LOGV(__FUNCTION__,"header:%s",headerLine);
