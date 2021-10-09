@@ -367,23 +367,34 @@ bool extractClientTar(char *tarFName)
     char* fname = (char *)dmalloc(255);
     FILE *fw = NULL;
     struct stat st;
+    char* prevName=(char *)dmalloc(255);
+    memset(prevName, 0, 255);
     if (ret == MTAR_ESUCCESS)
     {
         cJSON *msg = NULL;
         cJSON *devid = NULL;
         while ((ret = mtar_read_header(&tar, header)) != MTAR_ENULLRECORD)
         {
+            *buf=0;
+            if (strcmp(header->name, prevName)!=0) {
+                ESP_LOGV(__FUNCTION__,"Different header name %s",header->name);
+                strcpy(prevName,header->name);
+            } else {
+                ESP_LOGD(__FUNCTION__, "This is the end..%s",mtar_strerror(ret));
+                ret=MTAR_ENULLRECORD;
+                break; //Weirdness ensues with tars. When the same header is sent twice, lets just assume we are done and good.
+            }
             if ((header->type == MTAR_TREG) && (header->size > 0))
             {
                 ESP_LOGV(__FUNCTION__, "File %s (%d bytes)", header->name, header->size);
                 len = 0;
-                if (endsWith(header->name, ".json"))
+                if (endsWith(header->name, "current.json"))
                 {
                     ret = mtar_read_data(&tar, buf, header->size);
                     if ((ret == MTAR_ESUCCESS) && (buf[0] == '{'))
                     {
                         buf[header->size] = 0;
-                        if ((devid == NULL) && endsWith(header->name,"current.json")){
+                        if (devid == NULL) {
                             msg = cJSON_ParseWithLength(buf,header->size);
                             if (msg) {
                                 devid = cJSON_GetObjectItemCaseSensitive(msg, "deviceid");
@@ -396,17 +407,6 @@ bool extractClientTar(char *tarFName)
                         if (devid != NULL)
                         {
                             sprintf(fname, "/sdcard/%s/%d.json", indexOf(header->name,"config") ? "config" : "status", devid->valueint);
-                            ret = stat(fname, &st);
-                            if (ret == 0){
-                                if (st.st_size != header->size){
-                                    ESP_LOGD(__FUNCTION__, "Saved as %s (tar %d bytes, file %d bytes)\n", fname, header->size, (int)st.st_size);
-                                    fw = fOpenCd(fname, "w", true);
-                                    fWrite(buf, 1, header->size, fw);
-                                    fClose(fw);
-                                } else {
-                                    ESP_LOGD(__FUNCTION__, "Skippng %s (header %d bytes,file %d bytes).", fname, header->size, (int)st.st_size);
-                                }
-                            }
                         } else{
                             sprintf(fname, "/sdcard/ucf/%s", header->name);
                         }
@@ -446,36 +446,31 @@ bool extractClientTar(char *tarFName)
                         }
                     }
                 }
-                ret = stat(fname, &st);
-                if (((ret == 0) && (st.st_size != header->size)) || (ret != 0)){
-                    fw = fOpenCd(fname, "w", true);
-                    if (fw != NULL)
-                    {
-                        len=0;
-                        while (len < header->size)
+                if (strlen(buf)==0){
+                    ret = stat(fname, &st);
+                    if (((ret == 0) && (st.st_size != header->size)) || (ret != 0)){
+                        fw = fOpenCd(fname, "w", true);
+                        if (fw != NULL)
                         {
-                            chunkLen = fmin(header->size - len, 8192);
-                            mtar_read_data(&tar, buf, chunkLen);
-                            fWrite(buf, 1, chunkLen, fw);
-                            len += chunkLen;
+                            len=0;
+                            while (len < header->size)
+                            {
+                                chunkLen = fmin(header->size - len, 8192);
+                                mtar_read_data(&tar, buf, chunkLen);
+                                fWrite(buf, 1, chunkLen, fw);
+                                len += chunkLen;
+                            }
+                            fClose(fw);
+                            ESP_LOGD(__FUNCTION__, "Saved as %s (tar header %d bytes, file %d bytes, wrote %d bytes)\n", fname, header->size, (int)st.st_size, len);
                         }
-                        fClose(fw);
-                        ESP_LOGD(__FUNCTION__, "Saved as %s (tar header %d bytes, file %d bytes, wrote %d bytes)\n", fname, header->size, (int)st.st_size, len);
-                    }
-                    else
-                    {
-                        ESP_LOGE(__FUNCTION__, "Cannot write %s", fname);
-                        retVal = false;
-                    }
-                } else {
-                    ESP_LOGD(__FUNCTION__, "Skippng %s (%d bytes)..", fname, header->size);
-                        len=0;
-                        while (len < header->size)
+                        else
                         {
-                            chunkLen = fmin(header->size - len, 8192);
-                            mtar_read_data(&tar, buf, chunkLen);
-                            len += chunkLen;
+                            ESP_LOGE(__FUNCTION__, "Cannot write %s", fname);
+                            retVal = false;
                         }
+                    } else {
+                        ESP_LOGD(__FUNCTION__, "Skippng %s (%d bytes)..%s", fname, header->size,mtar_strerror(ret));
+                    }
                 }
             }
             if ((ret = mtar_next(&tar)) != MTAR_ESUCCESS)
@@ -484,6 +479,7 @@ bool extractClientTar(char *tarFName)
                 retVal = false;
                 break;
             }
+            ESP_LOGV(__FUNCTION__,"Tar next:%s",mtar_strerror(ret));
         }
         if (ret != MTAR_ENULLRECORD)
         {

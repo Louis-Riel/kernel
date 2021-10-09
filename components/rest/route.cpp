@@ -429,27 +429,31 @@ void TheRest::SendStatus(void *param)
     cJSON_Delete(jstats);
     cJSON_Delete(cstats);
 
-    if ((ret = esp_http_client_open(client, strlen(sjson))) == ESP_OK)
-    {
-        if (esp_http_client_write(client, sjson, strlen(sjson)) != strlen(sjson))
+    if (sjson){
+        if ((ret = esp_http_client_open(client, strlen(sjson))) == ESP_OK)
         {
-            ESP_LOGE(__FUNCTION__, "Status update failed: %s", esp_err_to_name(ret));
+            if (esp_http_client_write(client, sjson, strlen(sjson)) != strlen(sjson))
+            {
+                ESP_LOGE(__FUNCTION__, "Status update failed: %s", esp_err_to_name(ret));
+            }
+            else
+            {
+                ESP_LOGV(__FUNCTION__, "Status sent to %s", config->url);
+            }
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
         }
         else
         {
-            ESP_LOGV(__FUNCTION__, "Status sent to %s", config->url);
+            ESP_LOGW(__FUNCTION__, "Send wifi off request failed: %s", esp_err_to_name(ret));
         }
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-    }
-    else
-    {
-        ESP_LOGW(__FUNCTION__, "Send wifi off request failed: %s", esp_err_to_name(ret));
+        ldfree(sjson);
+    } else {
+        ESP_LOGE(__FUNCTION__, "Cannot printf the json");
     }
 
     ldfree((void*)config->url);
     ldfree(config);
-    ldfree(sjson);
 }
 
 EventHandlerDescriptor *TheRest::BuildHandlerDescriptors()

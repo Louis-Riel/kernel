@@ -315,6 +315,44 @@ uint8_t EventInterpretor::RunMethod(const char* method, void *event_data, bool i
         xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
         xEventGroupClearBits(app_eg,app_bits_t::WIFI_OFF);
         return UINT8_MAX;
+    } else if (strcmp(method, "service") == 0)
+    {
+        if ((jeventbase = cJSON_GetObjectItem(mParams, "service")) &&
+            (jeventbase = cJSON_GetObjectItem(jeventbase, "value")) &&
+            (jeventid = cJSON_GetObjectItem(mParams, "status")) &&
+            (jeventid = cJSON_GetObjectItem(jeventid, "value")))
+        {
+            if (strcmp(jeventbase->string, "wifi")==0){
+                if (strcmp(jeventid->string, "stop")){
+                    xEventGroupSetBits(app_eg,app_bits_t::WIFI_OFF);
+                    xEventGroupClearBits(app_eg,app_bits_t::WIFI_ON);
+                } else {
+                    xEventGroupSetBits(app_eg,app_bits_t::WIFI_ON);
+                    xEventGroupClearBits(app_eg,app_bits_t::WIFI_OFF);
+                }
+            }
+            if (strcmp(jeventbase->string, "gps")==0){
+                if (strcmp(jeventid->string, "stop")){
+                    xEventGroupSetBits(app_eg,app_bits_t::GPS_OFF);
+                    xEventGroupClearBits(app_eg,app_bits_t::GPS_ON);
+                } else {
+                    xEventGroupSetBits(app_eg,app_bits_t::GPS_ON);
+                    xEventGroupClearBits(app_eg,app_bits_t::GPS_OFF);
+                }
+            }
+            if (strcmp(jeventbase->string, "rest")==0){
+                if (strcmp(jeventid->string, "stop")){
+                    xEventGroupClearBits(app_eg,app_bits_t::REST);
+                } else {
+                    xEventGroupSetBits(app_eg,app_bits_t::REST);
+                }
+            }
+        }
+        return UINT8_MAX;
+    } else if (strcmp(method, "hibernate") == 0)
+    {
+        xEventGroupSetBits(app_eg,app_bits_t::HIBERNATE);
+        return UINT8_MAX;
     } else if (strcmp(method, "checkupgrade") == 0)
     {
         theFunc = TheRest::CheckUpgrade;
@@ -341,18 +379,20 @@ uint8_t EventInterpretor::RunMethod(const char* method, void *event_data, bool i
             (jeventid = cJSON_GetObjectItem(jeventid, "value")))
         {
             EventDescriptor_t* edesc = EventHandlerDescriptor::GetEventDescriptor(jeventbase->valuestring,jeventid->valuestring);
-            if (strcmp(jeventbase->valuestring,"MFile")==0) {
-                BufferedFile::ProcessEvent(NULL,edesc->baseName,edesc->id, &mParams);
-            } else if (strcmp(jeventbase->valuestring,"DigitalPin")==0) {
-                Pin::ProcessEvent(NULL,edesc->baseName,edesc->id, &mParams);
-            } else if (edesc) {
-                ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)..", edesc->eventName, edesc->baseName, edesc->id);
-                if ((ret = esp_event_post(edesc->baseName, edesc->id, &mParams, sizeof(void *), portMAX_DELAY)) != ESP_OK)
-                {
-                    ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s..", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));
+            if (edesc){
+                if (strcmp(jeventbase->valuestring,"MFile")==0) {
+                    BufferedFile::ProcessEvent(NULL,edesc->baseName,edesc->id, &mParams);
+                } else if (strcmp(jeventbase->valuestring,"DigitalPin")==0) {
+                    Pin::ProcessEvent(NULL,edesc->baseName,edesc->id, &mParams);
+                } else if (edesc) {
+                    ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)..", edesc->eventName, edesc->baseName, edesc->id);
+                    if ((ret = esp_event_post(edesc->baseName, edesc->id, &mParams, sizeof(void *), portMAX_DELAY)) != ESP_OK)
+                    {
+                        ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s..", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));
+                    }
+                } else {
+                    ESP_LOGW(__FUNCTION__, "Cannot find %s to %s..", jeventid->valuestring, jeventbase->valuestring);
                 }
-            } else {
-                ESP_LOGW(__FUNCTION__, "Cannot find %s to %s..", jeventid->valuestring, jeventbase->valuestring);
             }
         } else {
             char* tmp = cJSON_Print(mParams);

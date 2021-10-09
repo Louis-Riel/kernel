@@ -50,7 +50,7 @@ Pin::Pin(AppConfig* config)
     cJSON* sjson = NULL;
     AppConfig* apin = new AppConfig(sjson=ManagedDevice::BuildStatus(this),AppConfig::GetAppStatus());
     apin->SetPinNoProperty("pinNo",pinNo);
-    apin->SetIntProperty("state",gpio_get_level(pinNo));
+    apin->SetIntProperty("state",-1);
     pinStatus = apin->GetPropertyHolder("state");
 
     delete apin;
