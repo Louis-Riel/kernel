@@ -358,7 +358,7 @@ class ROProp extends React.Component {
         var smoothmin = min + (smoothsec / 60);
 
         if (now.getFullYear() <= 1970) {
-            today =  Math.floor(now.getDate()/(1000*60*60*24)) + ' Days';
+            today =  (now.getDate()-1) + ' Days';
             if (hrs == 0)
                 time = (min ? min + ":" : "") + ('0'+sec).slice(-2) + "." + mil;
             else

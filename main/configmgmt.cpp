@@ -632,10 +632,8 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
       cJSON_DeleteItemFromObject(ctmp1?holder:json,ctmp1?ctmp1+1:path);
       cJSON_AddStringToObject(ctmp1?GetJSONConfig(parPath):json,ctmp1?ctmp1+1:path,value);
     }
-    ldfree(parPath);
   } else if (cJSON_IsObject(holder))
   {
-    ldfree(parPath);
     cJSON *val = cJSON_GetObjectItem(holder, "value");
     cJSON *version = cJSON_GetObjectItem(holder, "version");
     if (!val || !version) {
@@ -663,6 +661,7 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
   }
   if (hasChanges)
     SaveAppConfig();
+  ldfree(parPath);
   xSemaphoreGiveRecursive(sema);
 }
 

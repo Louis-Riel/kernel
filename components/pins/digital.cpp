@@ -176,7 +176,7 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
                     ESP_LOGV(__FUNCTION__,"Pin %s from %d to %d",pin->name,pin->pinStatus->valueint,state);
                     if (!pin->isRtcGpio) {
                         cJSON_SetIntValue(pin->pinStatus,state);
-                        //pin->PostEvent((void*)&pinNo,sizeof(pinNo),state ? eventIds::ON : eventIds::OFF);
+                        pin->PostEvent((void*)&pinNo,sizeof(pinNo),state ? eventIds::ON : eventIds::OFF);
                     }
                 }
             } else {

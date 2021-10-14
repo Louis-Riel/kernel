@@ -40,6 +40,7 @@ IRDecoder::rmt_timing_t IRDecoder::timing_groups[] = {
 IRDecoder::~IRDecoder(){
     ldfree((void*)name);
     EventManager::UnRegisterEventHandler(handlerDescriptors);
+    ldfree(buf);
     ESP_LOGD(__FUNCTION__,"Destructor");
 }
 
@@ -49,7 +50,8 @@ IRDecoder::IRDecoder(AppConfig* config)
     channelNo((rmt_channel_t)config->GetIntProperty("channelNo")),
     config(config),
     rb(NULL),
-    timingGroup(NULL)
+    timingGroup(NULL),
+    buf((char*)dmalloc(1024))
 {
     isRunning=true;
     AppConfig* apin = new AppConfig(ManagedDevice::BuildStatus(this),AppConfig::GetAppStatus());
@@ -100,18 +102,16 @@ void IRDecoder::IRPoller(void *arg){
         rmt_rx_start(ir->channelNo, true);
         uint32_t code=0;
         while ((items=(rmt_item32_t *) xRingbufferReceive(ir->rb, &length, portMAX_DELAY))) {
-            vRingbufferReturnItem(ir->rb, (void *) items);
             if ((code=ir->read(items,length))){
                 length /= 4;
-                char* ctmp = cJSON_Print(ManagedDevice::BuildStatus(ir));
-                if (ctmp){
+                if (cJSON_PrintPreallocated(ManagedDevice::BuildStatus(ir),ir->buf,1024,false)){
                     AppConfig::SignalStateChange(state_change_t::MAIN);
-                    esp_event_post(ir->eventBase,eventIds::CODE,ctmp,strlen(ctmp),portMAX_DELAY);
+                    esp_event_post(ir->eventBase,eventIds::CODE,ir->buf,strlen(ir->buf),portMAX_DELAY);
                 } else {
                     ESP_LOGW(__FUNCTION__,"Could not parse status");
                 }
-                ldfree(ctmp);
             }
+            vRingbufferReturnItem(ir->rb, (void *) items);
         }
         vRingbufferDelete(ir->rb);
         rmt_driver_uninstall(ir->channelNo);

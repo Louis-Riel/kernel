@@ -74,6 +74,7 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
         time(&clients[idx].lastTs);
         localtime_r(&clients[idx].lastTs, &timeinfo);
         strftime(clients[idx].jLastTs->valuestring, 30, "%c", &timeinfo);
+        ESP_LOGD(__FUNCTION__,"Client %d %s",idx, clients[idx].jLastTs->valuestring);
       }
       hasLiveClients |= clients[idx].jIsLive->valueint;
     }
@@ -112,9 +113,10 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
   isLive=true;
   for (uint8_t idx = 0; idx < 5; idx++){
     if ((clients[idx].hd == hd) && (clients[idx].fd == fd)){
-      ESP_LOGV(__FUNCTION__,"Client was at position %d",idx);
+      ESP_LOGD(__FUNCTION__,"Client was at position %d",idx);
       isLive=true;
       cJSON_SetIntValue(clients[idx].jIsLive, true);
+      AppConfig::SignalStateChange(state_change_t::MAIN);
       return true;
     }
   }
@@ -216,43 +218,16 @@ void WebsocketManager::StatePoller(void *instance){
 
 
 esp_err_t TheRest::ws_handler(httpd_req_t *req) {
-  ESP_LOGV(__FUNCTION__, "WEBSOCKET Session");
+  ESP_LOGD(__FUNCTION__, "WEBSOCKET Session");
   if (stateHandler == NULL) {
     ESP_LOGD(__FUNCTION__, "Staring Manager");
     stateHandler = new WebsocketManager();
   }
 
-  httpd_ws_frame_t ws_pkt;
-  memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-  ws_pkt.payload = (uint8_t*)dmalloc(128);
-  memset(ws_pkt.payload,0,128);
-  esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 128);
-  if (ret == ESP_OK) 
-  {
-    GetServer()->jBytesOut->valuedouble = GetServer()->jBytesOut->valueint+=ws_pkt.len;
-    switch (ws_pkt.type)
-    {
-    case HTTPD_WS_TYPE_TEXT:
-      if (strcmp((char*)ws_pkt.payload,"Connect")==0){
-        if (stateHandler->RegisterClient(req->handle,httpd_req_to_sockfd(req))){
-          ESP_LOGV(__FUNCTION__,"Client Connected");
-        } else {
-          ESP_LOGW(__FUNCTION__,"Client cannot be connected");
-        }
-      } else {
-        ESP_LOGW(__FUNCTION__,"Unknown Command(%d):%s",ws_pkt.len, (char*)ws_pkt.payload);
-      }
-    break;
-    case HTTPD_WS_TYPE_CONTINUE:  ESP_LOGD(__FUNCTION__,"Packet type(%d): CONTINUE: %s",ws_pkt.len, (char*)ws_pkt.payload); break;
-    case HTTPD_WS_TYPE_BINARY:    ESP_LOGD(__FUNCTION__,"Packet type(%d): BINARY",ws_pkt.len);   break;
-    case HTTPD_WS_TYPE_CLOSE:     ESP_LOGD(__FUNCTION__,"Packet type(%d): CLOSE",ws_pkt.len);    break;
-    case HTTPD_WS_TYPE_PING:      ESP_LOGD(__FUNCTION__,"Packet type(%d): PING",ws_pkt.len);     break;
-    case HTTPD_WS_TYPE_PONG:      ESP_LOGD(__FUNCTION__,"Packet type(%d): PONG",ws_pkt.len);     break;
-    default:                      ESP_LOGW(__FUNCTION__,"Packet type(%d): UNKNOWN",ws_pkt.len);  break;
-    }
-  } else {
-    ESP_LOGE(__FUNCTION__, "httpd_ws_recv_frame failed: %s", esp_err_to_name(ret));
+  if (stateHandler->RegisterClient(req->handle,httpd_req_to_sockfd(req))){
+    ESP_LOGD(__FUNCTION__,"Client Connected");
+    return ESP_OK;
   }
-  ldfree(ws_pkt.payload);
-  return ret;
+  ESP_LOGW(__FUNCTION__,"Client cannot be connected");
+  return ESP_FAIL;
 }

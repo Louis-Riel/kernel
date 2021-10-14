@@ -37,13 +37,6 @@ protected:
     bool inPrefVector(uint8_t element);
     int setPreferred(const char* timing_group);
 private:
-    AppConfig* config;
-    cJSON* lastCode;
-    cJSON* lastProvider;
-    cJSON* numCodes;
-    RingbufHandle_t rb;
-    char* timingGroup;
-
     typedef struct {
         const char* tag;
         uint16_t carrier_freq_hz;
@@ -58,10 +51,18 @@ private:
         uint16_t zero_space_us;
     } rmt_timing_t;
 
-    static rmt_timing_t timing_groups[];
-    rmt_timing_t _timing;
+    AppConfig* config;
+    cJSON* lastCode;
+    cJSON* lastProvider;
+    cJSON* numCodes;
+    RingbufHandle_t rb;
+    char* timingGroup;
     uint16_t _margin_us = 80;
     std::vector<uint8_t> _preferred;
+    rmt_timing_t _timing;
+    char* buf;
+
+    static rmt_timing_t timing_groups[];
     bool rx_check_in_range(int duration_ticks, int target_us);
     bool rx_header_if(rmt_item32_t* item, uint8_t timing);
     bool rx_bit_one_if(rmt_item32_t* item, uint8_t timing);

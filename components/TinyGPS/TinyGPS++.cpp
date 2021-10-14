@@ -471,6 +471,14 @@ void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, i
   TinyGPSPlus *gps = (TinyGPSPlus *)handler_args;
   switch (id)
   {
+  case TinyGPSPlus::gpsEvent::gpsPaused:
+    if (!(xEventGroupGetBits(gps->eg) & TinyGPSPlus::gpsEvent::gpsPaused))
+      gps->gpsPause();
+    break;
+  case TinyGPSPlus::gpsEvent::gpsResumed:
+    if (xEventGroupGetBits(gps->eg) & TinyGPSPlus::gpsEvent::gpsPaused)
+      gps->gpsResume();
+    break;
   case TinyGPSPlus::gpsEvent::stop:
     CreateBackgroundTask(TinyGPSPlus::waitOnStop, "waitonstop", 4096, handler_args, tskIDLE_PRIORITY, NULL);
     break;
@@ -510,7 +518,9 @@ void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, i
     break;
   }
 }
+
 static TinyGPSPlus *instance = NULL;
+
 TinyGPSPlus::TinyGPSPlus(AppConfig *config) : TinyGPSPlus(
                                                   config->GetPinNoProperty("rxPin"),
                                                   config->GetPinNoProperty("txPin"),
@@ -670,10 +680,16 @@ void TinyGPSPlus::processEncoded(void)
   {
     if (strcmp(gpTxt->value(), "Stopping GPS") == 0)
     {
+      ESP_LOGD(__FUNCTION__,"GPS is paused");
+      xEventGroupSetBits(eg, gpsEvent::gpsPaused);
+      xEventGroupClearBits(eg, gpsEvent::locationChanged|gpsEvent::gpsResumed);
       ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::gpsPaused, NULL, 0, portMAX_DELAY));
     }
     if (strcmp(gpTxt->value(), "Resuming GPS") == 0)
     {
+      ESP_LOGD(__FUNCTION__,"GPS Resumed");
+      xEventGroupSetBits(eg, gpsEvent::gpsResumed);
+      xEventGroupClearBits(eg, gpsEvent::locationChanged|gpsEvent::gpsPaused);
       ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::gpsResumed, NULL, 0, portMAX_DELAY));
     }
   }
@@ -1006,7 +1022,7 @@ bool TinyGPSPlus::isSignificant()
   }
   
   if ((val=distanceBetween(location,lastLocation)) > 50000) {
-    ESP_LOGW(__FUNCTION__,"Dodgy gps coords lat:%f lng:%f llat:%f llng:%f",location.lat(),location.lng(),lastLocation.lat(),lastLocation.lng());
+    ESP_LOGV(__FUNCTION__,"Dodgy gps coords lat:%f lng:%f llat:%f llng:%f",location.lat(),location.lng(),lastLocation.lat(),lastLocation.lng());
     return false;
   }
   if (val > fmax(250, speed.kmph() * 30))
@@ -1098,20 +1114,15 @@ void TinyGPSPlus::gpsStart()
 
 void TinyGPSPlus::gpsResume()
 {
-  xEventGroupClearBits(eg, gpsEvent::locationChanged);
   int bw = uart_write_bytes(UART_NUM_2, (const char *)active_tracking, sizeof(active_tracking));
   ESP_ERROR_CHECK(uart_flush(UART_NUM_2));
   ESP_LOGV(__FUNCTION__, "Resumed GPS Output(%d)", bw);
-  ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::gpsResumed, NULL, 0, portMAX_DELAY));
 }
 
 void TinyGPSPlus::gpsPause()
 {
-  xEventGroupClearBits(eg, gpsEvent::gpsPaused);
-  xEventGroupClearBits(eg, gpsEvent::locationChanged);
   int bw = uart_write_bytes(UART_NUM_2, (const char *)silent_tracking, sizeof(silent_tracking) / sizeof(uint8_t));
   ESP_ERROR_CHECK(uart_flush(UART_NUM_2));
-  ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::gpsPaused, NULL, 0, portMAX_DELAY));
   ESP_LOGV(__FUNCTION__, "Paused GPS Output(%d)", bw);
 }
 
@@ -1175,7 +1186,7 @@ bool TinyGPSPlus::endOfTermHandler()
       {
         double dtmp = TinyGPSPlus::distanceBetween(location.lat(), location.lng(), lastLocation.lat(), lastLocation.lng());
         if ((lastLocation.lat() != 0) && (dtmp > 50000)) {
-          ESP_LOGW(__FUNCTION__,"Dodgy gps coords lat:%f lng:%f llat:%f llng:%f",location.lat(),location.lng(),lastLocation.lat(),lastLocation.lng());
+          ESP_LOGV(__FUNCTION__,"Dodgy gps coords lat:%f lng:%f llat:%f llng:%f",location.lat(),location.lng(),lastLocation.lat(),lastLocation.lng());
           return false;
         }
         ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::locationChanged, &dtmp, sizeof(dtmp), portMAX_DELAY));

@@ -178,10 +178,8 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
             postedEvent.event_data=malloc(strlen((char*)event_data)+1);
             strcpy((char*)postedEvent.event_data,(char*)event_data);
             ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent.event_data);
-            xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
-        } else {
-            xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
-        } 
+        }
+        xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
     }
 }
 
