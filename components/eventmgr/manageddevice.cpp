@@ -72,6 +72,16 @@ esp_err_t ManagedDevice::PostEvent(void* content, size_t len,int32_t event_id){
   return esp_event_post(eventBase,event_id,content,len,portMAX_DELAY);
 }
 
+ManagedDevice* ManagedDevice::GetByName(const char* name){
+  for (int idx = 0; idx < numDevices; idx++) {
+    if (runningInstances[idx] && runningInstances[idx]->status && (strcmp(runningInstances[idx]->GetName(),name) == 0)) {
+      return runningInstances[idx];
+    }
+  }
+  return NULL;
+}
+
+
 void ManagedDevice::UpdateStatuses(){
   for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
     if (runningInstances[idx] && runningInstances[idx]->statusFnc){

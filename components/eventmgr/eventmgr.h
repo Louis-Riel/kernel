@@ -44,6 +44,7 @@ class EventHandlerDescriptor
 {
 public:
     EventHandlerDescriptor(esp_event_base_t base, const char *name);
+    ~EventHandlerDescriptor();
     bool AddEventDescriptor(int32_t id, const char *name);
     bool AddEventDescriptor(int32_t id, const char *name, event_data_type_tp dtp);
     static EventDescriptor_t *GetEventDescriptor(esp_event_base_t base,const char *eventName);
@@ -142,6 +143,7 @@ class EventInterpretor
 public:
     EventInterpretor(cJSON *json, cJSON *programs);
     bool IsValid(esp_event_base_t eventBase, int32_t id, void *event_data);
+    static uint8_t RunMethod(EventInterpretor* instance, const char* method, void *event_data, bool inBackground);
     uint8_t RunMethod(const char* method, void *event_data, bool inBackground);
     uint8_t RunMethod(void *event_data);
     void RunProgram(void *event_data, const char *progName);
@@ -211,13 +213,14 @@ public:
     ~ManagedDevice();
     static void UpdateStatuses();
     const char *GetName();
+    esp_err_t PostEvent(void *content, size_t len, int32_t event_id);
     esp_event_base_t eventBase;
     EventHandlerDescriptor *handlerDescriptors;
     static void RunHealthCheck(void* param);
+    static ManagedDevice* GetByName(const char* name);
 
 protected:
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
-    esp_err_t PostEvent(void *content, size_t len, int32_t event_id);
     EventHandlerDescriptor *BuildHandlerDescriptors();
     static cJSON *BuildStatus(void *instance);
     cJSON *(*statusFnc)(void *);

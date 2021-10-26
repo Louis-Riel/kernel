@@ -237,6 +237,8 @@ void EventInterpretor::RunLooper(void* param) {
         vTaskDelayUntil(&ticks, pdMS_TO_TICKS( period ));
     }
     ldfree(program);
+    ldfree(la);
+    vTaskDelete(NULL);
 }
 
 uint8_t EventInterpretor::RunMethod(void *event_data) {
@@ -270,32 +272,32 @@ cJSON* EventInterpretor::GetParams(){
     return params;
 }
 
-uint8_t EventInterpretor::RunMethod(const char* method, void *event_data, bool inBackground)
+uint8_t EventInterpretor::RunMethod(const char* method, void *event_data, bool inBackground) {
+    return RunMethod(this,method,event_data,inBackground);
+}
+
+uint8_t EventInterpretor::RunMethod(EventInterpretor* instance, const char* method, void *event_data, bool inBackground)
 {
     cJSON *jeventbase;
     cJSON *jeventid;
     int32_t eventId = -1;
     esp_err_t ret;
+    EventGroupHandle_t app_eg = instance ? instance->app_eg : getAppEG();
 
     if (!method) {
         ESP_LOGE(__FUNCTION__,"Missing method");
-        if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
-            char* tmp = cJSON_Print(config);
-            ESP_LOGV(__FUNCTION__,"%s",tmp);
-            ldfree(tmp);
-        }
         return UINT8_MAX;
     }
 
-    ESP_LOGV(__FUNCTION__,"Got %s method:(%s) with id %d",inBackground?"backgroung":"foreground",method,id);
+    ESP_LOGV(__FUNCTION__,"Got %s method:(%s)",inBackground?"backgroung":"foreground",method);
 
     TaskFunction_t theFunc = NULL;
-    cJSON* mParams = event_data == NULL ? params : *(cJSON**)event_data;
+    cJSON* mParams = event_data == NULL ? instance->params : *(cJSON**)event_data;
     
     if (strcmp(method, "commitTripToDisk") == 0)
     {
         theFunc = commitTripToDisk;
-        jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(params, "flags"), "value");
+        jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(instance->params, "flags"), "value");
     } else if (strcmp(method, "wifioff") == 0)
     {
         xEventGroupClearBits(app_eg,app_bits_t::WIFI_ON);
@@ -393,6 +395,8 @@ uint8_t EventInterpretor::RunMethod(const char* method, void *event_data, bool i
                 } else {
                     ESP_LOGW(__FUNCTION__, "Cannot find %s to %s..", jeventid->valuestring, jeventbase->valuestring);
                 }
+            } else {
+                ESP_LOGE(__FUNCTION__,"No descriptor for %s-%s",jeventbase->valuestring,jeventid->valuestring);
             }
         } else {
             char* tmp = cJSON_Print(mParams);
@@ -450,6 +454,7 @@ EventCondition::EventCondition(cJSON *json)
                         AppConfig* cfg = valOrigin == compare_origin_t::Config ? AppConfig::GetAppConfig() : AppConfig::GetAppStatus();
                         srcJson = cfg->GetPropertyHolder(valJsonPropName);
                     }
+                    ldfree(valJsonPropName);
                 } else {
                     isValid = false;
                     char *stmp = cJSON_PrintUnformatted(json);
@@ -473,6 +478,7 @@ EventCondition::EventCondition(cJSON *json)
                         AppConfig* cfg = compOrigin == compare_origin_t::Config ? AppConfig::GetAppConfig() : AppConfig::GetAppStatus();
                         compJson = cfg->GetPropertyHolder(compJsonPropName);
                     }
+                    ldfree(compJsonPropName);
                 } else {
                     char *stmp = cJSON_PrintUnformatted(json);
                     ESP_LOGW(__FUNCTION__,"Empty comp path property in %s",stmp);

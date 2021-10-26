@@ -34,10 +34,20 @@ public:
     cJSON* jLastTs;
     cJSON* jIsLive;
     cJSON* jAddr;
+    cJSON* jErrCount;
   } clients[5];
 
 protected:
+  struct ws_msg_t {
+    void* buf;
+    ws_client_t* client;
+    uint32_t bufLen;
+    httpd_handle_t hd;
+    int fd;
+  };
+
   static bool HealthCheck(void *instance);
+  static void PostToClient(void* msg);
 
   EventHandlerDescriptor *BuildHandlerDescriptors();
 
@@ -45,7 +55,6 @@ private:
   uint32_t logPos;
   QueueHandle_t msgQueue;
   char *logBuffer;
-  char *stateBuffer;
   uint8_t emptyString;
   cJSON* jClients;
 };
@@ -98,6 +107,7 @@ protected:
   static esp_err_t sendFile(httpd_req_t *req, const char *path);
 
   static esp_err_t HandleSystemCommand(httpd_req_t *req);
+  static esp_err_t HandleStatusChange(httpd_req_t *req);
   static esp_err_t findFiles(httpd_req_t *req, const char *path, const char *ext, bool recursive, char *res, uint32_t resLen);
 
 private:

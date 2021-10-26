@@ -25,6 +25,10 @@ EventHandlerDescriptor::EventHandlerDescriptor(esp_event_base_t eventBase,const 
     strcpy(this->name,name);
 }
 
+EventHandlerDescriptor::~EventHandlerDescriptor(){
+    ldfree(eventDescriptors);
+}
+
 bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName){
     return AddEventDescriptor(id,eventName,event_data_type_tp::Unknown);
 }
@@ -299,5 +303,6 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
 
     ldfree(srcCursor);
     ldfree(strftime_buf);
+    ldfree(sourceShadow);
     return retVal;
 }

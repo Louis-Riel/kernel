@@ -23,7 +23,7 @@ public:
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     bool isRtcGpio;
     enum eventIds {
-        OFF,ON,TRIGGER
+        OFF,ON,TRIGGER,STATUS
     };
 protected:
     static uint8_t numPins;
@@ -36,7 +36,6 @@ protected:
     void InitDevice();
     void RefrestState();
     EventHandlerDescriptor* BuildHandlerDescriptors();
-    cJSON* status;
 private:
     AppConfig* config;
     cJSON* pinStatus;

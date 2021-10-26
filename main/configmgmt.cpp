@@ -78,6 +78,7 @@ AppConfig::AppConfig(cJSON *json, AppConfig *root)
     , json(json)
     , filePath(root == NULL ? NULL : root->filePath)
     , root(root == NULL ? this : root)
+    , activeStorage(NULL)
     , sema(root == NULL ? xSemaphoreCreateRecursiveMutex() : root->sema)
 {
 }

@@ -299,7 +299,7 @@ cJSON *TheRest::PostJSonRequest(const char *url)
     if (len)
     {
         ESP_LOGV(__FUNCTION__, "Parsing (%s).", sjson);
-        DisplayMemInfo();
+        //DisplayMemInfo();
         if (len && sjson && (ret = cJSON_ParseWithLength(sjson,len)))
         {
             ESP_LOGV(__FUNCTION__, "Got back from %d from (%s).", len, url);
@@ -324,9 +324,9 @@ cJSON *TheRest::GetDeviceConfig(esp_ip4_addr_t *ipInfo, uint32_t deviceId)
     else
         sprintf((char *)url, "http://" IPSTR "/config", IP2STR(ipInfo));
     ESP_LOGV(__FUNCTION__, "Getting config from %s", url);
-    DisplayMemInfo();
+    //DisplayMemInfo();
     jret = PostJSonRequest(url);
-    DisplayMemInfo();
+    //DisplayMemInfo();
     ldfree(url);
     return jret;
 }

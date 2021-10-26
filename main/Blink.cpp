@@ -1132,6 +1132,7 @@ bool CleanupEmptyDirs(char* path) {
 void app_main(void)
 {
   ESP_LOGI(__FUNCTION__, "Starting App...");
+  //DisplayMemInfo();
   cJSON_Hooks memoryHook;
 
   memoryHook.malloc_fn = spimalloc;
@@ -1251,6 +1252,7 @@ void app_main(void)
     ESP_LOGE(__FUNCTION__, "caps integrity error");
   }
   ESP_LOGD(__FUNCTION__, "Battery: %f", getBatteryVoltage());
+  //DisplayMemInfo();
   //vTaskDelay(30000/portTICK_PERIOD_MS);
   //CreateBackgroundTask(TheRest::MergeConfig, "MergeConfig", 8192, NULL, tskIDLE_PRIORITY, NULL);
 }

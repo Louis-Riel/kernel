@@ -175,7 +175,7 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
         ESP_LOGV(__FUNCTION__,"type for %s %s is %d", base, ed->eventName, (int)ed->dataType);
         if ((ed->dataType == event_data_type_tp::JSON) ||
             (ed->dataType == event_data_type_tp::String)) {
-            postedEvent.event_data=malloc(strlen((char*)event_data)+1);
+            postedEvent.event_data=dmalloc(strlen((char*)event_data)+1);
             strcpy((char*)postedEvent.event_data,(char*)event_data);
             ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent.event_data);
         }

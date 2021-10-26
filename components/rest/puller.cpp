@@ -192,6 +192,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                         ESP_LOGI(__FUNCTION__, "firmware update needed %d, %s!=%s", len, dmd5[0]?dmd5:"N/A", ccmd5);
                         esp_http_client_close(client);
                         esp_http_client_cleanup(client);
+                        ldfree((void*)config->url);
                         memset(config, 0, sizeof(esp_http_client_config_t));
                         fClose(fw);
                         FILE* fw;
@@ -264,6 +265,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                             }
                             esp_http_client_close(client);
                             esp_http_client_cleanup(client);
+                            ldfree((void*)config->url);
                         } else {
                             ESP_LOGE(__FUNCTION__,"Cannot open image: /lfs/firmware/current.bin");
                         }

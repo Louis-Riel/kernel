@@ -395,6 +395,62 @@ void parseFiles(void *param)
     }
 }
 
+esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
+    esp_err_t ret = ESP_FAIL;
+    char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
+    int rlen = httpd_req_recv(req, postData, JSON_BUFFER_SIZE);
+    if (rlen == 0)
+    {
+        ESP_LOGE(__FUNCTION__, "no body");
+        ret = httpd_resp_send_500(req);
+    }
+    else
+    {
+        *(postData+rlen)=0;
+        cJSON* stat = cJSON_ParseWithLength(postData,JSON_BUFFER_SIZE);
+        if (stat) {
+            AppConfig* appStat = new AppConfig(stat,NULL);
+            if (appStat->HasProperty("name")) {
+                const char* name = appStat->GetStringProperty("name");
+                ManagedDevice* dev = ManagedDevice::GetByName(name);
+                if (dev) {
+                    ESP_LOGV(__FUNCTION__,"Posting state to %s",dev->eventBase);
+                    EventDescriptor_t* ed = EventHandlerDescriptor::GetEventDescriptor(dev->eventBase,"STATUS");
+                    if (ed){
+                        EventInterpretor::RunMethod(NULL,"Post",(void*)&stat,false);
+                        //ret=dev->PostEvent(postData,rlen,ed->id);
+                        //if (ret == ESP_OK) {
+                            ESP_LOGV(__FUNCTION__,"Posted %s to %s",postData, name);
+                            char* nstat = cJSON_Print(ManagedDevice::BuildStatus(dev));
+                            ret=httpd_resp_send(req,nstat,strlen(nstat));
+                            ldfree(nstat);
+                        //} else {
+                        //    ESP_LOGE(__FUNCTION__,"Cannot post to %s",name);
+                        //    ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,esp_err_to_name(ret));
+                        //}
+                    } else {
+                        ESP_LOGE(__FUNCTION__,"%s is not implemented",name);
+                        ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,dev->GetName());
+                    }
+                } else {
+                    ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,dev->GetName());
+                    ESP_LOGE(__FUNCTION__,"Cannot find device named %s",name);
+                }
+            } else {
+                ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,postData);
+                ESP_LOGE(__FUNCTION__,"Missing name in %s",postData);
+            }
+            delete appStat;
+            cJSON_Delete(stat);
+        } else {
+            ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,postData);
+            ESP_LOGE(__FUNCTION__,"Cannot parse(%s)",postData);
+        }
+    }
+    ldfree(postData);
+    return ret;
+}
+
 esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
 {
     esp_err_t ret = 0;
@@ -416,6 +472,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
             cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
             if (jitem && (strcmp(jitem->valuestring, "reboot") == 0))
             {
+                ret = httpd_resp_send(req, "Rebooting", 9);
                 dumpTheLogs((void *)true);
                 esp_restart();
             }
@@ -857,9 +914,9 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         {
             ret = HandleSystemCommand(req);
         }
-        else if (endsWith(req->uri, "status"))
+        else if (endsWith(req->uri, "status/"))
         {
-            ESP_LOGW(__FUNCTION__, "Unimplemented methed:%s", req->uri);
+            ret = HandleStatusChange(req);
         }
         else
         {

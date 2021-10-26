@@ -17,33 +17,18 @@
       "value": 4
     }
   },
-  "gps": {
-    "txPin": {
-      "version": 0,
-      "value": 14
-    },
-    "rxPin": {
-      "version": 0,
-      "value": 27
-    },
-    "enPin": {
-      "version": 0,
-      "value": 12
-    },
-    "pois": []
-  },
   "wifitype": {
     "version": 0,
     "value": "STA"
   },
   "clienttype": {
     "version": 0,
-    "value": "Tracker"
+    "value": "Client"
   },
   "stations": [],
   "devName": {
     "version": 0,
-    "value": "Tracmer"
+    "value": "NewDevice"
   },
   "pins": [
     {
@@ -77,255 +62,110 @@
   ],
   "events": [
     {
-      "program": {
-        "version": 0,
-        "value": "sync"
-      },
-      "eventBase": {
-        "version": 0,
-        "value": "TheWifi"
-      },
-      "eventId": {
-        "version": 0,
-        "value": "IP_EVENT_STA_GOT_IP"
-      },
+      "eventBase": { "version": 0, "value": "TheWifi" },
+      "eventId": { "version": 2, "value": "IP_EVENT_STA_LOST_IP" },
+      "program": { "version": 1, "value": "blinktwice" },
       "conditions": [],
       "params": {}
     },
     {
-      "eventBase": {
-        "version": 0,
-        "value": "GPSPLUS_EVENTS"
-      },
-      "eventId": {
-        "version": 0,
-        "value": "atSyncPoint"
-      },
-      "method": {
-        "version": 0,
-        "value": "Post"
-      },
-      "conditions": [],
-      "params": {
-        "eventBase": {
-          "version": 0,
-          "value": "MFile"
-        },
-        "eventId": {
-          "version": 0,
-          "value": "WRITE_LINE"
-        },
-        "value": "${CurrentDate},${Status.gps/Longitude},${Status.gps/Lattitude},${Status.gps/Speed},${Status.gps/Altitude},${Status.gps/Course},${RAM},${Battery},${Status.gps/Satellites}",
-        "name": "/lfs/csv/${CurrentDateNoSpace}.csv",
-        "header": {
-          "version": 0,
-          "value": "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites"
-        }
-      }
-    },
-    {
-      "eventBase": {
-        "version": 0,
-        "value": "GPSPLUS_EVENTS"
-      },
-      "eventId": {
-        "version": 0,
-        "value": "atSyncPoint"
-      },
-      "method": {
-        "version": 0,
-        "value": "wifiSallyForth"
-      },
+      "eventBase": { "version": 1, "value": "TheWifi" },
+      "eventId": { "version": 2, "value": "IP_EVENT_STA_GOT_IP" },
+      "program": { "version": 0, "value": "blink" },
       "conditions": [],
       "params": {}
-    },
-    {
-      "eventBase": {
-        "version": 0,
-        "value": "GPSPLUS_EVENTS"
-      },
-      "eventId": {
-        "version": 0,
-        "value": "significantCourseChange"
-      },
-      "method": {
-        "version": 0,
-        "value": "Post"
-      },
-      "conditions": [],
-      "params": {
-        "eventBase": {
-          "version": 0,
-          "value": "MFile"
-        },
-        "eventId": {
-          "version": 0,
-          "value": "WRITE_LINE"
-        },
-        "value": "${CurrentDate},${Status.gps/Longitude},${Status.gps/Lattitude},${Status.gps/Speed},${Status.gps/Altitude},${Status.gps/Course},${RAM},${Battery},${Status.gps/Satellites}",
-        "name": "/lfs/csv/${CurrentDateNoSpace}.csv",
-        "header": {
-          "version": 0,
-          "value": "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites"
-        }
-      }
-    },
-    {
-      "eventBase": {
-        "version": 0,
-        "value": "GPSPLUS_EVENTS"
-      },
-      "eventId": {
-        "version": 0,
-        "value": "significantDistanceChange"
-      },
-      "method": {
-        "version": 0,
-        "value": "Post"
-      },
-      "conditions": [],
-      "params": {
-        "eventBase": {
-          "version": 0,
-          "value": "MFile"
-        },
-        "eventId": {
-          "version": 0,
-          "value": "WRITE_LINE"
-        },
-        "value": "${CurrentDate},${Status.gps/Longitude},${Status.gps/Lattitude},${Status.gps/Speed},${Status.gps/Altitude},${Status.gps/Course},${RAM},${Battery},${Status.gps/Satellites}",
-        "name": "/lfs/csv/${CurrentDateNoSpace}.csv",
-        "header": {
-          "version": 0,
-          "value": "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites"
-        }
-      }
-    },
-    {
-      "eventBase": {
-        "version": 0,
-        "value": "GPSPLUS_EVENTS"
-      },
-      "eventId": {
-        "version": 0,
-        "value": "significantCourseChange"
-      },
-      "method": {
-        "version": 0,
-        "value": "Post"
-      },
-      "conditions": [],
-      "params": {
-        "eventBase": {
-          "version": 0,
-          "value": "MFile"
-        },
-        "eventId": {
-          "version": 0,
-          "value": "WRITE_LINE"
-        },
-        "value": "${CurrentDate},${Status.gps/Longitude},${Status.gps/Lattitude},${Status.gps/Speed},${Status.gps/Altitude},${Status.gps/Course},${RAM},${Battery},${Status.gps/Satellites}",
-        "name": "/lfs/csv/${CurrentDateNoSpace}.csv",
-        "header": {
-          "version": 0,
-          "value": "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites"
-        }
-      }
-    },
-    {
-      "eventBase": {
-        "version": 0,
-        "value": "GPSPLUS_EVENTS"
-      },
-      "eventId": {
-        "version": 0,
-        "value": "outSyncPoint"
-      },
-      "method": {
-        "version": 0,
-        "value": "wifioff"
-      },
-      "conditions": [],
-      "params": {}
-    },
-    {
-      "eventBase": {
-        "version": 0,
-        "value": "GPSPLUS_EVENTS"
-      },
-      "eventId": {
-        "version": 0,
-        "value": "outSyncPoint"
-      },
-      "method": {
-        "version": 0,
-        "value": "post"
-      },
-      "conditions": [],
-      "params": {
-        "eventBase": {
-          "version": 0,
-          "value": "MFile"
-        },
-        "eventId": {
-          "version": 0,
-          "value": "WRITE_LINE"
-        },
-        "value": "${CurrentDate},${Status.gps/Longitude},${Status.gps/Lattitude},${Status.gps/Speed},${Status.gps/Altitude},${Status.gps/Course},${RAM},${Battery},${Status.gps/Satellites}",
-        "name": "/lfs/csv/${CurrentDateNoSpace}.csv",
-        "header": {
-          "version": 0,
-          "value": "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites"
-        }
-      }
     }
   ],
   "programs": [
     {
       "inLineThreads": [
-        {
-          "method": {
-            "version": 0,
-            "value": "mergeconfig"
-          }
-        },
-        {
-          "method": {
-            "version": 0,
-            "value": "sendstatus"
-          }
-        },
-        {
-          "method": {
-            "version": 0,
-            "value": "sendtar"
-          }
-        },
-        {
-          "method": {
-            "version": 0,
-            "value": "checkupgrade"
-          }
-        }
+        { "method": { "version": 0, "value": "mergeconfig" } },
+        { "method": { "version": 0, "value": "sendstatus" } },
+        { "method": { "version": 0, "value": "sendtar" } },
+        { "method": { "version": 0, "value": "checkupgrade" } }
       ],
       "name": "syncdata"
     },
     {
       "inLineThreads": [
+        { "program": { "version": 0, "value": "syncdata" } },
+        { "method": { "version": 0, "value": "wifioff" } }
+      ],
+      "name": "sync"
+    },
+    {
+      "inLineThreads": [
         {
-          "program": {
-            "version": 0,
-            "value": "syncdata"
+          "method": { "version": 0, "value": "Post" },
+          "params": {
+            "eventBase": { "version": 0, "value": "DigitalPin" },
+            "eventId": { "version": 1, "value": "OFF" },
+            "pinNo": { "version": 0, "value": 5 }
           }
         },
         {
-          "method": {
-            "version": 0,
-            "value": "wifioff"
+          "method": { "version": 0, "value": "Sleep" },
+          "params": { "time": { "version": 1, "value": 700 } }
+        },
+        {
+          "method": { "version": 0, "value": "Post" },
+          "params": {
+            "eventBase": { "version": 0, "value": "DigitalPin" },
+            "eventId": { "version": 1, "value": "ON" },
+            "pinNo": { "version": 0, "value": 5 }
           }
         }
       ],
-      "name": "sync"
+      "name": "blink"
+    },
+    {
+      "inLineThreads": [
+        {
+          "method": { "version": 0, "value": "Post" },
+          "params": {
+            "eventBase": { "version": 0, "value": "DigitalPin" },
+            "eventId": { "version": 1, "value": "OFF" },
+            "pinNo": { "version": 0, "value": 5 }
+          }
+        },
+        {
+          "method": { "version": 0, "value": "Sleep" },
+          "params": { "time": { "version": 1, "value": 700 } }
+        },
+        {
+          "method": { "version": 0, "value": "Post" },
+          "params": {
+            "eventBase": { "version": 0, "value": "DigitalPin" },
+            "eventId": { "version": 1, "value": "ON" },
+            "pinNo": { "version": 0, "value": 5 }
+          }
+        },
+        {
+          "method": { "version": 0, "value": "Sleep" },
+          "params": { "time": { "version": 1, "value": 700 } }
+        },
+        {
+          "method": { "version": 0, "value": "Post" },
+          "params": {
+            "eventBase": { "version": 0, "value": "DigitalPin" },
+            "eventId": { "version": 1, "value": "OFF" },
+            "pinNo": { "version": 0, "value": 5 }
+          }
+        },
+        {
+          "method": { "version": 0, "value": "Sleep" },
+          "params": { "time": { "version": 1, "value": 700 } }
+        },
+        {
+          "method": { "version": 0, "value": "Post" },
+          "params": {
+            "eventBase": { "version": 0, "value": "DigitalPin" },
+            "eventId": { "version": 1, "value": "ON" },
+            "pinNo": { "version": 0, "value": 5 }
+          }
+        }
+      ],
+      "name": "blinktwice"
     }
   ]
 }
