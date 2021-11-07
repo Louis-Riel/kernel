@@ -486,12 +486,7 @@ esp_err_t TheRest::rest_handler(httpd_req_t *req)
         {
             ESP_LOGV(__FUNCTION__, "rest handled (%d)%s <- %s idx:%d", req->method, theUri.uri, req->uri, idx);
             time_t start = esp_timer_get_time();
-            size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
             esp_err_t ret = theUri.handler(req);
-            size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
-            if (diff > 0) {
-                ESP_LOGW(__FUNCTION__,"%s %d bytes memleak",req->uri,diff);
-            }
             restInstance->jprocessingTime_us->valuedouble = restInstance->jprocessingTime_us->valueint+=(esp_timer_get_time()-start);
             return ret;
         }

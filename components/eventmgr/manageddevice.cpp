@@ -106,6 +106,7 @@ cJSON* ManagedDevice::BuildStatus(void* instance){
     md->status = AppConfig::GetAppStatus()->GetJSONConfig(md->GetName());
     if (md->status && md->GetName()){
       cJSON_AddStringToObject(md->status,"name",md->GetName());
+      cJSON_AddStringToObject(md->status,"class",md->eventBase);
       return md->status;
     } else{
       ESP_LOGE(__FUNCTION__,"Missing name");

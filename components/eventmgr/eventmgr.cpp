@@ -9,7 +9,7 @@ EventManager::EventManager(cJSON* cfg, cJSON* programs)
 :config(cfg)
 ,programs(programs)
 ,eventBuffer(NULL)
-,eventQueue(xQueueCreate(20, sizeof(postedEvent_t)))
+,eventQueue(xQueueCreate(20, sizeof(postedEvent_t*)))
 {
     memset(eventInterpretors,0,sizeof(void*)*MAX_NUM_EVENTS);
     if (!ValidateConfig()) {
@@ -74,15 +74,16 @@ void EventManager::RegisterEventHandler(EventHandlerDescriptor* eventHandlerDesc
 }
 
 void EventManager::UnRegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {
-    //ESP_LOGV(__FUNCTION__,"UnRegistering %s",(char*)eventHandlerDescriptor->GetEventBase());
-    //ESP_ERROR_CHECK(esp_event_handler_unregister(eventHandlerDescriptor->GetEventBase(), ESP_EVENT_ANY_ID, EventManager::ProcessEvent));
+    ESP_LOGV(__FUNCTION__,"UnRegistering %s",(char*)eventHandlerDescriptor->GetEventBase());
+    ESP_ERROR_CHECK(esp_event_handler_unregister(eventHandlerDescriptor->GetEventBase(), ESP_EVENT_ANY_ID, EventManager::EventProcessor));
 }
 
 void EventManager::EventPoller(void* param){
-    postedEvent_t postedEvent;
+    postedEvent_t** postedEvent = (postedEvent_t**)dmalloc(sizeof(postedEvent_t**));
     EventManager* mgr = (EventManager*)param;
-    while(xQueueReceive(mgr->eventQueue,&postedEvent,portMAX_DELAY)){
-        ProcessEvent(&postedEvent);
+    while(xQueueReceive(mgr->eventQueue,postedEvent,portMAX_DELAY)){
+        ProcessEvent(*postedEvent);
+        ldfree(*postedEvent);
     }
 }
 
@@ -120,7 +121,8 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
                 cJSON_AddStringToObject(jevt,"data",(char*)postedEvent->event_data);
                 break;
             case event_data_type_tp::Number:
-                cJSON_AddNumberToObject(jevt,"data",*(int*)postedEvent->event_data);
+                ESP_LOGV(__FUNCTION__,"Got %s(%d) %d",postedEvent->base,postedEvent->id ,(int)postedEvent->event_data);
+                cJSON_AddNumberToObject(jevt,"data",(int)postedEvent->event_data);
                 break;
             default:
                 ESP_LOGW(__FUNCTION__,"Unknown event data type for %s-%s",edesc->baseName,edesc->eventName);
@@ -163,21 +165,29 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
     }
     EventManager* mgr = (EventManager*) handler_args;
     ESP_LOGV(__FUNCTION__,"Base:%s id:%d eventQueue:%" PRIXPTR "",base,id,(uintptr_t)mgr->eventQueue);
-    postedEvent_t postedEvent;
-    postedEvent.base=base;
-    postedEvent.id=id;
-    postedEvent.event_data=event_data;
+    postedEvent_t* postedEvent = (postedEvent_t*)dmalloc(sizeof(postedEvent_t));
+    postedEvent->base=base;
+    postedEvent->id=id;
     EventDescriptor_t* ed=NULL;
-    postedEvent.eventDataType=(ed=EventHandlerDescriptor::GetEventDescriptor(base,id)) == NULL ? event_data_type_tp::Unknown : ed->dataType;
+    postedEvent->eventDataType=(ed=EventHandlerDescriptor::GetEventDescriptor(base,id)) == NULL ? event_data_type_tp::Unknown : ed->dataType;
     if (!ed) {
         ESP_LOGV(__FUNCTION__,"No desciptor for %s %d", base, id);
     } else {
         ESP_LOGV(__FUNCTION__,"type for %s %s is %d", base, ed->eventName, (int)ed->dataType);
-        if ((ed->dataType == event_data_type_tp::JSON) ||
-            (ed->dataType == event_data_type_tp::String)) {
-            postedEvent.event_data=dmalloc(strlen((char*)event_data)+1);
-            strcpy((char*)postedEvent.event_data,(char*)event_data);
-            ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent.event_data);
+        switch (ed->dataType)
+        {
+        case event_data_type_tp::String:
+        case event_data_type_tp::JSON:
+            postedEvent->event_data=dmalloc(strlen((char*)event_data)+1);
+            strcpy((char*)postedEvent->event_data,(char*)event_data);
+            ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent->event_data);
+            break;
+        case event_data_type_tp::Number:
+            postedEvent->event_data=(void*)*(int*)event_data;
+            //printf("\nevtproc %s(%d):%d\n",postedEvent->base,postedEvent->id, (int)postedEvent->event_data);
+            break;
+        default:
+            break;
         }
         xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
     }

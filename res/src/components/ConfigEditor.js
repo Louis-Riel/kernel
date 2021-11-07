@@ -109,7 +109,7 @@ class ConfigPage extends React.Component {
     SaveForm(form) {
         this.getJsonConfig(this.props.selectedDeviceId).then(vcfg => fromPlainToVersionned(this.state.deviceConfigs[this.props.selectedDeviceId], vcfg))
             .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + (this.props.selectedDeviceId == "current" ? "" : this.props.selectedDeviceId), {
-            method: 'put',
+                method: 'put',
                 body: JSON.stringify(cfg)
             }).then(res => alert(JSON.stringify(res)))
               .catch(res => alert(JSON.stringify(res))));

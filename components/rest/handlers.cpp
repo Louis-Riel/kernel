@@ -12,6 +12,7 @@
 #include "eventmgr.h"
 #include "mfile.h"
 #include "../TinyGPS/TinyGPS++.h"
+#include "pins.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -232,6 +233,56 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
     return ret;
 }
 
+esp_err_t TheRest::eventDescriptor_handler(httpd_req_t *req){
+    if (strlen(req->uri) <= 20) {
+        return httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"Bad request");
+    }
+    char uri[513];
+    strcpy(uri,req->uri);
+    char* eventBase = uri+17;
+    char* eventId = indexOf(eventBase,"/");
+    if (eventId) {
+        *eventId++=0;
+        ESP_LOGV(__FUNCTION__,"base:%s id:%s",eventBase,eventId);
+        EventDescriptor_t* ed = NULL;
+        if ((eventId[0] >= 0) && (eventId[0] <= 9)) {
+            ed=EventHandlerDescriptor::GetEventDescriptor(eventBase,atoi(eventId));
+        } else {
+            ed=EventHandlerDescriptor::GetEventDescriptor(eventBase,eventId);
+        }
+        if (ed) {
+            cJSON* resp = cJSON_CreateObject();
+            cJSON_AddStringToObject(resp,"eventBase",ed->baseName);
+            cJSON_AddStringToObject(resp,"eventName",ed->eventName);
+            cJSON_AddNumberToObject(resp,"eventId",ed->id);
+            switch (ed->dataType)
+            {
+            case event_data_type_tp::JSON:
+                cJSON_AddStringToObject(resp,"dataType","JSON");
+                break;
+            case event_data_type_tp::Number:
+                cJSON_AddStringToObject(resp,"dataType","Number");
+                break;
+            case event_data_type_tp::String:
+                cJSON_AddStringToObject(resp,"dataType","String");
+                break;
+            default:
+                cJSON_AddStringToObject(resp,"dataType","Unknown");
+                break;
+            }
+            char* stmp = cJSON_PrintUnformatted(resp);
+            esp_err_t ret = httpd_resp_send(req,stmp,strlen(stmp));
+            cJSON_Delete(resp);
+            ldfree(stmp);
+            return ret;
+        } else {
+            return httpd_resp_send_404(req);
+        }
+    } else {
+        return httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"Bad request.");
+    }
+}
+
 esp_err_t TheRest::list_entity_handler(httpd_req_t *req)
 {
     char *jsonbuf = (char *)dmalloc(JSON_BUFFER_SIZE);
@@ -418,16 +469,10 @@ esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
                     EventDescriptor_t* ed = EventHandlerDescriptor::GetEventDescriptor(dev->eventBase,"STATUS");
                     if (ed){
                         EventInterpretor::RunMethod(NULL,"Post",(void*)&stat,false);
-                        //ret=dev->PostEvent(postData,rlen,ed->id);
-                        //if (ret == ESP_OK) {
-                            ESP_LOGV(__FUNCTION__,"Posted %s to %s",postData, name);
-                            char* nstat = cJSON_Print(ManagedDevice::BuildStatus(dev));
-                            ret=httpd_resp_send(req,nstat,strlen(nstat));
-                            ldfree(nstat);
-                        //} else {
-                        //    ESP_LOGE(__FUNCTION__,"Cannot post to %s",name);
-                        //    ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,esp_err_to_name(ret));
-                        //}
+                        ESP_LOGV(__FUNCTION__,"Posted %s to %s",postData, name);
+                        char* nstat = cJSON_Print(ManagedDevice::BuildStatus(dev));
+                        ret=httpd_resp_send(req,nstat,strlen(nstat));
+                        ldfree(nstat);
                     } else {
                         ESP_LOGE(__FUNCTION__,"%s is not implemented",name);
                         ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,dev->GetName());
@@ -459,14 +504,16 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
     if (rlen == 0)
     {
         ESP_LOGE(__FUNCTION__, "no body");
+        ldfree(postData);
         ret = httpd_resp_send_500(req);
     }
     else
     {
         TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += rlen;
         *(postData + rlen) = 0;
-        ESP_LOGD(__FUNCTION__, "Got %s", postData);
+        ESP_LOGV(__FUNCTION__, "Got %s", postData);
         cJSON *jresponse = cJSON_ParseWithLength(postData, rlen);
+        ldfree(postData);
         if (jresponse != NULL)
         {
             cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
@@ -476,7 +523,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                 dumpTheLogs((void *)true);
                 esp_restart();
             }
-            if (jitem && (strcmp(jitem->valuestring, "parseFiles") == 0))
+            else if (jitem && (strcmp(jitem->valuestring, "parseFiles") == 0))
             {
                 CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
                 ret = httpd_resp_send(req, "parsing", 7);
@@ -488,9 +535,70 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                 ret = httpd_resp_send(req, "OK", 2);
                 TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
             }
+            else if (jitem && (strcmp(jitem->valuestring, "flush") == 0))
+            {
+                cJSON *fileName = cJSON_GetObjectItemCaseSensitive(jresponse, "name");
+                uint32_t slen = 0;
+                if (fileName && fileName->valuestring && (slen=strlen(fileName->valuestring))) {
+                    if ((slen == 1) && (fileName->valuestring[0] == '*')) {
+                        BufferedFile::FlushAll();
+                        ret = httpd_resp_send(req, "OK", 2);
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                    } else {
+                        BufferedFile* bfile = (BufferedFile*)ManagedDevice::GetByName(fileName->valuestring);
+                        if (bfile) {
+                            bfile->Flush();
+                            ret = httpd_resp_send(req, "OK", 2);
+                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                            AppConfig::SignalStateChange(state_change_t::MAIN);
+                        } else {
+                            ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"File not found");
+                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 14;
+                        }
+                    }
+                    ret = httpd_resp_send(req, "OK", 2);
+                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                } else {
+                    ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,"Not Implemented");
+                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
+                }
+            }
+            else if (jitem && (strcmp(jitem->valuestring, "scanaps") == 0))
+            {
+                TheWifi::GetInstance()->wifiScan();
+            } 
+            else if (jitem && (strcmp(jitem->valuestring, "trigger") == 0))
+            {
+                cJSON *pinName = cJSON_GetObjectItemCaseSensitive(jresponse, "name");
+                cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
+                cJSON *state = cJSON_GetObjectItemCaseSensitive(jresponse, "param2");
+                uint32_t slen = 0;
+                if (pinName && pinName->valuestring && (slen=strlen(pinName->valuestring))) {
+                    Pin* pin = (Pin*)ManagedDevice::GetByName(pinName->valuestring);
+                    if (pin) {
+                        if (pin->ProcessEvent(strcmp(event->valuestring,"TRIGGER") == 0 ? Pin::eventIds::TRIGGER : strcmp(event->valuestring,"ON") == 0 ? Pin::eventIds::ON : Pin::eventIds::OFF,state ? state->valueint : 2)) {
+                            ret = httpd_resp_send(req, "OK", 2);
+                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                            //AppConfig::SignalStateChange(state_change_t::MAIN);
+                        } else {
+                            ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,"Pin not triggered");
+                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 17;
+                        }
+                    } else {
+                        ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"Pin not found");
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 14;
+                    }
+                    ret = httpd_resp_send(req, "OK", 2);
+                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                } else {
+                    ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,"Not Implemented");
+                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
+                }
+            }
             else
             {
-                ret = httpd_resp_send_408(req);
+                ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_400_BAD_REQUEST, "Invalid command");
+                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
             }
             cJSON_Delete(jresponse);
         }
@@ -501,7 +609,6 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 25;
         }
     }
-    ldfree(postData);
     return ret;
 }
 

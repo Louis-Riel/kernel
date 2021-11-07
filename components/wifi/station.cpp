@@ -143,6 +143,12 @@ TheWifi::TheWifi(AppConfig *appcfg)
             wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
             ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_STA, &wifi_config));
         }
+        cJSON* methods = cJSON_AddArrayToObject(BuildStatus(this),"commands");
+        cJSON* flush = cJSON_CreateObject();
+        cJSON_AddItemToArray(methods,flush);
+        cJSON_AddStringToObject(flush,"command","scanaps");
+        cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+        cJSON_AddStringToObject(flush,"caption","Scan Access Points");
     }
 
     if (appcfg->IsAp())

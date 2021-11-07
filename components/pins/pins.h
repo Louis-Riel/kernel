@@ -25,6 +25,7 @@ public:
     enum eventIds {
         OFF,ON,TRIGGER,STATUS
     };
+    bool ProcessEvent(Pin::eventIds event,uint8_t param);
 protected:
     static uint8_t numPins;
     static void queuePoller(void *arg);
@@ -39,6 +40,7 @@ protected:
 private:
     AppConfig* config;
     cJSON* pinStatus;
+    char* buf;
 };
 
 #endif

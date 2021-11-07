@@ -1,3 +1,19 @@
+class StateCommands extends React.Component {
+    render() {
+        return e("div",{key:genUUID(),name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
+            key:genUUID(),
+            caption:cmd.caption || cmd.command,
+            command:cmd.command,
+            name:this.props.name,
+            onSuccess:this.props.onSuccess,
+            onError:this.props.onError,
+            param1:cmd.param1,
+            param2:cmd.param2,
+            HTTP_METHOD:cmd.HTTP_METHOD
+        })));
+    }
+}
+
 class AppState extends React.Component {
     constructor(props) {
         super(props);
@@ -9,28 +25,54 @@ class AppState extends React.Component {
 
     Parse(json) {
         if (json) {
-            return Object.keys(json)
-                .sort((f1,f2)=>{
-                    var f1s = Array.isArray(json[f1]) ? 5 : typeof json[f1] == 'object' ? 4 : IsDatetimeValue(f1) ? 2 : 3;
-                    var f2s = Array.isArray(json[f2]) ? 5 : typeof json[f2] == 'object' ? 4 : IsDatetimeValue(f2) ? 2 : 3;
-                    if (f1s == f2s) {
-                        return f1.localeCompare(f2);
-                    }
-                    return f1s>f2s?1:f2s>f1s?-1:0;
-                }).map(fld => {
-                    if (Array.isArray(json[fld])) {
-                        return e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] });
-                    } else if (typeof json[fld] == 'object') {
-                        return e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld] });
-                    } else {
-                        return e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld });
-                    }
-                });
+            return e("div",{key: genUUID(),className:"statusclass"},this.getSortedProperties(json).map(fld => {
+                                                    if (Array.isArray(json[fld])) {
+                                                        if (fld == "commands"){
+                                                            return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
+                                                        }
+                                                        return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
+                                                    } else if (typeof json[fld] == 'object') {
+                                                        return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus })};
+                                                    } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
+                                                        return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
+                                                    }
+                                                }).reduce((pv,cv)=>{
+                                                    if (cv){
+                                                        var fc = this.getFieldClass(json,cv.fld);
+                                                        var item = pv.find(it=>it.fclass == fc);
+                                                        if (item) {
+                                                            item.elements.push(cv.element);
+                                                        } else {
+                                                            pv.push({fclass:fc,elements:[cv.element]});
+                                                        }
+                                                    }
+                                                    return pv;
+                                                },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
         } else if (this.state && this.state.error) {
             return this.state.error;
         } else {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         }
+    }
+
+    getSortedProperties(json) {
+        return Object.keys(json)
+            .sort((f1, f2) => { 
+                var f1s = this.getFieldWeight(json, f1);
+                var f2s = this.getFieldWeight(json, f2);
+                if (f1s == f2s) {
+                    return f1.localeCompare(f2);
+                }
+                return f1s > f2s ? 1 : f2s > f1s ? -1 : 0;
+            }).filter(fld => !(typeof(json[fld]) == "object" && Object.keys(json[fld]).filter(fld=>fld != "class" && fld != "name").length==0));
+    }
+
+    getFieldWeight(json, f1) {
+        return Array.isArray(json[f1]) ? 5 : typeof json[f1] == 'object' ? json[f1]["commands"] ? 3 : 4 : IsDatetimeValue(f1) ? 1 : 2;
+    }
+
+    getFieldClass(json, f1) {
+        return Array.isArray(json[f1]) ? "array" : typeof json[f1] == 'object' ? json[f1]["commands"] ? "commandable" : "object" : "field";
     }
 
     render() {
@@ -40,7 +82,7 @@ class AppState extends React.Component {
         if (this.props.label != null) {
             return e("fieldset", { id: `fs${this.id}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.props.json)]);
         } else {
-            return e("fieldset", { id: `fs${this.id}` }, this.Parse(this.props.json));
+            return e("fieldset", { key: genUUID(), id: `fs${this.id}` }, this.Parse(this.props.json));
         }
     }
 }
@@ -49,9 +91,7 @@ class MainAppState extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            statuses: {},
-            loading: this.props.loading,
-            loaded: this.props.loaded,
+            statuses: {current:{}},
             error: null,
             selectedDeviceId: 0,
             refreshFrequency: 10,
@@ -70,13 +110,13 @@ class MainAppState extends React.Component {
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        if (!this.state.loading && !this.state.loaded) {
-            this.state.loading = true;
-            this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
-        }
         if (prevState && (this.state.autoRefresh != prevState.autoRefresh)) {
             this.setupWs(this.state.autoRefresh);
         }
+    }
+
+    updateAppStatus() {
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
     }
 
     updateMainStatus(stat) {
@@ -123,8 +163,6 @@ class MainAppState extends React.Component {
                 this.state.statuses[this.props.selectedDeviceId] = this.orderResults(newState)
                 this.setState({
                     error: null,
-                    loading: false,
-                    loaded: true,
                     statuses: this.state.statuses
                 });
             }).catch(err => {
@@ -150,7 +188,7 @@ class MainAppState extends React.Component {
             }).then(data => data.json()).then(fromVersionedToPlain)
                 .then(cfg => {
                     this.state.statuses[this.props.selectedDeviceId] = this.orderResults(cfg);
-                    this.setState({ statuses: this.state.statuses, loading: false, loaded: true });
+                    this.setState({ statuses: this.state.statuses });
                 })
         }
     }
@@ -168,7 +206,8 @@ class MainAppState extends React.Component {
             e(AppState, {
                 key: genUUID(), 
                 json: this.state.statuses[this.props.selectedDeviceId], 
-                selectedDeviceId: this.props.selectedDeviceId
+                selectedDeviceId: this.props.selectedDeviceId,
+                updateAppStatus: this.updateAppStatus.bind(this)
             })
         ];
     }

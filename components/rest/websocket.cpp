@@ -67,7 +67,7 @@ void WebsocketManager::PostToClient(void* msg) {
     ws_pkt.payload=(uint8_t*)&stateHandler->emptyString;
   }
 
-  if ((ret = httpd_ws_send_frame_async(wsMsg->hd,wsMsg->fd, &ws_pkt)) != ESP_OK) {
+  if ((ret = httpd_ws_send_frame_async(wsMsg->client->hd,wsMsg->client->fd, &ws_pkt)) != ESP_OK) {
     cJSON_SetIntValue(wsMsg->client->jErrCount,wsMsg->client->jErrCount->valueint+1);
     if (wsMsg->client->jErrCount->valueint > 10){
       cJSON_SetIntValue(wsMsg->client->jIsLive,false);
@@ -75,6 +75,7 @@ void WebsocketManager::PostToClient(void* msg) {
       wsMsg->client->fd=NULL;
       wsMsg->client->hd=NULL;
       ESP_LOGD(__FUNCTION__,"Client disconnected: %s",esp_err_to_name(ret));
+      AppConfig::SignalStateChange(state_change_t::MAIN);
     }
   } else {
     cJSON_SetIntValue(wsMsg->client->jBytesOut,wsMsg->client->jBytesOut->valueint+ws_pkt.len);
@@ -83,9 +84,8 @@ void WebsocketManager::PostToClient(void* msg) {
     strftime(wsMsg->client->jLastTs->valuestring, 30, "%c", &timeinfo);
     ESP_LOGV(__FUNCTION__,"Client %s - %d bytes", wsMsg->client->jLastTs->valuestring, ws_pkt.len);
   }
-  if (wsMsg->buf != NULL) {
+  if (wsMsg->buf)
     ldfree(wsMsg->buf);
-  }
   ldfree(wsMsg);
 }
 
@@ -102,18 +102,14 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
         wsMsg->buf = dmalloc(strlen((char*)msg)+1);
         strcpy((char*)wsMsg->buf,(const char*)msg);
       }
-      wsMsg->hd=clients[idx].hd;
-      wsMsg->fd=clients[idx].fd;
       wsMsg->client=&clients[idx];
       if ((ret = httpd_queue_work(clients[idx].hd,PostToClient,wsMsg)) != ESP_OK) {
         cJSON_SetIntValue(clients[idx].jIsLive,false);
-        if (wsMsg->buf)
-          ldfree(wsMsg->buf);
-        ldfree(wsMsg);
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
         stateChange=true;
         ESP_LOGD(__FUNCTION__,"Client %d disconnected",idx);
       }
+      //ldfree(wsMsg);
     }
   }
   if (stateChange){
@@ -230,6 +226,11 @@ void WebsocketManager::StatePoller(void *instance){
         cJSON_AddItemToObject(state,"tasks",tasks_json());
       } else if (bits&state_change_t::WIFI) {
         cJSON_AddItemReferenceToObject(state,"wifi",AppConfig::GetAppStatus()->GetJSONConfig("wifi"));
+      } else {
+        cJSON* item;
+        cJSON_ArrayForEach(item,mainState) {
+            cJSON_AddItemReferenceToObject(state,item->string,item);//AppConfig::GetAppStatus()->GetJSONConfig(item->string));
+        }
       }
       if (cJSON_PrintPreallocated(state,stateBuffer,JSON_BUFFER_SIZE,pdFALSE)){
         if (xQueueSend(stateHandler->msgQueue,stateBuffer,portMAX_DELAY) == pdTRUE) {

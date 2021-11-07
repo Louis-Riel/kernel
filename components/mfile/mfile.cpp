@@ -38,15 +38,22 @@ MFile::MFile(const char* fileName):MFile()
     uint32_t sz = strlen(fileName)+1;
     ESP_LOGV(__FUNCTION__,"Opening file %s(%d)",fileName, sz);
     if (sz > 1){
-        name = (char*)dmalloc(sz+1);
-        name[0]=0;
+        this->fileName = (const char*)dmalloc(sz+1);
         strcpy(name, fileName);
+        name = (char*)dmalloc(sz+7);
+        sprintf(name, "%s", fileName);
         ESP_LOGV(__FUNCTION__,"file %s(%d)...",name, sz);
     } 
-    AppConfig* apin = new AppConfig(ManagedDevice::BuildStatus(this),AppConfig::GetAppStatus());
+    cJSON* jcfg;
+    AppConfig* apin = new AppConfig((jcfg=ManagedDevice::BuildStatus(this)),AppConfig::GetAppStatus());
     apin->SetIntProperty("status",mfile_state_t::MFILE_INIT);
     apin->SetBoolProperty("hasContent",0);
     apin->SetIntProperty("bytesWritten",0);
+    cJSON* methods = cJSON_AddArrayToObject(jcfg,"commands");
+    cJSON* flush = cJSON_CreateObject();
+    cJSON_AddItemToArray(methods,flush);
+    cJSON_AddStringToObject(flush,"command","flush");
+    cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
     status = apin->GetPropertyHolder("status");
     hasContent = apin->GetPropertyHolder("hasContent");
     bytesWritten = apin->GetPropertyHolder("bytesWritten");
@@ -77,8 +84,8 @@ MFile* MFile::GetFile(const char* fileName){
 
     for (uint idx=0; idx < numOpenFiles; idx++) {
         MFile* file = openFiles[idx];
-        if (strcmp(fileName,file->GetName()) == 0) {
-            ESP_LOGV(__FUNCTION__,"Pulling %s from open files as %d, %d open files",file->GetName(),idx, numOpenFiles);
+        if (strcmp(fileName,file->fileName) == 0) {
+            ESP_LOGV(__FUNCTION__,"Pulling %s from open files as %d, %d open files",file->fileName,idx, numOpenFiles);
             return file;
         }
     }
@@ -225,17 +232,16 @@ esp_event_base_t MFile::GetEventBase(){
     return MFile::eventBase;    
 }
 
-const char* MFile::GetName(){
-    return name;
-}
-
 cJSON* MFile::BuildStatus(void *instance){
     return ManagedDevice::BuildStatus(instance);
 }
 
+const char* MFile::GetFilename(){
+    return fileName;
+}
 
-const char* BufferedFile::GetName(){
-    return MFile::GetName();
+const char* BufferedFile::GetFilename(){
+    return fileName;
 }
 
 BufferedFile::BufferedFile()
@@ -300,7 +306,7 @@ BufferedFile* BufferedFile::GetOpenedFile(const char* fileName){
 
     for (uint idx=0; idx < numOpenFiles; idx++) {
         BufferedFile* file = (BufferedFile*)openFiles[idx];
-        if (strcmp(file->GetName(),fileName) == 0) {
+        if (strcmp(file->fileName,fileName) == 0) {
             return file;
         }
     }
@@ -320,7 +326,7 @@ BufferedFile* BufferedFile::GetFile(const char* fileName){
 
     for (uint idx=0; idx < numOpenFiles; idx++) {
         BufferedFile* file = (BufferedFile*)openFiles[idx];
-        if (strcmp(file->GetName(),fileName) == 0) {
+        if (strcmp(file->fileName,fileName) == 0) {
             return file;
         }
     }

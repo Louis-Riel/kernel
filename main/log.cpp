@@ -19,7 +19,7 @@ const char* EMPTY_STRING = "";
 
 const char* getLogFName(){
     if (logFile) {
-        return logFile->GetName();
+        return logFile->GetFilename();
     }
     return EMPTY_STRING;
 }

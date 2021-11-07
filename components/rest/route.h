@@ -42,8 +42,6 @@ protected:
     void* buf;
     ws_client_t* client;
     uint32_t bufLen;
-    httpd_handle_t hd;
-    int fd;
   };
 
   static bool HealthCheck(void *instance);
@@ -98,6 +96,7 @@ protected:
   static esp_err_t list_files_handler(httpd_req_t *req);
   static esp_err_t status_handler(httpd_req_t *req);
   static esp_err_t download_handler(httpd_req_t *req);
+  static esp_err_t eventDescriptor_handler(httpd_req_t *req);
   static esp_err_t ota_handler(httpd_req_t *req);
   static esp_err_t app_handler(httpd_req_t *req);
   static esp_err_t list_entity_handler(httpd_req_t *req);
@@ -126,7 +125,7 @@ private:
   cJSON* jBytesOut;
   cJSON* jNumHc;
 
-  httpd_uri_t const restUris[10] =
+  httpd_uri_t const restUris[11] =
       {
           {.uri = "/config*",
            .method = HTTP_POST,
@@ -187,6 +186,13 @@ private:
           {.uri = "/sdcard/*",
            .method = HTTP_PUT,
            .handler = download_handler,
+           .user_ctx = NULL,
+           .is_websocket = false,
+           .handle_ws_control_frames = false,
+           .supported_subprotocol = NULL},
+          {.uri = "/eventDescriptor/*",
+           .method = HTTP_POST,
+           .handler = eventDescriptor_handler,
            .user_ctx = NULL,
            .is_websocket = false,
            .handle_ws_control_frames = false,

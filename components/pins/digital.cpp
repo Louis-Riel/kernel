@@ -25,7 +25,8 @@ Pin::Pin(AppConfig* config)
     pinNo(config->GetPinNoProperty("pinNo")),
     flags(config->GetIntProperty("driverFlags")),
     config(config),
-    pinStatus(NULL)
+    pinStatus(NULL),
+    buf((char*)dmalloc(1024))
 {
     const char* pname = config->GetStringProperty("pinName");
     ldfree(name);
@@ -46,10 +47,32 @@ Pin::Pin(AppConfig* config)
     ESP_LOGV(__FUNCTION__,"Pin(%d):%s at idx:%d",pinNo,name,numPins);
     pins[numPins++]=this;
     InitDevice();
-    AppConfig* apin = new AppConfig(BuildStatus(this),AppConfig::GetAppStatus());
+    cJSON* jcfg;
+    AppConfig* apin = new AppConfig((jcfg=BuildStatus(this)),AppConfig::GetAppStatus());
     apin->SetPinNoProperty("pinNo",pinNo);
     apin->SetIntProperty("state",-1);
     pinStatus = apin->GetPropertyHolder("state");
+    if (flags&gpio_driver_t::driver_type_t::digital_out){
+        cJSON* methods = cJSON_AddArrayToObject(jcfg,"commands");
+        cJSON* flush = cJSON_CreateObject();
+        cJSON_AddItemToArray(methods,flush);
+        cJSON_AddStringToObject(flush,"command","trigger");
+        cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+        cJSON_AddStringToObject(flush,"param1","ON");
+        cJSON_AddStringToObject(flush,"caption","On");
+        flush = cJSON_CreateObject();
+        cJSON_AddItemToArray(methods,flush);
+        cJSON_AddStringToObject(flush,"command","trigger");
+        cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+        cJSON_AddStringToObject(flush,"param1","OFF");
+        cJSON_AddStringToObject(flush,"caption","Off");
+        flush = cJSON_CreateObject();
+        cJSON_AddItemToArray(methods,flush);
+        cJSON_AddStringToObject(flush,"command","trigger");
+        cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+        cJSON_AddStringToObject(flush,"param1","TRIGGER");
+        cJSON_AddStringToObject(flush,"caption","Trigger");
+    }
 
     delete apin;
 }
@@ -57,8 +80,8 @@ Pin::Pin(AppConfig* config)
 EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
   ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
   EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
-  handler->AddEventDescriptor(eventIds::OFF,"OFF",event_data_type_tp::Number);
-  handler->AddEventDescriptor(eventIds::ON,"ON",event_data_type_tp::Number);
+  handler->AddEventDescriptor(eventIds::OFF,"OFF",event_data_type_tp::JSON);
+  handler->AddEventDescriptor(eventIds::ON,"ON",event_data_type_tp::JSON);
   handler->AddEventDescriptor(eventIds::TRIGGER,"TRIGGER");
   handler->AddEventDescriptor(eventIds::STATUS,"STATUS",event_data_type_tp::JSON);
   return handler;
@@ -96,7 +119,12 @@ void Pin::RefrestState(){
         cJSON_SetIntValue(pinStatus,curState);
         ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, eventBase,pinStatus->valueint?"On":"Off");
         AppConfig::SignalStateChange(state_change_t::EVENT);
-        PostEvent((void*)&pinNo,sizeof(pinNo),pinStatus->valueint ? eventIds::ON : eventIds::OFF);
+        if (cJSON_PrintPreallocated(ManagedDevice::BuildStatus(this),this->buf,1024,false)){
+            AppConfig::SignalStateChange(state_change_t::MAIN);
+            esp_event_post(eventBase,pinStatus->valueint ? eventIds::ON : eventIds::OFF,buf,strlen(buf),portMAX_DELAY);
+        } else {
+            ESP_LOGW(__FUNCTION__,"Could not parse status");
+        }
     }
 }
 
@@ -129,7 +157,6 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
         ESP_LOGE(__FUNCTION__,"Invalid params for digital pin");
     } else {
         ESP_LOGV(__FUNCTION__,"Params(0x%" PRIXPTR " 0x%" PRIXPTR ")",(uintptr_t)event_data,(uintptr_t)params);
-        uint32_t state = 2;
         if (params != NULL) {
             uint32_t pinNo = (((uintptr_t)params) < 35 || !cJSON_HasObjectItem(params,"pinNo"))?(uintptr_t)params:cJSON_GetObjectItem(cJSON_GetObjectItem(params,"pinNo"),"value")->valueint;
             const char* pinName = (((uintptr_t)params) < 35 || !cJSON_HasObjectItem(params,"name"))?NULL:cJSON_GetObjectItem(cJSON_GetObjectItem(params,"name"),"value")->valuestring;
@@ -150,37 +177,7 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
                 }
             }
             if (pin) {
-                if (pin->flags&gpio_driver_t::driver_type_t::digital_in){
-                    ESP_LOGV(__FUNCTION__,"Skipping event because %s is an input", pin->name);
-                    return;
-                }
-                switch (id)
-                {
-                case Pin::eventIds::TRIGGER:
-                case Pin::eventIds::STATUS:
-                    state = cJSON_GetObjectItem(cJSON_GetObjectItem(params,"state"),"value")->valueint;
-                    ESP_LOGV(__FUNCTION__,"Turning(%d) %s %d",id,pin->name,state);
-                    break;
-                case Pin::eventIds::ON:
-                    ESP_LOGV(__FUNCTION__,"Turning %s ON",pin->name);
-                    state = 1;
-                    break;
-                case Pin::eventIds::OFF:
-                    ESP_LOGV(__FUNCTION__,"Turning %s OFF",pin->name);
-                    state = 0;
-                    break;
-                default:
-                    ESP_LOGE(__FUNCTION__,"Invalid event id for %s",pin->name);
-                    break;
-                }
-                if ((state <= 1) && (state != pin->pinStatus->valueint)) {
-                    gpio_set_level(pin->pinNo,state);
-                    ESP_LOGV(__FUNCTION__,"Pin %s from %d to %d",pin->name,pin->pinStatus->valueint,state);
-                    if (!pin->isRtcGpio || pin->flags&gpio_driver_t::driver_type_t::digital_out) {
-                        cJSON_SetIntValue(pin->pinStatus,state);
-                        pin->PostEvent((void*)&pinNo,sizeof(pinNo),state ? eventIds::ON : eventIds::OFF);
-                    }
-                }
+                pin->ProcessEvent((Pin::eventIds)id,id == Pin::eventIds::STATUS ? cJSON_GetObjectItem(cJSON_GetObjectItem(params,"state"),"value")->valueint : pin->pinStatus->valueint ? 0 : 1);
             } else {
                 char* stmp = cJSON_Print(params);
                 ESP_LOGV(__FUNCTION__,"Invalid pin %s", stmp);
@@ -190,6 +187,49 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
             ESP_LOGE(__FUNCTION__,"Missing params");
         }
     }
+}
+
+bool Pin::ProcessEvent(Pin::eventIds event,uint8_t state){
+    if (flags&gpio_driver_t::driver_type_t::digital_in){
+        ESP_LOGV(__FUNCTION__,"Skipping event because %s is an input", name);
+        return false;
+    }
+    switch (event)
+    {
+    case Pin::eventIds::TRIGGER:
+    case Pin::eventIds::STATUS:
+        if (state > 1) {
+            state = pinStatus->valueint ? 0 : 1;
+        }
+        ESP_LOGV(__FUNCTION__,"Turning(%d) %s %d",event,name,state);
+        break;
+    case Pin::eventIds::ON:
+        ESP_LOGV(__FUNCTION__,"Turning %s ON",name);
+        state = 1;
+        break;
+    case Pin::eventIds::OFF:
+        ESP_LOGV(__FUNCTION__,"Turning %s OFF",name);
+        state = 0;
+        break;
+    default:
+        ESP_LOGE(__FUNCTION__,"Invalid event id for %s",name);
+        break;
+    }
+    if ((state <= 1) && (state != pinStatus->valueint)) {
+        gpio_set_level(pinNo,state);
+        ESP_LOGV(__FUNCTION__,"Pin %s from %d to %d",name,pinStatus->valueint,state);
+        if (!isRtcGpio || flags&gpio_driver_t::driver_type_t::digital_out) {
+            cJSON_SetIntValue(pinStatus,state);
+            if (cJSON_PrintPreallocated(ManagedDevice::BuildStatus(this),this->buf,1024,false)){
+                AppConfig::SignalStateChange(state_change_t::MAIN);
+                esp_event_post(eventBase,pinStatus->valueint ? eventIds::ON : eventIds::OFF,buf,strlen(buf),portMAX_DELAY);
+                return true;
+            } else {
+                ESP_LOGW(__FUNCTION__,"Could not parse status");
+            }
+        }
+    }
+    return false;
 }
 
 bool Pin::HealthCheck(void* instance){

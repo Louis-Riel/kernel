@@ -747,3 +747,11 @@ div.value {
 #controls label {
     background: none;
 }
+
+.statusclass {
+    display: flow-root;
+}
+
+.fieldgroup {
+    display: flow-root;
+}

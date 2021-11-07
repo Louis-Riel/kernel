@@ -383,7 +383,7 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
 
   char *slash = 0;
   cJSON* parJson;
-  char* parPath = (char*) dmalloc(strlen(path)+1);
+  char parPath[255];
   strcpy(parPath,path);
   char* ctmp1 = NULL;
   if ((slash = indexOf(path, "/")) != NULL)
@@ -403,14 +403,12 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
     if (parJson == NULL) {
       ESP_LOGE(__FUNCTION__,"Missing parent json");
       xSemaphoreGiveRecursive(sema);
-      ldfree(parPath);
       return NULL;
     }
   } else {
     if (json == NULL) {
       ESP_LOGE(__FUNCTION__,"Missing parent json.");
       xSemaphoreGiveRecursive(sema);
-      ldfree(parPath);
       return NULL;
     }
   }
@@ -431,7 +429,6 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
     ret = cJSON_GetObjectItem(parJson, ctmp1?ctmp1+1:parPath);
   }
   xSemaphoreGiveRecursive(sema);
-  ldfree(parPath);
   return ret;
 }
 
@@ -514,7 +511,7 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
   char *lastSlash = lastIndexOf(path, "/");
   if (lastSlash != NULL)
   {
-    char *propPath = (char *)dmalloc(strlen(path));
+    char propPath[255];
     memcpy(propPath, path, lastSlash - path);
     propPath[lastSlash - path] = 0;
     ESP_LOGV(__FUNCTION__, "Pathed value prop at %s,%s,%s", path == NULL ? "*null*" : path, lastSlash, propPath);
@@ -534,7 +531,6 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
       }
       ldfree(ctmp);
     }
-    ldfree(propPath);
   }
   else
   {
@@ -610,7 +606,7 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
 
   cJSON *holder = GetJSONConfig(json, path, false);
   bool hasChanges = false;
-  char* parPath = (char*) dmalloc(strlen(path)+1);
+  char parPath[255];
   strcpy(parPath,*path=='/'?path+1:path);
   char* ctmp1 = lastIndexOf(parPath,"/");
   if (ctmp1) {
@@ -662,7 +658,6 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
   }
   if (hasChanges)
     SaveAppConfig();
-  ldfree(parPath);
   xSemaphoreGiveRecursive(sema);
 }
 
@@ -707,7 +702,7 @@ void AppConfig::SetIntProperty(const char *path, int value)
   ESP_LOGV(__FUNCTION__, "Setting int value at %s=%d", path == NULL ? "*null*" : path,value);
 
   cJSON *holder = GetJSONConfig(json, path, false);
-  char* parPath = (char*) dmalloc(strlen(path)+1);
+  char parPath[255];
   strcpy(parPath,*path=='/'?path+1:path);
   char* ctmp1 = lastIndexOf(parPath,"/");
   if (ctmp1) {
@@ -729,10 +724,8 @@ void AppConfig::SetIntProperty(const char *path, int value)
     }
     SaveAppConfig();
     xSemaphoreGiveRecursive(sema);
-    ldfree(parPath);
     return;
   }
-  ldfree(parPath);
 
   if (cJSON_IsObject(holder))
   {
@@ -810,7 +803,7 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
   ESP_LOGV(__FUNCTION__, "Setting int value at %s=%f", path == NULL ? "*null*" : path,value);
 
   cJSON *holder = GetJSONConfig(json, path, false);
-  char* parPath = (char*) dmalloc(strlen(path)+1);
+  char parPath[255];
   strcpy(parPath,*path=='/'?path+1:path);
   char* ctmp1 = lastIndexOf(parPath,"/");
   if (ctmp1) {
@@ -832,10 +825,8 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
     }
     SaveAppConfig();
     xSemaphoreGiveRecursive(sema);
-    ldfree(parPath);
     return;
   }
-  ldfree(parPath);
 
   if (cJSON_IsObject(holder))
   {

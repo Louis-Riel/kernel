@@ -2,7 +2,7 @@
 
 const e = React.createElement;
 
-const httpPrefix = "";//"http://192.168.1.107";
+const httpPrefix = "";//"http://irtracker";
 
 //#region SHA-1
 /*
@@ -240,25 +240,50 @@ const comparer = (idx, asc) => (a, b) => ((v1, v2) =>
 class BoolInput extends React.Component {
     constructor(props) {
         super(props);
+        this.id = this.props.id || genUUID();
+        if (this.props.onOn && PageTransitionEvent.props.initialState){
+            this.props.onOn()
+        }
+        if (this.props.onOff && !PageTransitionEvent.props.initialState){
+            this.props.onOff()
+        }
+    }
+
+    toggleChange = (elem) => {
+        elem.target.checked ?
+            this.props.onOn ? this.props.onOn(elem.target) : null :
+            this.props.onOff ? this.props.onOff(elem.target) : null;
+        if (this.props.onChange) {
+            this.props.onChange(elem.target.checked);
+        }
+    }
+
+    render() {
+        return e("label", { key: genUUID(), className: `editable ${this.props.blurred ? "loading":""}`, id: `lbl${this.id}`, key: this.id },
+            e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, this.props.label),
+            e("input", { key: genUUID(), type: "checkbox", onChange: this.toggleChange, id: `in${this.id}`, checked: this.props.initialState}));
+    }
+}
+class CmdButton extends React.Component {
+    constructor(props) {
+        super(props);
         this.state = {
             checked: this.props.initialState ? this.props.initialState() : false
         };
         this.id = this.props.id || genUUID();
     }
 
-    toggleChange = (elem) => {
-        this.setState({
-            checked: elem.target.checked
-        });
-        elem.target.checked ?
-            this.props.onOn ? this.props.onOn(elem.target) : null :
-            this.props.onOff ? this.props.onOff(elem.target) : null;
+    runIt() {
+        fetch(`${httpPrefix}/status/cmd`, {
+            method: this.props.HTTP_METHOD,
+            body: JSON.stringify({command: this.props.command,name: this.props.name, param1: this.props.param1, param2: this.props.param2})
+        }).then(data => data.text())
+          .then(this.props.onSuccess ? this.props.onSuccess : console.log)
+          .catch(this.props.onError ? this.props.onError : console.error);
     }
 
     render() {
-        return e("label", { key: genUUID(), className: "editable", id: `lbl${this.id}`, key: this.id },
-            e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, this.props.label),
-            e("input", { key: genUUID(), type: "checkbox", onChange: this.toggleChange, id: `in${this.id}`, checked: this.state.checked }));
+        return e("button", { key: genUUID(), onClick: this.runIt.bind(this) }, this.props.caption)
     }
 }
 class DeviceList extends React.Component {
@@ -492,6 +517,22 @@ class StateTable extends React.Component {
                this.BuildBody(this.props.json)]));
     }
 }
+class StateCommands extends React.Component {
+    render() {
+        return e("div",{key:genUUID(),name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
+            key:genUUID(),
+            caption:cmd.caption || cmd.command,
+            command:cmd.command,
+            name:this.props.name,
+            onSuccess:this.props.onSuccess,
+            onError:this.props.onError,
+            param1:cmd.param1,
+            param2:cmd.param2,
+            HTTP_METHOD:cmd.HTTP_METHOD
+        })));
+    }
+}
+
 class AppState extends React.Component {
     constructor(props) {
         super(props);
@@ -503,28 +544,54 @@ class AppState extends React.Component {
 
     Parse(json) {
         if (json) {
-            return Object.keys(json)
-                .sort((f1,f2)=>{
-                    var f1s = Array.isArray(json[f1]) ? 5 : typeof json[f1] == 'object' ? 4 : IsDatetimeValue(f1) ? 2 : 3;
-                    var f2s = Array.isArray(json[f2]) ? 5 : typeof json[f2] == 'object' ? 4 : IsDatetimeValue(f2) ? 2 : 3;
-                    if (f1s == f2s) {
-                        return f1.localeCompare(f2);
-                    }
-                    return f1s>f2s?1:f2s>f1s?-1:0;
-                }).map(fld => {
-                    if (Array.isArray(json[fld])) {
-                        return e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] });
-                    } else if (typeof json[fld] == 'object') {
-                        return e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld] });
-                    } else {
-                        return e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld });
-                    }
-                });
+            return e("div",{key: genUUID(),className:"statusclass"},this.getSortedProperties(json).map(fld => {
+                                                    if (Array.isArray(json[fld])) {
+                                                        if (fld == "commands"){
+                                                            return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
+                                                        }
+                                                        return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
+                                                    } else if (typeof json[fld] == 'object') {
+                                                        return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus })};
+                                                    } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
+                                                        return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
+                                                    }
+                                                }).reduce((pv,cv)=>{
+                                                    if (cv){
+                                                        var fc = this.getFieldClass(json,cv.fld);
+                                                        var item = pv.find(it=>it.fclass == fc);
+                                                        if (item) {
+                                                            item.elements.push(cv.element);
+                                                        } else {
+                                                            pv.push({fclass:fc,elements:[cv.element]});
+                                                        }
+                                                    }
+                                                    return pv;
+                                                },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
         } else if (this.state && this.state.error) {
             return this.state.error;
         } else {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         }
+    }
+
+    getSortedProperties(json) {
+        return Object.keys(json)
+            .sort((f1, f2) => { 
+                var f1s = this.getFieldWeight(json, f1);
+                var f2s = this.getFieldWeight(json, f2);
+                if (f1s == f2s) {
+                    return f1.localeCompare(f2);
+                }
+                return f1s > f2s ? 1 : f2s > f1s ? -1 : 0;
+            }).filter(fld => !(typeof(json[fld]) == "object" && Object.keys(json[fld]).filter(fld=>fld != "class" && fld != "name").length==0));
+    }
+
+    getFieldWeight(json, f1) {
+        return Array.isArray(json[f1]) ? 5 : typeof json[f1] == 'object' ? json[f1]["commands"] ? 3 : 4 : IsDatetimeValue(f1) ? 1 : 2;
+    }
+
+    getFieldClass(json, f1) {
+        return Array.isArray(json[f1]) ? "array" : typeof json[f1] == 'object' ? json[f1]["commands"] ? "commandable" : "object" : "field";
     }
 
     render() {
@@ -534,7 +601,7 @@ class AppState extends React.Component {
         if (this.props.label != null) {
             return e("fieldset", { id: `fs${this.id}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.props.json)]);
         } else {
-            return e("fieldset", { id: `fs${this.id}` }, this.Parse(this.props.json));
+            return e("fieldset", { key: genUUID(), id: `fs${this.id}` }, this.Parse(this.props.json));
         }
     }
 }
@@ -543,9 +610,7 @@ class MainAppState extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            statuses: {},
-            loading: this.props.loading,
-            loaded: this.props.loaded,
+            statuses: {current:{}},
             error: null,
             selectedDeviceId: 0,
             refreshFrequency: 10,
@@ -564,13 +629,13 @@ class MainAppState extends React.Component {
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        if (!this.state.loading && !this.state.loaded) {
-            this.state.loading = true;
-            this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
-        }
         if (prevState && (this.state.autoRefresh != prevState.autoRefresh)) {
             this.setupWs(this.state.autoRefresh);
         }
+    }
+
+    updateAppStatus() {
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
     }
 
     updateMainStatus(stat) {
@@ -617,8 +682,6 @@ class MainAppState extends React.Component {
                 this.state.statuses[this.props.selectedDeviceId] = this.orderResults(newState)
                 this.setState({
                     error: null,
-                    loading: false,
-                    loaded: true,
                     statuses: this.state.statuses
                 });
             }).catch(err => {
@@ -644,7 +707,7 @@ class MainAppState extends React.Component {
             }).then(data => data.json()).then(fromVersionedToPlain)
                 .then(cfg => {
                     this.state.statuses[this.props.selectedDeviceId] = this.orderResults(cfg);
-                    this.setState({ statuses: this.state.statuses, loading: false, loaded: true });
+                    this.setState({ statuses: this.state.statuses });
                 })
         }
     }
@@ -662,7 +725,8 @@ class MainAppState extends React.Component {
             e(AppState, {
                 key: genUUID(), 
                 json: this.state.statuses[this.props.selectedDeviceId], 
-                selectedDeviceId: this.props.selectedDeviceId
+                selectedDeviceId: this.props.selectedDeviceId,
+                updateAppStatus: this.updateAppStatus.bind(this)
             })
         ];
     }
@@ -778,7 +842,7 @@ class ConfigPage extends React.Component {
     SaveForm(form) {
         this.getJsonConfig(this.props.selectedDeviceId).then(vcfg => fromPlainToVersionned(this.state.deviceConfigs[this.props.selectedDeviceId], vcfg))
             .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + (this.props.selectedDeviceId == "current" ? "" : this.props.selectedDeviceId), {
-            method: 'put',
+                method: 'put',
                 body: JSON.stringify(cfg)
             }).then(res => alert(JSON.stringify(res)))
               .catch(res => alert(JSON.stringify(res))));
@@ -797,12 +861,15 @@ class ControlPanel extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            loaded: this.props.loaded,
-            error: null,
             refreshFrequency: this.props.refreshFrequency,
             devices: [],
+            autoRefresh: true,
             selectedDeviceId: this.props.selectedDeviceId
         }
+    }
+
+    componentDidMount(){
+        this.openWs();
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
@@ -811,62 +878,74 @@ class ControlPanel extends React.Component {
                 this.props.onSelectedDeviceId(this.state.selectedDeviceId);
             }
         }
+
+        if (prevState.autoRefresh != this.state.autoRefresh) {
+            this.state.autoRefresh ? this.openWs() : this.closeWs()
+        }
+
+        if (prevState.periodicRefresh != this.state.periodicRefresh) {
+            if (this.state.periodicRefresh) {
+                this.state.interval ? null: this.state.interval= setInterval(() => this.UpdateState(null),this.state.refreshFrequency*1000);
+            } else {
+                this.state.interval ? this.state.interval= clearTimeout(this.state?.interval)  : null;
+            }
+        }
     }
     
-    setupWs(running) {
-      this.state.autoRefresh=running;
-      if (running) {
-          if (this.ws == null) {
-              this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-              var stopItWithThatShit = setTimeout(() => {
-                  console.warn("WS Timeout");
-                  this.ws.close();
-              }, 3000);
-              this.ws.onmessage = (event) => {
-                  clearTimeout(stopItWithThatShit);
-                  if (event && event.data) {
-                      if (event.data[0] == "{") {
-                        if (event.data.startsWith('{"eventBase"'))
-                          this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
-                        else
-                          this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
-                      } else if (event.data.match(/.*\) ([^:]*)/g)) {
-                        this.AddLogLine(event.data);
-                      }
-                  }
-                  stopItWithThatShit = setTimeout(() => {
-                      this.ws.close();
-                  }, 3000);
-              };
-              this.ws.onopen = () => {
-                  clearTimeout(stopItWithThatShit);
-                  this.ws.send("Connect");
-                  stopItWithThatShit = setTimeout(() => {
-                      console.warn("WS Timeout on open");
-                      this.ws.close();
-                  }, 3000);
-              };
-              this.ws.onerror = (err) => {
-                  clearTimeout(stopItWithThatShit);
-                  this.ws.close();
-              };
-              this.ws.onclose = (evt => {
-                  clearTimeout(stopItWithThatShit);
-                  this.ws = null;
-                  this.setState({autoRefresh:false});
-              })
-          }
-      } else {
-          if (this.ws != null) {
-              this.ws.close();
-              this.ws = null;
-          } else {
-            this.state.autoRefresh=false;
-          }
-      }
+    closeWs() {
+        if (this.ws != null) {
+            this.ws.close();
+            this.ws = null;
+        }
     }
-    
-    
+
+    openWs() {
+        if (this.ws) {
+            return;
+        }
+        this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
+        var stopItWithThatShit = setTimeout(() => { this.ws.close(); }, 3000);
+        this.ws.onmessage = (event) => {
+            clearTimeout(stopItWithThatShit);
+
+            if (!this.state.running || this.state.disconnected) {
+                this.setState({ running: true, disconnected: false });
+            }
+
+            if (event && event.data) {
+                if (event.data[0] == "{") {
+                    if (event.data.startsWith('{"eventBase"')) {
+                        this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
+                    } else {
+                        this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
+                    }
+                } else if (event.data.match(/.*\) ([^:]*)/g)) {
+                    this.AddLogLine(event.data);
+                }
+            }
+            stopItWithThatShit = setTimeout(() => { this.setState({ disconnected: true }); this.ws.close(); }, 3000);
+        };
+        this.ws.onopen = () => {
+            clearTimeout(stopItWithThatShit);
+            this.setState({ connected: true, disconnected: false });
+            this.ws.send("Connect");
+            stopItWithThatShit = setTimeout(() => { this.setState({ disconnected: true }); this.ws.close(); }, 3000);
+        };
+        this.ws.onerror = (err) => {
+            clearTimeout(stopItWithThatShit);
+            this.setState({ error: err });
+            this.ws.close();
+        };
+        this.ws.onclose = (evt => {
+            clearTimeout(stopItWithThatShit);
+            this.ws = null;
+            this.setState({ connected: false, disconnected: true, running: false });
+            if (this.state.autoRefresh) {
+                setTimeout(() => {this.openWs();}, 1000);
+            }
+        });
+    }
+
     AddLogLine(ln) {
       if (ln && this.props.callbacks.logCBFn) {
         this.props.callbacks.logCBFn.forEach(logCBFn=>logCBFn(ln));
@@ -887,37 +966,32 @@ class ControlPanel extends React.Component {
 
     render() {
      return e('fieldset', { key: genUUID(), className:`slides`, id: "controls", key: this.id }, [
-            e('legend', { key: genUUID(), id: `lg${this.id}` }, 'Controls'),
-                e(BoolInput, { 
-                    key: genUUID(), 
-                    label: "Periodic Refresh", 
-                    onOn: (elem => this.state?.interval ? null: this.state.interval= setInterval(() => this.UpdateState(null),this.state.refreshFrequency*1000) ),
-                    onOff: (elem => this.state?.interval ? this.state.interval= clearTimeout(this.state?.interval)  : null),
-                    initialState: ()=>this.state.interval!=null && this.state.interval!=undefined
-                }),
-                e(IntInput, {
-                    key: genUUID(),
-                    label: "Freq(sec)", 
-                    value: this.state.refreshFrequency, 
-                    id: "refreshFreq",
-                    onChange: (val) => this.state.refreshFrequency=val
-                }),
-                e(BoolInput, {
-                    key: genUUID(),
-                    label: "Auto Refresh",
-                    onOn: (elem)=>this.setupWs(true),
-                    onOff: (elem)=>this.setupWs(false),
-                    id: "autorefresh",
-                    initialState: () => this.state.autoRefresh
-                }),
-                e("button", { key: genUUID(), onClick: elem => this.UpdateState(null) }, "Refresh"),
-                e(DeviceList, {
-                    key: genUUID(),
-                    selectedDeviceId: this.state.selectedDeviceId,
-                    devices: this.state.devices,
-                    onSet: val=>this.setState({selectedDeviceId:val}),
-                    onGotDevices: devices => { this.state.selectedDeviceId?this.setState({devices:devices}):this.setState({selectedDeviceId:"current", devices:devices})}
-                })]);
+        e(BoolInput, { 
+            key: genUUID(), 
+            label: "Periodic Refresh", 
+            onChange: state=>this.setState({periodicRefresh:state})
+        }),
+        e(IntInput, {
+            key: genUUID(),
+            label: "Freq(sec)", 
+            value: this.state.refreshFrequency, 
+            onChange: val=>this.setState({refreshFrequency:val})
+        }),
+        e(BoolInput, {
+            key: genUUID(),
+            label: "Auto Refresh",
+            onChange: state => this.setState({autoRefresh:state}),
+            blurred: this.state.autoRefresh && this.state.disconnected,
+            initialState: this.state.autoRefresh
+        }),
+        e("button", { key: genUUID(), onClick: elem => this.UpdateState(null) }, "Refresh"),
+        this.state.devices.length < 1 ? null : e(DeviceList, {
+            key: genUUID(),
+            selectedDeviceId: this.state.selectedDeviceId,
+            devices: this.state.devices,
+            onSet: val=>this.setState({selectedDeviceId:val}),
+            onGotDevices: devices => { this.state.selectedDeviceId?this.setState({devices:devices}):this.setState({selectedDeviceId:"current", devices:devices})}
+        })]);
     }
 }
 class TypedField extends React.Component {
@@ -1001,48 +1075,116 @@ class Event extends React.Component {
     }
 }class LiveEvent extends React.Component {
     render() {
+        if (this.props?.event?.dataType) {
+            return this.renderComponent(this.props.event);
+        } else {
+            return e("summary",{key: genUUID() ,className: "liveEvent"},
+                    e("div",{key: genUUID() ,className: "description"},[
+                        e("div",{key: genUUID() ,className: "eventBase"},"Loading"),
+                        e("div",{key: genUUID() ,className: "eventId"},"...")
+                    ]));
+        }
+    }
+
+    renderComponent(event) {
         return e("summary",{key: genUUID() ,className: "liveEvent"},[
             e("div",{key: genUUID() ,className: "description"},[
-                e("div",{key: genUUID() ,className: "eventBase"},this.props.eventBase),
-                e("div",{key: genUUID() ,className: "eventId"},this.props.eventId)
-            ]),
-            this.props.data ? 
-                e("details",{key: genUUID() ,className: "data"},Object.keys(this.props.data).map(prop => 
-                    e("div",{key: genUUID() ,className: "description"},[
-                        e("div",{key: genUUID() ,className: "propName"},prop),
-                        e("div",{key: genUUID() ,className: prop},this.props.data[prop])
-                    ])
-                )): null
+                e("div",{key: genUUID() ,className: "eventBase"},event.eventBase),
+                e("div",{key: genUUID() ,className: "eventId"},event.eventId)
+            ]), event.data ? e("details",{key: genUUID() ,className: "data"},this.parseData(event)): null
         ]);
+    }
+
+    parseData(props) {
+        if (props.dataType == "Number") {
+            return e("div", { key: genUUID(), className: "description" }, 
+                        e("div", { key: genUUID(), className: "propNumber" }, props.data)
+                    );
+        }
+        return Object.keys(props.data)
+            .filter(prop => typeof props.data[prop] != 'object' && !Array.isArray(props.data[prop]))
+            .map(prop => e("div", { key: genUUID(), className: "description" }, [
+                e("div", { key: genUUID(), className: "propName" }, prop),
+                e("div", { key: genUUID(), className: prop }, props.data[prop])
+            ]));
     }
 }
 
 class LiveEventPannel extends React.Component {
     constructor(props) {
         super(props);
-        this.state = {
-            lastEvents: []
-        };
+        this.eventTypes=[];
+        this.eventTypeRequests=[];
+        this.state = {lastEvents:[]}
+    }
+
+    componentDidMount(){
         if (this.props.registerEventCallback) {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
     }
 
     ProcessEvent(evt) {
-        this.state.lastEvents.push(evt);
-        while (this.state.lastEvents.length > 100) {
-            this.state.lastEvents.shift();
+        var lastEvents = this.state.lastEvents;
+        while (lastEvents.length > 100) {
+            lastEvents.shift();
         }
-        this.setState({lastEvents:this.state.lastEvents});
+        this.setState({lastEvents:lastEvents.concat(evt)});
+    }
+
+    parseEvent(event) {
+        var eventType = this.eventTypes.find(eventType => (eventType.eventBase == event.eventBase) && (eventType.eventName == event.eventId))
+        if (eventType) {
+            return {dataType:eventType.dataType,...event};
+        } else {
+            var req = this.eventTypeRequests.find(req=>(req.eventBase == event.eventBase) && (req.eventId == event.eventId));
+            if (!req) {
+                this.getEventDescriptor(event)
+                    .then(eventType => this.setState({lastState: this.state.lastEvents
+                        .map(event => event.eventBase == eventType.eventBase && event.eventId == eventType.eventName ? {dataType:eventType.dataType,...event}:{event})}));
+            }
+            return {...event};
+        }
+    }
+
+    getEventDescriptor(event) {
+        var curReq;
+        this.eventTypeRequests.push((curReq={waiters:[],...event}));
+        return new Promise((resolve,reject) => {
+            var eventType = this.eventTypes.find(eventType => (eventType.eventBase == event.eventBase) && (eventType.eventName == event.eventId))
+            if (eventType) {
+                resolve({dataType:eventType.dataType,...event});
+            } else {
+                var toControler = new AbortController();
+                const timer = setTimeout(() => toControler.abort(), 3000);
+                fetch(`${httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
+                    method: 'post',
+                    signal: toControler.signal
+                }).then(data => {
+                    clearTimeout(timer);
+                    return data.json();
+                }).then( eventType => {
+                    this.eventTypes.push(eventType);
+                    resolve(eventType);
+                }).catch((err) => {
+                    console.error(err);
+                    clearTimeout(timer);
+                    curReq.waiters.forEach(waiter => {
+                        waiter.reject(err);
+                    });
+                    reject(err);
+                });
+            }
+        })
     }
 
     render() {
         return  e("div", { key: genUUID() ,className: "eventPanel" }, [
             e("div", { key: genUUID(), className:"control" }, [
-                e("div",{ key: genUUID()}, `${this.state.lastEvents.length} event${this.state.lastEvents.length?'s':''}`),
+                e("div",{ key: genUUID()}, `${this.state?.lastEvents?.length || "Waiting on "} event${this.state?.lastEvents?.length?'s':''}`),
                 e("button",{ key: genUUID(), onClick: elem => this.setState({lastEvents:[]})},"Clear")
             ]),
-            e("div",{ key: genUUID(), className:"eventList"},this.state.lastEvents.map(event => e(LiveEvent,{ key: genUUID(), ...event})).reverse())
+            e("div",{ key: genUUID(), className:"eventList"},this.state?.lastEvents?.map(event => e(LiveEvent,{ key: genUUID(), event:this.parseEvent(event)})).reverse())
         ])
 
     }
@@ -1056,7 +1198,7 @@ class EventsPage extends React.Component {
             programs: []
         };
     }
-    
+
     componentDidMount() {
         if (this.props.active) {
             document.getElementById("Events").scrollIntoView()
