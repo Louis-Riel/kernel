@@ -19,7 +19,7 @@
   },
   "wifitype": {
     "version": 0,
-    "value": "STA"
+    "value": "APSTA"
   },
   "clienttype": {
     "version": 0,

@@ -534,13 +534,14 @@ void TheWifi::ProcessScannedAPs()
             {
                 ESP_LOGE(__FUNCTION__, "Cannot connect to wifi:%s", esp_err_to_name(ret));
             }
+        } else if (isTracker) {
+            wifiScan();
         }
     }
     else
     {
         ESP_LOGE(__FUNCTION__, "Cannot get scan result: %s", esp_err_to_name(ret));
     }
-    wifiScan();
 }
 
 Aper *TheWifi::GetAper(uint8_t *mac)
@@ -814,7 +815,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             client = theWifi->GetAper(station->mac);
             if (client != NULL)
             {
-                //restSallyForth(evtGrp);
+                restSallyForth(evtGrp);
                 //CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
                 xEventGroupSetBits(s_app_eg, app_bits_t::REST);
                 client->Associate();
