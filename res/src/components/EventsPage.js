@@ -40,17 +40,13 @@ class LiveEventPannel extends React.Component {
         super(props);
         this.eventTypes=[];
         this.eventTypeRequests=[];
-        this.state = {lastEvents:[]}
-    }
-
-    componentDidMount(){
         if (this.props.registerEventCallback) {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
     }
 
     ProcessEvent(evt) {
-        var lastEvents = this.state.lastEvents;
+        var lastEvents = this.state?.lastEvents||[];
         while (lastEvents.length > 100) {
             lastEvents.shift();
         }
@@ -116,19 +112,10 @@ class LiveEventPannel extends React.Component {
 }
 
 class EventsPage extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            events: [],
-            programs: []
-        };
-    }
-
     componentDidMount() {
         if (this.props.active) {
             document.getElementById("Events").scrollIntoView()
         }
-        this.getJsonConfig().then(cfg => this.setState({events: cfg.events,programs:cfg.programs}));
     }
 
     getJsonConfig() {
@@ -148,12 +135,17 @@ class EventsPage extends React.Component {
     }
 
     render() {
-        return [
-            e("div", { key: genUUID() ,className: "designer" },[
-                e("details",{ key: genUUID() ,className: "configuredEvents" }, [e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), this.state.events?.map(event => e(Event,{ key: genUUID(),...event}))]),
-                e("details",{ key: genUUID() ,className: "programs"},[e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), this.state.programs?.map(program => e(Program,{ key: genUUID(),...program}))])
-            ]),
-            e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
-        ];
+        if (this.state?.events){
+            return [
+                e("div", { key: genUUID() ,className: "designer" },[
+                    e("details",{ key: genUUID() ,className: "configuredEvents", onClick:elem=>elem.target.parentElement.nextSibling.removeAttribute("open"), open:true}, [e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), e("div",{key:genUUID(),className:"content"},this.state.events?.map(event => e(Event,{ key: genUUID(),...event})))]),
+                    e("details",{ key: genUUID() ,className: "programs", onClick:elem=>elem.target.parentElement.previousSibling.removeAttribute("open")},[e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), e("div",{key:genUUID(),className:"content"},this.state.programs?.map(program => e(Program,{ key: genUUID(),...program})))])
+                ]),
+                e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
+            ];
+        } else {
+            this.getJsonConfig().then(cfg => this.setState({events: cfg.events,programs:cfg.programs}));
+            return e("div",{key: genUUID()},"Loading...");
+        }
     }
 }

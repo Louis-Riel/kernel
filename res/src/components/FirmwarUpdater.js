@@ -68,13 +68,6 @@ class FirmwareUpdater extends React.Component {
         }
     }
 
-    componentDidMount() {
-        var searchParams = new URLSearchParams(window.location.search);
-        if (searchParams && searchParams.has("loaded")) {
-            this.setState({ loaded: searchParams.get("loaded", searchParams.get("loaded")) })
-        }
-    }
-
     render() {
         return e("form", { key: genUUID(), onSubmit: this.UploadFirmware.bind(this) },
             e("fieldset", { key: genUUID() }, [

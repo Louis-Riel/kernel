@@ -2,10 +2,10 @@ class BoolInput extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
-        if (this.props.onOn && PageTransitionEvent.props.initialState){
+        if (this.props.onOn && this.props.initialState){
             this.props.onOn()
         }
-        if (this.props.onOff && !PageTransitionEvent.props.initialState){
+        if (this.props.onOff && !this.props.initialState){
             this.props.onOff()
         }
     }

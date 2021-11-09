@@ -26,9 +26,14 @@ class SFile extends React.Component {
 class StorageViewer extends React.Component {
     constructor(props) {
         super(props);
-        this.state = { loaded: false, path: this.props.path, files: null };
-
+        this.state = { loaded: false, path: "/", files: null };
         this.id = this.props.id || genUUID();
+    }
+
+    componentDidMount() {
+        if (this.props.active) {
+            document.getElementById("Storage").scrollIntoView()
+        }
     }
 
     getSystemFolders() {
@@ -53,8 +58,7 @@ class StorageViewer extends React.Component {
                 clearTimeout(quitItNow);
                 data.json().then(jdata => {
                     fileToFetch.size = jdata.size;
-                    this.state.total += jdata.size;
-                    this.setState({ loaded: true, files: this.state.files, total: this.state.total });
+                    this.setState({ loaded: true, files: this.state.files, total: this.state?.total + jdata.size });
                 });
                 if (fileStatsToFetch.length && !this.props.pageControler.signal.aborted) {
                     this.GetFileStat(fileStatsToFetch);
@@ -63,8 +67,6 @@ class StorageViewer extends React.Component {
                 clearTimeout(quitItNow);
                 console.err(ex);
             });
-        } else {
-            this.setState({ loaded: true, files: this.state.files, total: this.state.total });
         }
     }
 
@@ -117,13 +119,6 @@ class StorageViewer extends React.Component {
         }
     }
 
-    componentDidMount() {
-        this.fetchFiles();
-        if (this.props.active) {
-            document.getElementById("Storage").scrollIntoView()
-        }
-    }
-
     SortTable(th) {
         var table,tbody;
         Array.from((tbody=(table=th.target.closest("div.file-table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n+2)'))
@@ -132,39 +127,33 @@ class StorageViewer extends React.Component {
                 }
 
     getTableHeader() {
-        return e("thead", { key: genUUID() }, e("tr", { key: genUUID() }, this.props.cols.map(col => e("th", { key: genUUID(), onClick: this.SortTable.bind(this) }, col)).concat(e("th", { key: genUUID() }, "Op"))));
+        return e("thead", { key: genUUID() }, e("tr", { key: genUUID() }, ["Name", "Size"].map(col => e("th", { key: genUUID(), onClick: this.SortTable.bind(this) }, col)).concat(e("th", { key: genUUID() }, "Op"))));
     }
 
     render() {
-        return e("div", { key: genUUID(), 
-                          id: this.id, 
-                          className: `file-table ${this.state.loaded?"":"loading"}` }, e("table", { key: genUUID(), className: "greyGridTable" }, [
-                e("caption", { key: genUUID() }, this.state.path),
-                this.getTableHeader(),
-                e("tbody", { key: genUUID() }, this.state.files && this.state.files.length > 0 ? 
-                    this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ 
-                        key: genUUID(), 
-                        file:file, 
-                        path:this.state.path, 
-                        getFileLink:this.getFileLink.bind(this),
-                        OnDelete: ()=>this.fetchFiles()
-                    })):this.state.path == "/" ?
-                        e("tr", { key: genUUID() }, [
-                            e("td", { key: genUUID() }, "Loading..."), 
-                            e("td", { key: genUUID() })
-                        ]):
-                        this.getSystemFolders().map(file => e(SFile,{ 
-                            key: genUUID(), 
-                            file:file, 
-                            path:this.state.path, 
-                            getFileLink:this.getFileLink.bind(this),
-                            OnDelete: ()=>this.fetchFiles()
-                        }))
-                    ),
-                e("tfoot", { key: genUUID() }, e("tr", { key: genUUID() }, [
-                    e("td", { key: genUUID() }, "Total"), 
-                    e("td", { key: genUUID() }, this.state.total)
-                ]))
-            ]));
+        if (!this.state?.files) {
+            this.fetchFiles();
+            return e("div", { key: genUUID() }, "Loading...");
+        } else {
+            return e("div", { key: genUUID(), 
+                id: this.id, 
+                className: `file-table ${this.state.loaded?"":"loading"}` }, e("table", { key: genUUID(), className: "greyGridTable" }, [
+                                            e("caption", { key: genUUID() }, this.state.path),
+                                            this.getTableHeader(),
+                                            e("tbody", { key: genUUID() }, 
+                                                this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ 
+                                                    key: genUUID(), 
+                                                    file:file, 
+                                                    path:this.state.path, 
+                                                    getFileLink:this.getFileLink.bind(this),
+                                                    OnDelete: ()=>this.fetchFiles()
+                                                }))
+                                                ),
+                                            e("tfoot", { key: genUUID() }, e("tr", { key: genUUID() }, [
+                                                e("td", { key: genUUID() }, "Total"), 
+                                                e("td", { key: genUUID() }, this.state.total)
+                                            ]))
+                                        ]));
+        }
     }
 }

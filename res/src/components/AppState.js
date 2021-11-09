@@ -15,14 +15,6 @@ class StateCommands extends React.Component {
 }
 
 class AppState extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            error: null
-        };
-        this.id = this.props.id || genUUID();
-    }
-
     Parse(json) {
         if (json) {
             return e("div",{key: genUUID(),className:"statusclass"},this.getSortedProperties(json).map(fld => {
@@ -48,8 +40,6 @@ class AppState extends React.Component {
                                                     }
                                                     return pv;
                                                 },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
-        } else if (this.state && this.state.error) {
-            return this.state.error;
         } else {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         }
@@ -88,46 +78,26 @@ class AppState extends React.Component {
 }
 
 class MainAppState extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            statuses: {current:{}},
-            error: null,
-            selectedDeviceId: 0,
-            refreshFrequency: 10,
-            autoRefresh: false
-        };
-        if (this.props.registerStateCallback) {
-            this.props.registerStateCallback(this.updateMainStatus.bind(this));
-        }
+    updateAppStatus() {
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
     }
 
     componentDidMount() {
         if (this.props.active) {
             document.getElementById("Status").scrollIntoView()
         }
-        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
     }
 
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevState && (this.state.autoRefresh != prevState.autoRefresh)) {
-            this.setupWs(this.state.autoRefresh);
-        }
-    }
-
-    updateAppStatus() {
-        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
-    }
-
-    updateMainStatus(stat) {
+    refreshStatus(stat) {
         if (stat){
             const flds = Object.keys(stat);
+            var status = this.state?.status || {};
             for (const fld in flds) {
-                this.state.statuses["current"][flds[fld]] = stat[flds[fld]];    
+                status[flds[fld]] = stat[flds[fld]];    
             }
-            this.setState({statuses:this.state.statuses});
+            this.setState({status:status});
         } else {
-            this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
+            this.updateAppStatus();
         }
     }
 
@@ -152,7 +122,7 @@ class MainAppState extends React.Component {
                             resolve({ path: request.path, stat: jstats });
                         }).catch(err => {
                             request.retryCnt = (request.retryCnt | 0) + 1;
-                            request.waitFor = 4000;
+                            request.waitFor = 1000;
                             request.error = err;
                             reject(err);
                         });
@@ -160,10 +130,9 @@ class MainAppState extends React.Component {
             })).then(results => {
                 clearTimeout(timer);
                 document.getElementById("Status").style.opacity = 1;
-                this.state.statuses[this.props.selectedDeviceId] = this.orderResults(newState)
                 this.setState({
                     error: null,
-                    statuses: this.state.statuses
+                    status: this.orderResults(newState)
                 });
             }).catch(err => {
                 clearTimeout(timer);
@@ -186,9 +155,8 @@ class MainAppState extends React.Component {
                 method: 'get',
                 signal: abort.signal
             }).then(data => data.json()).then(fromVersionedToPlain)
-                .then(cfg => {
-                    this.state.statuses[this.props.selectedDeviceId] = this.orderResults(cfg);
-                    this.setState({ statuses: this.state.statuses });
+                .then(status => {
+                    this.setState({ status: this.orderResults(status) });
                 })
         }
     }
@@ -202,13 +170,22 @@ class MainAppState extends React.Component {
     }
 
     render() {
-        return [
-            e(AppState, {
-                key: genUUID(), 
-                json: this.state.statuses[this.props.selectedDeviceId], 
-                selectedDeviceId: this.props.selectedDeviceId,
-                updateAppStatus: this.updateAppStatus.bind(this)
-            })
-        ];
+        if (this.state?.status){
+            if (this.props.registerStateCallback) {
+                this.props.registerStateCallback(this.refreshStatus.bind(this));
+            }
+            return [
+                e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
+                e(AppState, {
+                    key: genUUID(), 
+                    json: this.state.status, 
+                    selectedDeviceId: this.props.selectedDeviceId,
+                    updateAppStatus: this.updateAppStatus.bind(this)
+                })
+            ];
+        } else {
+            this.updateAppStatus();
+            return e("div",{key:genUUID()},"Loading...");
+        }
     }
 }

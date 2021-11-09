@@ -1,12 +1,4 @@
 class CmdButton extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            checked: this.props.initialState ? this.props.initialState() : false
-        };
-        this.id = this.props.id || genUUID();
-    }
-
     runIt() {
         fetch(`${httpPrefix}/status/cmd`, {
             method: this.props.HTTP_METHOD,
