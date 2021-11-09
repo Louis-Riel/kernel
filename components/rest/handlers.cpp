@@ -1275,8 +1275,8 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                             esp_err_t err;
 
                             pi = esp_partition_find(ESP_PARTITION_TYPE_APP,            // Get partition iterator for
-                                                    ESP_PARTITION_SUBTYPE_APP_OTA_0, // Ashy Flashy partition
-                                                    "ota_0");
+                                                    ESP_PARTITION_SUBTYPE_APP_FACTORY, // Ashy Flashy partition
+                                                    "factory");
                             if (pi == NULL) // Check result
                             {
                                 ESP_LOGE(__FUNCTION__, "Failed to find factory partition");
