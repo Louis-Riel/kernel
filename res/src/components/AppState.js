@@ -82,12 +82,6 @@ class MainAppState extends React.Component {
         this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
     }
 
-    componentDidMount() {
-        if (this.props.active) {
-            document.getElementById("Status").scrollIntoView()
-        }
-    }
-
     refreshStatus(stat) {
         if (stat){
             const flds = Object.keys(stat);

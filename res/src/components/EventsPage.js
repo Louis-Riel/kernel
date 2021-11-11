@@ -112,12 +112,6 @@ class LiveEventPannel extends React.Component {
 }
 
 class EventsPage extends React.Component {
-    componentDidMount() {
-        if (this.props.active) {
-            document.getElementById("Events").scrollIntoView()
-        }
-    }
-
     getJsonConfig() {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => this.props.pageControler.abort(), 3000);

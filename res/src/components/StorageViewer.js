@@ -30,12 +30,6 @@ class StorageViewer extends React.Component {
         this.id = this.props.id || genUUID();
     }
 
-    componentDidMount() {
-        if (this.props.active) {
-            document.getElementById("Storage").scrollIntoView()
-        }
-    }
-
     getSystemFolders() {
         return [
         this.state.path != "/" ?

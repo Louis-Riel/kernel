@@ -1131,7 +1131,7 @@ bool CleanupEmptyDirs(char* path) {
 
 void app_main(void)
 {
-  ESP_LOGI(__FUNCTION__, "Starting App");
+  ESP_LOGI(__FUNCTION__, "Starting App.....");
   //DisplayMemInfo();
   cJSON_Hooks memoryHook;
 

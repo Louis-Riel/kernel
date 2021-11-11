@@ -33,7 +33,7 @@ class MainApp extends React.Component {
   }
 
   componentDidMount() {
-    this.refreshActiveTab();
+//    this.refreshActiveTab();
   }
   
   refreshActiveTab() {
@@ -73,28 +73,37 @@ class MainApp extends React.Component {
       this.callbacks.eventCBFn.push(eventCBFn);
   }
 
+  getPage(name) {
+    if (name == "Storage") {
+      return e(StorageViewer, { pageControler: this.state.pageControler, active: this.state.tabs["Storage"].active});
+    }
+    if (name == "Status") {
+      return e(MainAppState,  { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Status"].active, registerStateCallback:this.registerStateCallback.bind(this) });
+    }
+    if (name == "Config") {
+      return e(ConfigPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Config"].active });
+    }
+    if (name == "Logs") {
+      return e(SystemPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Logs"].active, registerLogCallback:this.registerLogCallback.bind(this) });
+    }
+    if (name == "Events") {
+      return e(EventsPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Events"].active, registerEventCallback:this.registerEventCallback.bind(this) });
+    }
+  }
+
   render() {
-    return [
-      e("div",{ key: genUUID(), className:"tabs"}, Object.keys(this.state.tabs).map(tab => e("a",{key: genUUID(),
-                                                     id: `a${tab}`,
-                                                     className: this.state.tabs[tab].active ? "active" : "",
-                                                     onClick: () => this.setActiveTab(tab),href: `#${tab}`},tab))),
-      e("div", { key: genUUID(), className:"slide"},[
-      e(ControlPanel, { key: genUUID(), 
-                        selectedDeviceId: this.state?.selectedDeviceId, 
-                        onSelectedDeviceId: deviceId=>this.setState({selectedDeviceId:deviceId}), 
-                        stateCBFn: this.callbacks.stateCBFn,
-                        logCBFn: this.callbacks.logCBFn,
-                        eventCBFn: this.callbacks.eventCBFn
-                       }),
-      e("div", { key: genUUID(), className: `slides` }, [
-        e("div",{ className: `${this.state.tabs["Storage"].active ? "active":""} file_section`, id: "Storage", key: genUUID() },e(StorageViewer, { pageControler: this.state.pageControler, active: this.state.tabs["Storage"].active})),
-        e("div",{ className: `${this.state.tabs["Status"].active ? "active":""} system-config`, id: "Status",  key: genUUID() },e(MainAppState,  { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Status"].active, registerStateCallback:this.registerStateCallback.bind(this) })),
-        e("div",{ className: `${this.state.tabs["Config"].active ? "active":""} system-config`, id: "Config",  key: genUUID() },e(ConfigPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Config"].active })),
-        e("div",{ className: `${this.state.tabs["Logs"].active ? "active":""} logs`,            id: "Logs",    key: genUUID() },e(SystemPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Logs"].active, registerLogCallback:this.registerLogCallback.bind(this) })),
-        e("div",{ className: `${this.state.tabs["Events"].active ? "active":""} events`,        id: "Events",  key: genUUID() },e(EventsPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Events"].active, registerEventCallback:this.registerEventCallback.bind(this) }))
-      ])])
-    ];
+    return e("div",{key:genUUID(),className:"mainApp"}, [e(ControlPanel, { key: genUUID(), 
+      selectedDeviceId: this.state?.selectedDeviceId, 
+      onSelectedDeviceId: deviceId=>this.setState({selectedDeviceId:deviceId}), 
+      stateCBFn: this.callbacks.stateCBFn,
+      logCBFn: this.callbacks.logCBFn,
+      eventCBFn: this.callbacks.eventCBFn
+     }),Object.keys(this.state.tabs).map(tab => 
+        e("details",{key:genUUID(),id:tab, className:"appPage slides", open: this.state.tabs[tab].active, onClick:elem=>{elem.target.parentElement.setAttribute("open",true); [].slice.call(elem.target.parentElement.parentElement.children).filter(ttab => ttab != elem).forEach(ttab => ttab.removeAttribute("open"))}},[
+            e("summary",{key:genUUID(),className:"appTab"},tab),
+            e("div",{key:genUUID(),className: tab == "Status" ? "pageContent system-config" : "pageContent"}, this.getPage(tab))
+          ])
+        )]);
   }
 }
 

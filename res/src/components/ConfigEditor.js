@@ -16,12 +16,6 @@ class ConfigEditor extends React.Component {
 }
 
 class ConfigPage extends React.Component {
-    componentDidMount() {
-        if (this.props.active) {
-            document.getElementById("Config").scrollIntoView()
-        }
-    }
-
     getJsonConfig(devid) {
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => this.props.pageControler.abort(), 3000);

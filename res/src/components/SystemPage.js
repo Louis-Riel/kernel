@@ -39,12 +39,6 @@ class LogLines extends React.Component {
 }
 
 class SystemPage extends React.Component {
-    componentDidMount() {
-        if (this.props.active) {
-            document.getElementById("Logs").scrollIntoView()
-        }
-    }
-
     SendCommand(body) {
         return fetch(`${httpPrefix}/status/cmd`, {
             method: 'PUT',
