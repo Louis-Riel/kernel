@@ -18,28 +18,28 @@ class AppState extends React.Component {
     Parse(json) {
         if (json) {
             return e("div",{key: genUUID(),className:"statusclass"},this.getSortedProperties(json).map(fld => {
-                                                    if (Array.isArray(json[fld])) {
-                                                        if (fld == "commands"){
-                                                            return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
-                                                        }
-                                                        return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
-                                                    } else if (typeof json[fld] == 'object') {
-                                                        return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus })};
-                                                    } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
-                                                        return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
-                                                    }
-                                                }).reduce((pv,cv)=>{
-                                                    if (cv){
-                                                        var fc = this.getFieldClass(json,cv.fld);
-                                                        var item = pv.find(it=>it.fclass == fc);
-                                                        if (item) {
-                                                            item.elements.push(cv.element);
-                                                        } else {
-                                                            pv.push({fclass:fc,elements:[cv.element]});
-                                                        }
-                                                    }
-                                                    return pv;
-                                                },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
+                if (Array.isArray(json[fld])) {
+                    if (fld == "commands"){
+                        return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
+                    }
+                    return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
+                } else if (typeof json[fld] == 'object') {
+                    return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus })};
+                } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
+                    return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
+                }
+            }).reduce((pv,cv)=>{
+                if (cv){
+                    var fc = this.getFieldClass(json,cv.fld);
+                    var item = pv.find(it=>it.fclass == fc);
+                    if (item) {
+                        item.elements.push(cv.element);
+                    } else {
+                        pv.push({fclass:fc,elements:[cv.element]});
+                    }
+                }
+                return pv;
+            },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
         } else {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         }
@@ -78,80 +78,104 @@ class AppState extends React.Component {
 }
 
 class MainAppState extends React.Component {
+    constructor(props) {
+        super(props);
+        this.mounted=false;
+    }
+
+    componentWillUnmount() {
+        this.mounted=false;
+    }
+
+    componentDidMount() {
+        this.mounted=true;
+        this.updateAppStatus();
+        if (this.props.registerStateCallback) {
+            this.props.registerStateCallback(this.refreshStatus.bind(this));
+        }
+}
+
     updateAppStatus() {
         this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
     }
 
     refreshStatus(stat) {
-        if (stat){
-            const flds = Object.keys(stat);
-            var status = this.state?.status || {};
-            for (const fld in flds) {
-                status[flds[fld]] = stat[flds[fld]];    
+        if (this.mounted){
+            if (stat){
+                const flds = Object.keys(stat);
+                var status = this.state?.status || {};
+                for (const fld in flds) {
+                    status[flds[fld]] = stat[flds[fld]];    
+                }
+                this.setState({status:status});
+            } else {
+                this.updateAppStatus();
             }
-            this.setState({status:status});
-        } else {
-            this.updateAppStatus();
         }
     }
 
     updateStatuses(requests, newState) {
-        var abort = new AbortController()
-        var timer = setTimeout(() => abort.abort(), 4000);
-        if (this.props.selectedDeviceId == "current") {
-            Promise.all(requests.map(request => {
-                return new Promise((resolve, reject) => {
-                    fetch(`${httpPrefix}${request.url}`, {
-                        method: 'post',
-                        signal: abort.signal
-                    }).then(data => data.json())
-                      .then(fromVersionedToPlain)
-                      .then(jstats => {
-                            requests = requests.filter(req => req != request);
-                            if (request.path) {
-                                newState[request.path] = Object.values(jstats);
-                            } else {
-                                Object.assign(newState, jstats);
-                            }
-                            resolve({ path: request.path, stat: jstats });
-                        }).catch(err => {
-                            request.retryCnt = (request.retryCnt | 0) + 1;
-                            request.waitFor = 1000;
-                            request.error = err;
-                            reject(err);
+        if (window.location.host || httpPrefix){
+            var abort = new AbortController()
+            var timer = setTimeout(() => abort.abort(), 4000);
+            if (this.props.selectedDeviceId == "current") {
+                Promise.all(requests.map(request => {
+                    return new Promise((resolve, reject) => {
+                        fetch(`${httpPrefix}${request.url}`, {
+                            method: 'post',
+                            signal: abort.signal
+                        }).then(data => data.json())
+                        .then(fromVersionedToPlain)
+                        .then(jstats => {
+                                requests = requests.filter(req => req != request);
+                                if (request.path) {
+                                    newState[request.path] = Object.values(jstats);
+                                } else {
+                                    Object.assign(newState, jstats);
+                                }
+                                resolve({ path: request.path, stat: jstats });
+                            }).catch(err => {
+                                request.retryCnt = (request.retryCnt | 0) + 1;
+                                request.waitFor = 1000;
+                                request.error = err;
+                                reject(err);
+                            });
+                    });
+                })).then(results => {
+                    clearTimeout(timer);
+                    document.getElementById("Status").style.opacity = 1;
+                    if (this.mounted){
+                        this.setState({
+                            error: null,
+                            status: this.orderResults(newState)
                         });
-                });
-            })).then(results => {
-                clearTimeout(timer);
-                document.getElementById("Status").style.opacity = 1;
-                this.setState({
-                    error: null,
-                    status: this.orderResults(newState)
-                });
-            }).catch(err => {
-                clearTimeout(timer);
-                if (err.code != 20) {
-                    var errors = requests.filter(req => req.error);
-                    document.getElementById("Status").style.opacity = 0.5
-                    if (errors[0].waitFor) {
-                        setTimeout(() => {
-                            if (err.message != "Failed to fetch")
-                                console.error(err);
-                            this.updateStatuses(requests, newState);
-                        }, errors[0].waitFor);
-                    } else {
-                        this.updateStatuses(requests, newState);
                     }
-                }
-            });
-        } else if (this.props.selectedDeviceId) {
-            fetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
-                method: 'get',
-                signal: abort.signal
-            }).then(data => data.json()).then(fromVersionedToPlain)
-                .then(status => {
-                    this.setState({ status: this.orderResults(status) });
-                })
+                }).catch(err => {
+                    clearTimeout(timer);
+                    if (err.code != 20) {
+                        var errors = requests.filter(req => req.error);
+                        document.getElementById("Status").style.opacity = 0.5
+                        if (errors[0].waitFor) {
+                            setTimeout(() => {
+                                if (err.message != "Failed to fetch")
+                                    console.error(err);
+                                this.updateStatuses(requests, newState);
+                            }, errors[0].waitFor);
+                        } else {
+                            this.updateStatuses(requests, newState);
+                        }
+                    }
+                });
+            } else if (this.props.selectedDeviceId) {
+                fetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
+                    method: 'get',
+                    signal: abort.signal
+                }).then(data => data.json()).then(fromVersionedToPlain)
+                    .then(status => {
+                        if (this.mounted)
+                            this.setState({ status: this.orderResults(status) });
+                    })
+            }
         }
     }
 
@@ -165,9 +189,6 @@ class MainAppState extends React.Component {
 
     render() {
         if (this.state?.status){
-            if (this.props.registerStateCallback) {
-                this.props.registerStateCallback(this.refreshStatus.bind(this));
-            }
             return [
                 e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
                 e(AppState, {
@@ -178,7 +199,6 @@ class MainAppState extends React.Component {
                 })
             ];
         } else {
-            this.updateAppStatus();
             return e("div",{key:genUUID()},"Loading...");
         }
     }

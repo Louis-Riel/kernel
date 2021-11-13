@@ -1,8 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-
-const httpPrefix = "";//"http://fourmger";
+var httpPrefix = "";//"http://fourmger";
 
 //#region SHA-1
 /*
@@ -280,7 +279,8 @@ class CmdButton extends React.Component {
 }
 class DeviceList extends React.Component {
     getDevices() {
-        fetch(`${httpPrefix}/files/lfs/config`, {method: 'post'})
+        if (window.location.host || httpPrefix){
+            fetch(`${httpPrefix}/files/lfs/config`, {method: 'post'})
             .then(data => data.json())
             .then(json => json.filter(fentry => fentry.ftype == "file"))
             .then(devFiles => {
@@ -290,20 +290,21 @@ class DeviceList extends React.Component {
                     this.props.onGotDevices(devices);
             })
             .catch(err => {console.error(err);this.setState({error: err})});
+        }
     }
 
     render() {
         if (!this.state?.devices && !this.props.devices && !this.state?.error) {
             this.getDevices();
         }
-        return this.state?.error ? null :
+        return this.state?.devices?.length || this.props?.devices?.length <= 1 || this.state?.error ? null :
             this.state?.devices || this.props?.devices ?
                 e("select", {
                     key: genUUID(),
                     value: this.props.selectedDeviceId,
                     onChange: (elem) => this.props?.onSet(elem.target.value)
                 }, (this.state?.devices||this.props.devices).map(device => e("option", { key: genUUID(), value: device }, device))):
-                e("p",{jey:genUUID()},"Loading...")
+                null
     }
 }
 class IntInput extends React.Component {
@@ -518,28 +519,28 @@ class AppState extends React.Component {
     Parse(json) {
         if (json) {
             return e("div",{key: genUUID(),className:"statusclass"},this.getSortedProperties(json).map(fld => {
-                                                    if (Array.isArray(json[fld])) {
-                                                        if (fld == "commands"){
-                                                            return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
-                                                        }
-                                                        return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
-                                                    } else if (typeof json[fld] == 'object') {
-                                                        return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus })};
-                                                    } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
-                                                        return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
-                                                    }
-                                                }).reduce((pv,cv)=>{
-                                                    if (cv){
-                                                        var fc = this.getFieldClass(json,cv.fld);
-                                                        var item = pv.find(it=>it.fclass == fc);
-                                                        if (item) {
-                                                            item.elements.push(cv.element);
-                                                        } else {
-                                                            pv.push({fclass:fc,elements:[cv.element]});
-                                                        }
-                                                    }
-                                                    return pv;
-                                                },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
+                if (Array.isArray(json[fld])) {
+                    if (fld == "commands"){
+                        return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
+                    }
+                    return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
+                } else if (typeof json[fld] == 'object') {
+                    return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus })};
+                } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
+                    return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
+                }
+            }).reduce((pv,cv)=>{
+                if (cv){
+                    var fc = this.getFieldClass(json,cv.fld);
+                    var item = pv.find(it=>it.fclass == fc);
+                    if (item) {
+                        item.elements.push(cv.element);
+                    } else {
+                        pv.push({fclass:fc,elements:[cv.element]});
+                    }
+                }
+                return pv;
+            },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
         } else {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         }
@@ -578,80 +579,104 @@ class AppState extends React.Component {
 }
 
 class MainAppState extends React.Component {
+    constructor(props) {
+        super(props);
+        this.mounted=false;
+    }
+
+    componentWillUnmount() {
+        this.mounted=false;
+    }
+
+    componentDidMount() {
+        this.mounted=true;
+        this.updateAppStatus();
+        if (this.props.registerStateCallback) {
+            this.props.registerStateCallback(this.refreshStatus.bind(this));
+        }
+}
+
     updateAppStatus() {
         this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
     }
 
     refreshStatus(stat) {
-        if (stat){
-            const flds = Object.keys(stat);
-            var status = this.state?.status || {};
-            for (const fld in flds) {
-                status[flds[fld]] = stat[flds[fld]];    
+        if (this.mounted){
+            if (stat){
+                const flds = Object.keys(stat);
+                var status = this.state?.status || {};
+                for (const fld in flds) {
+                    status[flds[fld]] = stat[flds[fld]];    
+                }
+                this.setState({status:status});
+            } else {
+                this.updateAppStatus();
             }
-            this.setState({status:status});
-        } else {
-            this.updateAppStatus();
         }
     }
 
     updateStatuses(requests, newState) {
-        var abort = new AbortController()
-        var timer = setTimeout(() => abort.abort(), 4000);
-        if (this.props.selectedDeviceId == "current") {
-            Promise.all(requests.map(request => {
-                return new Promise((resolve, reject) => {
-                    fetch(`${httpPrefix}${request.url}`, {
-                        method: 'post',
-                        signal: abort.signal
-                    }).then(data => data.json())
-                      .then(fromVersionedToPlain)
-                      .then(jstats => {
-                            requests = requests.filter(req => req != request);
-                            if (request.path) {
-                                newState[request.path] = Object.values(jstats);
-                            } else {
-                                Object.assign(newState, jstats);
-                            }
-                            resolve({ path: request.path, stat: jstats });
-                        }).catch(err => {
-                            request.retryCnt = (request.retryCnt | 0) + 1;
-                            request.waitFor = 1000;
-                            request.error = err;
-                            reject(err);
+        if (window.location.host || httpPrefix){
+            var abort = new AbortController()
+            var timer = setTimeout(() => abort.abort(), 4000);
+            if (this.props.selectedDeviceId == "current") {
+                Promise.all(requests.map(request => {
+                    return new Promise((resolve, reject) => {
+                        fetch(`${httpPrefix}${request.url}`, {
+                            method: 'post',
+                            signal: abort.signal
+                        }).then(data => data.json())
+                        .then(fromVersionedToPlain)
+                        .then(jstats => {
+                                requests = requests.filter(req => req != request);
+                                if (request.path) {
+                                    newState[request.path] = Object.values(jstats);
+                                } else {
+                                    Object.assign(newState, jstats);
+                                }
+                                resolve({ path: request.path, stat: jstats });
+                            }).catch(err => {
+                                request.retryCnt = (request.retryCnt | 0) + 1;
+                                request.waitFor = 1000;
+                                request.error = err;
+                                reject(err);
+                            });
+                    });
+                })).then(results => {
+                    clearTimeout(timer);
+                    document.getElementById("Status").style.opacity = 1;
+                    if (this.mounted){
+                        this.setState({
+                            error: null,
+                            status: this.orderResults(newState)
                         });
-                });
-            })).then(results => {
-                clearTimeout(timer);
-                document.getElementById("Status").style.opacity = 1;
-                this.setState({
-                    error: null,
-                    status: this.orderResults(newState)
-                });
-            }).catch(err => {
-                clearTimeout(timer);
-                if (err.code != 20) {
-                    var errors = requests.filter(req => req.error);
-                    document.getElementById("Status").style.opacity = 0.5
-                    if (errors[0].waitFor) {
-                        setTimeout(() => {
-                            if (err.message != "Failed to fetch")
-                                console.error(err);
-                            this.updateStatuses(requests, newState);
-                        }, errors[0].waitFor);
-                    } else {
-                        this.updateStatuses(requests, newState);
                     }
-                }
-            });
-        } else if (this.props.selectedDeviceId) {
-            fetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
-                method: 'get',
-                signal: abort.signal
-            }).then(data => data.json()).then(fromVersionedToPlain)
-                .then(status => {
-                    this.setState({ status: this.orderResults(status) });
-                })
+                }).catch(err => {
+                    clearTimeout(timer);
+                    if (err.code != 20) {
+                        var errors = requests.filter(req => req.error);
+                        document.getElementById("Status").style.opacity = 0.5
+                        if (errors[0].waitFor) {
+                            setTimeout(() => {
+                                if (err.message != "Failed to fetch")
+                                    console.error(err);
+                                this.updateStatuses(requests, newState);
+                            }, errors[0].waitFor);
+                        } else {
+                            this.updateStatuses(requests, newState);
+                        }
+                    }
+                });
+            } else if (this.props.selectedDeviceId) {
+                fetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
+                    method: 'get',
+                    signal: abort.signal
+                }).then(data => data.json()).then(fromVersionedToPlain)
+                    .then(status => {
+                        if (this.mounted)
+                            this.setState({ status: this.orderResults(status) });
+                    })
+            }
         }
     }
 
@@ -665,9 +690,6 @@ class MainAppState extends React.Component {
 
     render() {
         if (this.state?.status){
-            if (this.props.registerStateCallback) {
-                this.props.registerStateCallback(this.refreshStatus.bind(this));
-            }
             return [
                 e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
                 e(AppState, {
@@ -678,7 +700,6 @@ class MainAppState extends React.Component {
                 })
             ];
         } else {
-            this.updateAppStatus();
             return e("div",{key:genUUID()},"Loading...");
         }
     }
@@ -693,6 +714,8 @@ class ConfigEditor extends React.Component {
         } else {
             this.container.innerText = "Loading...";
         }
+        if (window.location.hostname || httpPrefix)
+            this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}));
     }
 
     render() {
@@ -703,17 +726,21 @@ class ConfigEditor extends React.Component {
 class ConfigPage extends React.Component {
     getJsonConfig(devid) {
         return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
-            fetch(`${httpPrefix}/config${devid&&devid!="current"?`/${devid}`:""}`, {
-                method: 'post',
-                signal: this.props.pageControler.signal
-            }).then(data => {
-                clearTimeout(timer);
-                resolve(data.json());
-            }).catch((err) => {
-                clearTimeout(timer);
-                reject(err);
-            });
+            if (window.location.host || httpPrefix){
+                const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
+                fetch(`${httpPrefix}/config${devid&&devid!="current"?`/${devid}`:""}`, {
+                    method: 'post',
+                    signal: this.props.pageControler.signal
+                }).then(data => {
+                    clearTimeout(timer);
+                    resolve(data.json());
+                }).catch((err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                });
+            } else {
+                reject({error:"Not connected"});
+            }
         });
     }
 
@@ -735,53 +762,135 @@ class ConfigPage extends React.Component {
                 e("button", { key: genUUID(), type: "button", onClick:(elem) => this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}))} , "Refresh")
             ]);
         } else {
-            this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}));
             return e("div",{key:genUUID()},"Loading...");
         }
     }
 }
+
 class ControlPanel extends React.Component {
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        if ((prevState?.periodicRefresh != this.state?.periodicRefresh) || (prevState?.refreshFrequency != this.state?.refreshFrequency)) {
-            this.periodicRefresh(this.state?.periodicRefresh,this.state.refreshFrequency || 10)
+    constructor(props) {
+        super(props);
+        this.anims=[];
+        this.state = {
+            autoRefresh:props.autoRefresh
+        }
+
+        if (!this.props?.OnLineDevices?.length && (!httpPrefix && !window.location.hostname)){
+            this.lookForDevs();
+        } else if (this.props?.autoRefresh) {
+            console.log(`from mount ${JSON.stringify(this.state)}`);
+            this.openWs();
         }
     }
 
-    periodicRefresh(enabled, interval) {
-        if (enabled && interval) {
-            if (this.refreshTimeer) {
-                clearTimeout(this.refreshTimeer);
-            }
-            this.refreshTimeer=setInterval(() => this.UpdateState(null),interval*1000);
+    componentDidMount() {
+        this.mountWidget();
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        this.mountWidget();
+    }
+
+
+    lookForDevs() {
+        if (this.state?.scanning) {
+            return
         }
-        if (!enabled && this.refreshTimeer) {
-            clearTimeout(this.refreshTimeer);
-            this.refreshTimeer = null;
+        this.setState({scanning:true});
+        var devices = [];
+        for (var idx = 254; idx > 0; idx--) {
+            devices.push(`192.168.1.${idx}`);
+        }
+        console.log(`Scanning for ${devices.length} devices`);
+        var foundDevices=[];
+        for (var idx = 0; idx < Math.min(10, devices.length); idx++) {
+            if (devices.length) {
+                this.scanForDevices(devices,foundDevices);
+            }
         }
     }
-    
+
+    scanForDevices(devices,foundDevices) {
+        if (devices.length) {
+            var device = devices.pop();
+            var abort = new AbortController()
+            var timer = setTimeout(() => abort.abort(), 1000);
+            var onLine=false;
+            fetch(`http://${device}/config/`, {
+                method: 'post',
+                signal: abort.signal
+            }).then(data => {clearTimeout(timer); onLine=true; return data.json()})
+              .then(fromVersionedToPlain)
+              .then(dev => {
+                  if (dev?.deviceid) {
+                    foundDevices.push(dev);
+                  }
+                  if (devices.length) {
+                    this.scanForDevices(devices,foundDevices);
+                  } else {
+                    if (!this.props?.OnLineDevices?.length) {
+                        httpPrefix=`http://${foundDevices[0].devName}`
+                        if (this.state?.autoRefresh && !this.state.connecting && !this.state.connected)
+                            console.log("from scan finished good");
+                            this.props.OnToggleAutoRefresh(true);
+                        this.props.OnLiveDevChange(foundDevices);
+                    }
+                  }
+                })
+              .catch(err => {
+                if (devices.length) {
+                    this.scanForDevices(devices,foundDevices);
+                } else {
+                    if (!this.props?.OnLineDevices?.length) {
+                        httpPrefix=`http://${foundDevices[0].devName}`
+                        if (this.state?.autoRefresh && !this.state.connecting && !this.state.connected)
+                            console.log("from scan finished bad");
+                            this.props.OnToggleAutoRefresh(true);
+                        this.props.OnLiveDevChange(foundDevices);
+                    }
+                }
+              });
+        }
+    }
+
+    mountWidget() {
+        this.widget.addEventListener("click", (event) => {
+            if ((event.offsetX > 2) &&
+                (event.offsetX < 32) &&
+                (event.offsetY > 2) &&
+                (event.offsetY < 32)) {
+                this.props.OnToggleAutoRefresh(!this.state?.autoRefresh);
+            }
+        });
+    }
+
     closeWs() {
-        if (this.state?.autoRefresh)
-            this.setState({autoRefresh:false});
+        this.props.OnToggleAutoRefresh(off);
         if (this.ws) {
             this.ws.close();
+            this.ws = null;
         }
     }
 
     openWs() {
-        if (this.ws) {
+        if (!window.location.hostname && !httpPrefix) {
+            console.log("Not ws as not connected");
             return;
         }
-        if (!this.state?.autoRefresh)
-            this.setState({autoRefresh:true});
-        this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-        var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); if (this.ws.OPEN ) this.ws.close();}, 3000);
-        this.ws.onmessage = (event) => {
+        if (this.state?.connecting || this.state?.connected) {
+            return;
+        }
+        console.log(`Connecting to ${httpPrefix || window.location.hostname } ${JSON.stringify(this.state)}...`);
+        this.setState({connecting:true,running:false});
+        console.log(`Connecting to ${httpPrefix || window.location.hostname } ${JSON.stringify(this.state)}`);
+        var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
+        var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.setState({connecting:false});}, 3000);
+        ws.onmessage = (event) => {
             clearTimeout(stopItWithThatShit);
-
-            if (!this.state.running || this.state.disconnected) {
-                console.log("Connected");
-                this.setState({ running: true, disconnected: false, error: null });
+            if (!this.state.running || this.state.timeout) {
+                console.log("Running");
+                this.setState({ running: true, error: null, timeout: null });
             }
 
             if (event && event.data) {
@@ -795,44 +904,191 @@ class ControlPanel extends React.Component {
                     this.AddLogLine(event.data);
                 }
             }
-            stopItWithThatShit = setTimeout(() => { this.state.timeout="Message"; this.ws.close(); },3000)
+            stopItWithThatShit = setTimeout(() => { this.setState({timeout:"Message"}); ws.close();console.log("Message timeout")},3000)
         };
-        this.ws.onopen = () => {
+        ws.onopen = () => {
             clearTimeout(stopItWithThatShit);
-            this.setState({ connected: true, disconnected: false });
-            this.ws.send("Connect");
-            stopItWithThatShit = setTimeout(() => { this.state.timeout="Connect"; this.ws.close(); },3000)
+            this.setState({ connected: true, connecting:false });
+            ws.send("Connected");
+            console.log("Connected");
+            stopItWithThatShit = setTimeout(() => { this.setState({timeout:"Connect"}); ws.close();console.log("Connect timeout")},3000)
         };
-        this.ws.onerror = (err) => {
+        ws.onerror = (err) => {
             console.error(err);
             clearTimeout(stopItWithThatShit);
-            this.state.error= err ;
-            this.ws.close();
+            this.setState({error: err});
+            ws.close();
         };
-        this.ws.onclose = (evt => {
+        ws.onclose = (evt => {
             console.log("Closed");
             clearTimeout(stopItWithThatShit);
-            this.setState({ connected: false, running: false });
-            this.ws = null;
-            if (this.state.autoRefresh) {
-                setTimeout(() => {this.openWs();}, 1000);
-            }
+            this.setState({connected:false,connecting:false});
         });
     }
 
+    drawDidget(){
+        if (!this.widget)
+            return;
+            
+        var canvas = this.widget.getContext("2d");
+        canvas.clearRect(0,0,100,40);
+
+        this.browser(canvas, 2, 2, 30, 30, 10);
+        this.chip(canvas, 100-20-10, 2, 20, 30, 5);
+
+        if (this.anims.length){
+            var animGroups = this.anims.reduce((pv,cv)=>{
+                (pv[cv.type]=pv[cv.type]||[]).push(cv);
+                return pv
+            },{});
+            for (var agn in animGroups) {
+                canvas.beginPath();
+                animGroups[agn].forEach(anim => {
+                    this.drawSprite(anim, canvas);
+                });
+            }
+
+            this.anims = this.anims.filter(anim => anim.state != 2);
+        }
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+    }
+
+    drawSprite(anim, canvas) {
+        if (!anim.state) {
+            anim.state = 1;
+            anim.x = anim.startX;
+            anim.y = anim.startY;
+        } else {
+            anim.x -= 3+anim.weight;
+        }
+        canvas.strokeStyle = anim.lineColor;
+        canvas.lineWidth = 1;
+        canvas.shadowBlur = 1;
+        canvas.shadowColor = anim.shadowColor;
+        canvas.fillStyle = anim.color;
+        canvas.moveTo(anim.x, anim.y);
+        canvas.arc(anim.x, anim.y, 4 + (anim.weight), 0, 2 * Math.PI);
+        canvas.fill();
+        if (anim.x < 30) {
+            anim.state = 2;
+        }
+        return anim;
+    }
+
+    browser(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
+        canvas.beginPath();
+        canvas.strokeStyle = '#00ffff';
+        canvas.lineWidth = 2;
+        canvas.shadowBlur = 2;
+        canvas.shadowColor = '#00ffff';
+        canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#0396966b") : "#000000"
+        this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
+        canvas.fill();
+        canvas.stroke();
+    }
+
+    chip(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
+        canvas.beginPath();
+        const pinWidth = 4;
+        const pinHeight = 2;
+        const pinVCount = 3;
+
+        canvas.strokeStyle = '#00ffff';
+        canvas.lineWidth = 2;
+        canvas.shadowBlur = 2;
+        canvas.shadowColor = '#00ffff';
+        canvas.fillStyle = "#00ffff";
+        this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
+
+        for (var idx = 0; idx < pinVCount; idx++) {
+            canvas.moveTo(startX,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            canvas.lineTo(startX-pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            canvas.lineTo(startX-pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            canvas.lineTo(startX,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+
+            canvas.moveTo(startX+boxWidht,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            canvas.lineTo(startX+boxWidht+pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            canvas.lineTo(startX+boxWidht+pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            canvas.lineTo(startX+boxWidht,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+        }
+        canvas.stroke();
+    }
+
+    roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
+        canvas.moveTo(startX + cornerSize, startY);
+        canvas.lineTo(startX + boxWidht - (2 * cornerSize), startY);
+        canvas.arcTo(startX + boxWidht, startY, startX + boxWidht, startY + cornerSize, cornerSize);
+        canvas.lineTo(startX + boxWidht, startY + boxHeight - cornerSize);
+        canvas.arcTo(startX + boxWidht, startY + boxHeight, startX + boxWidht - cornerSize, startY + boxHeight, cornerSize);
+        canvas.lineTo(startX + cornerSize, startY + boxHeight);
+        canvas.arcTo(startX, startY + boxHeight, startX, startY + boxHeight - cornerSize, cornerSize);
+        canvas.lineTo(startX, startY + cornerSize);
+        canvas.arcTo(startX, startY, startX + cornerSize, startY, cornerSize);
+    }
+
     AddLogLine(ln) {
-      if (ln && this.props.logCBFn) {
-        this.props.logCBFn.forEach(logCBFn=>logCBFn(ln));
-      }
+        var anims = this.anims.filter(anim => anim.type == "log");
+        var curAnims = anims.filter(anim => anim.level == ln[0]);
+        if ((anims.length > 4) && (curAnims.length>1)) {
+            (curAnims.find(anim => anim.weight < 3) || curAnims[0]).weight++;
+        } else {
+            this.anims.push({
+                type:"log",
+                level:ln[0],
+                color:ln[0] == 'D' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+                weight: 1,
+                lineColor: '#00ffff',
+                shadowColor: '#00ffff',
+                startX: 70,
+                startY: 25,
+                renderer: this.drawSprite
+            })
+        }
+        if (ln && this.props.logCBFn) {
+            this.props.logCBFn.forEach(logCBFn=>logCBFn(ln));
+        }
     }
     
     UpdateState(state) {
+        var anims = this.anims.filter(anim => anim.type == "state");
+        if (anims.length > 4) {
+            (anims.find(anim => anim.weight < 3) || anims[0]).weight++;
+        } else {
+            this.anims.push({
+                type:"state",
+                color:"#00ffff",
+                weight: 1,
+                lineColor: '#00ffff',
+                shadowColor: '#00ffff',
+                startX: 70,
+                startY: 15,
+                renderer: this.drawSprite
+            });
+        }
       if (this.props.stateCBFn) {
         this.props.stateCBFn.forEach(stateCBFn=>stateCBFn(state));
       }
     }
   
     ProcessEvent(event) {
+        var anims = this.anims.filter(anim => anim.type == "event");
+        var curAnims = anims.filter(anim => anim.eventBase == event.eventBase);
+        if ((anims.length > 4) && (curAnims.length>1)) {
+            (curAnims.find(anim => anim.weight < 3) || curAnims[0]).weight++;
+        } else {
+            this.anims.push({
+                type:"event",
+                eventBase: event.eventBase,
+                color:"#7fffd4",
+                weight: 1,
+                lineColor: '#00ffff',
+                shadowColor: '#00ffff',
+                startX: 70,
+                startY: 5,
+                renderer: this.drawSprite
+            });
+        }
+
         if (this.props.eventCBFn) {
             this.props.eventCBFn.forEach(eventCBFn=>eventCBFn(event));
         }
@@ -840,25 +1096,21 @@ class ControlPanel extends React.Component {
 
     render() {
      return e('fieldset', { key: genUUID(), className:`slides`, id: "controls", key: this.id }, [
-        e(BoolInput, { 
-            key: genUUID(), 
-            label: "Periodic Refresh", 
-            initialState: this.state?.periodicRefresh,
-            onChange: val=>this.setState({periodicRefresh:val})
-        }),
-        e(IntInput, {
+        this.props?.OnLineDevices?.length && !window.location.hostname ?
+            e("select",{
+                key: genUUID(),
+                className: "landevices",
+                value: httpPrefix.substring(7),
+                onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.props.ReloadPage()}
+            },this.props.OnLineDevices.map(lanDev=>e("option",{
+                key:genUUID(),
+                className: "landevice"
+            },lanDev.devName))):null,
+        e("canvas",{
             key: genUUID(),
-            label: "Freq(sec)", 
-            value: this.state?.refreshFrequency || 10, 
-            onChange: val=>this.setState({refreshFrequency:val})
-        }),
-        e(BoolInput, {
-            key: genUUID(),
-            label: "Auto Refresh",
-            onOn: this.openWs.bind(this),
-            onOff: this.closeWs.bind(this),
-            blurred: this.state?.autoRefresh && this.state.disconnected,
-            initialState: this.state ? this.state.autoRefresh : true
+            height: 40,
+            width:100,
+            ref: (elem) => this.widget = elem
         }),
         e(DeviceList, {
             key: genUUID(),
@@ -994,14 +1246,25 @@ class LiveEventPannel extends React.Component {
         if (this.props.registerEventCallback) {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
+        this.mounted=false;
+    }
+
+    componentDidMount() {
+        this.mounted=true;
+    }
+
+    componentWillUnmount() {
+        this.mounted=false;
     }
 
     ProcessEvent(evt) {
-        var lastEvents = this.state?.lastEvents||[];
-        while (lastEvents.length > 100) {
-            lastEvents.shift();
+        if (this.mounted){
+            var lastEvents = this.state?.lastEvents||[];
+            while (lastEvents.length > 100) {
+                lastEvents.shift();
+            }
+            this.setState({lastEvents:lastEvents.concat(evt)});
         }
-        this.setState({lastEvents:lastEvents.concat(evt)});
     }
 
     parseEvent(event) {
@@ -1010,10 +1273,11 @@ class LiveEventPannel extends React.Component {
             return {dataType:eventType.dataType,...event};
         } else {
             var req = this.eventTypeRequests.find(req=>(req.eventBase == event.eventBase) && (req.eventId == event.eventId));
-            if (!req) {
+            if (!req && this.mounted) {
                 this.getEventDescriptor(event)
                     .then(eventType => this.setState({lastState: this.state.lastEvents
-                        .map(event => event.eventBase == eventType.eventBase && event.eventId == eventType.eventName ? {dataType:eventType.dataType,...event}:{event})}));
+                        .map(event => event.eventBase == eventType.eventBase && event.eventId == eventType.eventName ? {dataType:eventType.dataType,...event}:{event})}
+                    ));
             }
             return {...event};
         }
@@ -1063,19 +1327,35 @@ class LiveEventPannel extends React.Component {
 }
 
 class EventsPage extends React.Component {
+
+    componentWillUnmount() {
+        this.mounted=false;
+    }
+
+    componentDidMount(){
+        this.mounted=true;
+        if (window.location.hostname || httpPrefix)
+            this.getJsonConfig().then(cfg => this.mounted?this.setState({events: cfg.events,programs:cfg.programs}):null);
+    }
+
     getJsonConfig() {
         return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
-            fetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
-                method: 'post',
-                signal: this.props.pageControler.signal
-            }).then(data => {
-                clearTimeout(timer);
-                return data.json();
-            }).then( data => resolve(fromVersionedToPlain(data))).catch((err) => {
-                clearTimeout(timer);
-                reject(err);
-            });
+            if (window.location.hostname || httpPrefix){
+                const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
+                fetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
+                    method: 'post',
+                    signal: this.props.pageControler.signal
+                }).then(data => {
+                    clearTimeout(timer);
+                    return data.json();
+                }).then( data => resolve(fromVersionedToPlain(data)
+                )).catch((err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                });
+            } else {
+                reject({error:"Not connected"});
+            }
         });
     }
 
@@ -1083,13 +1363,20 @@ class EventsPage extends React.Component {
         if (this.state?.events){
             return [
                 e("div", { key: genUUID() ,className: "designer" },[
-                    e("details",{ key: genUUID() ,className: "configuredEvents", onClick:elem=>elem.target.parentElement.nextSibling.removeAttribute("open"), open:true}, [e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), e("div",{key:genUUID(),className:"content"},this.state.events?.map(event => e(Event,{ key: genUUID(),...event})))]),
-                    e("details",{ key: genUUID() ,className: "programs", onClick:elem=>elem.target.parentElement.previousSibling.removeAttribute("open")},[e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), e("div",{key:genUUID(),className:"content"},this.state.programs?.map(program => e(Program,{ key: genUUID(),...program})))])
+                    e("details",{ key: genUUID() ,className: "configuredEvents", onClick:elem=>elem.target.parentElement.nextSibling.removeAttribute("open"), open:true}, [
+                        e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), 
+                        e("div",{key:genUUID(),className:"content"},
+                            this.state.events?.map(event => e(Event,{ key: genUUID(),...event})))
+                    ]),
+                    e("details",{ key: genUUID() ,className: "programs", onClick:elem=>elem.target.parentElement.previousSibling.removeAttribute("open")},[
+                        e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), 
+                        e("div",{key:genUUID(),className:"content"},
+                            this.state.programs?.map(program => e(Program,{ key: genUUID(),...program})))
+                    ])
                 ]),
                 e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
             ];
         } else {
-            this.getJsonConfig().then(cfg => this.setState({events: cfg.events,programs:cfg.programs}));
             return e("div",{key: genUUID()},"Loading...");
         }
     }
@@ -1256,10 +1543,12 @@ class StorageViewer extends React.Component {
                 clearTimeout(quitItNow);
                 data.json().then(jdata => {
                     fileToFetch.size = jdata.size;
-                    this.setState({ loaded: true, files: this.state.files, total: this.state?.total + jdata.size });
+                    if (this.mounted)
+                        this.setState({ loaded: true, files: this.state.files, total: this.state?.total + jdata.size });
                 });
                 if (fileStatsToFetch.length && !this.props.pageControler.signal.aborted) {
-                    this.GetFileStat(fileStatsToFetch);
+                    if (this.mounted)
+                        this.GetFileStat(fileStatsToFetch);
                 }        
             }).catch(ex => {
                 clearTimeout(quitItNow);
@@ -1269,28 +1558,32 @@ class StorageViewer extends React.Component {
     }
 
     fetchFiles() {
-        var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
-        fetch(`${httpPrefix}/files` + this.state.path, {
-            method: 'post',
-            signal: this.props.pageControler.signal
-        }).then(data => {
-            clearInterval(quitItNow);
-            data.json()
-                .then(files => files.sort((f1, f2) => {
-                    if (f1.ftype != f2.ftype) {
-                        return f1.ftype == "folder" ? 1 : -1;
-                    }
-                    return f1.name == f2.name ? 0 : f1.name > f2.name ? 1 : -1;
-                })).then(files => {
-                    this.setState({ loaded: true, files: files, total: files.reduce((e1,e2) => e1 + e2.size,0) });
-                    var fileStatsToFetch = files.filter(file => file.ftype == "file" && !file.size);
-                    for (var idx = 0; idx < Math.min(3, fileStatsToFetch.length); idx++) {
-                        if (fileStatsToFetch.length) {
-                            this.GetFileStat(fileStatsToFetch);
+        if (window.location.host || httpPrefix){
+            var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
+            fetch(`${httpPrefix}/files` + this.state.path, {
+                method: 'post',
+                signal: this.props.pageControler.signal
+            }).then(data => {
+                clearInterval(quitItNow);
+                data.json()
+                    .then(files => files.sort((f1, f2) => {
+                        if (f1.ftype != f2.ftype) {
+                            return f1.ftype == "folder" ? 1 : -1;
                         }
-                    }
-                });
-        }).catch(console.error);
+                        return f1.name == f2.name ? 0 : f1.name > f2.name ? 1 : -1;
+                    })).then(files => {
+                        if (this.mounted){
+                            this.setState({ loaded: true, files: files, total: files.reduce((e1,e2) => e1 + e2.size,0) });
+                            var fileStatsToFetch = files.filter(file => file.ftype == "file" && !file.size);
+                            for (var idx = 0; idx < Math.min(3, fileStatsToFetch.length); idx++) {
+                                if (fileStatsToFetch.length) {
+                                    this.GetFileStat(fileStatsToFetch);
+                                }
+                            }
+                        }
+                    });
+            }).catch(console.error);
+        }
     }
 
     getFileLink(file) {
@@ -1317,6 +1610,17 @@ class StorageViewer extends React.Component {
         }
     }
 
+    componentDidMount(){
+        this.mounted=true;
+        if (!this.state?.files) {
+            this.fetchFiles();
+        }
+    }
+
+    componentWillUnmount() {
+        this.mounted=false;
+    }
+
     SortTable(th) {
         var table,tbody;
         Array.from((tbody=(table=th.target.closest("div.file-table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n+2)'))
@@ -1330,28 +1634,28 @@ class StorageViewer extends React.Component {
 
     render() {
         if (!this.state?.files) {
-            this.fetchFiles();
             return e("div", { key: genUUID() }, "Loading...");
         } else {
             return e("div", { key: genUUID(), 
                 id: this.id, 
-                className: `file-table ${this.state.loaded?"":"loading"}` }, e("table", { key: genUUID(), className: "greyGridTable" }, [
-                                            e("caption", { key: genUUID() }, this.state.path),
-                                            this.getTableHeader(),
-                                            e("tbody", { key: genUUID() }, 
-                                                this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ 
-                                                    key: genUUID(), 
-                                                    file:file, 
-                                                    path:this.state.path, 
-                                                    getFileLink:this.getFileLink.bind(this),
-                                                    OnDelete: ()=>this.fetchFiles()
-                                                }))
-                                                ),
-                                            e("tfoot", { key: genUUID() }, e("tr", { key: genUUID() }, [
-                                                e("td", { key: genUUID() }, "Total"), 
-                                                e("td", { key: genUUID() }, this.state.total)
-                                            ]))
-                                        ]));
+                className: `file-table ${this.state.loaded?"":"loading"}` }, 
+                    e("table", { key: genUUID(), className: "greyGridTable" }, [
+                        e("caption", { key: genUUID() }, this.state.path),
+                        this.getTableHeader(),
+                        e("tbody", { key: genUUID() }, 
+                            this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ 
+                                key: genUUID(), 
+                                file:file, 
+                                path:this.state.path, 
+                                getFileLink:this.getFileLink.bind(this),
+                                OnDelete: ()=>this.fetchFiles()
+                            }))
+                            ),
+                        e("tfoot", { key: genUUID() }, e("tr", { key: genUUID() }, [
+                            e("td", { key: genUUID() }, "Total"), 
+                            e("td", { key: genUUID() }, this.state.total)
+                        ]))
+                    ]));
         }
     }
 }
@@ -1381,10 +1685,20 @@ class LogLine extends React.Component {
 }
 
 class LogLines extends React.Component {
+    constructor(props) {
+        super(props);
+        this.mounted=false;
+        this.state={logLines:[]};
+    }
+
+    componentDidMount() {
+        this.mounted=true;
+    }
+
     AddLogLine(logln) {
-        var logLines = (this.state?.logLines||[]);
-        logLines.push(logln);
-        this.setState({ logLines: logLines });
+        if (this.mounted){
+            this.setState({ logLines: [...(this.state?.logLines||[]),logln]});
+        }
     }
 
     render() {
@@ -1421,6 +1735,7 @@ class SystemPage extends React.Component {
 class MainApp extends React.Component {
   constructor(props) {
     super(props);
+    this.anims=[];
     this.state = {
       pageControler: this.GetPageControler(),
       selectedDeviceId: "current",
@@ -1430,11 +1745,313 @@ class MainApp extends React.Component {
         Config:  {active: false}, 
         Logs:    {active: false},
         Events:  {active: false}
-        }
+        },
+        autoRefresh: (httpPrefix||window.location.hostname) ? true : false
       };
-    this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
+    if (!httpPrefix && !window.location.hostname){
+      this.lookForDevs();
+    }
+    if (this.state?.autoRefresh && (httpPrefix || window.location.hostname)) {
+      this.openWs();
+    }
   }
 
+  componentDidMount() {
+    this.mountWidget();
+  }
+
+  componentDidUpdate(prevProps, prevState, snapshot) {
+    //this.mountWidget();
+  }
+
+//#region Control Pannel
+  lookForDevs() {
+    var devices = [];
+    for (var idx = 254; idx > 0; idx--) {
+        devices.push(`192.168.1.${idx}`);
+    }
+    var foundDevices=[];
+    for (var idx = 0; idx < Math.min(10, devices.length); idx++) {
+        if (devices.length) {
+            this.scanForDevices(devices,foundDevices);
+        }
+    }
+  }
+
+  scanForDevices(devices,foundDevices) {
+    if (devices.length) {
+      var device = devices.pop();
+      var abort = new AbortController()
+      var timer = setTimeout(() => abort.abort(), 1000);
+      var onLine=false;
+      fetch(`http://${device}/config/`, {
+          method: 'post',
+          signal: abort.signal
+      }).then(data => {clearTimeout(timer); onLine=true; return data.json()})
+        .then(fromVersionedToPlain)
+        .then(dev => {
+            if (dev?.deviceid) {
+              foundDevices.push(dev);
+            }
+            if (devices.length) {
+              this.scanForDevices(devices,foundDevices);
+            } else {
+              if (!this.state?.OnLineDevices?.length) {
+                this.state.OnLineDevices=foundDevices;
+                httpPrefix=`http://${foundDevices[0].devName}`
+                this.state.autoRefresh=true;
+                if (!this.state.connecting && !this.state.connected){
+                  this.openWs();
+                  this.ReloadPage()
+                }
+              }
+            }
+          })
+        .catch(err => {
+          if (devices.length) {
+              this.scanForDevices(devices,foundDevices);
+          } else {
+              if (!this.state?.OnLineDevices?.length) {
+                  this.state.OnLineDevices=foundDevices;
+                  httpPrefix=`http://${foundDevices[0].devName}`
+                  this.state.autoRefresh=true;
+                  if (!this.state.connecting && !this.state.connected){
+                    this.openWs();
+                    this.ReloadPage();
+                  }
+              }
+          }
+        });
+    }
+  }
+
+  mountWidget() {
+    this.widget.addEventListener("click", (event) => {
+      if ((event.offsetX > 2) &&
+          (event.offsetX < 32) &&
+          (event.offsetY > 2) &&
+          (event.offsetY < 32)) {
+        this.state.autoRefresh=!this.state.autoRefresh;
+        this.state.autoRefresh?this.openWs():this.closeWs();
+      }
+    });
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+  }
+
+  closeWs() {
+    if (this.ws) {
+        this.state.autoRefresh=false;
+        this.ws.close();
+        this.ws = null;
+    }
+  }
+
+  openWs() {
+    if (!window.location.hostname && !httpPrefix) {
+        return;
+    }
+    if (this.state?.connecting || this.state?.connected) {
+        return;
+    }
+    this.state.connecting=true;
+    this.state.running=false;
+    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
+    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false;this.openWs()}, 3000);
+    ws.onmessage = (event) => {
+        clearTimeout(stopItWithThatShit);
+        if (!this.state.running || this.state.timeout) {
+            this.state.running= true;
+            this.state.error= null;
+            this.state.timeout= null;
+        }
+
+        if (event && event.data) {
+            if (event.data[0] == "{") {
+                if (event.data.startsWith('{"eventBase"')) {
+                    this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
+                } else {
+                    this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
+                }
+            } else if (event.data.match(/.*\) ([^:]*)/g)) {
+                this.AddLogLine(event.data);
+            }
+        }
+        stopItWithThatShit = setTimeout(() => { this.state.timeout="Message"; ws.close();console.log("Message timeout")},3000)
+    };
+    ws.onopen = () => {
+      clearTimeout(stopItWithThatShit);
+        this.state.connected=true;
+        this.state.connecting=false;
+        ws.send("Connected");
+        stopItWithThatShit = setTimeout(() => { this.state.timeout="Connect"; ws.close();console.log("Connect timeout")},3000)
+    };
+    ws.onerror = (err) => {
+        console.error(err);
+        clearTimeout(stopItWithThatShit);
+        this.state.error= err;
+        ws.close();
+    };
+    ws.onclose = (evt => {
+        clearTimeout(stopItWithThatShit);
+        this.state.connected=false;
+        this.state.connecting=false;
+        if (this.state.autoRefresh)
+          this.openWs();
+    });
+  }
+
+  drawDidget(){
+    if (!this.widget)
+        return;
+        
+    var canvas = this.widget.getContext("2d");
+    canvas.clearRect(0,0,100,40);
+
+    this.browser(canvas, 2, 2, 30, 30, 10);
+    this.chip(canvas, 100-20-10, 2, 20, 30, 5);
+
+    if (this.anims.length){
+        var animGroups = this.anims.reduce((pv,cv)=>{
+            (pv[cv.type]=pv[cv.type]||[]).push(cv);
+            return pv
+        },{});
+        for (var agn in animGroups) {
+            canvas.beginPath();
+            animGroups[agn].forEach(anim => {
+                this.drawSprite(anim, canvas);
+            });
+        }
+
+        this.anims = this.anims.filter(anim => anim.state != 2);
+    }
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+  }
+
+  drawSprite(anim, canvas) {
+    if (!anim.state) {
+        anim.state = 1;
+        anim.x = anim.startX;
+        anim.y = anim.startY;
+    } else {
+        anim.x -= 3+anim.weight;
+    }
+    canvas.strokeStyle = anim.lineColor;
+    canvas.lineWidth = 1;
+    canvas.shadowBlur = 1;
+    canvas.shadowColor = anim.shadowColor;
+    canvas.fillStyle = anim.color;
+    canvas.moveTo(anim.x, anim.y);
+    canvas.arc(anim.x, anim.y, 4 + (anim.weight), 0, 2 * Math.PI);
+    canvas.fill();
+    if (anim.x < 30) {
+        anim.state = 2;
+    }
+    return anim;
+  }
+
+  browser(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
+    canvas.beginPath();
+    canvas.strokeStyle = '#00ffff';
+    canvas.lineWidth = 2;
+    canvas.shadowBlur = 2;
+    canvas.shadowColor = '#00ffff';
+    canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#0396966b") : "#000000"
+    this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
+    canvas.fill();
+    canvas.stroke();
+  }
+
+  chip(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
+    canvas.beginPath();
+    const pinWidth = 4;
+    const pinHeight = 2;
+    const pinVCount = 3;
+
+    canvas.strokeStyle = '#00ffff';
+    canvas.lineWidth = 2;
+    canvas.shadowBlur = 2;
+    canvas.shadowColor = '#00ffff';
+    canvas.fillStyle = "#00ffff";
+    this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
+
+    for (var idx = 0; idx < pinVCount; idx++) {
+        canvas.moveTo(startX,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+        canvas.lineTo(startX-pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+        canvas.lineTo(startX-pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+        canvas.lineTo(startX,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+
+        canvas.moveTo(startX+boxWidht,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+        canvas.lineTo(startX+boxWidht+pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+        canvas.lineTo(startX+boxWidht+pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+        canvas.lineTo(startX+boxWidht,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+    }
+    canvas.stroke();
+  }
+
+  roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
+    canvas.moveTo(startX + cornerSize, startY);
+    canvas.lineTo(startX + boxWidht - (2 * cornerSize), startY);
+    canvas.arcTo(startX + boxWidht, startY, startX + boxWidht, startY + cornerSize, cornerSize);
+    canvas.lineTo(startX + boxWidht, startY + boxHeight - cornerSize);
+    canvas.arcTo(startX + boxWidht, startY + boxHeight, startX + boxWidht - cornerSize, startY + boxHeight, cornerSize);
+    canvas.lineTo(startX + cornerSize, startY + boxHeight);
+    canvas.arcTo(startX, startY + boxHeight, startX, startY + boxHeight - cornerSize, cornerSize);
+    canvas.lineTo(startX, startY + cornerSize);
+    canvas.arcTo(startX, startY, startX + cornerSize, startY, cornerSize);
+  }
+
+  AddLogLine(ln) {
+    var anims = this.anims.filter(anim => anim.type == "log");
+    var curAnims = anims.filter(anim => anim.level == ln[0]);
+    if ((anims.length > 4) && (curAnims.length>1)) {
+        (curAnims.find(anim => anim.weight < 3) || curAnims[0]).weight++;
+    } else {
+        this.anims.push({
+            type:"log",
+            level:ln[0],
+            color:ln[0] == 'D' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+            weight: 1,
+            lineColor: '#00ffff',
+            shadowColor: '#00ffff',
+            startX: 70,
+            startY: 25,
+            renderer: this.drawSprite
+        })
+    }
+    this.callbacks.logCBFn.forEach(logCBFn=>logCBFn(ln));
+  }
+
+  UpdateState(state) {
+    this.anims.push({
+        type:"state",
+        color:"#00ffff",
+        weight: 1,
+        lineColor: '#00ffff',
+        shadowColor: '#00ffff',
+        startX: 70,
+        startY: 15,
+        renderer: this.drawSprite
+    });
+    this.callbacks.stateCBFn.forEach(stateCBFn=>stateCBFn(state));
+  }
+
+  ProcessEvent(event) {
+    this.anims.push({
+        type:"event",
+        eventBase: event.eventBase,
+        color:"#7fffd4",
+        weight: 1,
+        lineColor: '#00ffff',
+        shadowColor: '#00ffff',
+        startX: 70,
+        startY: 5,
+        renderer: this.drawSprite
+    });
+    this.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn(event));
+  }
+//#endregion
+
+//#region Page Tabulation
   GetPageControler() {
     var ret = new AbortController();
     ret.onabort = this.OnAbort;
@@ -1442,7 +2059,6 @@ class MainApp extends React.Component {
   }
 
   OnAbort() {
-    console.log("Abort!!!!");
     this.state.pageControler= this.GetPageControler();
   }
 
@@ -1450,10 +2066,6 @@ class MainApp extends React.Component {
     this.state.tabs[tab].active=true;
     Object.keys(this.state.tabs).filter(ttab => ttab != tab).forEach(ttab => this.state.tabs[ttab].active=false);
     this.refreshActiveTab();
-  }
-
-  componentDidMount() {
-//    this.refreshActiveTab();
   }
   
   refreshActiveTab() {
@@ -1477,7 +2089,9 @@ class MainApp extends React.Component {
       }
     });
   }
+//#endregion
 
+//#region Event Management
   registerStateCallback(stateCBFn) {
     if (!this.callbacks.stateCBFn.find(fn => fn.name == stateCBFn.name))
       this.callbacks.stateCBFn.push(stateCBFn);
@@ -1492,6 +2106,7 @@ class MainApp extends React.Component {
     if (!this.callbacks.eventCBFn.find(fn => fn.name == eventCBFn.name))
       this.callbacks.eventCBFn.push(eventCBFn);
   }
+//#endregion
 
   getPage(name) {
     if (name == "Storage") {
@@ -1509,21 +2124,55 @@ class MainApp extends React.Component {
     if (name == "Events") {
       return e(EventsPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Events"].active, registerEventCallback:this.registerEventCallback.bind(this) });
     }
+    return null;
+  }
+
+  ReloadPage(){
+    this.setState({pageControler: this.GetPageControler()});
   }
 
   render() {
-    return e("div",{key:genUUID(),className:"mainApp"}, [e(ControlPanel, { key: genUUID(), 
-      selectedDeviceId: this.state?.selectedDeviceId, 
-      onSelectedDeviceId: deviceId=>this.setState({selectedDeviceId:deviceId}), 
-      stateCBFn: this.callbacks.stateCBFn,
-      logCBFn: this.callbacks.logCBFn,
-      eventCBFn: this.callbacks.eventCBFn
-     }),Object.keys(this.state.tabs).map(tab => 
-        e("details",{key:genUUID(),id:tab, className:"appPage slides", open: this.state.tabs[tab].active, onClick:elem=>{elem.target.parentElement.setAttribute("open",true); [].slice.call(elem.target.parentElement.parentElement.children).filter(ttab => ttab != elem).forEach(ttab => ttab.removeAttribute("open"))}},[
+    this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
+    return e("div",{key:genUUID(),className:"mainApp"}, [
+      e('fieldset', { key: genUUID(), className:`slides`, id: "controls"}, [
+        this.state?.OnLineDevices?.length && !window.location.hostname ?
+            e("select",{
+              key: genUUID(),
+              className: "landevices",
+              value: httpPrefix.substring(7),
+              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.ws?.close(),this.ReloadPage()}
+              },this.state.OnLineDevices.map(lanDev=>e("option",{
+                  key:genUUID(),
+                  className: "landevice"
+              },lanDev.devName))
+            ):null,
+        e("canvas",{
+            key: genUUID(),
+            height: 40,
+            width:100,
+            ref: (elem) => this.widget = elem
+        }),
+        e(DeviceList, {
+            key: genUUID(),
+            selectedDeviceId: this.props.selectedDeviceId,
+            devices: this.state?.devices,
+            onSet: this.props.onSelectedDeviceId,
+            onGotDevices: devices=>this.setState({devices:devices})
+        })
+      ]),
+      Object.keys(this.state.tabs).map(tab => 
+        e("details",{key:genUUID(),id:tab, className:"appPage slides", open: this.state.tabs[tab].active, onClick:elem=>{
+            elem.target.parentElement.setAttribute("open",true);
+            Object.keys(this.state.tabs).forEach(ttab => ttab == tab ? this.state.tabs[ttab].active=true : this.state.tabs[ttab].active=false );
+            [].slice.call(elem.target.parentElement.parentElement.children).filter(ttab => ttab != elem).forEach(ttab => ttab.removeAttribute("open"))
+          }},
+          [
             e("summary",{key:genUUID(),className:"appTab"},tab),
             e("div",{key:genUUID(),className: tab == "Status" ? "pageContent system-config" : "pageContent"}, this.getPage(tab))
-          ])
-        )]);
+          ]
+        )
+      )
+    ]);
   }
 }
 

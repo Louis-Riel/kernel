@@ -24,10 +24,20 @@ class LogLine extends React.Component {
 }
 
 class LogLines extends React.Component {
+    constructor(props) {
+        super(props);
+        this.mounted=false;
+        this.state={logLines:[]};
+    }
+
+    componentDidMount() {
+        this.mounted=true;
+    }
+
     AddLogLine(logln) {
-        var logLines = (this.state?.logLines||[]);
-        logLines.push(logln);
-        this.setState({ logLines: logLines });
+        if (this.mounted){
+            this.setState({ logLines: [...(this.state?.logLines||[]),logln]});
+        }
     }
 
     render() {

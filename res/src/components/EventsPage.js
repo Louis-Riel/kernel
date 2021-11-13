@@ -43,14 +43,25 @@ class LiveEventPannel extends React.Component {
         if (this.props.registerEventCallback) {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
+        this.mounted=false;
+    }
+
+    componentDidMount() {
+        this.mounted=true;
+    }
+
+    componentWillUnmount() {
+        this.mounted=false;
     }
 
     ProcessEvent(evt) {
-        var lastEvents = this.state?.lastEvents||[];
-        while (lastEvents.length > 100) {
-            lastEvents.shift();
+        if (this.mounted){
+            var lastEvents = this.state?.lastEvents||[];
+            while (lastEvents.length > 100) {
+                lastEvents.shift();
+            }
+            this.setState({lastEvents:lastEvents.concat(evt)});
         }
-        this.setState({lastEvents:lastEvents.concat(evt)});
     }
 
     parseEvent(event) {
@@ -59,10 +70,11 @@ class LiveEventPannel extends React.Component {
             return {dataType:eventType.dataType,...event};
         } else {
             var req = this.eventTypeRequests.find(req=>(req.eventBase == event.eventBase) && (req.eventId == event.eventId));
-            if (!req) {
+            if (!req && this.mounted) {
                 this.getEventDescriptor(event)
                     .then(eventType => this.setState({lastState: this.state.lastEvents
-                        .map(event => event.eventBase == eventType.eventBase && event.eventId == eventType.eventName ? {dataType:eventType.dataType,...event}:{event})}));
+                        .map(event => event.eventBase == eventType.eventBase && event.eventId == eventType.eventName ? {dataType:eventType.dataType,...event}:{event})}
+                    ));
             }
             return {...event};
         }
@@ -112,19 +124,35 @@ class LiveEventPannel extends React.Component {
 }
 
 class EventsPage extends React.Component {
+
+    componentWillUnmount() {
+        this.mounted=false;
+    }
+
+    componentDidMount(){
+        this.mounted=true;
+        if (window.location.hostname || httpPrefix)
+            this.getJsonConfig().then(cfg => this.mounted?this.setState({events: cfg.events,programs:cfg.programs}):null);
+    }
+
     getJsonConfig() {
         return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
-            fetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
-                method: 'post',
-                signal: this.props.pageControler.signal
-            }).then(data => {
-                clearTimeout(timer);
-                return data.json();
-            }).then( data => resolve(fromVersionedToPlain(data))).catch((err) => {
-                clearTimeout(timer);
-                reject(err);
-            });
+            if (window.location.hostname || httpPrefix){
+                const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
+                fetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
+                    method: 'post',
+                    signal: this.props.pageControler.signal
+                }).then(data => {
+                    clearTimeout(timer);
+                    return data.json();
+                }).then( data => resolve(fromVersionedToPlain(data)
+                )).catch((err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                });
+            } else {
+                reject({error:"Not connected"});
+            }
         });
     }
 
@@ -132,13 +160,20 @@ class EventsPage extends React.Component {
         if (this.state?.events){
             return [
                 e("div", { key: genUUID() ,className: "designer" },[
-                    e("details",{ key: genUUID() ,className: "configuredEvents", onClick:elem=>elem.target.parentElement.nextSibling.removeAttribute("open"), open:true}, [e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), e("div",{key:genUUID(),className:"content"},this.state.events?.map(event => e(Event,{ key: genUUID(),...event})))]),
-                    e("details",{ key: genUUID() ,className: "programs", onClick:elem=>elem.target.parentElement.previousSibling.removeAttribute("open")},[e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), e("div",{key:genUUID(),className:"content"},this.state.programs?.map(program => e(Program,{ key: genUUID(),...program})))])
+                    e("details",{ key: genUUID() ,className: "configuredEvents", onClick:elem=>elem.target.parentElement.nextSibling.removeAttribute("open"), open:true}, [
+                        e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), 
+                        e("div",{key:genUUID(),className:"content"},
+                            this.state.events?.map(event => e(Event,{ key: genUUID(),...event})))
+                    ]),
+                    e("details",{ key: genUUID() ,className: "programs", onClick:elem=>elem.target.parentElement.previousSibling.removeAttribute("open")},[
+                        e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), 
+                        e("div",{key:genUUID(),className:"content"},
+                            this.state.programs?.map(program => e(Program,{ key: genUUID(),...program})))
+                    ])
                 ]),
                 e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
             ];
         } else {
-            this.getJsonConfig().then(cfg => this.setState({events: cfg.events,programs:cfg.programs}));
             return e("div",{key: genUUID()},"Loading...");
         }
     }

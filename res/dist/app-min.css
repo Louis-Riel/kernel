@@ -829,3 +829,8 @@ div.mainApp > details[open] > summary {
     padding-right: 20px;
     font-family: system-ui;
 }
+
+select.landevices {
+    margin-right: 10px;
+    border-style: hidden;
+}
