@@ -389,7 +389,6 @@ void MeasureTar(void* param){
 
 void TheRest::SendTar(void* param)
 {
-    dumpTheLogs(NULL);
     BufferedFile::FlushAll();
 
     TheRest* rest = GetServer();

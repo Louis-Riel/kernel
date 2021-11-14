@@ -137,7 +137,7 @@ bool ManagedDevice::ValidateDevices(){
 
 void ManagedDevice::RunHealthCheck(void* param) {
   if (!ValidateDevices()){
-    dumpTheLogs((void*)true);
+    dumpLogs();
     if (numErrors > 5)
       esp_restart();
   } else if (lastErrorTs) {

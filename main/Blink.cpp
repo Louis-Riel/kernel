@@ -488,8 +488,8 @@ void commitTripToDisk(void *param)
 void doHibernate(void *param)
 {
   ESP_LOGV(__FUNCTION__, "Deep Sleeping %d", bumpCnt);
-  hibernate = true;
   BufferedFile::FlushAll();
+  hibernate = true;
   uint64_t ext_wakeup_on_pin_mask = 0;
   uint64_t ext_wakeup_off_pin_mask = 0;
   int curLvl = 0;
@@ -530,6 +530,7 @@ void doHibernate(void *param)
     gpio_set_level(BLINK_GPIO, 1);
     gpio_set_level(gps->enPin(), 0);
     gpio_hold_dis(gps->enPin());
+    delete gps;
   }
 
   //CreateManagedTask(flash, "flashy", 2048, (void *)10, tskIDLE_PRIORITY, NULL);
@@ -540,9 +541,6 @@ void doHibernate(void *param)
   ESP_ERROR_CHECK(esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM, ESP_PD_OPTION_OFF));
   //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
   //CLEAR_PERI_REG_MASK(RTC_CNTL_BROWN_OUT_REG, RTC_CNTL_BROWN_OUT_RST_ENA);
-  if (gps) {
-    delete gps;
-  }
 
   if (TheRest::GetServer()) {
     delete TheRest::GetServer();
@@ -552,7 +550,6 @@ void doHibernate(void *param)
     delete TheWifi::GetInstance();
   }
 
-  dumpTheLogs((void*)true);
   ESP_LOGD(__FUNCTION__, "Waiting for sleepers");
   WaitToSleepExceptFor("doHibernate");
   ESP_LOGD(__FUNCTION__, "Hybernating");
@@ -566,7 +563,7 @@ void Hibernate()
     EventGroupHandle_t eg = getAppEG();
     EventBits_t bits = xEventGroupGetBits(getAppEG());
     ESP_LOGV(__FUNCTION__, "Hibernating");
-    CreateWokeBackgroundTask(doHibernate, "doHibernate", 4096, NULL, tskIDLE_PRIORITY, &hybernator);
+    CreateWokeBackgroundTask(doHibernate, "doHibernate", 8192, NULL, tskIDLE_PRIORITY, &hybernator);
     //xEventGroupSetBits(eg,app_bits_t::HIBERNATE);
   }
 }

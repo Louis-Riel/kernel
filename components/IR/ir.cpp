@@ -105,7 +105,7 @@ void IRDecoder::IRPoller(void *arg){
             if ((code=ir->read(items,length))){
                 length /= 4;
                 if (cJSON_PrintPreallocated(ManagedDevice::BuildStatus(ir),ir->buf,1024,false)){
-                    AppConfig::SignalStateChange(state_change_t::MAIN);
+                    //AppConfig::SignalStateChange(state_change_t::MAIN);
                     esp_event_post(ir->eventBase,eventIds::CODE,ir->buf,strlen(ir->buf),portMAX_DELAY);
                 } else {
                     ESP_LOGW(__FUNCTION__,"Could not parse status");

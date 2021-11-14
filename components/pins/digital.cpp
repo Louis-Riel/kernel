@@ -118,9 +118,9 @@ void Pin::RefrestState(){
     if (curState != pinStatus->valueint) {
         cJSON_SetIntValue(pinStatus,curState);
         ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, eventBase,pinStatus->valueint?"On":"Off");
-        AppConfig::SignalStateChange(state_change_t::EVENT);
+        //AppConfig::SignalStateChange(state_change_t::EVENT);
         if (cJSON_PrintPreallocated(ManagedDevice::BuildStatus(this),this->buf,1024,false)){
-            AppConfig::SignalStateChange(state_change_t::MAIN);
+            //AppConfig::SignalStateChange(state_change_t::MAIN);
             esp_event_post(eventBase,pinStatus->valueint ? eventIds::ON : eventIds::OFF,buf,strlen(buf),portMAX_DELAY);
         } else {
             ESP_LOGW(__FUNCTION__,"Could not parse status");
@@ -221,7 +221,7 @@ bool Pin::ProcessEvent(Pin::eventIds event,uint8_t state){
         if (!isRtcGpio || flags&gpio_driver_t::driver_type_t::digital_out) {
             cJSON_SetIntValue(pinStatus,state);
             if (cJSON_PrintPreallocated(ManagedDevice::BuildStatus(this),this->buf,1024,false)){
-                AppConfig::SignalStateChange(state_change_t::MAIN);
+                //AppConfig::SignalStateChange(state_change_t::MAIN);
                 esp_event_post(eventBase,pinStatus->valueint ? eventIds::ON : eventIds::OFF,buf,strlen(buf),portMAX_DELAY);
                 return true;
             } else {

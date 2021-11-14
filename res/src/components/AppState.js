@@ -15,6 +15,19 @@ class StateCommands extends React.Component {
 }
 
 class AppState extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = props.json;
+    }
+
+    componentWillUnmount() {
+        this.mounted=false;
+    }
+
+    componentDidMount() {
+        this.mounted=true;
+    }
+
     Parse(json) {
         if (json) {
             return e("div",{key: genUUID(),className:"statusclass"},this.getSortedProperties(json).map(fld => {
@@ -24,7 +37,7 @@ class AppState extends React.Component {
                     }
                     return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
                 } else if (typeof json[fld] == 'object') {
-                    return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus })};
+                    return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus,registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
                 } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
                     return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
                 }
@@ -65,14 +78,25 @@ class AppState extends React.Component {
         return Array.isArray(json[f1]) ? "array" : typeof json[f1] == 'object' ? json[f1]["commands"] ? "commandable" : "object" : "field";
     }
 
+    ProcessEvent(evt) {
+        if (this.mounted && evt?.data){
+            if ((evt.data?.class == this.state.class) && (evt.data?.name == this.state.name)){
+                this.setState({...evt.data});
+            }
+        }
+    }
+
     render() {
-        if (this.props.json === null || this.props.json === undefined) {
+        if (this.state === null || this.state === undefined) {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         }
         if (this.props.label != null) {
-            return e("fieldset", { id: `fs${this.id}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.props.json)]);
+            if (this.props.registerEventInstanceCallback) {
+                this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.state.className}-${this.state.name}`);
+            }
+            return e("fieldset", { id: `fs${this.props.label}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.state)]);
         } else {
-            return e("fieldset", { key: genUUID(), id: `fs${this.id}` }, this.Parse(this.props.json));
+            return e("fieldset", { key: genUUID(), id: `fs${this.id}` }, this.Parse(this.state));
         }
     }
 }
@@ -93,7 +117,7 @@ class MainAppState extends React.Component {
         if (this.props.registerStateCallback) {
             this.props.registerStateCallback(this.refreshStatus.bind(this));
         }
-}
+    }
 
     updateAppStatus() {
         this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
@@ -195,7 +219,8 @@ class MainAppState extends React.Component {
                     key: genUUID(), 
                     json: this.state.status, 
                     selectedDeviceId: this.props.selectedDeviceId,
-                    updateAppStatus: this.updateAppStatus.bind(this)
+                    updateAppStatus: this.updateAppStatus.bind(this),
+                    registerEventInstanceCallback: this.props.registerEventInstanceCallback
                 })
             ];
         } else {

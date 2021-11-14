@@ -32,14 +32,14 @@ class MainApp extends React.Component {
 
 //#region Control Pannel
   lookForDevs() {
-    var devices = [];
+    this.state.lanDevices = [];
     for (var idx = 254; idx > 0; idx--) {
-        devices.push(`192.168.1.${idx}`);
+      this.state.lanDevices.push(`192.168.1.${idx}`);
     }
     var foundDevices=[];
-    for (var idx = 0; idx < Math.min(10, devices.length); idx++) {
-        if (devices.length) {
-            this.scanForDevices(devices,foundDevices);
+    for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
+        if (this.state.lanDevices.length) {
+            this.scanForDevices(this.state.lanDevices,foundDevices);
         }
     }
   }
@@ -122,7 +122,7 @@ class MainApp extends React.Component {
     this.state.connecting=true;
     this.state.running=false;
     var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false;this.openWs()}, 3000);
+    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false}, 3000);
     ws.onmessage = (event) => {
         clearTimeout(stopItWithThatShit);
         if (!this.state.running || this.state.timeout) {
@@ -224,6 +224,10 @@ class MainApp extends React.Component {
     canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#0396966b") : "#000000"
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
     canvas.fill();
+    if (this.state?.lanDevices?.length) {
+      this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight * (this.state.lanDevices.length/254), cornerSize);
+    }
+
     canvas.stroke();
   }
 
@@ -313,7 +317,7 @@ class MainApp extends React.Component {
         startY: 5,
         renderer: this.drawSprite
     });
-    this.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn(event));
+    this.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn.fn(event));
   }
 //#endregion
 
@@ -368,9 +372,18 @@ class MainApp extends React.Component {
       this.callbacks.logCBFn.push(logCBFn);
   }
 
+  registerEventInstanceCallback(eventCBFn,instance) {
+    var cur = null;
+    if (!(cur=this.callbacks.eventCBFn.find(fn => fn.fn.name == eventCBFn.name && fn.instance === instance)))
+      this.callbacks.eventCBFn.push({fn:eventCBFn,instance:instance});
+    else {
+      cur.fn=eventCBFn;
+    }
+  }
+
   registerEventCallback(eventCBFn) {
-    if (!this.callbacks.eventCBFn.find(fn => fn.name == eventCBFn.name))
-      this.callbacks.eventCBFn.push(eventCBFn);
+    if (!this.callbacks.eventCBFn.find(fn => fn.fn.name == eventCBFn.name && fn.instance === undefined))
+      this.callbacks.eventCBFn.push({fn:eventCBFn});
   }
 //#endregion
 
@@ -379,7 +392,7 @@ class MainApp extends React.Component {
       return e(StorageViewer, { pageControler: this.state.pageControler, active: this.state.tabs["Storage"].active});
     }
     if (name == "Status") {
-      return e(MainAppState,  { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Status"].active, registerStateCallback:this.registerStateCallback.bind(this) });
+      return e(MainAppState,  { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Status"].active, registerEventInstanceCallback:this.registerEventInstanceCallback.bind(this), registerStateCallback:this.registerStateCallback.bind(this) });
     }
     if (name == "Config") {
       return e(ConfigPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Config"].active });

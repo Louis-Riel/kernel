@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "";//"http://fourmger";
+var httpPrefix = "";//"http://irtracker";
 
 //#region SHA-1
 /*
@@ -516,6 +516,19 @@ class StateCommands extends React.Component {
 }
 
 class AppState extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = props.json;
+    }
+
+    componentWillUnmount() {
+        this.mounted=false;
+    }
+
+    componentDidMount() {
+        this.mounted=true;
+    }
+
     Parse(json) {
         if (json) {
             return e("div",{key: genUUID(),className:"statusclass"},this.getSortedProperties(json).map(fld => {
@@ -525,7 +538,7 @@ class AppState extends React.Component {
                     }
                     return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
                 } else if (typeof json[fld] == 'object') {
-                    return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus })};
+                    return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus,registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
                 } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
                     return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
                 }
@@ -566,14 +579,25 @@ class AppState extends React.Component {
         return Array.isArray(json[f1]) ? "array" : typeof json[f1] == 'object' ? json[f1]["commands"] ? "commandable" : "object" : "field";
     }
 
+    ProcessEvent(evt) {
+        if (this.mounted && evt?.data){
+            if ((evt.data?.class == this.state.class) && (evt.data?.name == this.state.name)){
+                this.setState({...evt.data});
+            }
+        }
+    }
+
     render() {
-        if (this.props.json === null || this.props.json === undefined) {
+        if (this.state === null || this.state === undefined) {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         }
         if (this.props.label != null) {
-            return e("fieldset", { id: `fs${this.id}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.props.json)]);
+            if (this.props.registerEventInstanceCallback) {
+                this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.state.className}-${this.state.name}`);
+            }
+            return e("fieldset", { id: `fs${this.props.label}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.state)]);
         } else {
-            return e("fieldset", { key: genUUID(), id: `fs${this.id}` }, this.Parse(this.props.json));
+            return e("fieldset", { key: genUUID(), id: `fs${this.id}` }, this.Parse(this.state));
         }
     }
 }
@@ -594,7 +618,7 @@ class MainAppState extends React.Component {
         if (this.props.registerStateCallback) {
             this.props.registerStateCallback(this.refreshStatus.bind(this));
         }
-}
+    }
 
     updateAppStatus() {
         this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
@@ -696,7 +720,8 @@ class MainAppState extends React.Component {
                     key: genUUID(), 
                     json: this.state.status, 
                     selectedDeviceId: this.props.selectedDeviceId,
-                    updateAppStatus: this.updateAppStatus.bind(this)
+                    updateAppStatus: this.updateAppStatus.bind(this),
+                    registerEventInstanceCallback: this.props.registerEventInstanceCallback
                 })
             ];
         } else {
@@ -1766,14 +1791,14 @@ class MainApp extends React.Component {
 
 //#region Control Pannel
   lookForDevs() {
-    var devices = [];
+    this.state.lanDevices = [];
     for (var idx = 254; idx > 0; idx--) {
-        devices.push(`192.168.1.${idx}`);
+      this.state.lanDevices.push(`192.168.1.${idx}`);
     }
     var foundDevices=[];
-    for (var idx = 0; idx < Math.min(10, devices.length); idx++) {
-        if (devices.length) {
-            this.scanForDevices(devices,foundDevices);
+    for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
+        if (this.state.lanDevices.length) {
+            this.scanForDevices(this.state.lanDevices,foundDevices);
         }
     }
   }
@@ -1856,7 +1881,7 @@ class MainApp extends React.Component {
     this.state.connecting=true;
     this.state.running=false;
     var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false;this.openWs()}, 3000);
+    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false}, 3000);
     ws.onmessage = (event) => {
         clearTimeout(stopItWithThatShit);
         if (!this.state.running || this.state.timeout) {
@@ -1958,6 +1983,10 @@ class MainApp extends React.Component {
     canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#0396966b") : "#000000"
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
     canvas.fill();
+    if (this.state?.lanDevices?.length) {
+      this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight * (this.state.lanDevices.length/254), cornerSize);
+    }
+
     canvas.stroke();
   }
 
@@ -2047,7 +2076,7 @@ class MainApp extends React.Component {
         startY: 5,
         renderer: this.drawSprite
     });
-    this.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn(event));
+    this.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn.fn(event));
   }
 //#endregion
 
@@ -2102,9 +2131,18 @@ class MainApp extends React.Component {
       this.callbacks.logCBFn.push(logCBFn);
   }
 
+  registerEventInstanceCallback(eventCBFn,instance) {
+    var cur = null;
+    if (!(cur=this.callbacks.eventCBFn.find(fn => fn.fn.name == eventCBFn.name && fn.instance === instance)))
+      this.callbacks.eventCBFn.push({fn:eventCBFn,instance:instance});
+    else {
+      cur.fn=eventCBFn;
+    }
+  }
+
   registerEventCallback(eventCBFn) {
-    if (!this.callbacks.eventCBFn.find(fn => fn.name == eventCBFn.name))
-      this.callbacks.eventCBFn.push(eventCBFn);
+    if (!this.callbacks.eventCBFn.find(fn => fn.fn.name == eventCBFn.name && fn.instance === undefined))
+      this.callbacks.eventCBFn.push({fn:eventCBFn});
   }
 //#endregion
 
@@ -2113,7 +2151,7 @@ class MainApp extends React.Component {
       return e(StorageViewer, { pageControler: this.state.pageControler, active: this.state.tabs["Storage"].active});
     }
     if (name == "Status") {
-      return e(MainAppState,  { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Status"].active, registerStateCallback:this.registerStateCallback.bind(this) });
+      return e(MainAppState,  { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Status"].active, registerEventInstanceCallback:this.registerEventInstanceCallback.bind(this), registerStateCallback:this.registerStateCallback.bind(this) });
     }
     if (name == "Config") {
       return e(ConfigPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Config"].active });

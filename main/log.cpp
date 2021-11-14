@@ -25,17 +25,18 @@ const char* getLogFName(){
 }
 
 void dumpTheLogs(void* params){
-    if (!logFile) {
+    if (!logFile && curLogBuf && strlen(curLogBuf)) {
         struct tm timeinfo;
         time_t now = 0;
         time(&now);
         char* lpath=(char*)dmalloc(255);
         char* logfname=(char*)dmalloc(355);
-        sprintf(lpath,"%s/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
+        sprintf(lpath,"%s/logs/%s-%%Y-%%m-%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
         localtime_r(&now, &timeinfo);
         strftime(logfname, 254, lpath, &timeinfo);
-        //printf("\nlogname1:%s\n",logfname);
+        //printf("\nlogname:%s\n",logfname);
         logFile = new BufferedFile(logfname);
+        logFile->Write((uint8_t*)curLogBuf,strlen(curLogBuf));
         ldfree(lpath);
         ldfree(logfname);
         ESP_LOGD(__FUNCTION__,"Flushing logs");
@@ -44,7 +45,10 @@ void dumpTheLogs(void* params){
     if (dltask == NULL) {
         dltask = (TaskHandle_t)1; //Just not null
     }
-    logFile->Flush();
+
+    if (logFile)
+        logFile->Flush();
+
     dltask = NULL;
 }
 
@@ -54,13 +58,8 @@ void dumpLogs(){
         return;
     }
 
-    if (!logFile) {
-        ESP_LOGW(__FUNCTION__,"No logs");
-        return;
-    }
-
     if (dltask == NULL) {
-        CreateWokeBackgroundTask(dumpTheLogs, "dumpLogs", 4096, (void*)true, tskIDLE_PRIORITY, &dltask);
+        CreateWokeBackgroundTask(dumpTheLogs, "dumpLogs", 8192, (void*)true, tskIDLE_PRIORITY+10, &dltask);
     }
 }
 
