@@ -90,7 +90,7 @@ class LiveEventPannel extends React.Component {
             } else {
                 var toControler = new AbortController();
                 const timer = setTimeout(() => toControler.abort(), 3000);
-                fetch(`${httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
+                wfetch(`${httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
                     method: 'post',
                     signal: toControler.signal
                 }).then(data => {
@@ -139,7 +139,7 @@ class EventsPage extends React.Component {
         return new Promise((resolve, reject) => {
             if (window.location.hostname || httpPrefix){
                 const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
-                fetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
+                wfetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
                     method: 'post',
                     signal: this.props.pageControler.signal
                 }).then(data => {

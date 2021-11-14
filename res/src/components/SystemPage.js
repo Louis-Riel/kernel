@@ -50,7 +50,7 @@ class LogLines extends React.Component {
 
 class SystemPage extends React.Component {
     SendCommand(body) {
-        return fetch(`${httpPrefix}/status/cmd`, {
+        return wfetch(`${httpPrefix}/status/cmd`, {
             method: 'PUT',
             body: JSON.stringify(body)
         }).then(res => res.text().then(console.log))

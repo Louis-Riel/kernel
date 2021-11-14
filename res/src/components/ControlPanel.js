@@ -49,7 +49,7 @@ class ControlPanel extends React.Component {
             var abort = new AbortController()
             var timer = setTimeout(() => abort.abort(), 1000);
             var onLine=false;
-            fetch(`http://${device}/config/`, {
+            wfetch(`http://${device}/config/`, {
                 method: 'post',
                 signal: abort.signal
             }).then(data => {clearTimeout(timer); onLine=true; return data.json()})

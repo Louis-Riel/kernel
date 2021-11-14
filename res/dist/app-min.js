@@ -265,7 +265,7 @@ class BoolInput extends React.Component {
 }
 class CmdButton extends React.Component {
     runIt() {
-        fetch(`${httpPrefix}/status/cmd`, {
+        wfetch(`${httpPrefix}/status/cmd`, {
             method: this.props.HTTP_METHOD,
             body: JSON.stringify({command: this.props.command,name: this.props.name, param1: this.props.param1, param2: this.props.param2})
         }).then(data => data.text())
@@ -278,14 +278,15 @@ class CmdButton extends React.Component {
     }
 }
 class DeviceList extends React.Component {
+
     getDevices() {
         if (window.location.host || httpPrefix){
-            fetch(`${httpPrefix}/files/lfs/config`, {method: 'post'})
+            wfetch(`${httpPrefix}/files/lfs/config`, {method: 'post'})
             .then(data => data.json())
             .then(json => json.filter(fentry => fentry.ftype == "file"))
             .then(devFiles => {
                 var devices = devFiles.map(devFile=> devFile.name.substr(0,devFile.name.indexOf(".")));
-                this.setState({ devices: devices });
+                this.setState({ devices: devices, httpPrefix:httpPrefix });
                 if (this.props?.onGotDevices)
                     this.props.onGotDevices(devices);
             })
@@ -293,18 +294,24 @@ class DeviceList extends React.Component {
         }
     }
 
-    render() {
-        if (!this.state?.devices && !this.props.devices && !this.state?.error) {
-            this.getDevices();
+    componentDidMount() {
+        this.getDevices();
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps?.httpPrefix != this.props.httpPrefix) {
+            this.getDevices(this.props.httpPrefix);
         }
-        return this.state?.devices?.length || this.props?.devices?.length <= 1 || this.state?.error ? null :
-            this.state?.devices || this.props?.devices ?
-                e("select", {
-                    key: genUUID(),
-                    value: this.props.selectedDeviceId,
-                    onChange: (elem) => this.props?.onSet(elem.target.value)
-                }, (this.state?.devices||this.props.devices).map(device => e("option", { key: genUUID(), value: device }, device))):
-                null
+    }
+
+    render() {
+        return this.state?.devices?.length > 1 ?
+            e("select", {
+                key: genUUID(),
+                value: this.props.selectedDeviceId,
+                onChange: (elem) => this.props?.onSet(elem.target.value)
+            }, (this.state?.devices||this.props.devices).map(device => e("option", { key: genUUID(), value: device }, device))):
+            null
     }
 }
 class IntInput extends React.Component {
@@ -646,7 +653,7 @@ class MainAppState extends React.Component {
             if (this.props.selectedDeviceId == "current") {
                 Promise.all(requests.map(request => {
                     return new Promise((resolve, reject) => {
-                        fetch(`${httpPrefix}${request.url}`, {
+                        wfetch(`${httpPrefix}${request.url}`, {
                             method: 'post',
                             signal: abort.signal
                         }).then(data => data.json())
@@ -682,7 +689,7 @@ class MainAppState extends React.Component {
                         document.getElementById("Status").style.opacity = 0.5
                         if (errors[0].waitFor) {
                             setTimeout(() => {
-                                if (err.message != "Failed to fetch")
+                                if (err.message != "Failed to wfetch")
                                     console.error(err);
                                 this.updateStatuses(requests, newState);
                             }, errors[0].waitFor);
@@ -692,7 +699,7 @@ class MainAppState extends React.Component {
                     }
                 });
             } else if (this.props.selectedDeviceId) {
-                fetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
+                wfetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
                     method: 'get',
                     signal: abort.signal
                 }).then(data => data.json()).then(fromVersionedToPlain)
@@ -753,7 +760,7 @@ class ConfigPage extends React.Component {
         return new Promise((resolve, reject) => {
             if (window.location.host || httpPrefix){
                 const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
-                fetch(`${httpPrefix}/config${devid&&devid!="current"?`/${devid}`:""}`, {
+                wfetch(`${httpPrefix}/config${devid&&devid!="current"?`/${devid}`:""}`, {
                     method: 'post',
                     signal: this.props.pageControler.signal
                 }).then(data => {
@@ -771,7 +778,7 @@ class ConfigPage extends React.Component {
 
     SaveForm(form) {
         this.getJsonConfig(this.props.selectedDeviceId).then(vcfg => fromPlainToVersionned(this.state.config, vcfg))
-            .then(cfg => fetch(form.target.action.replace("file://", httpPrefix) + "/" + (this.props.selectedDeviceId == "current" ? "" : this.props.selectedDeviceId), {
+            .then(cfg => wfetch(form.target.action.replace("file://", httpPrefix) + "/" + (this.props.selectedDeviceId == "current" ? "" : this.props.selectedDeviceId), {
                 method: 'put',
                 body: JSON.stringify(cfg)
             }).then(res => alert(JSON.stringify(res)))
@@ -842,7 +849,7 @@ class ControlPanel extends React.Component {
             var abort = new AbortController()
             var timer = setTimeout(() => abort.abort(), 1000);
             var onLine=false;
-            fetch(`http://${device}/config/`, {
+            wfetch(`http://${device}/config/`, {
                 method: 'post',
                 signal: abort.signal
             }).then(data => {clearTimeout(timer); onLine=true; return data.json()})
@@ -1318,7 +1325,7 @@ class LiveEventPannel extends React.Component {
             } else {
                 var toControler = new AbortController();
                 const timer = setTimeout(() => toControler.abort(), 3000);
-                fetch(`${httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
+                wfetch(`${httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
                     method: 'post',
                     signal: toControler.signal
                 }).then(data => {
@@ -1367,7 +1374,7 @@ class EventsPage extends React.Component {
         return new Promise((resolve, reject) => {
             if (window.location.hostname || httpPrefix){
                 const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
-                fetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
+                wfetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
                     method: 'post',
                     signal: this.props.pageControler.signal
                 }).then(data => {
@@ -1411,7 +1418,7 @@ class FirmwareUpdater extends React.Component {
         form.preventDefault();
         this.setState({ loaded: `Sending ${this.state.len} firmware bytes` })
         if (this.state.fwdata && this.state.md5) {
-            return fetch(`${httpPrefix}/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
+            return wfetch(`${httpPrefix}/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
                 method: 'post',
                 body: this.state.fwdata
             }).then(res => res.text())
@@ -1422,7 +1429,7 @@ class FirmwareUpdater extends React.Component {
     waitForDevFlashing() {
         var abort = new AbortController();
         var stopAbort = setTimeout(() => { abort.abort() }, 1000);
-        fetch(`${httpPrefix}/status/app`, {
+        wfetch(`${httpPrefix}/status/app`, {
             method: 'post',
             signal: abort.signal
         }).then(res => {
@@ -1524,7 +1531,7 @@ class SFile extends React.Component {
                 key: genUUID(),
                 href: "#",
                 onClick: () => {
-                    fetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
+                    wfetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
                         method: 'post',
                         headers: {
                             ftype: this.props.file.ftype == "file" ? "file" : "directory",
@@ -1561,7 +1568,7 @@ class StorageViewer extends React.Component {
         if (fileStatsToFetch.length) {
             var fileToFetch = fileStatsToFetch.pop()
             var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
-            fetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
+            wfetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
                 method: 'post',
                 signal: this.props.pageControler.signal
             }).then(data => {
@@ -1585,7 +1592,7 @@ class StorageViewer extends React.Component {
     fetchFiles() {
         if (window.location.host || httpPrefix){
             var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
-            fetch(`${httpPrefix}/files` + this.state.path, {
+            wfetch(`${httpPrefix}/files` + this.state.path, {
                 method: 'post',
                 signal: this.props.pageControler.signal
             }).then(data => {
@@ -1736,7 +1743,7 @@ class LogLines extends React.Component {
 
 class SystemPage extends React.Component {
     SendCommand(body) {
-        return fetch(`${httpPrefix}/status/cmd`, {
+        return wfetch(`${httpPrefix}/status/cmd`, {
             method: 'PUT',
             body: JSON.stringify(body)
         }).then(res => res.text().then(console.log))
@@ -1757,13 +1764,64 @@ class SystemPage extends React.Component {
         ];
     }
 }
+var app=null;
+
+function wfetch(requestInfo, params) {
+  return new Promise((resolve,reject) => {
+    var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "browser");
+    var inSpot = getInSpot(anims, "browser");
+    var reqAnim = inSpot;
+
+    if (inSpot) {
+      inSpot.weight++;
+    } else {
+      app.anims.push((reqAnim={
+          type:"post",
+          from: "browser",
+          weight: 1,
+          lineColor: '#00ffff',
+          shadowColor: '#00ffff',
+          startY: 5,
+          renderer: app.drawSprite
+      }));
+    }
+
+    fetch(requestInfo,params).then(resp => {
+      var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
+      var inSpot = getInSpot(anims, "chip");
+
+      if (inSpot) {
+        inSpot.weight++;
+      } else {
+        app.anims.push({
+            type:"post",
+            from: "chip",
+            weight: 1,
+            lineColor: '#00ffff',
+            shadowColor: '#00ffff',
+            startY: 25,
+            renderer: app.drawSprite
+        });
+      }
+      resolve(resp);
+    })
+    .catch(err => {
+      reqAnim.color="red";
+      reqAnim.lineColor="red";
+      reject(err);
+    });
+  })
+}
+
 class MainApp extends React.Component {
   constructor(props) {
     super(props);
     this.anims=[];
+    app=this;
     this.state = {
       pageControler: this.GetPageControler(),
       selectedDeviceId: "current",
+      httpPrefix: httpPrefix,
       tabs: { 
         Storage: {active: true}, 
         Status:  {active: false}, 
@@ -1780,13 +1838,19 @@ class MainApp extends React.Component {
       this.openWs();
     }
   }
-
-  componentDidMount() {
+  
+  componentDidUpdate(prevProps, prevState, snapshot) {
     this.mountWidget();
   }
 
-  componentDidUpdate(prevProps, prevState, snapshot) {
-    //this.mountWidget();
+  componentDidMount() {
+    app=this;
+    this.mountWidget();
+    this.mounted=true;
+  }
+
+  componentWillUnmount(){
+    this.mounted=false;
   }
 
 //#region Control Pannel
@@ -1795,6 +1859,7 @@ class MainApp extends React.Component {
     for (var idx = 254; idx > 0; idx--) {
       this.state.lanDevices.push(`192.168.1.${idx}`);
     }
+    this.state.lanDevices=this.state.lanDevices.sort( () => .5 - Math.random() );
     var foundDevices=[];
     for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
         if (this.state.lanDevices.length) {
@@ -1809,42 +1874,46 @@ class MainApp extends React.Component {
       var abort = new AbortController()
       var timer = setTimeout(() => abort.abort(), 1000);
       var onLine=false;
-      fetch(`http://${device}/config/`, {
+      wfetch(`http://${device}/config/`, {
           method: 'post',
           signal: abort.signal
       }).then(data => {clearTimeout(timer); onLine=true; return data.json()})
         .then(fromVersionedToPlain)
         .then(dev => {
             if (dev?.deviceid) {
+              var anims = this.anims.filter(anim => anim.type == "ping" && anim.from=="chip");
+              var inSpot = getInSpot(anims, "chip");
+              if (inSpot) {
+                inSpot.weight++;
+              } else {
+                  this.anims.push({
+                      type:"ping",
+                      from: "chip",
+                      weight: 1,
+                      lineColor: '#00ffff',
+                      shadowColor: '#00ffff',
+                      startY: 30,
+                      renderer: this.drawSprite
+                  })
+              }
               foundDevices.push(dev);
-            }
-            if (devices.length) {
-              this.scanForDevices(devices,foundDevices);
-            } else {
-              if (!this.state?.OnLineDevices?.length) {
-                this.state.OnLineDevices=foundDevices;
+              if (!httpPrefix){
                 httpPrefix=`http://${foundDevices[0].devName}`
                 this.state.autoRefresh=true;
                 if (!this.state.connecting && !this.state.connected){
                   this.openWs();
-                  this.ReloadPage()
                 }
               }
+              this.setState({OnLineDevices: foundDevices});
+            }
+
+            if (devices.length) {
+              this.scanForDevices(devices,foundDevices);
             }
           })
         .catch(err => {
           if (devices.length) {
               this.scanForDevices(devices,foundDevices);
-          } else {
-              if (!this.state?.OnLineDevices?.length) {
-                  this.state.OnLineDevices=foundDevices;
-                  httpPrefix=`http://${foundDevices[0].devName}`
-                  this.state.autoRefresh=true;
-                  if (!this.state.connecting && !this.state.connected){
-                    this.openWs();
-                    this.ReloadPage();
-                  }
-              }
           }
         });
     }
@@ -1860,7 +1929,8 @@ class MainApp extends React.Component {
         this.state.autoRefresh?this.openWs():this.closeWs();
       }
     });
-    window.requestAnimationFrame(this.drawDidget.bind(this));
+    if (!this.mounted)
+      window.requestAnimationFrame(this.drawDidget.bind(this));
   }
 
   closeWs() {
@@ -1933,7 +2003,7 @@ class MainApp extends React.Component {
     canvas.clearRect(0,0,100,40);
 
     this.browser(canvas, 2, 2, 30, 30, 10);
-    this.chip(canvas, 100-20-10, 2, 20, 30, 5);
+    this.chip(canvas, 70, 2, 20, 30, 5);
 
     if (this.anims.length){
         var animGroups = this.anims.reduce((pv,cv)=>{
@@ -1955,26 +2025,53 @@ class MainApp extends React.Component {
   drawSprite(anim, canvas) {
     if (!anim.state) {
         anim.state = 1;
-        anim.x = anim.startX;
+        anim.x = anim.from == "chip" ? this.chipX : this.browserX;
+        anim.endX = anim.from == "chip" ? this.browserX : this.chipX;
+        anim.direction=anim.from=="browser"?1:-1;
         anim.y = anim.startY;
     } else {
-        anim.x -= 3+anim.weight;
+        anim.x += (anim.direction)*(2);
+    }
+    var width=Math.min(15,4 + (anim.weight));
+    if ((anim.y-(width/2)) <= 0) {
+      anim.y = width;
     }
     canvas.strokeStyle = anim.lineColor;
     canvas.lineWidth = 1;
     canvas.shadowBlur = 1;
     canvas.shadowColor = anim.shadowColor;
     canvas.fillStyle = anim.color;
-    canvas.moveTo(anim.x, anim.y);
-    canvas.arc(anim.x, anim.y, 4 + (anim.weight), 0, 2 * Math.PI);
-    canvas.fill();
-    if (anim.x < 30) {
+    canvas.moveTo(anim.x+width, anim.y);
+    canvas.arc(anim.x, anim.y, width, 0, 2 * Math.PI);
+
+    if (anim.from == "browser")
+      canvas.fill();
+
+    if (anim.weight > 1) {
+      var today = ""+anim.weight
+      canvas.font = Math.min(20,8+anim.weight)+"px Helvetica";
+      var txtbx = canvas.measureText(today);
+      if (anim.from == "browser") {
+        canvas.strokeStyle = "black";
+        canvas.fillStyle = "black"
+      }
+      canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
+      if (anim.from == "browser") {
+        canvas.strokeStyle=anim.lineColor;
+        canvas.fillStyle=anim.color;
+      }
+    }    
+
+    canvas.stroke();
+    
+    if (anim.direction==1?(anim.x > anim.endX):(anim.x < anim.endX)) {
         anim.state = 2;
     }
     return anim;
   }
 
   browser(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
+    this.browserX=startX+boxWidht;
     canvas.beginPath();
     canvas.strokeStyle = '#00ffff';
     canvas.lineWidth = 2;
@@ -1991,6 +2088,7 @@ class MainApp extends React.Component {
   }
 
   chip(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
+    this.chipX=startX;
     canvas.beginPath();
     const pinWidth = 4;
     const pinHeight = 2;
@@ -2031,18 +2129,18 @@ class MainApp extends React.Component {
 
   AddLogLine(ln) {
     var anims = this.anims.filter(anim => anim.type == "log");
-    var curAnims = anims.filter(anim => anim.level == ln[0]);
-    if ((anims.length > 4) && (curAnims.length>1)) {
-        (curAnims.find(anim => anim.weight < 3) || curAnims[0]).weight++;
+    var inSpot = getInSpot(anims, "chip");
+    if (inSpot) {
+      inSpot.weight++;
     } else {
         this.anims.push({
             type:"log",
+            from: "chip",
             level:ln[0],
             color:ln[0] == 'D' ? "green" : ln[0] == 'W' ? "yellow" : "red",
             weight: 1,
             lineColor: '#00ffff',
             shadowColor: '#00ffff',
-            startX: 70,
             startY: 25,
             renderer: this.drawSprite
         })
@@ -2051,31 +2149,43 @@ class MainApp extends React.Component {
   }
 
   UpdateState(state) {
-    this.anims.push({
+    var anims = this.anims.filter(anim => anim.type == "state");
+    var inSpot = getInSpot(anims, "chip");
+    if (inSpot) {
+      inSpot.weight++;
+    } else {
+      this.anims.push({
         type:"state",
+        from: "chip",
         color:"#00ffff",
         weight: 1,
         lineColor: '#00ffff',
         shadowColor: '#00ffff',
-        startX: 70,
-        startY: 15,
+        startY: 5,
         renderer: this.drawSprite
-    });
+      });
+    }
     this.callbacks.stateCBFn.forEach(stateCBFn=>stateCBFn(state));
   }
 
   ProcessEvent(event) {
-    this.anims.push({
-        type:"event",
-        eventBase: event.eventBase,
-        color:"#7fffd4",
-        weight: 1,
-        lineColor: '#00ffff',
-        shadowColor: '#00ffff',
-        startX: 70,
-        startY: 5,
-        renderer: this.drawSprite
-    });
+    var anims = this.anims.filter(anim => anim.type == "event");
+    var inSpot = getInSpot(anims, "chip");
+    if (inSpot) {
+      inSpot.weight++;
+    } else {
+      this.anims.push({
+          type:"event",
+          from: "chip",
+          eventBase: event.eventBase,
+          color:"#7fffd4",
+          weight: 1,
+          lineColor: '#00ffff',
+          shadowColor: '#00ffff',
+          startY: 15,
+          renderer: this.drawSprite
+      });
+    }
     this.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn.fn(event));
   }
 //#endregion
@@ -2178,7 +2288,7 @@ class MainApp extends React.Component {
               key: genUUID(),
               className: "landevices",
               value: httpPrefix.substring(7),
-              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.ws?.close(),this.ReloadPage()}
+              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
               },this.state.OnLineDevices.map(lanDev=>e("option",{
                   key:genUUID(),
                   className: "landevice"
@@ -2192,10 +2302,9 @@ class MainApp extends React.Component {
         }),
         e(DeviceList, {
             key: genUUID(),
-            selectedDeviceId: this.props.selectedDeviceId,
-            devices: this.state?.devices,
-            onSet: this.props.onSelectedDeviceId,
-            onGotDevices: devices=>this.setState({devices:devices})
+            selectedDeviceId: this.state.selectedDeviceId,
+            httpPrefix: httpPrefix,
+            onSet: val=>this.state?.selectedDeviceId!=val?this.setState({selectedDeviceId:val}):null
         })
       ]),
       Object.keys(this.state.tabs).map(tab => 
@@ -2221,3 +2330,9 @@ ReactDOM.render(
   }),
   document.querySelector(".slider")
 );
+function getInSpot(anims, origin) {
+  return anims
+        .filter(anim => anim.from == origin)
+        .find(anim => (anim.x === undefined) || (origin == "browser" ? anim.x <= (app.browserX + 4 + anim.weight) : anim.x >= (app.chipX - 4- anim.weight)));
+}
+

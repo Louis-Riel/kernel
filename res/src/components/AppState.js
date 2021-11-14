@@ -145,7 +145,7 @@ class MainAppState extends React.Component {
             if (this.props.selectedDeviceId == "current") {
                 Promise.all(requests.map(request => {
                     return new Promise((resolve, reject) => {
-                        fetch(`${httpPrefix}${request.url}`, {
+                        wfetch(`${httpPrefix}${request.url}`, {
                             method: 'post',
                             signal: abort.signal
                         }).then(data => data.json())
@@ -181,7 +181,7 @@ class MainAppState extends React.Component {
                         document.getElementById("Status").style.opacity = 0.5
                         if (errors[0].waitFor) {
                             setTimeout(() => {
-                                if (err.message != "Failed to fetch")
+                                if (err.message != "Failed to wfetch")
                                     console.error(err);
                                 this.updateStatuses(requests, newState);
                             }, errors[0].waitFor);
@@ -191,7 +191,7 @@ class MainAppState extends React.Component {
                     }
                 });
             } else if (this.props.selectedDeviceId) {
-                fetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
+                wfetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
                     method: 'get',
                     signal: abort.signal
                 }).then(data => data.json()).then(fromVersionedToPlain)

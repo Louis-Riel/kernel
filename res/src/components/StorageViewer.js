@@ -8,7 +8,7 @@ class SFile extends React.Component {
                 key: genUUID(),
                 href: "#",
                 onClick: () => {
-                    fetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
+                    wfetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
                         method: 'post',
                         headers: {
                             ftype: this.props.file.ftype == "file" ? "file" : "directory",
@@ -45,7 +45,7 @@ class StorageViewer extends React.Component {
         if (fileStatsToFetch.length) {
             var fileToFetch = fileStatsToFetch.pop()
             var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
-            fetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
+            wfetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
                 method: 'post',
                 signal: this.props.pageControler.signal
             }).then(data => {
@@ -69,7 +69,7 @@ class StorageViewer extends React.Component {
     fetchFiles() {
         if (window.location.host || httpPrefix){
             var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
-            fetch(`${httpPrefix}/files` + this.state.path, {
+            wfetch(`${httpPrefix}/files` + this.state.path, {
                 method: 'post',
                 signal: this.props.pageControler.signal
             }).then(data => {

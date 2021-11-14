@@ -1,6 +1,6 @@
 class CmdButton extends React.Component {
     runIt() {
-        fetch(`${httpPrefix}/status/cmd`, {
+        wfetch(`${httpPrefix}/status/cmd`, {
             method: this.props.HTTP_METHOD,
             body: JSON.stringify({command: this.props.command,name: this.props.name, param1: this.props.param1, param2: this.props.param2})
         }).then(data => data.text())

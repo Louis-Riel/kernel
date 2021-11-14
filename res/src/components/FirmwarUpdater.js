@@ -3,7 +3,7 @@ class FirmwareUpdater extends React.Component {
         form.preventDefault();
         this.setState({ loaded: `Sending ${this.state.len} firmware bytes` })
         if (this.state.fwdata && this.state.md5) {
-            return fetch(`${httpPrefix}/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
+            return wfetch(`${httpPrefix}/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
                 method: 'post',
                 body: this.state.fwdata
             }).then(res => res.text())
@@ -14,7 +14,7 @@ class FirmwareUpdater extends React.Component {
     waitForDevFlashing() {
         var abort = new AbortController();
         var stopAbort = setTimeout(() => { abort.abort() }, 1000);
-        fetch(`${httpPrefix}/status/app`, {
+        wfetch(`${httpPrefix}/status/app`, {
             method: 'post',
             signal: abort.signal
         }).then(res => {
