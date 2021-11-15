@@ -89,11 +89,13 @@ protected:
     cJSON* bytesCached;
 
 private:
+    static void waitingWrites(void* params);
     bool isNewOrEmpty;
     uint8_t* buf = NULL;
     uint32_t maxBufSize = MFILE_BUFFER_SIZE;
     uint32_t pos = 0;
     char eol = 10;
+    static esp_timer_handle_t refreshHandle;
 };
 
 #endif

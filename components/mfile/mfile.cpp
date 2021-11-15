@@ -5,9 +5,13 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
+#define FILEBUFFER_UNFLUSHED_TIMEOUT_SECS 300
+
 MFile* MFile::openFiles[];
 uint8_t MFile::numOpenFiles=0;
 QueueHandle_t MFile::eventQueue;
+esp_timer_handle_t BufferedFile::refreshHandle=NULL;
+
 
 MFile::~MFile(){
     ESP_LOGV(__FUNCTION__,"Destructor %s",name);
@@ -245,7 +249,8 @@ const char* BufferedFile::GetFilename(){
 }
 
 BufferedFile::BufferedFile()
-    :MFile(){
+    :MFile()
+{
     ESP_ERROR_CHECK(esp_event_handler_instance_register(MFile::GetEventBase(), ESP_EVENT_ANY_ID, ProcessEvent, this, NULL));
 }
 
@@ -339,7 +344,24 @@ void BufferedFile::WriteLine(uint8_t* data, uint32_t len) {
     Write((uint8_t*)&eol,1);
 }
 
+void BufferedFile::waitingWrites(void* params){
+    printf("\nTimeout for buffered files, flushing\n");
+    BufferedFile::FlushAll();
+}
+
 void BufferedFile::Write(uint8_t* data, uint32_t len) {
+    if (BufferedFile::refreshHandle != NULL) {
+        BufferedFile::refreshHandle=NULL;
+        esp_timer_stop(BufferedFile::refreshHandle);
+    }
+    esp_timer_create_args_t logTimerArgs=(esp_timer_create_args_t){
+        waitingWrites,
+        (void*)NULL,
+        esp_timer_dispatch_t::ESP_TIMER_TASK,
+        "BF Waiter"};
+    ESP_ERROR_CHECK(esp_timer_create(&logTimerArgs,&BufferedFile::refreshHandle));
+    ESP_ERROR_CHECK(esp_timer_start_once(BufferedFile::refreshHandle, FILEBUFFER_UNFLUSHED_TIMEOUT_SECS * 1000000));
+
     if (buf == NULL) {
         buf = (uint8_t*)dmalloc(maxBufSize);
     }

@@ -278,19 +278,19 @@ class MainApp extends React.Component {
     canvas.moveTo(anim.x+width, anim.y);
     canvas.arc(anim.x, anim.y, width, 0, 2 * Math.PI);
 
-    if (anim.from == "browser")
+    if ((anim.from == "browser") || (anim.type == "log"))
       canvas.fill();
 
     if (anim.weight > 1) {
       var today = ""+anim.weight
       canvas.font = Math.min(20,8+anim.weight)+"px Helvetica";
       var txtbx = canvas.measureText(today);
-      if (anim.from == "browser") {
+      if ((anim.from == "browser") || (anim.type == "log")){
         canvas.strokeStyle = "black";
         canvas.fillStyle = "black"
       }
       canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
-      if (anim.from == "browser") {
+      if ((anim.from == "browser") || (anim.type == "log")){
         canvas.strokeStyle=anim.lineColor;
         canvas.fillStyle=anim.color;
       }
@@ -362,7 +362,7 @@ class MainApp extends React.Component {
   }
 
   AddLogLine(ln) {
-    var anims = this.anims.filter(anim => anim.type == "log");
+    var anims = this.anims.filter(anim => anim.type == "log" && anim.level == ln[0]);
     var inSpot = getInSpot(anims, "chip");
     if (inSpot) {
       inSpot.weight++;
@@ -522,7 +522,8 @@ class MainApp extends React.Component {
               key: genUUID(),
               className: "landevices",
               value: httpPrefix.substring(7),
-              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
+              //onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
+              onChange: elem=>{window.location=`http://${elem.target.value}`}
               },this.state.OnLineDevices.map(lanDev=>e("option",{
                   key:genUUID(),
                   className: "landevice"
