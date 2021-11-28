@@ -58,10 +58,10 @@ class TripViewer extends React.Component {
 
     setupListeners(canvas,tiles) {
         this.widget.addEventListener("mousemove", (event) => {
-            var pt = tiles.points.find(point => (this.getClientX(point,tiles) >= (event.offsetX - 5)) &&
-                (this.getClientX(point,tiles) <= (event.offsetX + 5)) &&
-                (this.getClientY(point,tiles) >= (event.offsetY - 5)) &&
-                (this.getClientY(point,tiles) <= (event.offsetY + 5)));
+            var pt = tiles.points.find(point => (this.getClientX(point,tiles) >= (event.offsetX - 15)) &&
+                (this.getClientX(point,tiles) <= (event.offsetX + 15)) &&
+                (this.getClientY(point,tiles) >= (event.offsetY - 15)) &&
+                (this.getClientY(point,tiles) <= (event.offsetY + 15)));
             var needsRefresh = false;
             tiles.points.filter(point => point != pt).forEach(point => {
                 if (point.focused) {

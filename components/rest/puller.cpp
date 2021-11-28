@@ -325,7 +325,7 @@ cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
     {
         ESP_LOGD(__FUNCTION__, "Probably not a tracker but a lurker %s", esp_err_to_name(err));
         //ldfree(kmlFiles);
-        //deinitSPISDCard();
+        //deinitSDCard();
     }
 
     xEventGroupWaitBits(TheWifi::GetEventGroup(), GETTING_TRIPS, pdFALSE, pdTRUE, portMAX_DELAY);
@@ -581,7 +581,7 @@ void pullStation(void *pvParameter)
         free(cfg);
         cJSON_Delete(jcfg);
         esp_http_client_config_t *config = (esp_http_client_config_t *)dmalloc(sizeof(esp_http_client_config_t));
-        if (initSPISDCard())
+        if (initSDCard())
         {
             memset(config, 0, sizeof(esp_http_client_config_t));
             config->url = (char *)dmalloc(30);
@@ -657,7 +657,7 @@ void pullStation(void *pvParameter)
 
         ldfree((void *)config);
         ldfree(pvParameter);
-        deinitSPISDCard();
+        deinitSDCard();
     }
     else
     {

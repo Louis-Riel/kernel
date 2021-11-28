@@ -474,12 +474,12 @@ void parseFolderForCSV(const char *folder)
 void commitTripToDisk(void *param)
 {
   EventGroupHandle_t app_eg = getAppEG();
-  if (initSPISDCard())
+  if (initSDCard())
   {
     xEventGroupSetBits(app_eg, app_bits_t::COMMITTING_TRIPS);
     parseFolderForCSV("/lfs/csv");
     parseFolderForCSV("/sdcard/csv");
-    deinitSPISDCard();
+    deinitSDCard();
   }
   xEventGroupSetBits(app_eg, app_bits_t::TRIPS_COMMITTED);
   xEventGroupClearBits(app_eg, app_bits_t::COMMITTING_TRIPS);
@@ -1158,10 +1158,10 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     nvs_flash_init();
 
-    initSPISDCard();
+    initSDCard();
     CleanupEmptyDirs("/lfs");
     CleanupEmptyDirs("/sdcard");
-    deinitSPISDCard();
+    deinitSDCard();
 
     bool firstRun = false;
 
@@ -1185,7 +1185,7 @@ void app_main(void)
     initLog();
     sampleBatteryVoltage();
     UpgradeFirmware();
-    //initSPISDCard();
+    //initSDCard();
 
     gpio_reset_pin(BLINK_GPIO);
     gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);

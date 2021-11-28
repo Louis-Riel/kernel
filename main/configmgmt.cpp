@@ -322,7 +322,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   version++;
   if (!skipMount)
   {
-    initSPISDCard();
+    initSDCard();
   }
   FILE *currentCfg = fOpen(config->filePath, "w");
   if (currentCfg != NULL)
@@ -350,7 +350,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   }
   if (!skipMount)
   {
-    deinitSPISDCard();
+    deinitSDCard();
   }
   //xSemaphoreGiveRecursive(sema);
 }

@@ -1,5 +1,5 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "";//"http://irtracker";
+var httpPrefix = "http://irtracker";
 

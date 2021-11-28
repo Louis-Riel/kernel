@@ -703,7 +703,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             //xEventGroupSetBits(s_app_eg, REST);
             xEventGroupClearBits(evtGrp, WIFI_DISCONNECTED_BIT);
             theWifi->ParseStateBits(theWifi->stationStat);
-            initSPISDCard();
+            initSDCard();
 
             if (!theWifi->isSidPuller((const char *)theWifi->wifi_config.sta.ssid, true))
                 CreateBackgroundTask(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, &timeHandle);
@@ -828,7 +828,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
                          MAC2STR(station->mac), station->aid);
             }
             theWifi->RefreshApMembers(theWifi->apStat);
-            initSPISDCard();
+            initSDCard();
             ESP_LOGD(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x joined, AID=%d",
                      MAC2STR(station->mac), station->aid);
             break;
@@ -852,7 +852,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
                 xEventGroupSetBits(evtGrp, WIFI_DISCONNECTED_BIT);
             }
 
-            //deinitSPISDCard();
+            //deinitSDCard();
             break;
         case WIFI_EVENT_STA_CONNECTED:
             xEventGroupSetBits(evtGrp, WIFI_CONNECTED_BIT);
@@ -867,7 +867,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             if (xEventGroupGetBits(evtGrp) & WIFI_CONNECTED_BIT)
             {
                 ESP_LOGD(__FUNCTION__, "Got disconnected from AP");
-                deinitSPISDCard();
+                deinitSDCard();
                 theWifi->ParseStateBits(theWifi->stationStat);
             }
             if (!(xEventGroupGetBits(s_app_eg) & app_bits_t::TRIPS_SYNCING))

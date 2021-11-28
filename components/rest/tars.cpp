@@ -40,7 +40,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     {
         return ESP_FAIL;
     }
-    if (!initSPISDCard())
+    if (!initSDCard())
     {
         return ESP_FAIL;
     }
@@ -228,7 +228,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     ldfree(theFolders);
     ldfree(buf);
     ldfree(kmlFileName);
-    deinitSPISDCard();
+    deinitSDCard();
     ESP_LOGV(__FUNCTION__,"Done reading %s",path);
     return ret;
 }

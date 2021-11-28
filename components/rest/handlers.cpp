@@ -117,7 +117,7 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
         sprintf(res, "[{\"name\":\"sdcard\",\"ftype\":\"folder\",\"size\":0},{\"name\":\"lfs\",\"ftype\":\"folder\",\"size\":0}]");
         return ESP_OK;
     }
-    if (!initSPISDCard())
+    if (!initSDCard())
     {
         ESP_LOGE(__FUNCTION__, "Cannot init storage");
         return ESP_FAIL;
@@ -229,7 +229,7 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
     ldfree(theFName);
     ldfree(theFolders);
     ldfree(kmlFileName);
-    deinitSPISDCard();
+    deinitSDCard();
     return ret;
 }
 
@@ -665,7 +665,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
     httpd_resp_set_hdr(req, "filename", path);
     FILE *theFile;
     uint32_t len = 0;
-    if (initSPISDCard())
+    if (initSDCard())
     {
         if ((theFile = fOpen(path, "r")) != NULL)
         {
@@ -710,7 +710,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
         }
     }
     ESP_LOGD(__FUNCTION__, "Sent %s(%d)", path, len);
-    deinitSPISDCard();
+    deinitSDCard();
     return ESP_OK;
 }
 
@@ -1171,7 +1171,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             return ESP_FAIL;
         }
 
-        if (md5[0] && initSPISDCard())
+        if (md5[0] && initSDCard())
         {
             FILE *fw = NULL;
             esp_err_t ret;
@@ -1338,7 +1338,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                     ESP_LOGE(__FUNCTION__, "Failed to open /lfs/firmware/current.bin");
                     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open /lfs/firmware/current.bin");
                 }
-                deinitSPISDCard();
+                deinitSDCard();
                 ldfree(img);
             }
             else
@@ -1359,7 +1359,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
     }
     else if (indexOf(req->uri, "/ota/getmd5") == req->uri)
     {
-        if (initSPISDCard())
+        if (initSDCard())
         {
             FILE *fw = NULL;
             if ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
@@ -1380,7 +1380,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                         ESP_LOGD(__FUNCTION__, "Sent MD5:%s", ccmd5);
                     }
                     fClose(fw);
-                    deinitSPISDCard();
+                    deinitSDCard();
                     return ret;
                 }
                 else
@@ -1393,7 +1393,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             {
                 ESP_LOGE(__FUNCTION__, "Failed in opeing md5");
             }
-            deinitSPISDCard();
+            deinitSDCard();
         }
         else
         {

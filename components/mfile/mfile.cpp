@@ -109,7 +109,7 @@ void MFile::Open(const char* mode){
         return;
     }
 
-    initSPISDCard();
+    initSDCard();
 
     file = fOpenCd(name, mode,true);
     if (file == NULL)
@@ -148,7 +148,7 @@ void MFile::Close(){
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_CLOSED_PENDING_WRITE);
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_INIT);
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_FAILED);
-        deinitSPISDCard();
+        deinitSDCard();
     }
 }
 
