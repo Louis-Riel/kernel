@@ -45,10 +45,12 @@ extern const unsigned char favicon_ico_start[] asm("_binary_favicon_ico_start");
 extern const unsigned char favicon_ico_end[]   asm("_binary_favicon_ico_end");
 extern const unsigned char index_html_start[] asm("_binary_index_html_start");
 extern const unsigned char index_html_end[]   asm("_binary_index_html_end");
-extern const unsigned char app_css_start[] asm("_binary_app_min_css_start");
-extern const unsigned char app_css_end[]   asm("_binary_app_min_css_end");
-extern const unsigned char app_js_start[] asm("_binary_app_min_js_start");
-extern const unsigned char app_js_end[]   asm("_binary_app_min_js_end");
+extern const unsigned char index_sd_html_start[] asm("_binary_index_sd_html_start");
+extern const unsigned char index_sd_html_end[]   asm("_binary_index_sd_html_end");
+extern const unsigned char app_css_start[] asm("_binary_app_min_min_css_start");
+extern const unsigned char app_css_end[]   asm("_binary_app_min_min_css_end");
+extern const unsigned char app_js_start[] asm("_binary_app_min_min_js_start");
+extern const unsigned char app_js_end[]   asm("_binary_app_min_min_js_end");
 
 struct poiConfig_t {
   float lat;
@@ -143,6 +145,7 @@ public:
   void SaveAppConfig();
   static const char* GetActiveStorage();
   static bool HasActiveStorage();
+  static bool HasSDCard();
 
   bool isValid();
   bool isItemObject(const char* path);
@@ -175,8 +178,8 @@ public:
   bool IsSta();
   cJSON* GetPropertyHolder(cJSON* prop);
 protected:
-  const char *SDPATH = "/sdcard";
-  const char *SPIFFPATH = "/lfs";
+  static const char *SDPATH;
+  static const char *SPIFFPATH;
 
   cJSON* GetJSONProperty(cJSON* json,const char* path, bool createWhenMissing);
   cJSON* GetJSONProperty(const char* path);

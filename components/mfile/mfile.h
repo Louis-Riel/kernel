@@ -52,6 +52,8 @@ public:
     bool IsOpen();
     const char* GetFilename();
     esp_event_base_t GetEventBase();
+    static const char* MFILE_BASE;
+    static esp_event_handler_instance_t *handlerInstance;
 
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
 protected:

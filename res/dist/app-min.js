@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "";//"http://irtracker";
+var httpPrefix = "";//"http://tracer";
 
 //#region SHA-1
 /*
@@ -349,6 +349,11 @@ class ROProp extends React.Component {
         if (IsBooleanValue(val)) {
             val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
         }
+
+        if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+            return e("a", { href: `${httpPrefix}${val}` }, val);
+        }
+
         return val;
     }
 
@@ -480,6 +485,10 @@ class StateTable extends React.Component {
         if (IsBooleanValue(val)) {
             val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
         }
+
+        if ((fld == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+            return e("a", { href: `${httpPrefix}${val}` }, val);
+        }
         return val;
     }
 
@@ -488,8 +497,8 @@ class StateTable extends React.Component {
             return e("tbody", { key: genUUID() },
                 json.sort((e1,e2)=>e1[this.sortedOn].localeCompare(e2[this.sortedOn]))
                     .map(line => e("tr", { key: genUUID() },
-                                         this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" }, 
-                                                                             line[fld] !== undefined ? e("div", { key: genUUID(), className: "value" }, this.getValue(fld, line[fld])) : null)))));
+                        this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" }, 
+                            line[fld] !== undefined ? e("div", { key: genUUID(), className: "value" }, this.getValue(fld, line[fld])) : null)))));
         } else {
             return null;
         }
@@ -746,8 +755,6 @@ class ConfigEditor extends React.Component {
         } else {
             this.container.innerText = "Loading...";
         }
-        if (window.location.hostname || httpPrefix)
-            this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}));
     }
 
     render() {
@@ -756,6 +763,11 @@ class ConfigEditor extends React.Component {
 }
 
 class ConfigPage extends React.Component {
+    componentDidMount() {
+        if (window.location.hostname || httpPrefix)
+            this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}));
+    }
+
     getJsonConfig(devid) {
         return new Promise((resolve, reject) => {
             if (window.location.host || httpPrefix){
@@ -794,7 +806,7 @@ class ConfigPage extends React.Component {
                 e("button", { key: genUUID(), type: "button", onClick:(elem) => this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}))} , "Refresh")
             ]);
         } else {
-            return e("div",{key:genUUID()},"Loading...");
+            return e("div",{key:genUUID()},"Loading....");
         }
     }
 }
@@ -1521,28 +1533,127 @@ class Program extends React.Component {
             Object.keys(this.props).filter(fld => fld != "name").map(fld => e(ProgramLine,{key: genUUID(),name:fld,value:this.props[fld]}))
         ]);
     }
+}class UnparsedCVS extends React.Component {
+    renderTrip(){
+        if (!this.state?.points){
+            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+            .then(resp => resp.text())
+            .then(content =>{
+                var lns = content.split(/\n|\r\n/);
+                var cols=lns[0].split(",");
+                this.setState({
+                    points:lns.splice(1).map(ln => {
+                        var ret={};
+                        ln.split(",").forEach((it,idx) => ret[cols[idx]] = isNaN(it)?it:parseFloat(it));
+                        return ret;
+                    }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
+                });
+            });
+        } else {
+            this.setState({points:this.state.points});
+        }
+    }
+
+    getIconColor() {
+        if (!this.state?.points) {
+            return "#00ff00";
+        } else if (this.state.points.length) {
+            return "aquamarine";
+        } else {
+            return "#ff0000";
+        }
+    }
+
+    getIcon() {
+        return e("svg", { key: genUUID(), xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64",onClick:this.renderTrip.bind(this) }, [
+            e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M17.993 56h20v6h-20zm-4.849-18.151c4.1 4.1 9.475 6.149 14.85 6.149 5.062 0 10.11-1.842 14.107-5.478l.035.035 1.414-1.414-.035-.035c7.496-8.241 7.289-20.996-.672-28.957A20.943 20.943 0 0 0 27.992 2a20.927 20.927 0 0 0-14.106 5.477l-.035-.035-1.414 1.414.035.035c-7.496 8.243-7.289 20.997.672 28.958zM27.992 4.001c5.076 0 9.848 1.976 13.437 5.563 7.17 7.17 7.379 18.678.671 26.129L15.299 8.892c3.493-3.149 7.954-4.891 12.693-4.891zm12.696 33.106c-3.493 3.149-7.954 4.892-12.694 4.892a18.876 18.876 0 0 1-13.435-5.563c-7.17-7.17-7.379-18.678-.671-26.129l26.8 26.8z" }),
+            e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M48.499 2.494l-2.828 2.828c4.722 4.721 7.322 10.999 7.322 17.678s-2.601 12.957-7.322 17.678S34.673 48 27.993 48s-12.957-2.601-17.678-7.322l-2.828 2.828C12.962 48.983 20.245 52 27.993 52s15.031-3.017 20.506-8.494c5.478-5.477 8.494-12.759 8.494-20.506S53.977 7.97 48.499 2.494z" })
+        ]);
+    }
+
+    render() {
+        return e("div",{key:genUUID(),className:"rendered trip"},[
+            this.getIcon(),
+            this.state?.points?e(TripViewer,{key:genUUID(),points:this.state.points}):null
+        ]
+        );
+    }
 }
+class FileViewer extends React.Component {
+    constructor(props) {
+        super(props);
+        this.buildRenderers();
+    }
+
+    buildRenderers() {
+        if (this.props.name.endsWith(".csv")) {
+            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+                .then(resp => resp.text())
+                .then(content =>{
+                    if (content.startsWith("timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites") &&
+                        !this.state?.renderes?.some("unparsedcsv")){
+                        this.setState({renderes:["unparsedcsv",...(this.state?.renderes||[])]})
+                    }
+                })
+        }
+    }
+
+    getRenderers() {
+        return this.state?.renderes.map(renderer => {
+            switch (renderer) {
+                case "unparsedcsv":
+                    return e(UnparsedCVS,{key:genUUID(),...this.props});
+                    break;
+            
+                default:
+                    return null;
+                    break;
+            }
+        });
+    }
+
+    render() {
+        return [e("a", { key:genUUID(), href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name),this.getRenderers()];
+    }
+}
+
 class SFile extends React.Component {
     render() {
         return  e("tr", { key: genUUID(), className: this.props.file.ftype }, [
-            e("td", { key: genUUID() }, this.props.getFileLink(this.props.file)),
+            e("td", { key: genUUID() }, this.getLink(this.props.file)),
             e("td", { key: genUUID() }, this.props.file.ftype != "file" ? "" : this.props.file.size),
-            e("td", { key: genUUID() }, this.props.path == "/" || this.props.file.name == ".." ? null : e("a", {
+            e("td", { key: genUUID() }, this.getDeleteLink())]);
+    }
+
+    getDeleteLink() {
+        return this.props.path == "/" || this.props.file.name == ".." ? null : e("a", {
+            key: genUUID(),
+            href: "#",
+            onClick: () => {
+                wfetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
+                    method: 'post',
+                    headers: {
+                        ftype: this.props.file.ftype == "file" ? "file" : "directory",
+                        operation: "delete"
+                    }
+                }).then(this.props.OnDelete ? this.props.OnDelete() : null)
+                    .catch(err => {
+                        console.error(err);
+                    });
+            }
+        }, "Del");
+    }
+
+    getLink(file) {
+        if (file.ftype == "folder") {
+            return e("a", {
                 key: genUUID(),
                 href: "#",
-                onClick: () => {
-                    wfetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
-                        method: 'post',
-                        headers: {
-                            ftype: this.props.file.ftype == "file" ? "file" : "directory",
-                            operation: "delete"
-                        }
-                    }).then(this.props.OnDelete ? this.props.OnDelete():null)
-                      .catch(err => {
-                        console.error(err);
-                      });
-                }
-            }, "Del"))]);
+                onClick: () => this.props.onChangeFolder ? this.props.onChangeFolder(`${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/")):null
+            }, file.name);
+        } else {
+            return e(FileViewer,{key:genUUID(),...file});
+        }
     }
 }
 
@@ -1618,20 +1729,6 @@ class StorageViewer extends React.Component {
         }
     }
 
-    getFileLink(file) {
-        if (file.ftype == "folder") {
-            return e("a", {
-                key: genUUID(),
-                href: "#",
-                onClick: () => {
-                    this.setState({ total: 0, loaded: false, path: `${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/") });
-                }
-            }, file.name);
-        } else {
-            return e("a", { href: `${httpPrefix}${this.state.path}/${file.name}` }, file.name);
-        }
-    }
-
     componentDidUpdate(prevProps, prevState) {
         if (!this.state.loaded) {
             this.state.loaded = true;
@@ -1678,8 +1775,8 @@ class StorageViewer extends React.Component {
                             this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ 
                                 key: genUUID(), 
                                 file:file, 
-                                path:this.state.path, 
-                                getFileLink:this.getFileLink.bind(this),
+                                path:this.state.path,
+                                onChangeFolder: (folder) => this.setState({path:folder}),
                                 OnDelete: ()=>this.fetchFiles()
                             }))
                             ),
@@ -1764,6 +1861,259 @@ class SystemPage extends React.Component {
         ];
     }
 }
+class TripViewer extends React.Component {
+    constructor(props) {
+        super(props);
+        this.zoomlevel=15;
+        this.state={images:{}};
+    }
+    componentDidMount() {
+        this.mounted=true;
+        this.drawMap();
+    }
+    
+
+    drawMap() {
+        return new Promise((resolve,reject) => {
+            if (!this.mounted || !this.widget || !this.props.points || !this.props.points.length){
+                reject({});
+            } else {
+                this.canvas = this.widget.getContext("2d");                    
+        
+                this.getTripTiles().then(this.drawTripTiles.bind(this))
+                                   .then(this.drawTrip.bind(this))
+                                   .catch(reject);
+            }
+        });
+    }
+
+    getTripTiles() {
+        return new Promise((resolve,reject) => this.props.points?.length?resolve(this.props.points.reduce((ret, point) => {
+            ret.trip.leftTile = this.lon2tile(ret.left = Math.min(ret.left, point.longitude));
+            ret.trip.rightTile = this.lon2tile(ret.right = Math.max(ret.right, point.longitude));
+            ret.trip.topTile = this.lat2tile(ret.top = Math.min(ret.top, point.latitude));
+            ret.trip.bottomTile = this.lat2tile(ret.bottom = Math.max(ret.bottom, point.latitude));
+            ret.trip.XTiles = (ret.trip.rightTile - ret.trip.leftTile) + 1;
+            ret.trip.YTiles = (ret.trip.topTile - ret.trip.bottomTile) + 1;
+            ret.margin.bottom = Math.floor((ret.maxYTiles-ret.trip.YTiles)/2);
+            ret.margin.top = ret.maxYTiles-ret.trip.YTiles-ret.margin.bottom;
+            ret.margin.left = Math.floor((ret.maxXTiles-ret.trip.XTiles)/2);
+            ret.margin.right = ret.maxXTiles-ret.trip.XTiles-ret.margin.left;
+            ret.leftTile=ret.trip.leftTile-Math.abs(ret.margin.left);
+            ret.rightTile=Math.max(ret.maxXTiles+ret.trip.leftTile, ret.trip.rightTile+Math.abs(ret.margin.right));
+            ret.bottomTile=ret.trip.bottomTile-Math.abs(ret.margin.bottom);
+            ret.topTile=Math.max(ret.maxYTiles+ret.trip.bottomTile, ret.trip.bottomTile+Math.abs(ret.margin.top));
+            ret.points.push(this.pointToCartesian(point));
+            return ret;
+        }, {
+            left: this.props.points[0].longitude,
+            right: this.props.points[0].longitude,
+            top: this.props.points[0].latitude,
+            bottom: this.props.points[0].latitude,
+            trip:{},
+            margin:{},
+            points: [],
+            margin: [],
+            maxXTiles:Math.ceil(window.innerWidth/256),
+            maxYTiles: Math.ceil(window.innerHeight/256)
+        })):reject({"error":"no points"}));
+    }
+
+    setupListeners(canvas,tiles) {
+        this.widget.addEventListener("mousemove", (event) => {
+            var pt = tiles.points.find(point => (this.getClientX(point,tiles) >= (event.offsetX - 5)) &&
+                (this.getClientX(point,tiles) <= (event.offsetX + 5)) &&
+                (this.getClientY(point,tiles) >= (event.offsetY - 5)) &&
+                (this.getClientY(point,tiles) <= (event.offsetY + 5)));
+            var needsRefresh = false;
+            tiles.points.filter(point => point != pt).forEach(point => {
+                if (point.focused) {
+                    point.focused = false;
+                    needsRefresh = true;
+                }
+            });
+            if (needsRefresh) {
+                this.drawMap().then(res => {
+                    if (pt && !pt.focused) {
+                        pt.focused = true;
+                        this.drawPointPopup(canvas, pt, tiles);
+                    }
+                });
+            } else if (pt && !pt.focused) {
+                pt.focused = true;
+                this.drawPointPopup(canvas, pt, tiles);
+            }
+        });
+    }
+
+    drawPointPopup(canvas,pt,tiles){
+        canvas.font = "10px Helvetica";
+        var txtSz = canvas.measureText(new Date(`${pt.timestamp} UTC`).toLocaleString());
+        var boxHeight=60;
+        var boxWidth=txtSz.width+10;
+        canvas.strokeStyle = '#00ffff';
+        canvas.shadowColor = '#00ffff';
+        canvas.fillStyle = "#ffffff";
+        canvas.lineWidth = 1;
+        canvas.shadowBlur = 2;
+        canvas.beginPath();
+        canvas.rect(this.getClientX(pt,tiles),this.getClientY(pt,tiles)-boxHeight,boxWidth,boxHeight);
+        canvas.fill();
+        canvas.stroke();
+
+        canvas.fillStyle = 'rgba(00, 0, 0, 1)';
+        canvas.strokeStyle = '#000000';
+
+        canvas.beginPath();
+        var ypos = this.getClientY(pt,tiles)-boxHeight+txtSz.actualBoundingBoxAscent+3;
+        var xpos = this.getClientX(pt,tiles)+3;
+        canvas.fillText(new Date(`${pt.timestamp} UTC`).toLocaleString(),xpos,ypos);
+        ypos+=txtSz.actualBoundingBoxAscent+3;
+        canvas.fillText(`Bat: ${Math.floor(pt.Battery)}`,xpos,ypos);
+        ypos+=txtSz.actualBoundingBoxAscent+3;
+        canvas.fillText(`Sats: ${pt.Satellites}`,xpos,ypos);
+        ypos+=txtSz.actualBoundingBoxAscent+3;
+        canvas.fillText(`Speed:${Math.floor(1.852*pt.speed/100.0)} km/h`,xpos,ypos);
+        ypos+=txtSz.actualBoundingBoxAscent+3;
+        canvas.fillText(`Alt:${Math.floor(pt.altitude/100)} m`,xpos,ypos);
+
+        canvas.stroke();
+    }
+
+    drawTrip(tiles) {
+        var firstPoint = tiles.points[0];
+        this.canvas.strokeStyle = '#00ffff';
+        this.canvas.shadowColor = '#00ffff';
+        this.canvas.fillStyle = "#00ffff";
+        this.canvas.lineWidth = 2;
+        this.canvas.shadowBlur = 2;
+
+        this.canvas.beginPath();
+        this.canvas.moveTo(this.getClientX(firstPoint,tiles), this.getClientY(firstPoint,tiles));
+        tiles.points.forEach(point => {
+            this.canvas.lineTo(this.getClientX(point,tiles), this.getClientY(point,tiles));
+        });
+        this.canvas.stroke();
+        this.canvas.strokeStyle = '#0000ff';
+        this.canvas.shadowColor = '#0000ff';
+        this.canvas.fillStyle = "#0000ff";
+        tiles.points.forEach(point => {
+            this.canvas.beginPath();
+            this.canvas.arc(((point.tileX - tiles.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - tiles.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
+            this.canvas.stroke();
+        });
+    }
+
+    getClientY(firstPoint,tiles) {
+        return ((firstPoint.tileY - tiles.bottomTile) * 256) + (256 * firstPoint.posTileY);
+    }
+
+    getClientX(firstPoint,tiles) {
+        return ((firstPoint.tileX - tiles.leftTile) * 256) + (256 * firstPoint.posTileX);
+    }
+
+    drawTripTiles(tiles) {
+        this.widget.width=(tiles.trip.XTiles+Math.abs(tiles.margin.left+tiles.margin.right))*256;
+        this.widget.height=(tiles.trip.YTiles+Math.abs(tiles.margin.bottom+tiles.margin.top))*256;
+        this.canvas.fillStyle = "black";
+        this.canvas.fillRect(0,0,window.innerWidth,window.innerHeight);
+        this.setupListeners(this.canvas,tiles);
+        var promises = [];
+        for (var tileX = tiles.leftTile; tileX <= tiles.rightTile; tileX++) {
+            for (var tileY = tiles.bottomTile; tileY <= tiles.topTile; tileY++) {
+                promises.push(this.drawTile(tileX, tileY, 0, tiles));
+            }
+        }
+        return new Promise((resolve,reject)=>Promise.all(promises).then(res=>resolve(tiles)).catch(reject));
+    }
+
+    drawTile(tileX, tileY, numTries, tiles) {
+        return new Promise((resolve,reject) => {
+            if (!this.state.images[tileX] || !this.state.images[tileX][tileY]){
+                var tile = new Image();
+                tile.posX = tileX - tiles.leftTile;
+                tile.posY = tileY - tiles.bottomTile;
+                tile.onload = (elem) => {
+                    if (!this.state.images[tileX]) {
+                        this.state.images[tileX]={};
+                    }
+                    this.state.images[tileX][tileY]=elem.currentTarget;
+                    resolve(this.canvas.drawImage(elem.currentTarget, elem.currentTarget.posX * elem.currentTarget.width, elem.currentTarget.posY * elem.currentTarget.height));
+                };
+                tile.onerror = (err) => {
+                    if (numTries > 3) {
+                        reject(`Failed to fetch tile ${tileX},${tileY}`);
+                    } else {
+                        this.drawTile(tileX, tileY, numTries++,tiles).then(resolve).catch(reject);
+                    }
+                };
+                tile.src = `${httpPrefix}/sdcard/web/tiles/${tileX}/${tileY}.png`;
+            } else {
+                resolve(this.canvas.drawImage(this.state.images[tileX][tileY], 
+                                         this.state.images[tileX][tileY].posX * this.state.images[tileX][tileY].width, 
+                                         this.state.images[tileX][tileY].posY * this.state.images[tileX][tileY].height));
+            }
+        });
+    }
+
+    lon2tile(lon) { 
+        return Math.floor(this.lon2x(lon)); 
+    }
+    
+    lat2tile(lat)  { 
+        return Math.floor(this.lat2y(lat));
+    }
+
+    lon2x(lon) { 
+        return (lon+180)/360*Math.pow(2,this.zoomlevel); 
+    }
+    
+    lat2y(lat)  { 
+        return (1-Math.log(Math.tan(lat*Math.PI/180) + 1/Math.cos(lat*Math.PI/180))/Math.PI)/2 *Math.pow(2,this.zoomlevel); 
+    }
+
+    tile2long(x,z) {
+        return (x/Math.pow(2,z)*360-180);
+    }
+
+    tile2lat(y,z) {
+        var n=Math.PI-2*Math.PI*y/Math.pow(2,z);
+        return (180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n))));
+    }
+    
+    pointToCartesian(point) {
+        return {
+            tileX: this.lon2tile(point.longitude, this.zoomlevel),
+            tileY: this.lat2tile(point.latitude, this.zoomlevel),
+            posTileX: this.lon2x(point.longitude,this.zoomlevel) - this.lon2tile(point.longitude, this.zoomlevel),
+            posTileY: this.lat2y(point.latitude,this.zoomlevel) - this.lat2tile(point.latitude, this.zoomlevel),
+            ...point
+        };
+    }
+
+    closeIt(){
+        this.setState({closed:true});
+    }
+
+    render(){
+        return e("div",{key:genUUID(),className:`lightbox ${this.state?.closed?"closed":"opened"}`},[
+            e("div",{key:genUUID()},[
+                e("div",{key:genUUID(),className:"tripHeader"},[
+                    `Trip with ${this.props.points.length} points`,
+                    e("br"),
+                    `From ${new Date(`${this.props.points[0].timestamp} UTC`).toLocaleString()} `,
+                    `To ${new Date(`${this.props.points[this.props.points.length-1].timestamp} UTC`).toLocaleString()}`,
+                ]),
+                e("span",{key:genUUID(),className:"close",onClick:this.closeIt.bind(this)},"X")
+            ]),
+            e("div",{key:genUUID(),className:"trip"},e("canvas",{
+                onresize:this.drawMap(),
+                key:genUUID(),
+                ref: (elem) => this.widget = elem
+            }))
+        ]);
+    }
+}
 var app=null;
 
 function wfetch(requestInfo, params) {
@@ -1840,7 +2190,7 @@ class MainApp extends React.Component {
   }
   
   componentDidUpdate(prevProps, prevState, snapshot) {
-    this.mountWidget();
+    //this.mountWidget();
   }
 
   componentDidMount() {
@@ -2288,8 +2638,8 @@ class MainApp extends React.Component {
               key: genUUID(),
               className: "landevices",
               value: httpPrefix.substring(7),
-              //onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
-              onChange: elem=>{window.location=`http://${elem.target.value}`}
+              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
+              //onChange: elem=>{window.location=`http://${elem.target.value}`}
               },this.state.OnLineDevices.map(lanDev=>e("option",{
                   key:genUUID(),
                   className: "landevice"

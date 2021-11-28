@@ -344,11 +344,9 @@ esp_err_t setupLittlefs()
 
   ESP_LOGV(__FUNCTION__, "Space: %d/%d", used_bytes, total_bytes);
   struct dirent *de;
-  bool hasCsv = false;
   bool hasLogs = false;
   bool hasFw = false;
   bool hasCfg = false;
-  bool hasStat = false;
 
   ESP_LOGV(__FUNCTION__, "Spiff is spiffy");
   EventGroupHandle_t app_eg = getAppEG();
@@ -365,10 +363,6 @@ esp_err_t setupLittlefs()
   while ((de = readDir(root)) != NULL)
   {
     ESP_LOGV(__FUNCTION__, "%d %s", de->d_type, de->d_name);
-    if (strcmp(de->d_name, "csv") == 0)
-    {
-      hasCsv = true;
-    }
     if (strcmp(de->d_name, "logs") == 0)
     {
       hasLogs = true;
@@ -381,10 +375,6 @@ esp_err_t setupLittlefs()
     {
       hasCfg = true;
     }
-    if (strcmp(de->d_name, "status") == 0)
-    {
-      hasStat = true;
-    }
   }
   if ((ret = closeDir(root)) != ESP_OK)
   {
@@ -392,15 +382,6 @@ esp_err_t setupLittlefs()
     return ret;
   }
 
-  if (!hasCsv)
-  {
-    if (mkdir("/lfs/csv", 0750) != 0)
-    {
-      ESP_LOGE(__FUNCTION__, "Failed in creating csv folder");
-      return ESP_FAIL;
-    }
-    ESP_LOGD(__FUNCTION__, "csv folder created");
-  }
   if (!hasLogs)
   {
     if (mkdir("/lfs/logs", 0750) != 0)
@@ -428,16 +409,6 @@ esp_err_t setupLittlefs()
       return ESP_FAIL;
     }
     ESP_LOGD(__FUNCTION__, "config folder created");
-  }
-
-  if (!hasStat)
-  {
-    if (mkdir("/lfs/status", 0750) != 0)
-    {
-      ESP_LOGE(__FUNCTION__, "Failed in creating status folder");
-      return ESP_FAIL;
-    }
-    ESP_LOGD(__FUNCTION__, "status folder created");
   }
 
   return ESP_OK;

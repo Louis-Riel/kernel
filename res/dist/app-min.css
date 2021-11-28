@@ -74,10 +74,6 @@ table.greyGridTable tfoot td {
     font-size: 14px;
 }
 
-fieldset {
-    /* width: inherit; */
-}
-
 .site-header {
     text-align: center;
 }
@@ -129,19 +125,12 @@ label {
     font-style: italic;
     font-size: small;
     background: linear-gradient(to bottom, #2d332d, #091308);
-    /* margin-top: 10px; */
-}
-
-* {
-    /* box-sizing: border-box; */
 }
 
 div.slider {
     overflow: hidden;
     color: #97ea44;
     padding-top: 5px;
-    /* width: 100%; */
-    /* height: -webkit-fill-available; */
 }
 
 div.slides {
@@ -151,9 +140,6 @@ div.slides {
     -webkit-overflow-scrolling: touch;
     position: relative;
     transition: opacity 1s;
-    /* height: 95%; */
-    /* width: 100%; */
-    /* display: flex; */
 }
 
 .slides::-webkit-scrollbar {
@@ -182,7 +168,6 @@ div.slides {
     border-color: silver;
     padding-left: 15px;
     padding-top: 10px;
-    /* max-height: 100%; */
 }
 
 .author-info {
@@ -211,7 +196,6 @@ img {
 }
 
 div.tabs>a {
-    /* height: 150px; */
     text-decoration: none;
     border-top-left-radius: 25%;
     border-top-right-radius: 25%;
@@ -253,13 +237,11 @@ body {
 
 .system-config fieldset label {
     float: left;
-    /* height: fit-content; */
 }
 
 .system-config fieldset label>input,
 textarea,
 select {
-    /* width: 90%; */
     font-size: large;
     height: fit-content;
 }
@@ -276,17 +258,10 @@ option {
     border-style: none;
     background: linear-gradient(to bottom, #151a15, #273426);
     float: left;
-    /* max-width: 100%; */
 }
 
 .slides fieldset>fieldset {
-    /* border-style: double; */
     border-radius: 10px;
-    /* display: flex; */
-    /* height: fit-content; */
-    /* width: fit-content; */
-    /* max-width: 100%; */
-    /* flex-direction: column; */
     background: linear-gradient(to bottom, #2d332d, #091308);
 }
 
@@ -385,7 +360,6 @@ label.table {
 
 label>div.value {
     margin-top: 10px;
-    /* font-size: large; */
     white-space: pre-wrap;
 }
 
@@ -414,7 +388,6 @@ caption div.controls button {
 summary {
     clear: both;
     font-size: large;
-    /* background-color: #495248; */
     color: aqua;
 }
 
@@ -534,13 +507,8 @@ form .jsoneditor-frame {
 div.slider {
     width: 100%;
     height: 100%;
-    /* margin-bottom: 35px; */
     display: flex;
     flex-direction: column;
-}
-
-fieldset.slides label {
-    /* width: 200px; */
 }
 
 fieldset.slides .label {
@@ -560,25 +528,16 @@ fieldset.slides input {
     display: none !important;
 }
 
-.expanded {
-    /* max-height: 100%; */
-}
-
 div.slider > div.slide {
     max-height: 95%;
-    /* display: flex; */
-    /* flex: 1 1 auto; */
-    /* width: 100%; */
     display: flex;
     flex-direction: column;
     background-color: #181f18;
 }
 
 .eventPanel {
-    /* max-width: 20%; */
     float: right;
     height: 100%;
-    /* overflow: auto; */
     width: min-content;
 }
 
@@ -590,19 +549,16 @@ div.slider > div.slide {
     border-style: dotted;
     padding: 5px;
     border-radius: 20%;
-    /* display: flex; */
     width: fit-content;
     font-size: small;
 }
 
 .eventBase {
-    /* font-size: small; */
     color: aqua;
     margin-right: 5px;
 }
 
 .eventId {
-    /* font-size: small; */
     color: #5fdfc0;
 }
 
@@ -611,7 +567,6 @@ div.slider > div.slide {
     justify-content: center;
     position: sticky;
     top: 0;
-    /* background: linear-gradient(to bottom, #090c09, #273326); */
     font: caption;
     color: aquamarine;
 }
@@ -625,7 +580,6 @@ div.events button {
 }
 
 .designer {
-    /* float: left; */
     position: relative;
     width: fit-content;
 }
@@ -666,12 +620,8 @@ div.events button {
 }
 
 details {
-    /* border: 1px solid #aaa; */
     border-radius: 4px;
     padding: .5em .5em .5em;
-    /* background: linear-gradient(to bottom, #495248, #393d39); */
-    /* background-color: #495248; */
-    /* float: left; */
     display: inline-block;
 }
 
@@ -711,14 +661,9 @@ details.data {
     padding-right: 5px;
 }
 
-.slide tbody {
-    /* font-size: small; */
-}
-
 .tabs {
     height: 35px;
     flex: 0 1 auto;
-    /* flex-direction: row; */
 }
 
 fieldset#controls {
@@ -749,10 +694,7 @@ legend {
 }
 
 div.value {
-    /* color: red; */
-    /* font-variant-caps: unicase; */
     font-family: monospace;
-    /* font-size: small; */
 }
 
 #controls label {
@@ -816,8 +758,6 @@ div.mainApp > details > summary {
     text-decoration: none;
     border-top-left-radius: 25%;
     border-top-right-radius: 25%;
-    /* margin-left: 15px; */
-    /* padding-left: 10px; */
     padding-right: 10px;
     color: aquamarine;
     background-color: #242d23;
@@ -833,4 +773,69 @@ div.mainApp > details[open] > summary {
 select.landevices {
     margin-right: 10px;
     border-style: hidden;
+}
+
+.pageContent.system-config.a {
+    color: gren;
+}
+
+a {
+    color: aquamarine;
+}
+
+.file td a {
+    float: left;
+}
+
+.file td .rendered {
+    float: right;
+    height: 20px;
+    width: 20px;
+}
+
+.lightbox {
+    position: fixed;
+    z-index: 1;
+    padding-top: 60px;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: black;
+}
+
+.lightbox.closed {
+    display: none;
+}
+
+.lightbox.opened {
+    display: block;
+}
+
+.close {
+    color: white;
+    position: absolute;
+    top: 10px;
+    right: 25px;
+    font-size: 35px;
+    font-weight: bold;
+  }
+  
+.close:hover,.close:focus {
+    color: #999;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.lightbox .trip {
+    background-color: #fefefe;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+}
+
+.tripHeader {
+    position: absolute;
+    top: 0;
 }

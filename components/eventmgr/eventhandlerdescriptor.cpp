@@ -40,7 +40,8 @@ bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName
         desc=&EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries];
         EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].id = id;
         EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].baseName = name;
-        EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].eventName = eventName;
+        EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].eventName = (char*)dmalloc(strlen(eventName)+1);
+        strcpy((char*)EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].eventName, eventName);
         EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries++].dataType = dtp;
     }
 
@@ -98,18 +99,23 @@ cJSON* EventHandlerDescriptor::GetEventBaseEvents(esp_event_base_t base, const c
 
 EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(esp_event_base_t base,const char* eventName) {
     ESP_LOGV(__FUNCTION__,"GetEventDescriptor %s(%s)", eventName, base);
+    if ((base == NULL) || (eventName == NULL)) {
+        ESP_LOGW(__FUNCTION__,"Missing base(%d) or name(%d)",base == NULL,eventName == NULL);
+    }
     for (int idx = 0; idx < numCacheEntries; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
+        ESP_LOGV(__FUNCTION__,"%s-%s == %s-%s",base,eventName,ei->baseName,ei->eventName);
         if ((ei != NULL) && 
             (ei->baseName != NULL) &&
             (ei->eventName != NULL) &&
-            (base != NULL) && 
-            (eventName != NULL) && 
             (indexOf(ei->baseName,base) != NULL) &&
             (indexOf(ei->eventName,eventName) != NULL)) {
+            ESP_LOGV(__FUNCTION__,"got a match");
             return ei;
         }
     }
+    ESP_LOGV(__FUNCTION__,"no match");
+
     return NULL;
 }
 
@@ -130,6 +136,7 @@ EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(esp_event_base_t b
             return ei;
         }
     }
+    ESP_LOGV(__FUNCTION__,"no match");
     return NULL;
 }
 
@@ -200,34 +207,36 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
         return NULL;
     }
     ESP_LOGV(__FUNCTION__,"before:%s", sourceValue);
-    char* sourceShadow = (char*)dmalloc(strlen(sourceValue)+1);
-    uint32_t retLen = strlen(sourceShadow)+200;
-    char* termName = NULL;
-    char* srcCursor = sourceShadow;
+    uint32_t retLen = strlen(sourceValue)+200;
     char* retCursor=(char*)dmalloc(retLen);
+    memset(retCursor,0,retLen);
+
+    char* srcCursor = (char*)dmalloc(strlen(sourceValue)+1);
+    char* srcCopy = srcCursor;
+    strcpy(srcCursor,sourceValue);
     char* retVal = retCursor;
-    char* openPos=sourceShadow;
+    char* termName = NULL;
+    char* openPos=srcCursor;
     char* closePos=NULL;
     char* lastClosePos=NULL;
     char* strftime_buf = (char*)dmalloc(64);
+
     cJSON* jtmp=NULL;
-    memset(retCursor,0,retLen);
     struct tm timeinfo;
     time_t now = 0;
     time(&now);
     localtime_r(&now, &timeinfo);
     EventHandlerDescriptor::templateType_t tt;
-    
-    strcpy(sourceShadow,sourceValue);
 
     AppConfig* cfg = NULL;
     AppConfig* jstat = AppConfig::GetAppStatus();
     AppConfig* jcfg = AppConfig::GetAppConfig();
+
     while ((openPos=indexOf(openPos,"${")) && (closePos=indexOf(openPos,"}"))) {
         lastClosePos=closePos;
-        if (openPos != sourceShadow) {
-            memcpy(retCursor,sourceShadow,openPos-sourceShadow);
-            ESP_LOGV(__FUNCTION__,"added:%s(%d)", retCursor,openPos-sourceShadow);
+        if (openPos != srcCursor) {
+            memcpy(retCursor,srcCursor,openPos-srcCursor);
+            ESP_LOGV(__FUNCTION__,"added:%s(%d)", retCursor,openPos-srcCursor);
         }
         retCursor+=strlen(retCursor);
         *closePos=0;
@@ -287,9 +296,9 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
         case EventHandlerDescriptor::templateType_t::Invalid:
             break;
         }
-        sourceShadow=openPos=closePos+1;
+        srcCursor=openPos=closePos+1;
         retCursor+=strlen(retCursor);
-        ESP_LOGV(__FUNCTION__,"now at:%s", sourceShadow);
+        ESP_LOGV(__FUNCTION__,"now at:%s", srcCursor);
     }
 
     if (lastClosePos != NULL) {
@@ -301,8 +310,7 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
         ESP_LOGV(__FUNCTION__,"Straight copy:%s", retVal);
     }
 
-    ldfree(srcCursor);
     ldfree(strftime_buf);
-    ldfree(sourceShadow);
+    ldfree(srcCopy);
     return retVal;
 }

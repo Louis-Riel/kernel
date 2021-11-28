@@ -331,6 +331,14 @@ int tarClose(mtar_t *tar)
 void DeleteTarFiles(void* param){
     char* filesToDelete = (char*) param;
     ESP_LOGV(__FUNCTION__,"Deleting %s",filesToDelete);
+
+    struct tm timeinfo;
+    time_t now = 0;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    char strftime_buf[65]; 
+    strftime(strftime_buf, 64, "%Y-%m-%d", &timeinfo);
+
     char* nextFile = lastIndexOf(filesToDelete,",");
     if (nextFile){
         *nextFile=0; //Remove trailng ,
@@ -344,7 +352,11 @@ void DeleteTarFiles(void* param){
     }
     while (nextFile) {
         ESP_LOGV(__FUNCTION__,"nextFile:%s",filesToDelete);
-        deleteFile(nextFile);
+        if (!indexOf(nextFile,strftime_buf)){
+            deleteFile(nextFile);
+        } else {
+            ESP_LOGD(__FUNCTION__,"Not deleting %s",nextFile);
+        }
         if (nextFile == filesToDelete) {
             ESP_LOGV(__FUNCTION__,"Done deleting");
             break;

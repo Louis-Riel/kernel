@@ -8,8 +8,6 @@ class ConfigEditor extends React.Component {
         } else {
             this.container.innerText = "Loading...";
         }
-        if (window.location.hostname || httpPrefix)
-            this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}));
     }
 
     render() {
@@ -18,6 +16,11 @@ class ConfigEditor extends React.Component {
 }
 
 class ConfigPage extends React.Component {
+    componentDidMount() {
+        if (window.location.hostname || httpPrefix)
+            this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}));
+    }
+
     getJsonConfig(devid) {
         return new Promise((resolve, reject) => {
             if (window.location.host || httpPrefix){
@@ -56,7 +59,7 @@ class ConfigPage extends React.Component {
                 e("button", { key: genUUID(), type: "button", onClick:(elem) => this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}))} , "Refresh")
             ]);
         } else {
-            return e("div",{key:genUUID()},"Loading...");
+            return e("div",{key:genUUID()},"Loading....");
         }
     }
 }

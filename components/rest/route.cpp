@@ -385,6 +385,8 @@ void TheRest::MergeConfig(void *param)
             AppConfig::GetAppConfig()->SetAppConfig(newCfg);
             ESP_LOGD(__FUNCTION__, "Updated config from server");
             TheRest::SendConfig(restInstance->gwAddr, newCfg);
+            vTaskDelay(1000/portTICK_PERIOD_MS);
+            esp_restart();
         }
         else
         {

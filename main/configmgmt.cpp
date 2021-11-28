@@ -14,6 +14,9 @@
 
 extern const uint8_t defaultconfig_json_start[] asm("_binary_defaultconfig_json_start");
 extern const uint8_t defaultconfig_json_end[] asm("_binary_defaultconfig_json_end");
+const char* AppConfig::SDPATH = "/sdcard";
+const char* AppConfig::SPIFFPATH = "/lfs";
+
 const char* emptyString="";
 
 AppConfig *GetAppConfig()
@@ -115,6 +118,11 @@ bool AppConfig::HasActiveStorage()
   return stat->activeStorage != NULL;
 }
 
+bool AppConfig::HasSDCard()
+{
+  return HasActiveStorage() && (GetActiveStorage()==SDPATH);
+}
+
 const char *AppConfig::GetActiveStorage()
 {
   AppConfig* stat = GetAppStatus();
@@ -144,7 +152,7 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
   uint8_t newIdx = 0, curIdx = 0;
   ESP_LOGV(__FUNCTION__, "Parsing src:%d dest:%d", curConfig == NULL, newConfig == NULL);
 
-  xSemaphoreTakeRecursive(sema,portMAX_DELAY);
+  //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   cJSON_ArrayForEach(curCfgItem, curConfig)
   {
     if (curCfgItem && curCfgItem->string)
@@ -254,7 +262,7 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
       }
     };
   }
-  xSemaphoreGiveRecursive(sema);
+  //xSemaphoreGiveRecursive(sema);
 }
 
 void AppConfig::SetAppConfig(cJSON *config)
@@ -264,7 +272,7 @@ void AppConfig::SetAppConfig(cJSON *config)
     ESP_LOGE(__FUNCTION__, "Save with empty set");
     return;
   }
-  xSemaphoreTakeRecursive(sema,portMAX_DELAY);
+  //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   char *c1, *c2;
   if (strcmp((c1 = cJSON_PrintUnformatted(json)), (c2 = cJSON_PrintUnformatted(config))) != 0)
   {
@@ -279,7 +287,7 @@ void AppConfig::SetAppConfig(cJSON *config)
   }
   ldfree(c1);
   ldfree(c2);
-  xSemaphoreGiveRecursive(sema);
+  //xSemaphoreGiveRecursive(sema);
 }
 
 void AppConfig::ResetAppConfig(bool save)
@@ -309,7 +317,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   {
     return;
   }
-  xSemaphoreTakeRecursive(sema,portMAX_DELAY);
+  //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   ESP_LOGV(__FUNCTION__, "Saving config %s",config->filePath);
   version++;
   if (!skipMount)
@@ -344,7 +352,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   {
     deinitSPISDCard();
   }
-  xSemaphoreGiveRecursive(sema);
+  //xSemaphoreGiveRecursive(sema);
 }
 
 AppConfig *AppConfig::GetConfig(const char *path)
@@ -373,7 +381,7 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
     return json;
   }
   ESP_LOGV(__FUNCTION__, "Getting JSON at path %s cwm:%d", path, createWhenMissing);
-  xSemaphoreTakeRecursive(sema,portMAX_DELAY);
+  //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
 
   if (path[0] == '/')
   {
@@ -402,13 +410,13 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
   if (ctmp1) {
     if (parJson == NULL) {
       ESP_LOGE(__FUNCTION__,"Missing parent json");
-      xSemaphoreGiveRecursive(sema);
+      //xSemaphoreGiveRecursive(sema);
       return NULL;
     }
   } else {
     if (json == NULL) {
       ESP_LOGE(__FUNCTION__,"Missing parent json.");
-      xSemaphoreGiveRecursive(sema);
+      //xSemaphoreGiveRecursive(sema);
       return NULL;
     }
   }
@@ -428,7 +436,7 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
     ESP_LOGV(__FUNCTION__, "Got JSON at:%s", path);
     ret = cJSON_GetObjectItem(parJson, ctmp1?ctmp1+1:parPath);
   }
-  xSemaphoreGiveRecursive(sema);
+  //xSemaphoreGiveRecursive(sema);
   return ret;
 }
 
@@ -447,7 +455,7 @@ cJSON *AppConfig::GetPropertyHolder(cJSON *prop)
   {
     return NULL;
   }
-  xSemaphoreTakeRecursive(sema,portMAX_DELAY);
+  //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
 
   cJSON* ret = NULL;
   if (cJSON_IsObject(prop))
@@ -466,7 +474,7 @@ cJSON *AppConfig::GetPropertyHolder(cJSON *prop)
     ESP_LOGV(__FUNCTION__, "JSon is not an object");
     ret = prop;
   }
-  xSemaphoreGiveRecursive(sema);
+  //xSemaphoreGiveRecursive(sema);
   return ret;
 }
 
@@ -506,7 +514,7 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
 
   ESP_LOGV(__FUNCTION__, "Getting JSON at %s", path);
 
-  xSemaphoreTakeRecursive(sema,portMAX_DELAY);
+  //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   cJSON *prop = NULL;
   char *lastSlash = lastIndexOf(path, "/");
   if (lastSlash != NULL)
@@ -567,7 +575,7 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
     }
   }
 
-  xSemaphoreGiveRecursive(sema);
+  //xSemaphoreGiveRecursive(sema);
   return prop;
 }
 
@@ -613,7 +621,7 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
     *ctmp1=0;
   }
 
-  xSemaphoreTakeRecursive(sema,portMAX_DELAY);
+  //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
 
   if (!holder)
   {
@@ -658,7 +666,7 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
   }
   if (hasChanges)
     SaveAppConfig();
-  xSemaphoreGiveRecursive(sema);
+  //xSemaphoreGiveRecursive(sema);
 }
 
 int32_t AppConfig::GetIntProperty(const char *path, int32_t defaultValue)
@@ -709,7 +717,7 @@ void AppConfig::SetIntProperty(const char *path, int value)
     *ctmp1=0;
   }
 
-  xSemaphoreTakeRecursive(sema,portMAX_DELAY);
+  //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   if (!holder)
   {
     holder = GetJSONConfig(path,true);
@@ -723,7 +731,7 @@ void AppConfig::SetIntProperty(const char *path, int value)
       cJSON_AddNumberToObject(ctmp1?holder:json,ctmp1?ctmp1+1:path,value);
     }
     SaveAppConfig();
-    xSemaphoreGiveRecursive(sema);
+    //xSemaphoreGiveRecursive(sema);
     return;
   }
 
@@ -733,7 +741,7 @@ void AppConfig::SetIntProperty(const char *path, int value)
     cJSON *version = cJSON_GetObjectItem(holder, "version");
     if (!val || !version) {
       ESP_LOGW(__FUNCTION__,"Weirdness at versioned path %s",path);
-      xSemaphoreGiveRecursive(sema);
+      //xSemaphoreGiveRecursive(sema);
       return;
     }
     ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == NULL?"*NULL*":filePath);
@@ -752,11 +760,11 @@ void AppConfig::SetIntProperty(const char *path, int value)
     ESP_LOGV(__FUNCTION__, "Update straight up int for %s to %d", path, value);
   } else {
     ESP_LOGV(__FUNCTION__, "No change for %s to %d", path, value);
-    xSemaphoreGiveRecursive(sema);
+    //xSemaphoreGiveRecursive(sema);
     return;
   }
   SaveAppConfig();
-  xSemaphoreGiveRecursive(sema);
+  //xSemaphoreGiveRecursive(sema);
 }
 
 void AppConfig::SetLongProperty(const char *path, uint64_t value)
@@ -810,7 +818,7 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
     *ctmp1=0;
   }
 
-  xSemaphoreTakeRecursive(sema,portMAX_DELAY);
+  //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   if (!holder)
   {
     holder = GetJSONConfig(path,true);
@@ -824,7 +832,7 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
       cJSON_AddNumberToObject(ctmp1?holder:json,ctmp1?ctmp1+1:path,value);
     }
     SaveAppConfig();
-    xSemaphoreGiveRecursive(sema);
+    //xSemaphoreGiveRecursive(sema);
     return;
   }
 
@@ -834,7 +842,7 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
     cJSON *version = cJSON_GetObjectItem(holder, "version");
     if (!val || !version) {
       ESP_LOGW(__FUNCTION__,"Weirdness at versioned path %s",path);
-      xSemaphoreGiveRecursive(sema);
+      //xSemaphoreGiveRecursive(sema);
       return;
     }
     ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == NULL?"*NULL*":filePath);
@@ -853,11 +861,11 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
     ESP_LOGV(__FUNCTION__, "Update straight up int for %s to %f", path, value);
   } else {
     ESP_LOGV(__FUNCTION__, "No change for %s to %f", path, value);
-    xSemaphoreGiveRecursive(sema);
+    //xSemaphoreGiveRecursive(sema);
     return;
   }
   SaveAppConfig();
-  xSemaphoreGiveRecursive(sema);
+  //xSemaphoreGiveRecursive(sema);
 }
 
 bool AppConfig::GetBoolProperty(const char *path)

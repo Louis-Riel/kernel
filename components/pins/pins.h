@@ -32,6 +32,8 @@ protected:
     static void pinHandler(void *arg);
     static QueueHandle_t eventQueue;
     static bool HealthCheck(void* instance);
+    static const char* PIN_BASE;
+    static esp_event_handler_instance_t *handlerInstance;
     gpio_num_t pinNo;
     uint32_t flags;
     void InitDevice();

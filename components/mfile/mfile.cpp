@@ -5,13 +5,14 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
-#define FILEBUFFER_UNFLUSHED_TIMEOUT_SECS 300
+#define FILEBUFFER_UNFLUSHED_TIMEOUT_SECS 30
 
 MFile* MFile::openFiles[];
 uint8_t MFile::numOpenFiles=0;
 QueueHandle_t MFile::eventQueue;
 esp_timer_handle_t BufferedFile::refreshHandle=NULL;
-
+esp_event_handler_instance_t* MFile::handlerInstance=NULL;
+const char* MFile::MFILE_BASE="MFile";
 
 MFile::~MFile(){
     ESP_LOGV(__FUNCTION__,"Destructor %s",name);
@@ -24,7 +25,7 @@ MFile::~MFile(){
 }
 
 MFile::MFile()
-    :ManagedDevice("MFile","MFile",BuildStatus)
+    :ManagedDevice(MFILE_BASE,"MFile",BuildStatus)
     ,file(NULL)
 {
     ESP_LOGV(__FUNCTION__,"Building MFile");
@@ -43,9 +44,9 @@ MFile::MFile(const char* fileName):MFile()
     ESP_LOGV(__FUNCTION__,"Opening file %s(%d)",fileName, sz);
     if (sz > 1){
         this->fileName = (const char*)dmalloc(sz+1);
+        name = (char*)dmalloc(sz+1);
+        strcpy((char*)this->fileName, fileName);
         strcpy(name, fileName);
-        name = (char*)dmalloc(sz+7);
-        sprintf(name, "%s", fileName);
         ESP_LOGV(__FUNCTION__,"file %s(%d)...",name, sz);
     } 
     cJSON* jcfg;
@@ -82,7 +83,11 @@ MFile* MFile::GetFile(const char* fileName){
     }
 
     if (numOpenFiles > MAX_OPEN_FILES) {
-        ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
+        ESP_LOGW(__FUNCTION__,"Ran Out of files at %s",fileName);
+        for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
+            if (openFiles[idx])
+                ESP_LOGD(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+        }
         return NULL;
     }
 
@@ -233,7 +238,7 @@ void MFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, 
 }
 
 esp_event_base_t MFile::GetEventBase(){
-    return MFile::eventBase;    
+    return MFILE_BASE;    
 }
 
 cJSON* MFile::BuildStatus(void *instance){
@@ -251,7 +256,8 @@ const char* BufferedFile::GetFilename(){
 BufferedFile::BufferedFile()
     :MFile()
 {
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(MFile::GetEventBase(), ESP_EVENT_ANY_ID, ProcessEvent, this, NULL));
+    if (handlerInstance == NULL)
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, ProcessEvent, this, handlerInstance));
 }
 
 BufferedFile::BufferedFile(const char* fileName)
@@ -270,19 +276,24 @@ BufferedFile::BufferedFile(const char* fileName)
     apin->SetIntProperty("bytesCached",0);
     bytesCached = apin->GetPropertyHolder("bytesCached");
     delete apin;
+    if (numOpenFiles < MAX_OPEN_FILES)
+        openFiles[numOpenFiles++]=this;
 }
 
 
 void BufferedFile::Flush() {
     if (buf && pos) {
-        ESP_LOGV(__FUNCTION__,"Flushing");
+        ESP_LOGV(__FUNCTION__,"Flushing %s",fileName);
         MFile::Write(buf,pos);
         pos=0;
         cJSON_SetIntValue(bytesCached,pos);
+    } else {
+        ESP_LOGV(__FUNCTION__,"Not Flushing %s, pos:%d",fileName,pos);
     }
 }
 
 void BufferedFile::FlushAll() {
+    ESP_LOGV(__FUNCTION__,"Flushing all");
     for (int idx=0; idx < MAX_OPEN_FILES; idx++) {
         if (openFiles[idx]){
             ((BufferedFile*)openFiles[idx])->Flush();
@@ -306,6 +317,10 @@ BufferedFile* BufferedFile::GetOpenedFile(const char* fileName){
 
     if (numOpenFiles > MAX_OPEN_FILES) {
         ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
+        for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
+            if (openFiles[idx])
+                ESP_LOGD(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+        }
         return NULL;
     }
 
@@ -324,19 +339,24 @@ BufferedFile* BufferedFile::GetFile(const char* fileName){
         return NULL;
     }
 
-    if (numOpenFiles > MAX_OPEN_FILES) {
-        ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
-        return NULL;
-    }
-
     for (uint idx=0; idx < numOpenFiles; idx++) {
         BufferedFile* file = (BufferedFile*)openFiles[idx];
         if (strcmp(file->fileName,fileName) == 0) {
             return file;
         }
     }
-    ESP_LOGV(__FUNCTION__,"Opening file %s",fileName);
-    return (BufferedFile*)(openFiles[numOpenFiles++]=new BufferedFile(fileName));
+    if (numOpenFiles > MAX_OPEN_FILES) {
+        ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
+        for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
+            if (openFiles[idx])
+                ESP_LOGD(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+        }
+
+        return NULL;
+    }
+
+    ESP_LOGV(__FUNCTION__,"Creating file %s",fileName);
+    return new BufferedFile(fileName);
 }
 
 void BufferedFile::WriteLine(uint8_t* data, uint32_t len) {
@@ -351,8 +371,8 @@ void BufferedFile::waitingWrites(void* params){
 
 void BufferedFile::Write(uint8_t* data, uint32_t len) {
     if (BufferedFile::refreshHandle != NULL) {
-        BufferedFile::refreshHandle=NULL;
         esp_timer_stop(BufferedFile::refreshHandle);
+        BufferedFile::refreshHandle=NULL;
     }
     esp_timer_create_args_t logTimerArgs=(esp_timer_create_args_t){
         waitingWrites,
@@ -405,6 +425,13 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
         if (cJSON_IsInvalid(*(cJSON**)event_data)) {
             ESP_LOGW(__FUNCTION__,"Invalid input json 0x%" PRIXPTR ", no go",(uintptr_t)*(cJSON**)event_data);
             return;
+        }
+
+        if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
+            char *tmp = cJSON_Print(*(cJSON**)event_data);
+            ESP_LOGW(__FUNCTION__, "Missing event id or base:%s", tmp == NULL ? "null" : tmp);
+            if (tmp)
+                ldfree(tmp);
         }
 
         AppConfig* params = new AppConfig(*(cJSON**)event_data,NULL);

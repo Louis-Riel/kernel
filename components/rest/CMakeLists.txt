@@ -3,6 +3,6 @@ idf_component_register(
     INCLUDE_DIRS "."
     PRIV_REQUIRES "microtar esp_littlefs mfile TinyGPS eventmgr pins"
     EMBED_FILES "../../res/favicon.ico"
-    EMBED_TXTFILES "../../res/index.html" "../../res/dist/app-min.js" "../../res/dist/app-min.css"
+    EMBED_TXTFILES "../../res/index.html" "../../res/index-sd.html" "../../res/dist/app-min-min.js" "../../res/dist/app-min-min.css"
     SRCS "../../main/log.cpp" "../../main/utils.cpp" "handlers.cpp" "puller.cpp" "websocket.cpp" "route.cpp" "flash.cpp" "tars.cpp"
 )

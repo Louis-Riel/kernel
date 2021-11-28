@@ -47,6 +47,10 @@ class StateTable extends React.Component {
         if (IsBooleanValue(val)) {
             val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
         }
+
+        if ((fld == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+            return e("a", { href: `${httpPrefix}${val}` }, val);
+        }
         return val;
     }
 
@@ -55,8 +59,8 @@ class StateTable extends React.Component {
             return e("tbody", { key: genUUID() },
                 json.sort((e1,e2)=>e1[this.sortedOn].localeCompare(e2[this.sortedOn]))
                     .map(line => e("tr", { key: genUUID() },
-                                         this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" }, 
-                                                                             line[fld] !== undefined ? e("div", { key: genUUID(), className: "value" }, this.getValue(fld, line[fld])) : null)))));
+                        this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" }, 
+                            line[fld] !== undefined ? e("div", { key: genUUID(), className: "value" }, this.getValue(fld, line[fld])) : null)))));
         } else {
             return null;
         }

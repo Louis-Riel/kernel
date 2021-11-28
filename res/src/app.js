@@ -74,7 +74,7 @@ class MainApp extends React.Component {
   }
   
   componentDidUpdate(prevProps, prevState, snapshot) {
-    this.mountWidget();
+    //this.mountWidget();
   }
 
   componentDidMount() {
@@ -522,8 +522,8 @@ class MainApp extends React.Component {
               key: genUUID(),
               className: "landevices",
               value: httpPrefix.substring(7),
-              //onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
-              onChange: elem=>{window.location=`http://${elem.target.value}`}
+              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
+              //onChange: elem=>{window.location=`http://${elem.target.value}`}
               },this.state.OnLineDevices.map(lanDev=>e("option",{
                   key:genUUID(),
                   className: "landevice"

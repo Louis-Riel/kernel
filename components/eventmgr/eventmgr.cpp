@@ -9,7 +9,7 @@ EventManager::EventManager(cJSON* cfg, cJSON* programs)
 :config(cfg)
 ,programs(programs)
 ,eventBuffer(NULL)
-,eventQueue(xQueueCreate(20, sizeof(postedEvent_t*)))
+,eventQueue(xQueueCreate(20, sizeof(postedEvent_t)))
 {
     memset(eventInterpretors,0,sizeof(void*)*MAX_NUM_EVENTS);
     if (!ValidateConfig()) {
@@ -67,7 +67,7 @@ bool EventManager::ValidateConfig(){
 void EventManager::RegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {
     ESP_LOGV(__FUNCTION__,"Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
     if (runningInstance == NULL) {
-        ESP_LOGD(__FUNCTION__,"Getting EventManager instance");
+        ESP_LOGV(__FUNCTION__,"Getting EventManager instance");
         runningInstance = EventManager::GetInstance();
         ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, EventManager::EventProcessor, runningInstance, NULL));
     }
@@ -79,20 +79,25 @@ void EventManager::UnRegisterEventHandler(EventHandlerDescriptor* eventHandlerDe
 }
 
 void EventManager::EventPoller(void* param){
-    postedEvent_t** postedEvent = (postedEvent_t**)dmalloc(sizeof(postedEvent_t**));
+    postedEvent_t* postedEvent = (postedEvent_t*)dmalloc(sizeof(postedEvent_t));
+    memset(postedEvent,0,sizeof(postedEvent_t));
     EventManager* mgr = (EventManager*)param;
-    while(xQueueReceive(mgr->eventQueue,postedEvent,portMAX_DELAY)){
-        ProcessEvent(*postedEvent);
-        ldfree(*postedEvent);
+    EventGroupHandle_t appEg = getAppEG();
+    while(!(xEventGroupGetBits(appEg) & app_bits_t::HIBERNATE) && xQueueReceive(mgr->eventQueue,postedEvent,portMAX_DELAY)){
+        ESP_LOGV(__FUNCTION__,"Processing Event %s %d",postedEvent->base, postedEvent->id);
+        ProcessEvent(postedEvent);
+        memset(postedEvent,0,sizeof(postedEvent_t));
     }
+    ldfree(postedEvent);
 }
 
 void EventManager::ProcessEvent(postedEvent_t* postedEvent){
     if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
-        ESP_LOGV(__FUNCTION__,"Parsing Event %s %d",postedEvent->base, postedEvent->id);
         EventDescriptor_t* desc = EventHandlerDescriptor::GetEventDescriptor(postedEvent->base,postedEvent->id);
         if (desc) {
             ESP_LOGV(__FUNCTION__,"Event %s %s",desc->baseName, desc->eventName);
+        } else {
+            ESP_LOGV(__FUNCTION__,"Parsing Event %s %d",postedEvent->base, postedEvent->id);
         }
     }
     EventManager* evtMgr = EventManager::GetInstance();
@@ -113,8 +118,10 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
                 jpl = cJSON_Parse((const char*)postedEvent->event_data);
                 if (jpl) {
                     cJSON_AddItemToObject(jevt,"data",jpl);
-                } else {
+                } else if (cJSON_IsInvalid((cJSON*)postedEvent->event_data)) {
                     ESP_LOGW(__FUNCTION__,"Cannot jsonify data for %s %s %s",edesc->baseName,edesc->eventName, (char*)postedEvent->event_data);
+                } else {
+                    cJSON_AddItemReferenceToObject(jevt,"data",(cJSON*)postedEvent->event_data);
                 }
                 break;
             case event_data_type_tp::String:
@@ -147,7 +154,6 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
                 ESP_LOGV(__FUNCTION__,"Running program %s at idx %d", postedEvent->base, idx);
                 interpretor->RunProgram(interpretor->GetProgramName());
             } else {
-                ESP_LOGV(__FUNCTION__,"Running method at idx %d",idx);
                 interpretor->RunMethod(NULL);
             }
         }
@@ -165,15 +171,15 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
     }
     EventManager* mgr = (EventManager*) handler_args;
     ESP_LOGV(__FUNCTION__,"Base:%s id:%d eventQueue:%" PRIXPTR "",base,id,(uintptr_t)mgr->eventQueue);
-    postedEvent_t* postedEvent = (postedEvent_t*)dmalloc(sizeof(postedEvent_t));
-    postedEvent->base=base;
-    postedEvent->id=id;
-    EventDescriptor_t* ed=NULL;
-    postedEvent->eventDataType=(ed=EventHandlerDescriptor::GetEventDescriptor(base,id)) == NULL ? event_data_type_tp::Unknown : ed->dataType;
+    EventDescriptor_t* ed=EventHandlerDescriptor::GetEventDescriptor(base,id);
     if (!ed) {
         ESP_LOGV(__FUNCTION__,"No desciptor for %s %d", base, id);
     } else {
-        ESP_LOGV(__FUNCTION__,"type for %s %s is %d", base, ed->eventName, (int)ed->dataType);
+        postedEvent_t* postedEvent = (postedEvent_t*)dmalloc(sizeof(postedEvent_t));
+        postedEvent->base=base;
+        postedEvent->id=id;
+        postedEvent->eventDataType=ed->dataType;
+        ESP_LOGV(__FUNCTION__,"type for %s %s(%d) is %d", postedEvent->base, ed->eventName, postedEvent->id, (int)ed->dataType);
         switch (ed->dataType)
         {
         case event_data_type_tp::String:
@@ -189,7 +195,8 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
         default:
             break;
         }
-        xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
+        xQueueSendFromISR(mgr->eventQueue, postedEvent, NULL);
+        ldfree(postedEvent);
     }
 }
 

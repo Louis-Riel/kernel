@@ -82,7 +82,7 @@ void WebsocketManager::PostToClient(void* msg) {
     time(&wsMsg->client->lastTs);
     localtime_r(&wsMsg->client->lastTs, &timeinfo);
     strftime(wsMsg->client->jLastTs->valuestring, 30, "%c", &timeinfo);
-    ESP_LOGV(__FUNCTION__,"Client %s - %d bytes", wsMsg->client->jLastTs->valuestring, ws_pkt.len);
+    ESP_LOGV(__FUNCTION__,"Client %s - %d bytes:%s", wsMsg->client->jLastTs->valuestring, ws_pkt.len,(char*)ws_pkt.payload);
   }
   if (wsMsg->buf)
     ldfree(wsMsg->buf);
@@ -108,6 +108,9 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
         stateChange=true;
         ESP_LOGD(__FUNCTION__,"Client %d disconnected",idx);
+      } else {
+        if (msg)
+          ESP_LOGV(__FUNCTION__,"Client %d:%s",idx,(char*) msg);
       }
       //ldfree(wsMsg);
     }

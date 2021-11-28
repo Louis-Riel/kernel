@@ -432,14 +432,21 @@ void parseFolderForTars(const char *folder)
 
 void parseFiles(void *param)
 {
+    char folderName[200];
+    if (param) {
+        strcpy(folderName,(char*)param);
+        ldfree(param);
+    } else {
+        strcpy(folderName,"/sdcard/tars");
+    }
     size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
-    parseFolderForTars("/sdcard/tars");
+    parseFolderForTars(folderName);
     size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
     if (diff > 0) {
         ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","parseFolderForTars",diff);
     }
     stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
-    commitTripToDisk(NULL);
+    //commitTripToDisk(NULL);
     diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
     if (diff > 0) {
         ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","commitTripToDisk",diff);
@@ -525,7 +532,12 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
             }
             else if (jitem && (strcmp(jitem->valuestring, "parseFiles") == 0))
             {
-                CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
+                cJSON *fileName = cJSON_GetObjectItemCaseSensitive(jresponse, "filename");
+                char* fname = fileName == NULL ? NULL : (char*)dmalloc(strlen(fileName->string)+1);
+                if (fname) {
+                    strcpy(fname,fileName->valuestring);
+                } 
+                CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, fname, tskIDLE_PRIORITY, NULL);
                 ret = httpd_resp_send(req, "parsing", 7);
                 TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 7;
             }
@@ -727,6 +739,11 @@ esp_err_t TheRest::app_handler(httpd_req_t *req)
     {
         return sendFile(req, req->uri);
     }
+    if (AppConfig::HasSDCard()) {
+        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += (index_sd_html_end - index_sd_html_start);
+        return httpd_resp_send(req, (const char *)index_sd_html_start, (index_sd_html_end - index_sd_html_start - 1));
+    }
+
     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += (index_html_end - index_html_start);
     return httpd_resp_send(req, (const char *)index_html_start, (index_html_end - index_html_start - 1));
 }

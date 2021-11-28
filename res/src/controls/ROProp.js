@@ -20,6 +20,11 @@ class ROProp extends React.Component {
         if (IsBooleanValue(val)) {
             val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
         }
+
+        if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+            return e("a", { href: `${httpPrefix}${val}` }, val);
+        }
+
         return val;
     }
 

@@ -1,25 +1,124 @@
+class UnparsedCVS extends React.Component {
+    renderTrip(){
+        if (!this.state?.points){
+            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+            .then(resp => resp.text())
+            .then(content =>{
+                var lns = content.split(/\n|\r\n/);
+                var cols=lns[0].split(",");
+                this.setState({
+                    points:lns.splice(1).map(ln => {
+                        var ret={};
+                        ln.split(",").forEach((it,idx) => ret[cols[idx]] = isNaN(it)?it:parseFloat(it));
+                        return ret;
+                    }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
+                });
+            });
+        } else {
+            this.setState({points:this.state.points});
+        }
+    }
+
+    getIconColor() {
+        if (!this.state?.points) {
+            return "#00ff00";
+        } else if (this.state.points.length) {
+            return "aquamarine";
+        } else {
+            return "#ff0000";
+        }
+    }
+
+    getIcon() {
+        return e("svg", { key: genUUID(), xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64",onClick:this.renderTrip.bind(this) }, [
+            e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M17.993 56h20v6h-20zm-4.849-18.151c4.1 4.1 9.475 6.149 14.85 6.149 5.062 0 10.11-1.842 14.107-5.478l.035.035 1.414-1.414-.035-.035c7.496-8.241 7.289-20.996-.672-28.957A20.943 20.943 0 0 0 27.992 2a20.927 20.927 0 0 0-14.106 5.477l-.035-.035-1.414 1.414.035.035c-7.496 8.243-7.289 20.997.672 28.958zM27.992 4.001c5.076 0 9.848 1.976 13.437 5.563 7.17 7.17 7.379 18.678.671 26.129L15.299 8.892c3.493-3.149 7.954-4.891 12.693-4.891zm12.696 33.106c-3.493 3.149-7.954 4.892-12.694 4.892a18.876 18.876 0 0 1-13.435-5.563c-7.17-7.17-7.379-18.678-.671-26.129l26.8 26.8z" }),
+            e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M48.499 2.494l-2.828 2.828c4.722 4.721 7.322 10.999 7.322 17.678s-2.601 12.957-7.322 17.678S34.673 48 27.993 48s-12.957-2.601-17.678-7.322l-2.828 2.828C12.962 48.983 20.245 52 27.993 52s15.031-3.017 20.506-8.494c5.478-5.477 8.494-12.759 8.494-20.506S53.977 7.97 48.499 2.494z" })
+        ]);
+    }
+
+    render() {
+        return e("div",{key:genUUID(),className:"rendered trip"},[
+            this.getIcon(),
+            this.state?.points?e(TripViewer,{key:genUUID(),points:this.state.points}):null
+        ]
+        );
+    }
+}
+class FileViewer extends React.Component {
+    constructor(props) {
+        super(props);
+        this.buildRenderers();
+    }
+
+    buildRenderers() {
+        if (this.props.name.endsWith(".csv")) {
+            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+                .then(resp => resp.text())
+                .then(content =>{
+                    if (content.startsWith("timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites") &&
+                        !this.state?.renderes?.some("unparsedcsv")){
+                        this.setState({renderes:["unparsedcsv",...(this.state?.renderes||[])]})
+                    }
+                })
+        }
+    }
+
+    getRenderers() {
+        return this.state?.renderes.map(renderer => {
+            switch (renderer) {
+                case "unparsedcsv":
+                    return e(UnparsedCVS,{key:genUUID(),...this.props});
+                    break;
+            
+                default:
+                    return null;
+                    break;
+            }
+        });
+    }
+
+    render() {
+        return [e("a", { key:genUUID(), href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name),this.getRenderers()];
+    }
+}
 
 class SFile extends React.Component {
     render() {
         return  e("tr", { key: genUUID(), className: this.props.file.ftype }, [
-            e("td", { key: genUUID() }, this.props.getFileLink(this.props.file)),
+            e("td", { key: genUUID() }, this.getLink(this.props.file)),
             e("td", { key: genUUID() }, this.props.file.ftype != "file" ? "" : this.props.file.size),
-            e("td", { key: genUUID() }, this.props.path == "/" || this.props.file.name == ".." ? null : e("a", {
+            e("td", { key: genUUID() }, this.getDeleteLink())]);
+    }
+
+    getDeleteLink() {
+        return this.props.path == "/" || this.props.file.name == ".." ? null : e("a", {
+            key: genUUID(),
+            href: "#",
+            onClick: () => {
+                wfetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
+                    method: 'post',
+                    headers: {
+                        ftype: this.props.file.ftype == "file" ? "file" : "directory",
+                        operation: "delete"
+                    }
+                }).then(this.props.OnDelete ? this.props.OnDelete() : null)
+                    .catch(err => {
+                        console.error(err);
+                    });
+            }
+        }, "Del");
+    }
+
+    getLink(file) {
+        if (file.ftype == "folder") {
+            return e("a", {
                 key: genUUID(),
                 href: "#",
-                onClick: () => {
-                    wfetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
-                        method: 'post',
-                        headers: {
-                            ftype: this.props.file.ftype == "file" ? "file" : "directory",
-                            operation: "delete"
-                        }
-                    }).then(this.props.OnDelete ? this.props.OnDelete():null)
-                      .catch(err => {
-                        console.error(err);
-                      });
-                }
-            }, "Del"))]);
+                onClick: () => this.props.onChangeFolder ? this.props.onChangeFolder(`${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/")):null
+            }, file.name);
+        } else {
+            return e(FileViewer,{key:genUUID(),...file});
+        }
     }
 }
 
@@ -95,20 +194,6 @@ class StorageViewer extends React.Component {
         }
     }
 
-    getFileLink(file) {
-        if (file.ftype == "folder") {
-            return e("a", {
-                key: genUUID(),
-                href: "#",
-                onClick: () => {
-                    this.setState({ total: 0, loaded: false, path: `${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/") });
-                }
-            }, file.name);
-        } else {
-            return e("a", { href: `${httpPrefix}${this.state.path}/${file.name}` }, file.name);
-        }
-    }
-
     componentDidUpdate(prevProps, prevState) {
         if (!this.state.loaded) {
             this.state.loaded = true;
@@ -155,8 +240,8 @@ class StorageViewer extends React.Component {
                             this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ 
                                 key: genUUID(), 
                                 file:file, 
-                                path:this.state.path, 
-                                getFileLink:this.getFileLink.bind(this),
+                                path:this.state.path,
+                                onChangeFolder: (folder) => this.setState({path:folder}),
                                 OnDelete: ()=>this.fetchFiles()
                             }))
                             ),
