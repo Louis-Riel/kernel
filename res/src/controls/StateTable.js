@@ -19,7 +19,8 @@ class StateTable extends React.Component {
                     .map(fld => {
                         if (!this.cols.some(col => fld == col)) {
                             this.cols.push(fld);
-                            if (!this.sortedOn && json[0] && isNaN(json[0][fld])) {
+                            var val = this.getValue(fld,json[0][fld]);
+                            if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
                                 this.sortedOn = fld;
                             }
                         }
@@ -31,36 +32,46 @@ class StateTable extends React.Component {
     }
 
     getValue(fld, val) {
-        if (fld.endsWith("_sec") && (val > 10000000)) {
-            return new Date(val * 1000).toLocaleString();
-        } else if (IsNumberValue(val)) {
-            if (isFloat(val)) {
-                if ((this.props.name.toLowerCase() != "lattitude") &&
-                    (this.props.name.toLowerCase() != "longitude") &&
-                    (this.props.name != "lat") && (this.props.name != "lng")) {
-                    val = parseFloat(val).toFixed(2);
-                } else {
-                    val = parseFloat(val).toFixed(8);
+        if (val?.value !== undefined) {
+            return this.getValue(fld,val.value);
+        } else {
+            if (fld.endsWith("_sec") && (val > 10000000)) {
+                return new Date(val * 1000).toLocaleString();
+            } else if (IsNumberValue(val)) {
+                if (isFloat(val)) {
+                    if ((this.props.name.toLowerCase() != "lattitude") &&
+                        (this.props.name.toLowerCase() != "longitude") &&
+                        (this.props.name != "lat") && (this.props.name != "lng")) {
+                        val = parseFloat(val).toFixed(2);
+                    } else {
+                        val = parseFloat(val).toFixed(8);
+                    }
                 }
             }
+            if (IsBooleanValue(val)) {
+                val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
+            }
+    
+            if ((fld == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+                return e("a", { href: `${httpPrefix}${val}` }, val);
+            }
+            return val;
         }
-        if (IsBooleanValue(val)) {
-            val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
-        }
-
-        if ((fld == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-            return e("a", { href: `${httpPrefix}${val}` }, val);
-        }
-        return val;
     }
 
     BuildBody(json) {
         if (json) {
             return e("tbody", { key: genUUID() },
-                json.sort((e1,e2)=>e1[this.sortedOn].localeCompare(e2[this.sortedOn]))
+                json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
                     .map(line => e("tr", { key: genUUID() },
                         this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" }, 
-                            line[fld] !== undefined ? e("div", { key: genUUID(), className: "value" }, this.getValue(fld, line[fld])) : null)))));
+                            typeof this.getValue(fld, line[fld]) != 'object' ? 
+                                e("div", { key: genUUID(), className: "value" }, this.getValue(fld, line[fld])) : 
+                                Array.isArray(line[fld]) ? 
+                                    e(StateTable,{key: genUUID(), name:fld, label:fld, json:line[fld]}):
+                                    e(AppState,{key: genUUID(),json:line[fld]})
+                        )))
+                    ));
         } else {
             return null;
         }

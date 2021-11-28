@@ -54,8 +54,12 @@ class ConfigPage extends React.Component {
     render() {
         if (this.state?.config) {
             return e("form", { onSubmit: form => this.SaveForm(form), key: `${this.props.id || genUUID()}`, action: "/config", method: "post" }, [
-                e(ConfigEditor, { key: genUUID(), deviceId: this.props.selectedDeviceId, deviceConfig: this.state.config }),
-                e("button", { key: genUUID() }, "Save"),
+                //e(ConfigEditor, { key: genUUID(), deviceId: this.props.selectedDeviceId, deviceConfig: this.state.config }),
+                e(AppState, {
+                    key: genUUID(), 
+                    json: this.state.config, 
+                    selectedDeviceId: this.props.selectedDeviceId
+                }),
                 e("button", { key: genUUID(), type: "button", onClick:(elem) => this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}))} , "Refresh")
             ]);
         } else {

@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "";//"http://tracer";
+var httpPrefix = "";//"http://irtracker";
 
 //#region SHA-1
 /*
@@ -333,33 +333,36 @@ class ROProp extends React.Component {
         this.id = this.props.id || genUUID();
     }
 
-    getValue() {
-        var val = this.props.value && this.props.value.version ? this.props.value.value : this.props.value;
-        if (IsNumberValue(val)) {
-            if (isFloat(val)) {
-                if ((this.props.name.toLowerCase() != "lattitude") &&
-                    (this.props.name.toLowerCase() != "longitude") &&
-                    (this.props.name != "lat") && (this.props.name != "lng")) {
-                    val = parseFloat(val).toFixed(2);
-                } else {
-                    val = parseFloat(val).toFixed(8);
+    getValue(fld,val) {
+        if (val?.value !== undefined) {
+            return this.getValue(fld,val.value);
+        } else {
+            if (IsNumberValue(val)) {
+                if (isFloat(val)) {
+                    if ((this.props.name.toLowerCase() != "lattitude") &&
+                        (this.props.name.toLowerCase() != "longitude") &&
+                        (this.props.name != "lat") && (this.props.name != "lng")) {
+                        val = parseFloat(val).toFixed(2);
+                    } else {
+                        val = parseFloat(val).toFixed(8);
+                    }
                 }
             }
-        }
-        if (IsBooleanValue(val)) {
-            val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
-        }
+            if (IsBooleanValue(val)) {
+                val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
+            }
 
-        if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-            return e("a", { href: `${httpPrefix}${val}` }, val);
-        }
+            if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+                return e("a", { href: `${httpPrefix}${val}` }, val);
+            }
 
-        return val;
+            return val;
+        }
     }
 
     componentDidMount() {
         if (IsDatetimeValue(this.props.name)) {
-            this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue());
+            this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
         }
     }
 
@@ -432,7 +435,7 @@ class ROProp extends React.Component {
     render() {
         return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
             e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, this.props.label),
-            e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue())
+            e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
         ]);
     }
 }
@@ -457,7 +460,8 @@ class StateTable extends React.Component {
                     .map(fld => {
                         if (!this.cols.some(col => fld == col)) {
                             this.cols.push(fld);
-                            if (!this.sortedOn && json[0] && isNaN(json[0][fld])) {
+                            var val = this.getValue(fld,json[0][fld]);
+                            if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
                                 this.sortedOn = fld;
                             }
                         }
@@ -469,36 +473,46 @@ class StateTable extends React.Component {
     }
 
     getValue(fld, val) {
-        if (fld.endsWith("_sec") && (val > 10000000)) {
-            return new Date(val * 1000).toLocaleString();
-        } else if (IsNumberValue(val)) {
-            if (isFloat(val)) {
-                if ((this.props.name.toLowerCase() != "lattitude") &&
-                    (this.props.name.toLowerCase() != "longitude") &&
-                    (this.props.name != "lat") && (this.props.name != "lng")) {
-                    val = parseFloat(val).toFixed(2);
-                } else {
-                    val = parseFloat(val).toFixed(8);
+        if (val?.value !== undefined) {
+            return this.getValue(fld,val.value);
+        } else {
+            if (fld.endsWith("_sec") && (val > 10000000)) {
+                return new Date(val * 1000).toLocaleString();
+            } else if (IsNumberValue(val)) {
+                if (isFloat(val)) {
+                    if ((this.props.name.toLowerCase() != "lattitude") &&
+                        (this.props.name.toLowerCase() != "longitude") &&
+                        (this.props.name != "lat") && (this.props.name != "lng")) {
+                        val = parseFloat(val).toFixed(2);
+                    } else {
+                        val = parseFloat(val).toFixed(8);
+                    }
                 }
             }
+            if (IsBooleanValue(val)) {
+                val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
+            }
+    
+            if ((fld == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+                return e("a", { href: `${httpPrefix}${val}` }, val);
+            }
+            return val;
         }
-        if (IsBooleanValue(val)) {
-            val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
-        }
-
-        if ((fld == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-            return e("a", { href: `${httpPrefix}${val}` }, val);
-        }
-        return val;
     }
 
     BuildBody(json) {
         if (json) {
             return e("tbody", { key: genUUID() },
-                json.sort((e1,e2)=>e1[this.sortedOn].localeCompare(e2[this.sortedOn]))
+                json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
                     .map(line => e("tr", { key: genUUID() },
                         this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" }, 
-                            line[fld] !== undefined ? e("div", { key: genUUID(), className: "value" }, this.getValue(fld, line[fld])) : null)))));
+                            typeof this.getValue(fld, line[fld]) != 'object' ? 
+                                e("div", { key: genUUID(), className: "value" }, this.getValue(fld, line[fld])) : 
+                                Array.isArray(line[fld]) ? 
+                                    e(StateTable,{key: genUUID(), name:fld, label:fld, json:line[fld]}):
+                                    e(AppState,{key: genUUID(),json:line[fld]})
+                        )))
+                    ));
         } else {
             return null;
         }
@@ -553,7 +567,7 @@ class AppState extends React.Component {
                         return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
                     }
                     return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
-                } else if (typeof json[fld] == 'object') {
+                } else if ((typeof json[fld] == 'object') && !Object.keys(json[fld]).find(fld => fld=="value")) {
                     return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus,registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
                 } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
                     return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
@@ -801,8 +815,12 @@ class ConfigPage extends React.Component {
     render() {
         if (this.state?.config) {
             return e("form", { onSubmit: form => this.SaveForm(form), key: `${this.props.id || genUUID()}`, action: "/config", method: "post" }, [
-                e(ConfigEditor, { key: genUUID(), deviceId: this.props.selectedDeviceId, deviceConfig: this.state.config }),
-                e("button", { key: genUUID() }, "Save"),
+                //e(ConfigEditor, { key: genUUID(), deviceId: this.props.selectedDeviceId, deviceConfig: this.state.config }),
+                e(AppState, {
+                    key: genUUID(), 
+                    json: this.state.config, 
+                    selectedDeviceId: this.props.selectedDeviceId
+                }),
                 e("button", { key: genUUID(), type: "button", onClick:(elem) => this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}))} , "Refresh")
             ]);
         } else {
@@ -2024,7 +2042,7 @@ class TripViewer extends React.Component {
                 promises.push(this.drawTile(tileX, tileY, 0, tiles));
             }
         }
-        return new Promise((resolve,reject)=>Promise.all(promises).then(res=>resolve(tiles)).catch(reject));
+        return new Promise((resolve,reject)=>Promise.all(promises).then(res=>resolve(tiles)).catch(err=>resolve(tiles)));
     }
 
     drawTile(tileX, tileY, numTries, tiles) {
@@ -2044,7 +2062,7 @@ class TripViewer extends React.Component {
                     if (numTries > 3) {
                         reject(`Failed to fetch tile ${tileX},${tileY}`);
                     } else {
-                        this.drawTile(tileX, tileY, numTries++,tiles).then(resolve).catch(reject);
+                        this.drawTile(tileX, tileY, numTries+1,tiles).then(resolve).catch(reject);
                     }
                 };
                 tile.src = `${httpPrefix}/sdcard/web/tiles/${tileX}/${tileY}.png`;

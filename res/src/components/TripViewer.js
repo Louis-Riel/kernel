@@ -161,7 +161,7 @@ class TripViewer extends React.Component {
                 promises.push(this.drawTile(tileX, tileY, 0, tiles));
             }
         }
-        return new Promise((resolve,reject)=>Promise.all(promises).then(res=>resolve(tiles)).catch(reject));
+        return new Promise((resolve,reject)=>Promise.all(promises).then(res=>resolve(tiles)).catch(err=>resolve(tiles)));
     }
 
     drawTile(tileX, tileY, numTries, tiles) {
@@ -181,7 +181,7 @@ class TripViewer extends React.Component {
                     if (numTries > 3) {
                         reject(`Failed to fetch tile ${tileX},${tileY}`);
                     } else {
-                        this.drawTile(tileX, tileY, numTries++,tiles).then(resolve).catch(reject);
+                        this.drawTile(tileX, tileY, numTries+1,tiles).then(resolve).catch(reject);
                     }
                 };
                 tile.src = `${httpPrefix}/sdcard/web/tiles/${tileX}/${tileY}.png`;

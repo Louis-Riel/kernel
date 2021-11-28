@@ -4,33 +4,36 @@ class ROProp extends React.Component {
         this.id = this.props.id || genUUID();
     }
 
-    getValue() {
-        var val = this.props.value && this.props.value.version ? this.props.value.value : this.props.value;
-        if (IsNumberValue(val)) {
-            if (isFloat(val)) {
-                if ((this.props.name.toLowerCase() != "lattitude") &&
-                    (this.props.name.toLowerCase() != "longitude") &&
-                    (this.props.name != "lat") && (this.props.name != "lng")) {
-                    val = parseFloat(val).toFixed(2);
-                } else {
-                    val = parseFloat(val).toFixed(8);
+    getValue(fld,val) {
+        if (val?.value !== undefined) {
+            return this.getValue(fld,val.value);
+        } else {
+            if (IsNumberValue(val)) {
+                if (isFloat(val)) {
+                    if ((this.props.name.toLowerCase() != "lattitude") &&
+                        (this.props.name.toLowerCase() != "longitude") &&
+                        (this.props.name != "lat") && (this.props.name != "lng")) {
+                        val = parseFloat(val).toFixed(2);
+                    } else {
+                        val = parseFloat(val).toFixed(8);
+                    }
                 }
             }
-        }
-        if (IsBooleanValue(val)) {
-            val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
-        }
+            if (IsBooleanValue(val)) {
+                val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
+            }
 
-        if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-            return e("a", { href: `${httpPrefix}${val}` }, val);
-        }
+            if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+                return e("a", { href: `${httpPrefix}${val}` }, val);
+            }
 
-        return val;
+            return val;
+        }
     }
 
     componentDidMount() {
         if (IsDatetimeValue(this.props.name)) {
-            this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue());
+            this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
         }
     }
 
@@ -103,7 +106,7 @@ class ROProp extends React.Component {
     render() {
         return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
             e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, this.props.label),
-            e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue())
+            e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
         ]);
     }
 }

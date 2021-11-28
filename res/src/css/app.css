@@ -686,6 +686,7 @@ label.table table {
 
 label.table {
     background: none;
+    float: left;
 }
 
 legend {
@@ -702,11 +703,12 @@ div.value {
 }
 
 .statusclass {
-    display: flow-root;
+    /* display: flow-root; */
 }
 
 .fieldgroup {
-    display: flow-root;
+    /* display: flow-root; */
+    /* float: left; */
 }
 
 .content  {
@@ -838,4 +840,12 @@ a {
 .tripHeader {
     position: absolute;
     top: 0;
+}
+
+.fieldgroup.object {
+    float: right;
+}
+
+.fieldgroup.array {
+    float: left;
 }
