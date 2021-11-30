@@ -1,20 +1,3 @@
-class ConfigEditor extends React.Component {
-    componentDidMount() {
-        if (this.props.deviceConfig) {
-            this.jsonEditor = new JSONEditor(this.container, {
-                onChangeJSON: json => Object.assign(this.props.deviceConfig, json)
-            });
-            this.jsonEditor.set(this.props.deviceConfig);
-        } else {
-            this.container.innerText = "Loading...";
-        }
-    }
-
-    render() {
-        return e("div", { key: genUUID(), ref: (elem) => this.container = elem, id: `${this.props.id || genUUID()}`, className: "column col-md-12", "data-theme": "spectre" })
-    }
-}
-
 class ConfigPage extends React.Component {
     componentDidMount() {
         if (window.location.hostname || httpPrefix)
@@ -54,11 +37,11 @@ class ConfigPage extends React.Component {
     render() {
         if (this.state?.config) {
             return e("form", { onSubmit: form => this.SaveForm(form), key: `${this.props.id || genUUID()}`, action: "/config", method: "post" }, [
-                //e(ConfigEditor, { key: genUUID(), deviceId: this.props.selectedDeviceId, deviceConfig: this.state.config }),
-                e(AppState, {
+                e(JSONEditor, {
                     key: genUUID(), 
-                    json: this.state.config, 
-                    selectedDeviceId: this.props.selectedDeviceId
+                    json: this.state.config,
+                    name: "config",
+                    editable: true
                 }),
                 e("button", { key: genUUID(), type: "button", onClick:(elem) => this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}))} , "Refresh")
             ]);

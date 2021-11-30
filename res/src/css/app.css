@@ -5,7 +5,7 @@ table.greyGridTable th {
 }
 
 table.greyGridTable tbody td {
-    vertical-align: middle;
+    /* vertical-align: middle; */
 }
 
 table.greyGridTable td:nth-child(even) {
@@ -22,7 +22,7 @@ table.greyGridTable tfoot {
 
 table.greyGridTable caption {
     position: sticky;
-    top: -11px;
+    top: 0;
     height: 30px;
     font-family: monospace;
     font-size: x-large;
@@ -43,12 +43,10 @@ table.greyGridTable caption {
 }
 
 table.greyGridTable thead * {
-    text-align: center;
-    border-left: 2px solid #333333;
     background: #181d17;
     border-bottom: 2px solid #c0c0c0;
     position: sticky;
-    top: 18px;
+    top: 28px;
     color: aqua;
     padding-top: 8px;
 }
@@ -79,7 +77,6 @@ table.greyGridTable tfoot td {
 }
 
 .settings_section {
-    float: right;
     font-size: x-large;
 }
 
@@ -128,8 +125,6 @@ label {
 }
 
 div.slider {
-    overflow: hidden;
-    color: #97ea44;
     padding-top: 5px;
 }
 
@@ -157,17 +152,11 @@ div.slides {
 }
 
 .slides>div {
-    scroll-snap-align: start;
-    flex-shrink: 0;
     border-radius: 10px;
-    transform-origin: center center;
-    transition: transform 0.5s;
-    overflow: auto;
-    width: 99%;
     border: solid;
     border-color: silver;
     padding-left: 15px;
-    padding-top: 10px;
+    /* padding-top: 10px; */
 }
 
 .author-info {
@@ -227,23 +216,18 @@ body {
 }
 
 body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     background: linear-gradient(to bottom, #040404, #3a4a38);
     font-family: 'Ropa Sans', sans-serif;
     font-size: x-large;
-}
-
-.system-config fieldset label {
-    float: left;
+    color: #97ea44;
 }
 
 .system-config fieldset label>input,
 textarea,
 select {
     font-size: large;
-    height: fit-content;
+    border: none;
+    margin-right: 10px;
 }
 
 .system-config fieldset input,
@@ -257,7 +241,13 @@ option {
 .slides fieldset {
     border-style: none;
     background: linear-gradient(to bottom, #151a15, #273426);
-    float: left;
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
+    padding-left: 0.3em;
+    padding-right: 0;
+    width: fit-content;
+    padding-bottom: 0;
 }
 
 .slides fieldset>fieldset {
@@ -304,7 +294,6 @@ button {
 }
 
 .log div {
-    float: left;
     padding-right: 5px;
     font-size: small;
 }
@@ -353,8 +342,8 @@ label.textarea {
     text-align: center;
 }
 
-label.table {
-    width: 100%;
+fieldset>label.table {
+    max-width: 100%;
     margin-top: 10px;
 }
 
@@ -376,12 +365,10 @@ div#jsoneditorcontrol {
 }
 
 .controls {
-    float: right;
     width: min-content;
 }
 
 caption div.controls button {
-    float: right;
     margin-top: -30px;
 }
 
@@ -410,18 +397,6 @@ div.tabs>a.active {
 
 .je-modal {
     background-color: #212621 !important;
-}
-
-form div.jsoneditor-field,
-div.jsoneditor-value,
-div.jsoneditor td,
-div.jsoneditor th,
-div.jsoneditor textarea,
-pre.jsoneditor-preview,
-.jsoneditor-schema-error,
-.jsoneditor-popover {
-    color: #54b221 !important;
-    ;
 }
 
 form div.jsoneditor-value.jsoneditor-string {
@@ -493,7 +468,10 @@ form .jsoneditor-navigation-bar {
 }
 
 form .jsoneditor {
-    border: thin solid #77797c !important;
+    /* border: thin solid #77797c !important; */
+    /* display: flex; */
+    /* flex-wrap: wrap; */
+    /* flex-direction: row; */
 }
 
 form .jsoneditor-frame {
@@ -501,23 +479,17 @@ form .jsoneditor-frame {
 }
 
 .slider form {
-    width: 100%;
-}
-
-div.slider {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
+    /* width: 100%; */
+    /* display: flex; */
+    flex-wrap: wrap;
+    flex-direction: row;
 }
 
 fieldset.slides .label {
     width: max-content;
-    float: left;
 }
 
 fieldset.slides input {
-    float: right;
     margin-top: 10px;
     margin-right: 10px;
     max-width: 60px;
@@ -536,9 +508,13 @@ div.slider > div.slide {
 }
 
 .eventPanel {
-    float: right;
-    height: 100%;
-    width: min-content;
+    display: flex;
+    flex-direction: column;
+    /* overflow: auto; */
+    /* height: 100%; */
+    margin-left: auto;
+    padding-right: 1em;
+    padding-top: 10px;
 }
 
 .liveEvent {
@@ -551,6 +527,10 @@ div.slider > div.slide {
     border-radius: 20%;
     width: fit-content;
     font-size: small;
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: center;
 }
 
 .eventBase {
@@ -577,11 +557,17 @@ div.events button {
 
 .eventList {
     text-align: -webkit-center;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    align-items: flex-end;
 }
 
 .designer {
     position: relative;
-    width: fit-content;
+    /* width: fit-content; */
+    display: flex;
+    flex-wrap: wrap;
 }
 
 .event, .program {
@@ -620,7 +606,6 @@ div.events button {
 }
 
 details {
-    border-radius: 4px;
     padding: .5em .5em .5em;
     display: inline-block;
 }
@@ -667,12 +652,7 @@ details.data {
 }
 
 fieldset#controls {
-    display: flex;
-    flex-direction: row;
-    align-content: stretch;
-    justify-content: space-evenly;
     border-style: none;
-    float: right;
     padding: 0;
 }
 
@@ -686,12 +666,6 @@ label.table table {
 
 label.table {
     background: none;
-    float: left;
-}
-
-legend {
-    color: aquamarine;
-    padding-top: 15px;
 }
 
 div.value {
@@ -702,19 +676,13 @@ div.value {
     background: none;
 }
 
-.statusclass {
-    /* display: flow-root; */
-}
-
-.fieldgroup {
-    /* display: flow-root; */
-    /* float: left; */
-}
-
 .content  {
     position: absolute;
     left: 0;
     right: 0;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
 }
 
 div.designer > details > summary::marker {
@@ -747,8 +715,11 @@ div.designer > details[open] > summary {
     width: 100%;
     height: 100%;
     overflow: auto;
-    max-height: 93%;
-    max-width: 98%;
+    height: 93%;
+    width: 98%;
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
 }
 
 div.mainApp > details > summary::marker {
@@ -757,7 +728,6 @@ div.mainApp > details > summary::marker {
 }
 
 div.mainApp > details > summary {
-    text-decoration: none;
     border-top-left-radius: 25%;
     border-top-right-radius: 25%;
     padding-right: 10px;
@@ -785,14 +755,10 @@ a {
     color: aquamarine;
 }
 
-.file td a {
-    float: left;
-}
-
 .file td .rendered {
-    float: right;
     height: 20px;
     width: 20px;
+    float: right;
 }
 
 .lightbox {
@@ -843,9 +809,82 @@ a {
 }
 
 .fieldgroup.object {
-    float: right;
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
 }
 
 .fieldgroup.array {
-    float: left;
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
+}
+
+.jsonNodes input {
+    background: linear-gradient(to bottom, #2d332d80, #09130880);
+    color: chartreuse;
+}
+
+td>fieldset {
+    margin: 0;
+    padding: 0;
+}
+
+.slides canvas {
+    padding-right: 5px;
+}
+
+.fieldgroup.field {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
+    justify-content: flex-start;
+}
+
+.fieldgroup.commandable {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
+}
+
+.loglines {
+    overflow: auto;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    height: 100%;
+}
+
+.log.LOGD, .log.LOGW, .log.LOGI, .log.LOGV, .log.LOGE {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.mainApp {
+    display: flex;
+}
+
+.mainApp>canvas {
+    margin-left: auto;
+    padding-bottom: 30px;
+}
+
+.logpannel {
+    /* display: flex; */
+    position: sticky;
+    top: 0;
+    /* align-content: flex-start; */
+    /* justify-content: flex-end; */
+    width: 100%;
+    background: black;
+}
+
+.logpannel {}
+
+.file>td {
+    /* display: flex; */
+    flex-direction: row;
+    flex-wrap: wrap;
 }

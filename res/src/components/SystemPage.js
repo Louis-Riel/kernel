@@ -60,7 +60,7 @@ class SystemPage extends React.Component {
 
     render() {
         return [
-            e("div", { key: genUUID() }, [
+            e("div", { key: genUUID(), className: "logpannel" }, [
                 e("button", { key: genUUID(), onClick: elem => this.setState({ logLines: [] }) }, "Clear Logs"),
                 e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'reboot' }) }, "Reboot"),
                 e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'parseFiles' }) }, "Parse Files"),

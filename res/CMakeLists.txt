@@ -8,7 +8,7 @@ ${CMAKE_CURRENT_SOURCE_DIR}/res/src/misc/utils.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/controls/CmdButton.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/controls/BoolInput.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/controls/ROProp.js
-${CMAKE_CURRENT_SOURCE_DIR}/res/src/controls/StateTable.js
+${CMAKE_CURRENT_SOURCE_DIR}/res/src/controls/Table.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/controls/DeviceList.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/controls/IntInput.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/EventsPage.js

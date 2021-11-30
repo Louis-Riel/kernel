@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "http://irtracker";
+var httpPrefix = "http://tracer";
 
 //#region SHA-1
 /*
@@ -324,7 +324,123 @@ class IntInput extends React.Component {
     render() {
         return e("label", { key: genUUID(), className: "editable", id: `lbl${this.id}`, key: this.id },
             e("div", { key: genUUID(), className: "label", id: `div${this.id}` }, this.props.label),
-            e("input", { key: genUUID(), type: "number", value: this.props.value, onChange: this.toggleChange.bind(this), id: `${this.id}` }));
+            e("input", { key: genUUID(), type: "number", value: this.props.defaultValue, onChange: this.toggleChange.bind(this), id: `${this.id}` }));
+    }
+}
+class JSONNode extends React.Component {
+    getNodeType() {
+        if (this.isArray()) {
+            return "array";
+        }
+
+        return typeof this.getValue();
+    }
+
+    isArray() {
+        return Array.isArray(this.props.json);
+    }
+
+    getValue() {
+        if (this.state?.updatedValue) {
+            return this.state.updatedValue;
+        }
+        if (this.isEditable()) {
+            return this.props.json.value !== undefined ? 
+                this.props.json.value:
+                this.props.json;
+        }
+        return this.props.json;
+    }
+
+    isEditable() {
+        return this.props.editable;
+    }
+
+    updateValue(elem){
+        if (this.isEditable()) {
+            if (this.getValue() != elem.target.value){
+                this.state = {
+                    updated: {
+                        value:elem.target.value,
+                        version: this.props.json.version+1
+                    }
+                }
+                elem.target.classList.add("updated");
+            } else {
+                this.state={};
+                elem.target.classList.remove("updated");
+            }
+        }
+    }
+
+    renderField(){
+        if (this.isEditable()){
+            return this.props.name !== undefined ?
+                     e("details",{key:genUUID(),open:true},[
+                        e("summary",{key:genUUID()},this.props.name),
+                        e("div",{key:genUUID()},
+                            e("input",{key:genUUID(),defaultValue:this.getValue(),onChange:this.updateValue.bind(this)})
+                        )
+                    ]):
+                    e("input",{key:genUUID(),defaultValue:this.getValue(),onChange:this.updateValue.bind(this)})
+                } else {
+            return this.props.name !== undefined ?
+                e("details",{key:genUUID(),open:true},[
+                    e("summary",{key:genUUID()},this.props.name),
+                    e("div",{key:genUUID()},this.getValue())
+                ]):
+                e("div",{key:genUUID()},this.getValue())
+        }
+    }
+
+    getTypeNumber(val) {
+        if (Array.isArray(val)) {
+            return 30;
+        }
+        if ((typeof val == "object") && (val.version !== undefined)) {
+            return 20;
+        }
+        return 10;
+    }
+
+    fieldComparer(f1,f2) {
+        if (this.getTypeNumber(f1) == this.getTypeNumber(f2)) {
+            return f1.localeCompare(f2);
+        }
+        this.getTypeNumber(f1) > this.getTypeNumber(f2) ? 1 : -1;
+    }
+
+    render() {
+        switch (this.getNodeType()) {
+            case "object":
+                if (Object.keys(this.props.json).length > 0){
+                    return e("fieldset",{key:genUUID()},[
+                        this.props.name !== undefined ? e("legend",{key:genUUID()},this.props.name):null,
+                        Object.keys(this.getValue())
+                            .sort(this.fieldComparer.bind(this))
+                            .map(prop=>e(JSONNode,{key:genUUID(),editable:this.props.editable, name:prop,json:this.getValue()[prop]}))
+                    ])
+                } else {
+                    return null;
+                }
+            case "array":
+                return this.getValue().length ? e(Table, { key: genUUID(), sortable: !this.props.editable, name: this.props.name, label: this.props.name, json: this.getValue() }):null;
+            default:
+                return this.renderField();
+        }
+    }
+}
+
+class JSONEditor extends React.Component {
+    render() {
+        if (this.props.json && this.props.name) {
+            return e("div",{key:genUUID(),className: "jsoneditor"},[
+                e("div",{key:genUUID(),className: "controlPanel"},
+                    e("div",{key:genUUID(),className: "pendingUpdates"})
+                ),
+                e("div",{key:genUUID(),className:"jsonNodes"},e(JSONNode,{key:genUUID(),editable:this.props.editable, json:this.props.json,name:"Config"}))
+            ]);
+        }
     }
 }
 class ROProp extends React.Component {
@@ -353,7 +469,7 @@ class ROProp extends React.Component {
             }
 
             if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-                return e("a", { href: `${httpPrefix}${val}` }, val);
+                return e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
             }
 
             return val;
@@ -402,6 +518,8 @@ class ROProp extends React.Component {
         ctx.shadowBlur = 2;
         ctx.shadowColor = '#00ffff'
         var rect = input.getBoundingClientRect();
+        rect.height = canvas.height;
+        rect.width = canvas.width;
 
         //Background
         var gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
@@ -439,16 +557,18 @@ class ROProp extends React.Component {
         ]);
     }
 }
-class StateTable extends React.Component {
+class Table extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
     }
     SortTable(th) {
-        var table,tbody;
-        Array.from((tbody=(table=th.target.closest("table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n)'))
-                 .sort(comparer(Array.from(th.target.parentNode.children).indexOf(th.target), this.asc = !this.asc))
-                 .forEach(tr => tbody.appendChild(tr));
+        if (this.props.sortable){
+            var table,tbody;
+            Array.from((tbody=(table=th.target.closest("table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n)'))
+                    .sort(comparer(Array.from(th.target.parentNode.children).indexOf(th.target), this.asc = !this.asc))
+                    .forEach(tr => tbody.appendChild(tr));
+        }
     }
 
     BuildHead(json) {
@@ -466,7 +586,7 @@ class StateTable extends React.Component {
                             }
                         }
                         return e("th", { key: genUUID() }, fld);
-                    }))), e("caption", { key: genUUID() }, this.props.label)];
+                    }))), this.props.label !== undefined ? e("caption", { key: genUUID() }, this.props.label):null];
         } else {
             return null;
         }
@@ -474,7 +594,7 @@ class StateTable extends React.Component {
 
     getValue(fld, val) {
         if (val?.value !== undefined) {
-            return this.getValue(fld,val.value);
+            return val.value;
         } else {
             if (fld.endsWith("_sec") && (val > 10000000)) {
                 return new Date(val * 1000).toLocaleString();
@@ -503,24 +623,28 @@ class StateTable extends React.Component {
     BuildBody(json) {
         if (json) {
             return e("tbody", { key: genUUID() },
-                json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
-                    .map(line => e("tr", { key: genUUID() },
-                        this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" }, 
-                            typeof this.getValue(fld, line[fld]) != 'object' ? 
-                                e("div", { key: genUUID(), className: "value" }, this.getValue(fld, line[fld])) : 
-                                Array.isArray(line[fld]) ? 
-                                    e(StateTable,{key: genUUID(), name:fld, label:fld, json:line[fld]}):
-                                    e(AppState,{key: genUUID(),json:line[fld]})
-                        )))
-                    ));
+                this.props.sortable ? 
+                    json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
+                        .map(this.BuildLine.bind(this)):
+                    json.map(this.BuildLine.bind(this))
+                )
         } else {
             return null;
         }
     }
 
+    BuildLine(line) {
+        return e("tr", { key: genUUID() },
+            this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" },
+                Array.isArray(line[fld]) ?
+                    line[fld].length ? e(Table, { key: genUUID(), sortable: this.props.sortable, name: fld, json: line[fld] }) : null :
+                    line[fld] !== undefined  && e(JSONNode, { key: genUUID(),editable:!this.props.sortable, json: line[fld] })
+            )));
+    }
+
     render() {
         if (!this.props?.json) {
-            return e("div", { key: genUUID(), id: `loading${this.id}` }, "Loading...");
+            return null;
         }
 
         return e("label", { key: genUUID(), id: this.id, className: "table" }, 
@@ -566,7 +690,7 @@ class AppState extends React.Component {
                     if (fld == "commands"){
                         return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
                     }
-                    return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
+                    return {fld:fld,element:e(Table, { key: genUUID(), name: fld, label: fld, json: json[fld], sortable: true })};
                 } else if ((typeof json[fld] == 'object') && !Object.keys(json[fld]).find(fld => fld=="value")) {
                     return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus,registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
                 } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
@@ -759,23 +883,6 @@ class MainAppState extends React.Component {
         }
     }
 }
-class ConfigEditor extends React.Component {
-    componentDidMount() {
-        if (this.props.deviceConfig) {
-            this.jsonEditor = new JSONEditor(this.container, {
-                onChangeJSON: json => Object.assign(this.props.deviceConfig, json)
-            });
-            this.jsonEditor.set(this.props.deviceConfig);
-        } else {
-            this.container.innerText = "Loading...";
-        }
-    }
-
-    render() {
-        return e("div", { key: genUUID(), ref: (elem) => this.container = elem, id: `${this.props.id || genUUID()}`, className: "column col-md-12", "data-theme": "spectre" })
-    }
-}
-
 class ConfigPage extends React.Component {
     componentDidMount() {
         if (window.location.hostname || httpPrefix)
@@ -815,11 +922,11 @@ class ConfigPage extends React.Component {
     render() {
         if (this.state?.config) {
             return e("form", { onSubmit: form => this.SaveForm(form), key: `${this.props.id || genUUID()}`, action: "/config", method: "post" }, [
-                //e(ConfigEditor, { key: genUUID(), deviceId: this.props.selectedDeviceId, deviceConfig: this.state.config }),
-                e(AppState, {
+                e(JSONEditor, {
                     key: genUUID(), 
-                    json: this.state.config, 
-                    selectedDeviceId: this.props.selectedDeviceId
+                    json: this.state.config,
+                    name: "config",
+                    editable: true
                 }),
                 e("button", { key: genUUID(), type: "button", onClick:(elem) => this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}))} , "Refresh")
             ]);
@@ -1551,31 +1658,11 @@ class Program extends React.Component {
             Object.keys(this.props).filter(fld => fld != "name").map(fld => e(ProgramLine,{key: genUUID(),name:fld,value:this.props[fld]}))
         ]);
     }
-}class UnparsedCVS extends React.Component {
-    renderTrip(){
-        if (!this.state?.points){
-            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
-            .then(resp => resp.text())
-            .then(content =>{
-                var lns = content.split(/\n|\r\n/);
-                var cols=lns[0].split(",");
-                this.setState({
-                    points:lns.splice(1).map(ln => {
-                        var ret={};
-                        ln.split(",").forEach((it,idx) => ret[cols[idx]] = isNaN(it)?it:parseFloat(it));
-                        return ret;
-                    }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
-                });
-            });
-        } else {
-            this.setState({points:this.state.points});
-        }
-    }
-
+}class TripWithin extends React.Component {
     getIconColor() {
         if (!this.state?.points) {
             return "#00ff00";
-        } else if (this.state.points.length) {
+        } else if (this.props.points.length) {
             return "aquamarine";
         } else {
             return "#ff0000";
@@ -1583,7 +1670,7 @@ class Program extends React.Component {
     }
 
     getIcon() {
-        return e("svg", { key: genUUID(), xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64",onClick:this.renderTrip.bind(this) }, [
+        return e("svg", { key: genUUID(), xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64",onClick:elem=>this.setState({viewer:"trip"}) }, [
             e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M17.993 56h20v6h-20zm-4.849-18.151c4.1 4.1 9.475 6.149 14.85 6.149 5.062 0 10.11-1.842 14.107-5.478l.035.035 1.414-1.414-.035-.035c7.496-8.241 7.289-20.996-.672-28.957A20.943 20.943 0 0 0 27.992 2a20.927 20.927 0 0 0-14.106 5.477l-.035-.035-1.414 1.414.035.035c-7.496 8.243-7.289 20.997.672 28.958zM27.992 4.001c5.076 0 9.848 1.976 13.437 5.563 7.17 7.17 7.379 18.678.671 26.129L15.299 8.892c3.493-3.149 7.954-4.891 12.693-4.891zm12.696 33.106c-3.493 3.149-7.954 4.892-12.694 4.892a18.876 18.876 0 0 1-13.435-5.563c-7.17-7.17-7.379-18.678-.671-26.129l26.8 26.8z" }),
             e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M48.499 2.494l-2.828 2.828c4.722 4.721 7.322 10.999 7.322 17.678s-2.601 12.957-7.322 17.678S34.673 48 27.993 48s-12.957-2.601-17.678-7.322l-2.828 2.828C12.962 48.983 20.245 52 27.993 52s15.031-3.017 20.506-8.494c5.478-5.477 8.494-12.759 8.494-20.506S53.977 7.97 48.499 2.494z" })
         ]);
@@ -1592,7 +1679,7 @@ class Program extends React.Component {
     render() {
         return e("div",{key:genUUID(),className:"rendered trip"},[
             this.getIcon(),
-            this.state?.points?e(TripViewer,{key:genUUID(),points:this.state.points}):null
+            this.state?.viewer == "trip"?e(TripViewer,{key:genUUID(),points:this.props.points,cache:this.props.cache}):null
         ]
         );
     }
@@ -1600,38 +1687,76 @@ class Program extends React.Component {
 class FileViewer extends React.Component {
     constructor(props) {
         super(props);
-        this.buildRenderers();
+        this.buildRenderers(0);
     }
 
-    buildRenderers() {
-        if (this.props.name.endsWith(".csv")) {
+    buildRenderers(retryCount) {
+        if (this.props.name.endsWith(".csv") && !this.state?.renderes?.some("trip")){
+            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+            .then(resp => resp.text())
+            .then(content =>{
+                var cols=content.split(/\n|\r\n/)[0].split(",");
+                this.setState({
+                    renderes:[{
+                        name:"trip", 
+                        points:content.split(/\n|\r\n/)
+                                        .splice(1).map(ln => {
+                                            var ret={};
+                                        ln.split(",").forEach((it,idx) => ret[cols[idx]] = isNaN(it)?it:parseFloat(it));
+                                        return ret;
+                                        }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
+                    }]
+                })
+            }).catch(err =>{
+                if (retryCount++ < 3){
+                    this.buildRenderers(retryCount++);
+                }
+            });
+        }
+        if (this.props.name.endsWith(".log") && !this.state?.renderes?.some("trip")){
             wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
                 .then(resp => resp.text())
-                .then(content =>{
-                    if (content.startsWith("timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Satellites") &&
-                        !this.state?.renderes?.some("unparsedcsv")){
-                        this.setState({renderes:["unparsedcsv",...(this.state?.renderes||[])]})
-                    }
-                })
-        }
+                .then(content =>this.setState({
+                            renderes:[{
+                                name:"trip", 
+                                points: content.split("\n")
+                                               .filter(ln => ln.match(/[ID] \([0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}\).* Location:.*/))
+                                               .map(ln => ln.match(/[ID] \((?<timestamp>.*)\).*Location:\s*(?<latitude>[0-9.-]+),\s*(?<longitude>[0-9.-]+).*speed:\s*(?<speed>[0-9.]+).*altitude:\s*(?<altitude>[0-9.]+).*course:\s*(?<course>[0-9.]+).*bat:\s*(?<Battery>[0-9.]+)/i)?.groups)
+                                               .filter(point => point)
+                                               .map(point => {
+                                                   Object.keys(point).forEach(fld => point[fld] = isNaN(point[fld]) ? point[fld] : parseFloat(point[fld]));
+                                                   point.timestamp = `1970-01-01 ${point.timestamp}`;
+                                                   point.altitude*=100;
+                                                   point.speed*=100;
+                                                   return point;
+                                                })
+                            }]
+                        })
+                    ).catch(err =>{
+                        if (retryCount++ < 3){
+                            this.buildRenderers(retryCount++);
+                        }
+                    });
+                }
     }
 
     getRenderers() {
-        return this.state?.renderes.map(renderer => {
-            switch (renderer) {
-                case "unparsedcsv":
-                    return e(UnparsedCVS,{key:genUUID(),...this.props});
-                    break;
+        if (!this.state?.renderes || !this.state.renderes.length) {
+            return null;
+        }
+        return this.state.renderes.map(renderer => {
+            switch (renderer.name) {
+                case "trip":
+                    return renderer.points.length?e(TripWithin,{key:genUUID(),points:renderer.points,cache:this.props.cache}):null;
             
                 default:
                     return null;
-                    break;
             }
         });
     }
 
     render() {
-        return [e("a", { key:genUUID(), href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name),this.getRenderers()];
+        return [e("a", { key:genUUID(), href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]),this.getRenderers()];
     }
 }
 
@@ -1670,7 +1795,7 @@ class SFile extends React.Component {
                 onClick: () => this.props.onChangeFolder ? this.props.onChangeFolder(`${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/")):null
             }, file.name);
         } else {
-            return e(FileViewer,{key:genUUID(),...file});
+            return e(FileViewer,{cache:this.props.cache,key:genUUID(),...file});
         }
     }
 }
@@ -1678,7 +1803,11 @@ class SFile extends React.Component {
 class StorageViewer extends React.Component {
     constructor(props) {
         super(props);
-        this.state = { loaded: false, path: "/", files: null };
+        this.state = { 
+            loaded: false, 
+            path: "/", 
+            cache:{images:{}},
+            files: null };
         this.id = this.props.id || genUUID();
     }
 
@@ -1794,6 +1923,7 @@ class StorageViewer extends React.Component {
                                 key: genUUID(), 
                                 file:file, 
                                 path:this.state.path,
+                                cache:this.state.cache,
                                 onChangeFolder: (folder) => this.setState({path:folder}),
                                 OnDelete: ()=>this.fetchFiles()
                             }))
@@ -1868,7 +1998,7 @@ class SystemPage extends React.Component {
 
     render() {
         return [
-            e("div", { key: genUUID() }, [
+            e("div", { key: genUUID(), className: "logpannel" }, [
                 e("button", { key: genUUID(), onClick: elem => this.setState({ logLines: [] }) }, "Clear Logs"),
                 e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'reboot' }) }, "Reboot"),
                 e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'parseFiles' }) }, "Parse Files"),
@@ -1882,196 +2012,274 @@ class SystemPage extends React.Component {
 class TripViewer extends React.Component {
     constructor(props) {
         super(props);
-        this.zoomlevel=15;
-        this.state={images:{}};
+        this.state={
+            cache:this.props.cache,
+            zoomlevel:15
+        };
     }
     componentDidMount() {
         this.mounted=true;
-        this.drawMap();
+        this.needsRefresh=true;
+        this.canvas = this.widget.getContext("2d");                    
+        this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
+        window.requestAnimationFrame(this.drawMap.bind(this));
     }
-    
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        this.canvas = this.widget.getContext("2d");                    
+        this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
+        this.needsRefresh=true;
+    }
 
     drawMap() {
-        return new Promise((resolve,reject) => {
+        if (this.needsRefresh){
+            this.needsRefresh=false;
             if (!this.mounted || !this.widget || !this.props.points || !this.props.points.length){
-                reject({});
+                return;
             } else {
-                this.canvas = this.widget.getContext("2d");                    
-        
-                this.getTripTiles().then(this.drawTripTiles.bind(this))
-                                   .then(this.drawTrip.bind(this))
-                                   .catch(reject);
+                this.getTripTiles()
+                this.drawTripTiles()
+                    .then(this.drawTrip.bind(this))
+                    .then(this.drawPointPopup.bind(this))
+                    .then(ret=>window.requestAnimationFrame(this.drawMap.bind(this)))
+                    .catch(err => {
+                        console.error(err);
+                        window.requestAnimationFrame(this.drawMap.bind(this));
+                    });
             }
-        });
+        } else {
+            window.requestAnimationFrame(this.drawMap.bind(this));
+        }
     }
-
+   
     getTripTiles() {
-        return new Promise((resolve,reject) => this.props.points?.length?resolve(this.props.points.reduce((ret, point) => {
-            ret.trip.leftTile = this.lon2tile(ret.left = Math.min(ret.left, point.longitude));
-            ret.trip.rightTile = this.lon2tile(ret.right = Math.max(ret.right, point.longitude));
-            ret.trip.topTile = this.lat2tile(ret.top = Math.min(ret.top, point.latitude));
-            ret.trip.bottomTile = this.lat2tile(ret.bottom = Math.max(ret.bottom, point.latitude));
-            ret.trip.XTiles = (ret.trip.rightTile - ret.trip.leftTile) + 1;
-            ret.trip.YTiles = (ret.trip.topTile - ret.trip.bottomTile) + 1;
-            ret.margin.bottom = Math.floor((ret.maxYTiles-ret.trip.YTiles)/2);
-            ret.margin.top = ret.maxYTiles-ret.trip.YTiles-ret.margin.bottom;
-            ret.margin.left = Math.floor((ret.maxXTiles-ret.trip.XTiles)/2);
-            ret.margin.right = ret.maxXTiles-ret.trip.XTiles-ret.margin.left;
-            ret.leftTile=ret.trip.leftTile-Math.abs(ret.margin.left);
-            ret.rightTile=Math.max(ret.maxXTiles+ret.trip.leftTile, ret.trip.rightTile+Math.abs(ret.margin.right));
-            ret.bottomTile=ret.trip.bottomTile-Math.abs(ret.margin.bottom);
-            ret.topTile=Math.max(ret.maxYTiles+ret.trip.bottomTile, ret.trip.bottomTile+Math.abs(ret.margin.top));
-            ret.points.push(this.pointToCartesian(point));
-            return ret;
-        }, {
-            left: this.props.points[0].longitude,
-            right: this.props.points[0].longitude,
-            top: this.props.points[0].latitude,
-            bottom: this.props.points[0].latitude,
-            trip:{},
-            margin:{},
-            points: [],
-            margin: [],
-            maxXTiles:Math.ceil(window.innerWidth/256),
+        var points = this.props.points.map(this.pointToCartesian.bind(this));
+        this.tiles= {
+            points:points,
+            trip:{
+                leftTile: points.reduce((a,b)=>a<b.tileX?a:b.tileX,99999),
+                rightTile: points.reduce((a,b)=>a>b.tileX?a:b.tileX,0),
+                bottomTile: points.reduce((a,b)=>a<b.tileY?a:b.tileY,99999),
+                topTile: points.reduce((a,b)=>a>b.tileY?a:b.tileY,0)
+            },
+            maxXTiles: Math.ceil(window.innerWidth/256),
             maxYTiles: Math.ceil(window.innerHeight/256)
-        })):reject({"error":"no points"}));
+        }
+        this.tiles.trip.XTiles = this.tiles.trip.rightTile-this.tiles.trip.leftTile+1;
+        this.tiles.trip.YTiles = this.tiles.trip.bottomTile-this.tiles.trip.bottomTile+1;
+        this.tiles.margin = {
+            left: this.tiles.maxXTiles>this.tiles.trip.XTiles?Math.floor((this.tiles.maxXTiles-this.tiles.trip.XTiles)/2):0,
+            bottom: this.tiles.maxYTiles>this.tiles.trip.YTiles?Math.floor((this.tiles.maxYTiles-this.tiles.trip.YTiles)/2):0
+        };
+        this.tiles.margin.right=this.tiles.maxXTiles>this.tiles.trip.XTiles?this.tiles.maxXTiles-this.tiles.trip.XTiles-this.tiles.margin.left:0;
+        this.tiles.margin.top= this.tiles.maxYTiles>this.tiles.trip.YTiles?this.tiles.maxYTiles-this.tiles.trip.YTiles-this.tiles.margin.bottom:0;
+        this.tiles.leftTile=this.tiles.trip.leftTile-this.tiles.margin.left;
+        this.tiles.rightTile=this.tiles.trip.rightTile+this.tiles.margin.right;
+        this.tiles.bottomTile=this.tiles.trip.bottomTile-this.tiles.margin.bottom;
+        this.tiles.topTile=this.tiles.trip.topTile + this.tiles.margin.top;
     }
 
-    setupListeners(canvas,tiles) {
-        this.widget.addEventListener("mousemove", (event) => {
-            var pt = tiles.points.find(point => (this.getClientX(point,tiles) >= (event.offsetX - 15)) &&
-                (this.getClientX(point,tiles) <= (event.offsetX + 15)) &&
-                (this.getClientY(point,tiles) >= (event.offsetY - 15)) &&
-                (this.getClientY(point,tiles) <= (event.offsetY + 15)));
-            var needsRefresh = false;
-            tiles.points.filter(point => point != pt).forEach(point => {
-                if (point.focused) {
-                    point.focused = false;
-                    needsRefresh = true;
-                }
-            });
-            if (needsRefresh) {
-                this.drawMap().then(res => {
-                    if (pt && !pt.focused) {
-                        pt.focused = true;
-                        this.drawPointPopup(canvas, pt, tiles);
-                    }
-                });
-            } else if (pt && !pt.focused) {
-                pt.focused = true;
-                this.drawPointPopup(canvas, pt, tiles);
-            }
-        });
-    }
-
-    drawPointPopup(canvas,pt,tiles){
-        canvas.font = "10px Helvetica";
-        var txtSz = canvas.measureText(new Date(`${pt.timestamp} UTC`).toLocaleString());
-        var boxHeight=60;
-        var boxWidth=txtSz.width+10;
-        canvas.strokeStyle = '#00ffff';
-        canvas.shadowColor = '#00ffff';
-        canvas.fillStyle = "#ffffff";
-        canvas.lineWidth = 1;
-        canvas.shadowBlur = 2;
-        canvas.beginPath();
-        canvas.rect(this.getClientX(pt,tiles),this.getClientY(pt,tiles)-boxHeight,boxWidth,boxHeight);
-        canvas.fill();
-        canvas.stroke();
-
-        canvas.fillStyle = 'rgba(00, 0, 0, 1)';
-        canvas.strokeStyle = '#000000';
-
-        canvas.beginPath();
-        var ypos = this.getClientY(pt,tiles)-boxHeight+txtSz.actualBoundingBoxAscent+3;
-        var xpos = this.getClientX(pt,tiles)+3;
-        canvas.fillText(new Date(`${pt.timestamp} UTC`).toLocaleString(),xpos,ypos);
-        ypos+=txtSz.actualBoundingBoxAscent+3;
-        canvas.fillText(`Bat: ${Math.floor(pt.Battery)}`,xpos,ypos);
-        ypos+=txtSz.actualBoundingBoxAscent+3;
-        canvas.fillText(`Sats: ${pt.Satellites}`,xpos,ypos);
-        ypos+=txtSz.actualBoundingBoxAscent+3;
-        canvas.fillText(`Speed:${Math.floor(1.852*pt.speed/100.0)} km/h`,xpos,ypos);
-        ypos+=txtSz.actualBoundingBoxAscent+3;
-        canvas.fillText(`Alt:${Math.floor(pt.altitude/100)} m`,xpos,ypos);
-
-        canvas.stroke();
-    }
-
-    drawTrip(tiles) {
-        var firstPoint = tiles.points[0];
-        this.canvas.strokeStyle = '#00ffff';
-        this.canvas.shadowColor = '#00ffff';
-        this.canvas.fillStyle = "#00ffff";
-        this.canvas.lineWidth = 2;
-        this.canvas.shadowBlur = 2;
-
-        this.canvas.beginPath();
-        this.canvas.moveTo(this.getClientX(firstPoint,tiles), this.getClientY(firstPoint,tiles));
-        tiles.points.forEach(point => {
-            this.canvas.lineTo(this.getClientX(point,tiles), this.getClientY(point,tiles));
-        });
-        this.canvas.stroke();
-        this.canvas.strokeStyle = '#0000ff';
-        this.canvas.shadowColor = '#0000ff';
-        this.canvas.fillStyle = "#0000ff";
-        tiles.points.forEach(point => {
-            this.canvas.beginPath();
-            this.canvas.arc(((point.tileX - tiles.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - tiles.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
-            this.canvas.stroke();
-        });
-    }
-
-    getClientY(firstPoint,tiles) {
-        return ((firstPoint.tileY - tiles.bottomTile) * 256) + (256 * firstPoint.posTileY);
-    }
-
-    getClientX(firstPoint,tiles) {
-        return ((firstPoint.tileX - tiles.leftTile) * 256) + (256 * firstPoint.posTileX);
-    }
-
-    drawTripTiles(tiles) {
-        this.widget.width=(tiles.trip.XTiles+Math.abs(tiles.margin.left+tiles.margin.right))*256;
-        this.widget.height=(tiles.trip.YTiles+Math.abs(tiles.margin.bottom+tiles.margin.top))*256;
+    drawTripTiles() {
+        this.widget.width=(this.tiles.rightTile-this.tiles.leftTile)*256;
+        this.widget.height=(this.tiles.topTile-this.tiles.bottomTile)*256;
         this.canvas.fillStyle = "black";
         this.canvas.fillRect(0,0,window.innerWidth,window.innerHeight);
-        this.setupListeners(this.canvas,tiles);
-        var promises = [];
-        for (var tileX = tiles.leftTile; tileX <= tiles.rightTile; tileX++) {
-            for (var tileY = tiles.bottomTile; tileY <= tiles.topTile; tileY++) {
-                promises.push(this.drawTile(tileX, tileY, 0, tiles));
+        var tiles=[];
+        for (var tileX = this.tiles.leftTile; tileX <= this.tiles.rightTile; tileX++) {
+            for (var tileY = this.tiles.bottomTile; tileY <= this.tiles.topTile; tileY++) {
+                tiles.unshift({tileX:tileX, tileY:tileY});
             }
         }
-        return new Promise((resolve,reject)=>Promise.all(promises).then(res=>resolve(tiles)).catch(err=>resolve(tiles)));
+        return Promise.all(Array.from(Array(Math.min(3,tiles.length)).keys()).map(unused => this.drawTile(tiles)));
     }
 
-    drawTile(tileX, tileY, numTries, tiles) {
-        return new Promise((resolve,reject) => {
-            if (!this.state.images[tileX] || !this.state.images[tileX][tileY]){
-                var tile = new Image();
-                tile.posX = tileX - tiles.leftTile;
-                tile.posY = tileY - tiles.bottomTile;
-                tile.onload = (elem) => {
-                    if (!this.state.images[tileX]) {
-                        this.state.images[tileX]={};
-                    }
-                    this.state.images[tileX][tileY]=elem.currentTarget;
-                    resolve(this.canvas.drawImage(elem.currentTarget, elem.currentTarget.posX * elem.currentTarget.width, elem.currentTarget.posY * elem.currentTarget.height));
-                };
-                tile.onerror = (err) => {
-                    if (numTries > 3) {
-                        reject(`Failed to fetch tile ${tileX},${tileY}`);
-                    } else {
-                        this.drawTile(tileX, tileY, numTries+1,tiles).then(resolve).catch(reject);
-                    }
-                };
-                tile.src = `${httpPrefix}/sdcard/web/tiles/${tileX}/${tileY}.png`;
+    drawPointPopup(){
+        if (this.focused) {
+            this.canvas.font = "12px Helvetica";
+            var txtSz = this.canvas.measureText(new Date(`${this.focused.timestamp} UTC`).toLocaleString());
+            var props =  Object.keys(this.focused)
+                               .filter(prop => prop != "timestamp");
+
+            var boxHeight=50 + (9*props.length);
+            var boxWidth=txtSz.width+10;
+            this.canvas.strokeStyle = 'green';
+            this.canvas.shadowColor = '#00ffff';
+            this.canvas.fillStyle = "#000000";
+            this.canvas.lineWidth = 1;
+            this.canvas.shadowBlur = 2;
+            this.canvas.beginPath();
+            this.canvas.rect(this.getClientX(this.focused),this.getClientY(this.focused)-boxHeight,boxWidth,boxHeight);
+            this.canvas.fill();
+            this.canvas.stroke();
+
+            this.canvas.fillStyle = 'rgba(00, 0, 0, 1)';
+            this.canvas.strokeStyle = '#000000';
+
+            this.canvas.beginPath();
+            var ypos = this.getClientY(this.focused)-boxHeight+txtSz.actualBoundingBoxAscent+3;
+            var xpos = this.getClientX(this.focused)+3;
+
+            this.canvas.strokeStyle = '#97ea44';
+            this.canvas.shadowColor = '#ffffff';
+            this.canvas.fillStyle = "#97ea44";
+            this.canvas.lineWidth = 1;
+            this.canvas.shadowBlur = 2;
+            this.canvas.fillText(new Date(`${this.focused.timestamp} UTC`).toLocaleString(),xpos,ypos);
+            ypos+=5;
+
+            ypos+=txtSz.actualBoundingBoxAscent+3;
+            props.forEach(prop => {
+                var propVal = this.getPropValue(prop,this.focused[prop]);
+                this.canvas.strokeStyle = 'aquamarine';
+                this.canvas.shadowColor = '#ffffff';
+                this.canvas.fillStyle = "aquamarine";
+                this.canvas.fillText(`${prop}: `,xpos,ypos);
+                txtSz = this.canvas.measureText(propVal);
+                this.canvas.strokeStyle = '#97ea44';
+                this.canvas.shadowColor = '#ffffff';
+                this.canvas.fillStyle = "#97ea44";
+                this.canvas.fillText(propVal,(xpos+(boxWidth-txtSz.width)-5),ypos);
+                ypos+=txtSz.actualBoundingBoxAscent+3;
+            });
+
+            this.canvas.stroke();
+        }
+    }
+
+    drawTrip() {
+        return new Promise((resolve,reject)=>{
+            var firstPoint = this.tiles.points[0];
+            if (firstPoint){
+                this.canvas.strokeStyle = '#00ffff';
+                this.canvas.shadowColor = '#00ffff';
+                this.canvas.fillStyle = "#00ffff";
+                this.canvas.lineWidth = 2;
+                this.canvas.shadowBlur = 2;
+        
+                this.canvas.beginPath();
+                this.canvas.moveTo(this.getClientX(firstPoint), this.getClientY(firstPoint));
+                this.tiles.points.forEach(point => {
+                    this.canvas.lineTo(this.getClientX(point), this.getClientY(point));
+                });
+                this.canvas.stroke();
+                this.canvas.strokeStyle = '#0000ff';
+                this.canvas.shadowColor = '#0000ff';
+                this.canvas.fillStyle = "#0000ff";
+                this.tiles.points.forEach(point => {
+                    this.canvas.beginPath();
+                    this.canvas.arc(((point.tileX - this.tiles.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - this.tiles.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
+                    this.canvas.stroke();
+                });
+                resolve(this.tiles);
             } else {
-                resolve(this.canvas.drawImage(this.state.images[tileX][tileY], 
-                                         this.state.images[tileX][tileY].posX * this.state.images[tileX][tileY].width, 
-                                         this.state.images[tileX][tileY].posY * this.state.images[tileX][tileY].height));
+                reject({error:"no points"});
             }
         });
+    }
+
+    mouseEvent(event) {
+        var margin = 10;
+        var focused = this.tiles.points.find(point => 
+            (this.getClientX(point) >= (event.offsetX - margin)) &&
+            (this.getClientX(point) <= (event.offsetX + margin)) &&
+            (this.getClientY(point) >= (event.offsetY - margin)) &&
+            (this.getClientY(point) <= (event.offsetY + margin)));
+        this.needsRefresh = focused != this.focused;
+        this.focused=focused;
+    }
+
+    getPropValue(name,val) {
+        if (name == "speed") {
+            return `${Math.floor(1.852*val/100.0)} km/h`;
+        }
+        if (name == "altitude") {
+            return `${Math.floor(val/100)}m`;
+        }
+        if ((name == "longitude") || (name == "latitude")) {
+            return val;
+        }
+        return Math.round(val);
+    }
+
+    drawTile(tiles) {
+        return new Promise((resolve,reject) => {
+            var curTile = tiles.pop();
+            if (curTile){
+                if (!this.state.cache.images[this.state.zoomlevel] ||
+                    !this.state.cache.images[this.state.zoomlevel][curTile.tileX] || 
+                    !this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]){
+                    this.getTile(curTile.tileX,curTile.tileY,0)
+                        .then(imgData => {
+                            var tileImage = new Image();
+                            tileImage.posX = curTile.tileX - this.tiles.leftTile;
+                            tileImage.posY = curTile.tileY - this.tiles.bottomTile;
+                            tileImage.src = (window.URL || window.webkitURL).createObjectURL(imgData);
+                            if (!this.state.cache.images[this.state.zoomlevel]) {
+                                this.state.cache.images[this.state.zoomlevel]={};
+                            } 
+                            if (!this.state.cache.images[this.state.zoomlevel][curTile.tileX]) {
+                                this.state.cache.images[this.state.zoomlevel][curTile.tileX]={};
+                            } 
+                            this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]=tileImage;
+
+                            tileImage.onload = (elem) => {
+                                this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
+                                if (tiles.length) {
+                                    resolve(this.drawTile(tiles));
+                                } else {
+                                    resolve({});
+                                }
+                            };
+                        }).catch(reject);
+                } else {
+                    var tileImage = this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY];
+                    this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
+                    if (tiles.length) {
+                        resolve(this.drawTile(tiles));
+                    } else {
+                        resolve({});
+                    }
+                }
+            } else {
+                resolve({});
+            }
+        });
+    }
+
+    downloadTile(tileX,tileY) {
+        return new Promise((resolve,reject) => {
+            var newImg;
+            wfetch(`https://tile.openstreetmap.de/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
+                .then(resp => resp.blob())
+                .then(imgData => wfetch(`${httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
+                    method: 'put',
+                    body: (newImg=imgData)
+                }).then(resolve(newImg)))
+                  .catch(reject);
+        })
+    }
+
+    getTile(tileX,tileY, retryCount) {
+        return new Promise((resolve,reject)=>{
+            wfetch(`${httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
+                .then(resp => resolve(resp.status >= 300? this.downloadTile(tileX,tileY):resp.blob()))
+                .catch(err => {
+                    if (retryCount > 3) {
+                        reject({error:`Error in downloading ${this.state.zoomlevel}/${tileX}/${tileY}`});
+                    } else {
+                        console.log(`retrying ${this.state.zoomlevel}/${tileX}/${tileY}`);
+                        resolve(this.getTile(tileX,tileY,retryCount++));
+                    }
+                });
+        });
+    }
+
+    getClientY(firstPoint) {
+        return ((firstPoint.tileY - this.tiles.bottomTile) * 256) + (256 * firstPoint.posTileY);
+    }
+
+    getClientX(firstPoint) {
+        return ((firstPoint.tileX - this.tiles.leftTile) * 256) + (256 * firstPoint.posTileX);
     }
 
     lon2tile(lon) { 
@@ -2083,11 +2291,11 @@ class TripViewer extends React.Component {
     }
 
     lon2x(lon) { 
-        return (lon+180)/360*Math.pow(2,this.zoomlevel); 
+        return (lon+180)/360*Math.pow(2,this.state.zoomlevel); 
     }
     
     lat2y(lat)  { 
-        return (1-Math.log(Math.tan(lat*Math.PI/180) + 1/Math.cos(lat*Math.PI/180))/Math.PI)/2 *Math.pow(2,this.zoomlevel); 
+        return (1-Math.log(Math.tan(lat*Math.PI/180) + 1/Math.cos(lat*Math.PI/180))/Math.PI)/2 *Math.pow(2,this.state.zoomlevel); 
     }
 
     tile2long(x,z) {
@@ -2101,10 +2309,10 @@ class TripViewer extends React.Component {
     
     pointToCartesian(point) {
         return {
-            tileX: this.lon2tile(point.longitude, this.zoomlevel),
-            tileY: this.lat2tile(point.latitude, this.zoomlevel),
-            posTileX: this.lon2x(point.longitude,this.zoomlevel) - this.lon2tile(point.longitude, this.zoomlevel),
-            posTileY: this.lat2y(point.latitude,this.zoomlevel) - this.lat2tile(point.latitude, this.zoomlevel),
+            tileX: this.lon2tile(point.longitude, this.state.zoomlevel),
+            tileY: this.lat2tile(point.latitude, this.state.zoomlevel),
+            posTileX: this.lon2x(point.longitude,this.state.zoomlevel) - this.lon2tile(point.longitude, this.state.zoomlevel),
+            posTileY: this.lat2y(point.latitude,this.state.zoomlevel) - this.lat2tile(point.latitude, this.state.zoomlevel),
             ...point
         };
     }
@@ -2118,14 +2326,20 @@ class TripViewer extends React.Component {
             e("div",{key:genUUID()},[
                 e("div",{key:genUUID(),className:"tripHeader"},[
                     `Trip with ${this.props.points.length} points`,
-                    e("br"),
+                    e("br",{key:genUUID()}),
                     `From ${new Date(`${this.props.points[0].timestamp} UTC`).toLocaleString()} `,
-                    `To ${new Date(`${this.props.points[this.props.points.length-1].timestamp} UTC`).toLocaleString()}`,
+                    `To ${new Date(`${this.props.points[this.props.points.length-1].timestamp} UTC`).toLocaleString()} Zoom:`,
+                    e("select",{
+                        key:genUUID(),
+                        onChange: elem=>this.setState({zoomlevel:elem.target.value}),
+                        value: this.state.zoomlevel
+                    },
+                        Array.from(Array(18).keys()).map(zoom => e("option",{key:genUUID()},zoom+1))
+                    )
                 ]),
                 e("span",{key:genUUID(),className:"close",onClick:this.closeIt.bind(this)},"X")
             ]),
             e("div",{key:genUUID(),className:"trip"},e("canvas",{
-                onresize:this.drawMap(),
                 key:genUUID(),
                 ref: (elem) => this.widget = elem
             }))
@@ -2650,44 +2864,45 @@ class MainApp extends React.Component {
   render() {
     this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
     return e("div",{key:genUUID(),className:"mainApp"}, [
-      e('fieldset', { key: genUUID(), className:`slides`, id: "controls"}, [
-        this.state?.OnLineDevices?.length && !window.location.hostname ?
-            e("select",{
-              key: genUUID(),
-              className: "landevices",
-              value: httpPrefix.substring(7),
-              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
-              //onChange: elem=>{window.location=`http://${elem.target.value}`}
-              },this.state.OnLineDevices.map(lanDev=>e("option",{
-                  key:genUUID(),
-                  className: "landevice"
-              },lanDev.devName))
-            ):null,
-        e("canvas",{
-            key: genUUID(),
-            height: 40,
-            width:100,
-            ref: (elem) => this.widget = elem
-        }),
-        e(DeviceList, {
-            key: genUUID(),
-            selectedDeviceId: this.state.selectedDeviceId,
-            httpPrefix: httpPrefix,
-            onSet: val=>this.state?.selectedDeviceId!=val?this.setState({selectedDeviceId:val}):null
-        })
-      ]),
       Object.keys(this.state.tabs).map(tab => 
         e("details",{key:genUUID(),id:tab, className:"appPage slides", open: this.state.tabs[tab].active, onClick:elem=>{
-            elem.target.parentElement.setAttribute("open",true);
-            Object.keys(this.state.tabs).forEach(ttab => ttab == tab ? this.state.tabs[ttab].active=true : this.state.tabs[ttab].active=false );
-            [].slice.call(elem.target.parentElement.parentElement.children).filter(ttab => ttab != elem).forEach(ttab => ttab.removeAttribute("open"))
+            if (elem.target.classList.contains("appTab")){
+              elem.target.parentElement.setAttribute("open",true);
+              Object.keys(this.state.tabs).forEach(ttab => ttab == tab ? this.state.tabs[ttab].active=true : this.state.tabs[ttab].active=false );
+              [].slice.call(elem.target.parentElement.parentElement.children).filter(ttab => ttab != elem).forEach(ttab => ttab.removeAttribute("open"))
+            }
           }},
           [
             e("summary",{key:genUUID(),className:"appTab"},tab),
             e("div",{key:genUUID(),className: tab == "Status" ? "pageContent system-config" : "pageContent"}, this.getPage(tab))
           ]
         )
-      )
+      ),
+      e("canvas",{
+        key: genUUID(),
+        height: 40,
+        width:100,
+        ref: (elem) => this.widget = elem
+      }),
+      e('fieldset', { key: genUUID(), className:`slides`, id: "controls"}, [
+        this.state?.OnLineDevices?.length && !window.location.hostname ?
+          e("select",{
+              key: genUUID(),
+              className: "landevices",
+              value: httpPrefix.substring(7),
+              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
+              },this.state.OnLineDevices.map(lanDev=>e("option",{
+                  key:genUUID(),
+                  className: "landevice"
+              },lanDev.devName))
+            ):null,
+        e(DeviceList, {
+            key: genUUID(),
+            selectedDeviceId: this.state.selectedDeviceId,
+            httpPrefix: httpPrefix,
+            onSet: val=>this.state?.selectedDeviceId!=val?this.setState({selectedDeviceId:val}):null
+        })
+      ])
     ]);
   }
 }

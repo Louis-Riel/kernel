@@ -24,7 +24,7 @@ class ROProp extends React.Component {
             }
 
             if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-                return e("a", { href: `${httpPrefix}${val}` }, val);
+                return e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
             }
 
             return val;
@@ -73,6 +73,8 @@ class ROProp extends React.Component {
         ctx.shadowBlur = 2;
         ctx.shadowColor = '#00ffff'
         var rect = input.getBoundingClientRect();
+        rect.height = canvas.height;
+        rect.width = canvas.width;
 
         //Background
         var gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);

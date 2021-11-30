@@ -709,7 +709,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 9;
         }
     }
-    ESP_LOGD(__FUNCTION__, "Sent %s(%d)", path, len);
+    ESP_LOGV(__FUNCTION__, "Sent %s(%d)", path, len);
     deinitSDCard();
     return ESP_OK;
 }

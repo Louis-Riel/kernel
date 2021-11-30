@@ -1,196 +1,274 @@
 class TripViewer extends React.Component {
     constructor(props) {
         super(props);
-        this.zoomlevel=15;
-        this.state={images:{}};
+        this.state={
+            cache:this.props.cache,
+            zoomlevel:15
+        };
     }
     componentDidMount() {
         this.mounted=true;
-        this.drawMap();
+        this.needsRefresh=true;
+        this.canvas = this.widget.getContext("2d");                    
+        this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
+        window.requestAnimationFrame(this.drawMap.bind(this));
     }
-    
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        this.canvas = this.widget.getContext("2d");                    
+        this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
+        this.needsRefresh=true;
+    }
 
     drawMap() {
-        return new Promise((resolve,reject) => {
+        if (this.needsRefresh){
+            this.needsRefresh=false;
             if (!this.mounted || !this.widget || !this.props.points || !this.props.points.length){
-                reject({});
+                return;
             } else {
-                this.canvas = this.widget.getContext("2d");                    
-        
-                this.getTripTiles().then(this.drawTripTiles.bind(this))
-                                   .then(this.drawTrip.bind(this))
-                                   .catch(reject);
+                this.getTripTiles()
+                this.drawTripTiles()
+                    .then(this.drawTrip.bind(this))
+                    .then(this.drawPointPopup.bind(this))
+                    .then(ret=>window.requestAnimationFrame(this.drawMap.bind(this)))
+                    .catch(err => {
+                        console.error(err);
+                        window.requestAnimationFrame(this.drawMap.bind(this));
+                    });
             }
-        });
+        } else {
+            window.requestAnimationFrame(this.drawMap.bind(this));
+        }
     }
-
+   
     getTripTiles() {
-        return new Promise((resolve,reject) => this.props.points?.length?resolve(this.props.points.reduce((ret, point) => {
-            ret.trip.leftTile = this.lon2tile(ret.left = Math.min(ret.left, point.longitude));
-            ret.trip.rightTile = this.lon2tile(ret.right = Math.max(ret.right, point.longitude));
-            ret.trip.topTile = this.lat2tile(ret.top = Math.min(ret.top, point.latitude));
-            ret.trip.bottomTile = this.lat2tile(ret.bottom = Math.max(ret.bottom, point.latitude));
-            ret.trip.XTiles = (ret.trip.rightTile - ret.trip.leftTile) + 1;
-            ret.trip.YTiles = (ret.trip.topTile - ret.trip.bottomTile) + 1;
-            ret.margin.bottom = Math.floor((ret.maxYTiles-ret.trip.YTiles)/2);
-            ret.margin.top = ret.maxYTiles-ret.trip.YTiles-ret.margin.bottom;
-            ret.margin.left = Math.floor((ret.maxXTiles-ret.trip.XTiles)/2);
-            ret.margin.right = ret.maxXTiles-ret.trip.XTiles-ret.margin.left;
-            ret.leftTile=ret.trip.leftTile-Math.abs(ret.margin.left);
-            ret.rightTile=Math.max(ret.maxXTiles+ret.trip.leftTile, ret.trip.rightTile+Math.abs(ret.margin.right));
-            ret.bottomTile=ret.trip.bottomTile-Math.abs(ret.margin.bottom);
-            ret.topTile=Math.max(ret.maxYTiles+ret.trip.bottomTile, ret.trip.bottomTile+Math.abs(ret.margin.top));
-            ret.points.push(this.pointToCartesian(point));
-            return ret;
-        }, {
-            left: this.props.points[0].longitude,
-            right: this.props.points[0].longitude,
-            top: this.props.points[0].latitude,
-            bottom: this.props.points[0].latitude,
-            trip:{},
-            margin:{},
-            points: [],
-            margin: [],
-            maxXTiles:Math.ceil(window.innerWidth/256),
+        var points = this.props.points.map(this.pointToCartesian.bind(this));
+        this.tiles= {
+            points:points,
+            trip:{
+                leftTile: points.reduce((a,b)=>a<b.tileX?a:b.tileX,99999),
+                rightTile: points.reduce((a,b)=>a>b.tileX?a:b.tileX,0),
+                bottomTile: points.reduce((a,b)=>a<b.tileY?a:b.tileY,99999),
+                topTile: points.reduce((a,b)=>a>b.tileY?a:b.tileY,0)
+            },
+            maxXTiles: Math.ceil(window.innerWidth/256),
             maxYTiles: Math.ceil(window.innerHeight/256)
-        })):reject({"error":"no points"}));
+        }
+        this.tiles.trip.XTiles = this.tiles.trip.rightTile-this.tiles.trip.leftTile+1;
+        this.tiles.trip.YTiles = this.tiles.trip.bottomTile-this.tiles.trip.bottomTile+1;
+        this.tiles.margin = {
+            left: this.tiles.maxXTiles>this.tiles.trip.XTiles?Math.floor((this.tiles.maxXTiles-this.tiles.trip.XTiles)/2):0,
+            bottom: this.tiles.maxYTiles>this.tiles.trip.YTiles?Math.floor((this.tiles.maxYTiles-this.tiles.trip.YTiles)/2):0
+        };
+        this.tiles.margin.right=this.tiles.maxXTiles>this.tiles.trip.XTiles?this.tiles.maxXTiles-this.tiles.trip.XTiles-this.tiles.margin.left:0;
+        this.tiles.margin.top= this.tiles.maxYTiles>this.tiles.trip.YTiles?this.tiles.maxYTiles-this.tiles.trip.YTiles-this.tiles.margin.bottom:0;
+        this.tiles.leftTile=this.tiles.trip.leftTile-this.tiles.margin.left;
+        this.tiles.rightTile=this.tiles.trip.rightTile+this.tiles.margin.right;
+        this.tiles.bottomTile=this.tiles.trip.bottomTile-this.tiles.margin.bottom;
+        this.tiles.topTile=this.tiles.trip.topTile + this.tiles.margin.top;
     }
 
-    setupListeners(canvas,tiles) {
-        this.widget.addEventListener("mousemove", (event) => {
-            var pt = tiles.points.find(point => (this.getClientX(point,tiles) >= (event.offsetX - 15)) &&
-                (this.getClientX(point,tiles) <= (event.offsetX + 15)) &&
-                (this.getClientY(point,tiles) >= (event.offsetY - 15)) &&
-                (this.getClientY(point,tiles) <= (event.offsetY + 15)));
-            var needsRefresh = false;
-            tiles.points.filter(point => point != pt).forEach(point => {
-                if (point.focused) {
-                    point.focused = false;
-                    needsRefresh = true;
-                }
-            });
-            if (needsRefresh) {
-                this.drawMap().then(res => {
-                    if (pt && !pt.focused) {
-                        pt.focused = true;
-                        this.drawPointPopup(canvas, pt, tiles);
-                    }
-                });
-            } else if (pt && !pt.focused) {
-                pt.focused = true;
-                this.drawPointPopup(canvas, pt, tiles);
-            }
-        });
-    }
-
-    drawPointPopup(canvas,pt,tiles){
-        canvas.font = "10px Helvetica";
-        var txtSz = canvas.measureText(new Date(`${pt.timestamp} UTC`).toLocaleString());
-        var boxHeight=60;
-        var boxWidth=txtSz.width+10;
-        canvas.strokeStyle = '#00ffff';
-        canvas.shadowColor = '#00ffff';
-        canvas.fillStyle = "#ffffff";
-        canvas.lineWidth = 1;
-        canvas.shadowBlur = 2;
-        canvas.beginPath();
-        canvas.rect(this.getClientX(pt,tiles),this.getClientY(pt,tiles)-boxHeight,boxWidth,boxHeight);
-        canvas.fill();
-        canvas.stroke();
-
-        canvas.fillStyle = 'rgba(00, 0, 0, 1)';
-        canvas.strokeStyle = '#000000';
-
-        canvas.beginPath();
-        var ypos = this.getClientY(pt,tiles)-boxHeight+txtSz.actualBoundingBoxAscent+3;
-        var xpos = this.getClientX(pt,tiles)+3;
-        canvas.fillText(new Date(`${pt.timestamp} UTC`).toLocaleString(),xpos,ypos);
-        ypos+=txtSz.actualBoundingBoxAscent+3;
-        canvas.fillText(`Bat: ${Math.floor(pt.Battery)}`,xpos,ypos);
-        ypos+=txtSz.actualBoundingBoxAscent+3;
-        canvas.fillText(`Sats: ${pt.Satellites}`,xpos,ypos);
-        ypos+=txtSz.actualBoundingBoxAscent+3;
-        canvas.fillText(`Speed:${Math.floor(1.852*pt.speed/100.0)} km/h`,xpos,ypos);
-        ypos+=txtSz.actualBoundingBoxAscent+3;
-        canvas.fillText(`Alt:${Math.floor(pt.altitude/100)} m`,xpos,ypos);
-
-        canvas.stroke();
-    }
-
-    drawTrip(tiles) {
-        var firstPoint = tiles.points[0];
-        this.canvas.strokeStyle = '#00ffff';
-        this.canvas.shadowColor = '#00ffff';
-        this.canvas.fillStyle = "#00ffff";
-        this.canvas.lineWidth = 2;
-        this.canvas.shadowBlur = 2;
-
-        this.canvas.beginPath();
-        this.canvas.moveTo(this.getClientX(firstPoint,tiles), this.getClientY(firstPoint,tiles));
-        tiles.points.forEach(point => {
-            this.canvas.lineTo(this.getClientX(point,tiles), this.getClientY(point,tiles));
-        });
-        this.canvas.stroke();
-        this.canvas.strokeStyle = '#0000ff';
-        this.canvas.shadowColor = '#0000ff';
-        this.canvas.fillStyle = "#0000ff";
-        tiles.points.forEach(point => {
-            this.canvas.beginPath();
-            this.canvas.arc(((point.tileX - tiles.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - tiles.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
-            this.canvas.stroke();
-        });
-    }
-
-    getClientY(firstPoint,tiles) {
-        return ((firstPoint.tileY - tiles.bottomTile) * 256) + (256 * firstPoint.posTileY);
-    }
-
-    getClientX(firstPoint,tiles) {
-        return ((firstPoint.tileX - tiles.leftTile) * 256) + (256 * firstPoint.posTileX);
-    }
-
-    drawTripTiles(tiles) {
-        this.widget.width=(tiles.trip.XTiles+Math.abs(tiles.margin.left+tiles.margin.right))*256;
-        this.widget.height=(tiles.trip.YTiles+Math.abs(tiles.margin.bottom+tiles.margin.top))*256;
+    drawTripTiles() {
+        this.widget.width=(this.tiles.rightTile-this.tiles.leftTile)*256;
+        this.widget.height=(this.tiles.topTile-this.tiles.bottomTile)*256;
         this.canvas.fillStyle = "black";
         this.canvas.fillRect(0,0,window.innerWidth,window.innerHeight);
-        this.setupListeners(this.canvas,tiles);
-        var promises = [];
-        for (var tileX = tiles.leftTile; tileX <= tiles.rightTile; tileX++) {
-            for (var tileY = tiles.bottomTile; tileY <= tiles.topTile; tileY++) {
-                promises.push(this.drawTile(tileX, tileY, 0, tiles));
+        var tiles=[];
+        for (var tileX = this.tiles.leftTile; tileX <= this.tiles.rightTile; tileX++) {
+            for (var tileY = this.tiles.bottomTile; tileY <= this.tiles.topTile; tileY++) {
+                tiles.unshift({tileX:tileX, tileY:tileY});
             }
         }
-        return new Promise((resolve,reject)=>Promise.all(promises).then(res=>resolve(tiles)).catch(err=>resolve(tiles)));
+        return Promise.all(Array.from(Array(Math.min(3,tiles.length)).keys()).map(unused => this.drawTile(tiles)));
     }
 
-    drawTile(tileX, tileY, numTries, tiles) {
-        return new Promise((resolve,reject) => {
-            if (!this.state.images[tileX] || !this.state.images[tileX][tileY]){
-                var tile = new Image();
-                tile.posX = tileX - tiles.leftTile;
-                tile.posY = tileY - tiles.bottomTile;
-                tile.onload = (elem) => {
-                    if (!this.state.images[tileX]) {
-                        this.state.images[tileX]={};
-                    }
-                    this.state.images[tileX][tileY]=elem.currentTarget;
-                    resolve(this.canvas.drawImage(elem.currentTarget, elem.currentTarget.posX * elem.currentTarget.width, elem.currentTarget.posY * elem.currentTarget.height));
-                };
-                tile.onerror = (err) => {
-                    if (numTries > 3) {
-                        reject(`Failed to fetch tile ${tileX},${tileY}`);
-                    } else {
-                        this.drawTile(tileX, tileY, numTries+1,tiles).then(resolve).catch(reject);
-                    }
-                };
-                tile.src = `${httpPrefix}/sdcard/web/tiles/${tileX}/${tileY}.png`;
+    drawPointPopup(){
+        if (this.focused) {
+            this.canvas.font = "12px Helvetica";
+            var txtSz = this.canvas.measureText(new Date(`${this.focused.timestamp} UTC`).toLocaleString());
+            var props =  Object.keys(this.focused)
+                               .filter(prop => prop != "timestamp");
+
+            var boxHeight=50 + (9*props.length);
+            var boxWidth=txtSz.width+10;
+            this.canvas.strokeStyle = 'green';
+            this.canvas.shadowColor = '#00ffff';
+            this.canvas.fillStyle = "#000000";
+            this.canvas.lineWidth = 1;
+            this.canvas.shadowBlur = 2;
+            this.canvas.beginPath();
+            this.canvas.rect(this.getClientX(this.focused),this.getClientY(this.focused)-boxHeight,boxWidth,boxHeight);
+            this.canvas.fill();
+            this.canvas.stroke();
+
+            this.canvas.fillStyle = 'rgba(00, 0, 0, 1)';
+            this.canvas.strokeStyle = '#000000';
+
+            this.canvas.beginPath();
+            var ypos = this.getClientY(this.focused)-boxHeight+txtSz.actualBoundingBoxAscent+3;
+            var xpos = this.getClientX(this.focused)+3;
+
+            this.canvas.strokeStyle = '#97ea44';
+            this.canvas.shadowColor = '#ffffff';
+            this.canvas.fillStyle = "#97ea44";
+            this.canvas.lineWidth = 1;
+            this.canvas.shadowBlur = 2;
+            this.canvas.fillText(new Date(`${this.focused.timestamp} UTC`).toLocaleString(),xpos,ypos);
+            ypos+=5;
+
+            ypos+=txtSz.actualBoundingBoxAscent+3;
+            props.forEach(prop => {
+                var propVal = this.getPropValue(prop,this.focused[prop]);
+                this.canvas.strokeStyle = 'aquamarine';
+                this.canvas.shadowColor = '#ffffff';
+                this.canvas.fillStyle = "aquamarine";
+                this.canvas.fillText(`${prop}: `,xpos,ypos);
+                txtSz = this.canvas.measureText(propVal);
+                this.canvas.strokeStyle = '#97ea44';
+                this.canvas.shadowColor = '#ffffff';
+                this.canvas.fillStyle = "#97ea44";
+                this.canvas.fillText(propVal,(xpos+(boxWidth-txtSz.width)-5),ypos);
+                ypos+=txtSz.actualBoundingBoxAscent+3;
+            });
+
+            this.canvas.stroke();
+        }
+    }
+
+    drawTrip() {
+        return new Promise((resolve,reject)=>{
+            var firstPoint = this.tiles.points[0];
+            if (firstPoint){
+                this.canvas.strokeStyle = '#00ffff';
+                this.canvas.shadowColor = '#00ffff';
+                this.canvas.fillStyle = "#00ffff";
+                this.canvas.lineWidth = 2;
+                this.canvas.shadowBlur = 2;
+        
+                this.canvas.beginPath();
+                this.canvas.moveTo(this.getClientX(firstPoint), this.getClientY(firstPoint));
+                this.tiles.points.forEach(point => {
+                    this.canvas.lineTo(this.getClientX(point), this.getClientY(point));
+                });
+                this.canvas.stroke();
+                this.canvas.strokeStyle = '#0000ff';
+                this.canvas.shadowColor = '#0000ff';
+                this.canvas.fillStyle = "#0000ff";
+                this.tiles.points.forEach(point => {
+                    this.canvas.beginPath();
+                    this.canvas.arc(((point.tileX - this.tiles.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - this.tiles.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
+                    this.canvas.stroke();
+                });
+                resolve(this.tiles);
             } else {
-                resolve(this.canvas.drawImage(this.state.images[tileX][tileY], 
-                                         this.state.images[tileX][tileY].posX * this.state.images[tileX][tileY].width, 
-                                         this.state.images[tileX][tileY].posY * this.state.images[tileX][tileY].height));
+                reject({error:"no points"});
             }
         });
+    }
+
+    mouseEvent(event) {
+        var margin = 10;
+        var focused = this.tiles.points.find(point => 
+            (this.getClientX(point) >= (event.offsetX - margin)) &&
+            (this.getClientX(point) <= (event.offsetX + margin)) &&
+            (this.getClientY(point) >= (event.offsetY - margin)) &&
+            (this.getClientY(point) <= (event.offsetY + margin)));
+        this.needsRefresh = focused != this.focused;
+        this.focused=focused;
+    }
+
+    getPropValue(name,val) {
+        if (name == "speed") {
+            return `${Math.floor(1.852*val/100.0)} km/h`;
+        }
+        if (name == "altitude") {
+            return `${Math.floor(val/100)}m`;
+        }
+        if ((name == "longitude") || (name == "latitude")) {
+            return val;
+        }
+        return Math.round(val);
+    }
+
+    drawTile(tiles) {
+        return new Promise((resolve,reject) => {
+            var curTile = tiles.pop();
+            if (curTile){
+                if (!this.state.cache.images[this.state.zoomlevel] ||
+                    !this.state.cache.images[this.state.zoomlevel][curTile.tileX] || 
+                    !this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]){
+                    this.getTile(curTile.tileX,curTile.tileY,0)
+                        .then(imgData => {
+                            var tileImage = new Image();
+                            tileImage.posX = curTile.tileX - this.tiles.leftTile;
+                            tileImage.posY = curTile.tileY - this.tiles.bottomTile;
+                            tileImage.src = (window.URL || window.webkitURL).createObjectURL(imgData);
+                            if (!this.state.cache.images[this.state.zoomlevel]) {
+                                this.state.cache.images[this.state.zoomlevel]={};
+                            } 
+                            if (!this.state.cache.images[this.state.zoomlevel][curTile.tileX]) {
+                                this.state.cache.images[this.state.zoomlevel][curTile.tileX]={};
+                            } 
+                            this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]=tileImage;
+
+                            tileImage.onload = (elem) => {
+                                this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
+                                if (tiles.length) {
+                                    resolve(this.drawTile(tiles));
+                                } else {
+                                    resolve({});
+                                }
+                            };
+                        }).catch(reject);
+                } else {
+                    var tileImage = this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY];
+                    this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
+                    if (tiles.length) {
+                        resolve(this.drawTile(tiles));
+                    } else {
+                        resolve({});
+                    }
+                }
+            } else {
+                resolve({});
+            }
+        });
+    }
+
+    downloadTile(tileX,tileY) {
+        return new Promise((resolve,reject) => {
+            var newImg;
+            wfetch(`https://tile.openstreetmap.de/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
+                .then(resp => resp.blob())
+                .then(imgData => wfetch(`${httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
+                    method: 'put',
+                    body: (newImg=imgData)
+                }).then(resolve(newImg)))
+                  .catch(reject);
+        })
+    }
+
+    getTile(tileX,tileY, retryCount) {
+        return new Promise((resolve,reject)=>{
+            wfetch(`${httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
+                .then(resp => resolve(resp.status >= 300? this.downloadTile(tileX,tileY):resp.blob()))
+                .catch(err => {
+                    if (retryCount > 3) {
+                        reject({error:`Error in downloading ${this.state.zoomlevel}/${tileX}/${tileY}`});
+                    } else {
+                        console.log(`retrying ${this.state.zoomlevel}/${tileX}/${tileY}`);
+                        resolve(this.getTile(tileX,tileY,retryCount++));
+                    }
+                });
+        });
+    }
+
+    getClientY(firstPoint) {
+        return ((firstPoint.tileY - this.tiles.bottomTile) * 256) + (256 * firstPoint.posTileY);
+    }
+
+    getClientX(firstPoint) {
+        return ((firstPoint.tileX - this.tiles.leftTile) * 256) + (256 * firstPoint.posTileX);
     }
 
     lon2tile(lon) { 
@@ -202,11 +280,11 @@ class TripViewer extends React.Component {
     }
 
     lon2x(lon) { 
-        return (lon+180)/360*Math.pow(2,this.zoomlevel); 
+        return (lon+180)/360*Math.pow(2,this.state.zoomlevel); 
     }
     
     lat2y(lat)  { 
-        return (1-Math.log(Math.tan(lat*Math.PI/180) + 1/Math.cos(lat*Math.PI/180))/Math.PI)/2 *Math.pow(2,this.zoomlevel); 
+        return (1-Math.log(Math.tan(lat*Math.PI/180) + 1/Math.cos(lat*Math.PI/180))/Math.PI)/2 *Math.pow(2,this.state.zoomlevel); 
     }
 
     tile2long(x,z) {
@@ -220,10 +298,10 @@ class TripViewer extends React.Component {
     
     pointToCartesian(point) {
         return {
-            tileX: this.lon2tile(point.longitude, this.zoomlevel),
-            tileY: this.lat2tile(point.latitude, this.zoomlevel),
-            posTileX: this.lon2x(point.longitude,this.zoomlevel) - this.lon2tile(point.longitude, this.zoomlevel),
-            posTileY: this.lat2y(point.latitude,this.zoomlevel) - this.lat2tile(point.latitude, this.zoomlevel),
+            tileX: this.lon2tile(point.longitude, this.state.zoomlevel),
+            tileY: this.lat2tile(point.latitude, this.state.zoomlevel),
+            posTileX: this.lon2x(point.longitude,this.state.zoomlevel) - this.lon2tile(point.longitude, this.state.zoomlevel),
+            posTileY: this.lat2y(point.latitude,this.state.zoomlevel) - this.lat2tile(point.latitude, this.state.zoomlevel),
             ...point
         };
     }
@@ -237,14 +315,20 @@ class TripViewer extends React.Component {
             e("div",{key:genUUID()},[
                 e("div",{key:genUUID(),className:"tripHeader"},[
                     `Trip with ${this.props.points.length} points`,
-                    e("br"),
+                    e("br",{key:genUUID()}),
                     `From ${new Date(`${this.props.points[0].timestamp} UTC`).toLocaleString()} `,
-                    `To ${new Date(`${this.props.points[this.props.points.length-1].timestamp} UTC`).toLocaleString()}`,
+                    `To ${new Date(`${this.props.points[this.props.points.length-1].timestamp} UTC`).toLocaleString()} Zoom:`,
+                    e("select",{
+                        key:genUUID(),
+                        onChange: elem=>this.setState({zoomlevel:elem.target.value}),
+                        value: this.state.zoomlevel
+                    },
+                        Array.from(Array(18).keys()).map(zoom => e("option",{key:genUUID()},zoom+1))
+                    )
                 ]),
                 e("span",{key:genUUID(),className:"close",onClick:this.closeIt.bind(this)},"X")
             ]),
             e("div",{key:genUUID(),className:"trip"},e("canvas",{
-                onresize:this.drawMap(),
                 key:genUUID(),
                 ref: (elem) => this.widget = elem
             }))

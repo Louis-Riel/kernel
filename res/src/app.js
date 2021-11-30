@@ -516,44 +516,45 @@ class MainApp extends React.Component {
   render() {
     this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
     return e("div",{key:genUUID(),className:"mainApp"}, [
-      e('fieldset', { key: genUUID(), className:`slides`, id: "controls"}, [
-        this.state?.OnLineDevices?.length && !window.location.hostname ?
-            e("select",{
-              key: genUUID(),
-              className: "landevices",
-              value: httpPrefix.substring(7),
-              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
-              //onChange: elem=>{window.location=`http://${elem.target.value}`}
-              },this.state.OnLineDevices.map(lanDev=>e("option",{
-                  key:genUUID(),
-                  className: "landevice"
-              },lanDev.devName))
-            ):null,
-        e("canvas",{
-            key: genUUID(),
-            height: 40,
-            width:100,
-            ref: (elem) => this.widget = elem
-        }),
-        e(DeviceList, {
-            key: genUUID(),
-            selectedDeviceId: this.state.selectedDeviceId,
-            httpPrefix: httpPrefix,
-            onSet: val=>this.state?.selectedDeviceId!=val?this.setState({selectedDeviceId:val}):null
-        })
-      ]),
       Object.keys(this.state.tabs).map(tab => 
         e("details",{key:genUUID(),id:tab, className:"appPage slides", open: this.state.tabs[tab].active, onClick:elem=>{
-            elem.target.parentElement.setAttribute("open",true);
-            Object.keys(this.state.tabs).forEach(ttab => ttab == tab ? this.state.tabs[ttab].active=true : this.state.tabs[ttab].active=false );
-            [].slice.call(elem.target.parentElement.parentElement.children).filter(ttab => ttab != elem).forEach(ttab => ttab.removeAttribute("open"))
+            if (elem.target.classList.contains("appTab")){
+              elem.target.parentElement.setAttribute("open",true);
+              Object.keys(this.state.tabs).forEach(ttab => ttab == tab ? this.state.tabs[ttab].active=true : this.state.tabs[ttab].active=false );
+              [].slice.call(elem.target.parentElement.parentElement.children).filter(ttab => ttab != elem).forEach(ttab => ttab.removeAttribute("open"))
+            }
           }},
           [
             e("summary",{key:genUUID(),className:"appTab"},tab),
             e("div",{key:genUUID(),className: tab == "Status" ? "pageContent system-config" : "pageContent"}, this.getPage(tab))
           ]
         )
-      )
+      ),
+      e("canvas",{
+        key: genUUID(),
+        height: 40,
+        width:100,
+        ref: (elem) => this.widget = elem
+      }),
+      e('fieldset', { key: genUUID(), className:`slides`, id: "controls"}, [
+        this.state?.OnLineDevices?.length && !window.location.hostname ?
+          e("select",{
+              key: genUUID(),
+              className: "landevices",
+              value: httpPrefix.substring(7),
+              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
+              },this.state.OnLineDevices.map(lanDev=>e("option",{
+                  key:genUUID(),
+                  className: "landevice"
+              },lanDev.devName))
+            ):null,
+        e(DeviceList, {
+            key: genUUID(),
+            selectedDeviceId: this.state.selectedDeviceId,
+            httpPrefix: httpPrefix,
+            onSet: val=>this.state?.selectedDeviceId!=val?this.setState({selectedDeviceId:val}):null
+        })
+      ])
     ]);
   }
 }

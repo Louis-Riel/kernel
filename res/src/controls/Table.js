@@ -1,13 +1,15 @@
-class StateTable extends React.Component {
+class Table extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
     }
     SortTable(th) {
-        var table,tbody;
-        Array.from((tbody=(table=th.target.closest("table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n)'))
-                 .sort(comparer(Array.from(th.target.parentNode.children).indexOf(th.target), this.asc = !this.asc))
-                 .forEach(tr => tbody.appendChild(tr));
+        if (this.props.sortable){
+            var table,tbody;
+            Array.from((tbody=(table=th.target.closest("table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n)'))
+                    .sort(comparer(Array.from(th.target.parentNode.children).indexOf(th.target), this.asc = !this.asc))
+                    .forEach(tr => tbody.appendChild(tr));
+        }
     }
 
     BuildHead(json) {
@@ -25,7 +27,7 @@ class StateTable extends React.Component {
                             }
                         }
                         return e("th", { key: genUUID() }, fld);
-                    }))), e("caption", { key: genUUID() }, this.props.label)];
+                    }))), this.props.label !== undefined ? e("caption", { key: genUUID() }, this.props.label):null];
         } else {
             return null;
         }
@@ -33,7 +35,7 @@ class StateTable extends React.Component {
 
     getValue(fld, val) {
         if (val?.value !== undefined) {
-            return this.getValue(fld,val.value);
+            return val.value;
         } else {
             if (fld.endsWith("_sec") && (val > 10000000)) {
                 return new Date(val * 1000).toLocaleString();
@@ -62,24 +64,28 @@ class StateTable extends React.Component {
     BuildBody(json) {
         if (json) {
             return e("tbody", { key: genUUID() },
-                json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
-                    .map(line => e("tr", { key: genUUID() },
-                        this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" }, 
-                            typeof this.getValue(fld, line[fld]) != 'object' ? 
-                                e("div", { key: genUUID(), className: "value" }, this.getValue(fld, line[fld])) : 
-                                Array.isArray(line[fld]) ? 
-                                    e(StateTable,{key: genUUID(), name:fld, label:fld, json:line[fld]}):
-                                    e(AppState,{key: genUUID(),json:line[fld]})
-                        )))
-                    ));
+                this.props.sortable ? 
+                    json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
+                        .map(this.BuildLine.bind(this)):
+                    json.map(this.BuildLine.bind(this))
+                )
         } else {
             return null;
         }
     }
 
+    BuildLine(line) {
+        return e("tr", { key: genUUID() },
+            this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" },
+                Array.isArray(line[fld]) ?
+                    line[fld].length ? e(Table, { key: genUUID(), sortable: this.props.sortable, name: fld, json: line[fld] }) : null :
+                    line[fld] !== undefined  && e(JSONNode, { key: genUUID(),editable:!this.props.sortable, json: line[fld] })
+            )));
+    }
+
     render() {
         if (!this.props?.json) {
-            return e("div", { key: genUUID(), id: `loading${this.id}` }, "Loading...");
+            return null;
         }
 
         return e("label", { key: genUUID(), id: this.id, className: "table" }, 

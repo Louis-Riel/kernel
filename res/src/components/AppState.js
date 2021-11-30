@@ -35,7 +35,7 @@ class AppState extends React.Component {
                     if (fld == "commands"){
                         return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
                     }
-                    return {fld:fld,element:e(StateTable, { key: genUUID(), name: fld, label: fld, json: json[fld] })};
+                    return {fld:fld,element:e(Table, { key: genUUID(), name: fld, label: fld, json: json[fld], sortable: true })};
                 } else if ((typeof json[fld] == 'object') && !Object.keys(json[fld]).find(fld => fld=="value")) {
                     return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus,registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
                 } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
