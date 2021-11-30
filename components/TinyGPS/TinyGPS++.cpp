@@ -666,7 +666,7 @@ void TinyGPSPlus::processEncoded(void)
       ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::gpsResumed, NULL, 0, portMAX_DELAY));
     }
   }
-  if (date.isValid() && time.isValid() && time.isUpdated() && !(xEventGroupGetBits(getAppEG()) & app_bits_t::WIFI_ON))
+  if (date.isValid() && time.isValid() && time.isUpdated())
   {
     struct tm tm;
 
@@ -1013,7 +1013,6 @@ bool TinyGPSPlus::isSignificant()
         toBeFreqIdx = 0;
         isc = true;
         ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::go, &val, sizeof(val), portMAX_DELAY));
-        ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::significantSpeedChange, &val, sizeof(val), portMAX_DELAY));
       }
     }
     else
@@ -1022,10 +1021,9 @@ bool TinyGPSPlus::isSignificant()
       {
         isc = true;
         ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::stop, &lastSpeed.val, sizeof(lastSpeed.val), portMAX_DELAY));
-        ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::significantSpeedChange, &val, sizeof(val), portMAX_DELAY));
         lastSpeed.val = 0;
       }
-      else if (val > fmax(1.0, fmin(5.0, speed.kmph() / 20.0)))
+      else if (val > fmin(5.0, speed.kmph() / 10.0))
       {
         if ((speed.kmph() < 90) && (toBeFreqIdx > 1))
         {

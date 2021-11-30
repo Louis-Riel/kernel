@@ -87,7 +87,7 @@ class TripViewer extends React.Component {
             this.canvas.font = "12px Helvetica";
             var txtSz = this.canvas.measureText(new Date(`${this.focused.timestamp} UTC`).toLocaleString());
             var props =  Object.keys(this.focused)
-                               .filter(prop => prop != "timestamp");
+                               .filter(prop => prop != "timestamp" && !prop.match(/.*tile.*/i));
 
             var boxHeight=50 + (9*props.length);
             var boxWidth=txtSz.width+10;
