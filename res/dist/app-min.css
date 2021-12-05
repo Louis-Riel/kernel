@@ -119,9 +119,14 @@ textarea {
 }
 
 label {
-    font-style: italic;
+    /* font-style: italic; */
     font-size: small;
     background: linear-gradient(to bottom, #2d332d, #091308);
+    display: flex;
+    flex-direction: column;
+    align-content: center;
+    justify-content: space-between;
+    align-items: center;
 }
 
 div.slider {
@@ -152,11 +157,16 @@ div.slides {
 }
 
 .slides>div {
-    border-radius: 10px;
-    border: solid;
-    border-color: silver;
-    padding-left: 15px;
+    /* border-radius: 10px; */
+    /* border: solid; */
+    /* border-color: silver; */
+    /* padding-left: 15px; */
     /* padding-top: 10px; */
+    /* height: -webkit-fill-available; */
+    /* display: flex; */
+    /* border-radius: 10px; */
+    /* border: solid; */
+    /* border-color: silver; */
 }
 
 .author-info {
@@ -241,13 +251,15 @@ option {
 .slides fieldset {
     border-style: none;
     background: linear-gradient(to bottom, #151a15, #273426);
-    display: flex;
-    flex-wrap: wrap;
-    flex-direction: row;
-    padding-left: 0.3em;
+    /* display: flex; */
+    /* flex-wrap: wrap; */
+    /* flex-direction: row; */
+    /* padding-left: 0.3em; */
     padding-right: 0;
-    width: fit-content;
+    /* width: fit-content; */
+    height: fit-content;
     padding-bottom: 0;
+    /* justify-content: center; */
 }
 
 .slides fieldset>fieldset {
@@ -337,9 +349,12 @@ label.textarea {
 
 .label {
     margin-top: 10px;
-    font-size: small;
+    /* font-size: small; */
     color: aqua;
-    text-align: center;
+    /* text-align: center; */
+    /* width: 100%; */
+    font-style: italic;
+    padding-bottom: 10px;
 }
 
 fieldset>label.table {
@@ -348,7 +363,7 @@ fieldset>label.table {
 }
 
 label>div.value {
-    margin-top: 10px;
+    /* margin-top: 10px; */
     white-space: pre-wrap;
 }
 
@@ -607,7 +622,7 @@ div.events button {
 
 details {
     padding: .5em .5em .5em;
-    display: inline-block;
+    display: flex;
 }
 
 .arrayItem, .event , .program {
@@ -615,6 +630,9 @@ details {
     border-radius: 4px;
     padding: .5em .5em .5em;
     background: linear-gradient(to bottom, #354635, #091308);
+    display: flex;
+    justify-content: flex-start;
+    flex-direction: column;
 }
 
 summary div {
@@ -682,7 +700,7 @@ div.value {
     right: 0;
     display: flex;
     flex-direction: column;
-    flex-wrap: wrap;
+    align-items: flex-start;
 }
 
 div.designer > details > summary::marker {
@@ -712,14 +730,15 @@ div.designer > details[open] > summary {
     position: absolute;
     left: 0;
     right: 0;
-    width: 100%;
-    height: 100%;
     overflow: auto;
-    height: 93%;
-    width: 98%;
+    height: 94%;
+    width: -webkit-fill-available;
     display: flex;
-    flex-wrap: wrap;
-    flex-direction: row;
+    flex-direction: column;
+    padding-left: 15px;
+    border-radius: 10px;
+    border: solid;
+    border-color: silver;
 }
 
 div.mainApp > details > summary::marker {
@@ -808,16 +827,20 @@ a {
     top: 0;
 }
 
-.fieldgroup.object {
+.fieldgroup {
     display: flex;
-    flex-wrap: wrap;
     flex-direction: row;
+    /* justify-content: space-between; */
+    flex-wrap: wrap;
+    width: fit-content;
+    height: fit-content;
+    min-width: -webkit-fill-available;
 }
 
 .fieldgroup.array {
-    display: flex;
-    flex-wrap: wrap;
-    flex-direction: row;
+    /* display: flex; */
+    /* flex-wrap: wrap; */
+    /* flex-direction: row; */
 }
 
 .jsonNodes input {
@@ -835,10 +858,10 @@ td>fieldset {
 }
 
 .fieldgroup.field {
-    display: flex;
-    flex-wrap: wrap;
-    flex-direction: row;
-    justify-content: flex-start;
+    /* display: flex; */
+    /* flex-direction: row; */
+    /* justify-content: flex-start; */
+    /* flex-wrap: wrap; */
 }
 
 .fieldgroup.commandable {
@@ -848,12 +871,9 @@ td>fieldset {
 }
 
 .loglines {
-    overflow: auto;
-    width: 100%;
     display: flex;
     flex-direction: column;
     flex-wrap: nowrap;
-    height: 100%;
 }
 
 .log.LOGD, .log.LOGW, .log.LOGI, .log.LOGV, .log.LOGE {
@@ -872,19 +892,93 @@ td>fieldset {
 }
 
 .logpannel {
-    /* display: flex; */
     position: sticky;
     top: 0;
-    /* align-content: flex-start; */
-    /* justify-content: flex-end; */
-    width: 100%;
+    /* width: 100%; */
     background: black;
+    /* height: fit-content; */
 }
 
 .logpannel {}
 
 .file>td {
-    /* display: flex; */
     flex-direction: row;
     flex-wrap: wrap;
+}
+
+.pageContent>.jsonNodes>.fieldgroup {
+    border-radius: 10px;
+    border: solid;
+    border-color: silver;
+    padding-left: 15px;
+    padding-bottom: 10px;
+    padding-top: 10px;
+    padding-right: 15px;
+    margin-bottom: 10px;
+}
+
+.logContainer {
+    width: 100%;
+    margin-top: auto;
+    overflow: auto;
+    height: -webkit-fill-available;
+}
+
+.jsonNodes>legend {
+    display: flex;
+    /* width: 100%; */
+}
+
+.jsonlabel {
+    /* display: flex; */
+    /* width: 100%; */
+    /* justify-content: space-around; */
+}
+
+button.objectButton, .fieldButton, .lineButton {
+    padding: revert;
+}
+
+.fieldHeader {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.fieldButtons {
+    margin: unset;
+}
+
+.objectButtons {float: left;}
+
+caption>.jsonlabel {
+    width: fit-content;
+}
+
+.menuItems {
+    display: none;
+    position: absolute;
+    background-color: #f1f1f1;
+    min-width: 160px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    z-index: 1;
+}
+
+.menuItems .menuItem {
+    color: black;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+}
+
+.menuItems .menuItem:hover {background-color: #ddd;}
+
+.popupMenu:hover .menuItems {display: block;}
+
+.popupMenu:hover .popupMenu {background-color: #3e8e41;}
+
+.popupMenu {
+    float: right;
+    cursor: pointer;
+    margin-left: 10px;
 }

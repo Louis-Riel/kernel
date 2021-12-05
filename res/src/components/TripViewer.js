@@ -11,12 +11,14 @@ class TripViewer extends React.Component {
         this.needsRefresh=true;
         this.canvas = this.widget.getContext("2d");                    
         this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
+        this.getTripTiles();
         window.requestAnimationFrame(this.drawMap.bind(this));
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         this.canvas = this.widget.getContext("2d");                    
         this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
+        this.getTripTiles();
         this.needsRefresh=true;
     }
 
@@ -26,7 +28,6 @@ class TripViewer extends React.Component {
             if (!this.mounted || !this.widget || !this.props.points || !this.props.points.length){
                 return;
             } else {
-                this.getTripTiles()
                 this.drawTripTiles()
                     .then(this.drawTrip.bind(this))
                     .then(this.drawPointPopup.bind(this))
@@ -51,8 +52,8 @@ class TripViewer extends React.Component {
                 bottomTile: points.reduce((a,b)=>a<b.tileY?a:b.tileY,99999),
                 topTile: points.reduce((a,b)=>a>b.tileY?a:b.tileY,0)
             },
-            maxXTiles: Math.ceil(window.innerWidth/256),
-            maxYTiles: Math.ceil(window.innerHeight/256)
+            maxXTiles: Math.ceil(window.innerWidth/256)+1,
+            maxYTiles: Math.ceil(window.innerHeight/256)+1
         }
         this.tiles.trip.XTiles = this.tiles.trip.rightTile-this.tiles.trip.leftTile+1;
         this.tiles.trip.YTiles = this.tiles.trip.bottomTile-this.tiles.trip.bottomTile+1;
@@ -62,9 +63,9 @@ class TripViewer extends React.Component {
         };
         this.tiles.margin.right=this.tiles.maxXTiles>this.tiles.trip.XTiles?this.tiles.maxXTiles-this.tiles.trip.XTiles-this.tiles.margin.left:0;
         this.tiles.margin.top= this.tiles.maxYTiles>this.tiles.trip.YTiles?this.tiles.maxYTiles-this.tiles.trip.YTiles-this.tiles.margin.bottom:0;
-        this.tiles.leftTile=this.tiles.trip.leftTile-this.tiles.margin.left;
+        this.tiles.leftTile=Math.max(0,this.tiles.trip.leftTile-this.tiles.margin.left);
         this.tiles.rightTile=this.tiles.trip.rightTile+this.tiles.margin.right;
-        this.tiles.bottomTile=this.tiles.trip.bottomTile-this.tiles.margin.bottom;
+        this.tiles.bottomTile=Math.max(0,this.tiles.trip.bottomTile-this.tiles.margin.bottom);
         this.tiles.topTile=this.tiles.trip.topTile + this.tiles.margin.top;
     }
 
@@ -222,11 +223,16 @@ class TripViewer extends React.Component {
                         }).catch(reject);
                 } else {
                     var tileImage = this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY];
-                    this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
-                    if (tiles.length) {
+                    try {
+                        this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
+                        if (tiles.length) {
+                            resolve(this.drawTile(tiles));
+                        } else {
+                            resolve({});
+                        }
+                    } catch (err) {
+                        this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]=null;
                         resolve(this.drawTile(tiles));
-                    } else {
-                        resolve({});
                     }
                 }
             } else {

@@ -327,123 +327,215 @@ class IntInput extends React.Component {
             e("input", { key: genUUID(), type: "number", value: this.props.defaultValue, onChange: this.toggleChange.bind(this), id: `${this.id}` }));
     }
 }
-class JSONNode extends React.Component {
-    getNodeType() {
-        if (this.isArray()) {
-            return "array";
-        }
-
-        return typeof this.getValue();
-    }
-
-    isArray() {
-        return Array.isArray(this.props.json);
-    }
-
-    getValue() {
-        if (this.state?.updatedValue) {
-            return this.state.updatedValue;
-        }
-        if (this.isEditable()) {
-            return this.props.json.value !== undefined ? 
-                this.props.json.value:
-                this.props.json;
-        }
-        return this.props.json;
-    }
-
-    isEditable() {
-        return this.props.editable;
-    }
-
-    updateValue(elem){
-        if (this.isEditable()) {
-            if (this.getValue() != elem.target.value){
-                this.state = {
-                    updated: {
-                        value:elem.target.value,
-                        version: this.props.json.version+1
-                    }
-                }
-                elem.target.classList.add("updated");
-            } else {
-                this.state={};
-                elem.target.classList.remove("updated");
-            }
-        }
-    }
-
-    renderField(){
-        if (this.isEditable()){
-            return this.props.name !== undefined ?
-                     e("details",{key:genUUID(),open:true},[
-                        e("summary",{key:genUUID()},this.props.name),
-                        e("div",{key:genUUID()},
-                            e("input",{key:genUUID(),defaultValue:this.getValue(),onChange:this.updateValue.bind(this)})
-                        )
-                    ]):
-                    e("input",{key:genUUID(),defaultValue:this.getValue(),onChange:this.updateValue.bind(this)})
-                } else {
-            return this.props.name !== undefined ?
-                e("details",{key:genUUID(),open:true},[
-                    e("summary",{key:genUUID()},this.props.name),
-                    e("div",{key:genUUID()},this.getValue())
-                ]):
-                e("div",{key:genUUID()},this.getValue())
-        }
-    }
-
-    getTypeNumber(val) {
-        if (Array.isArray(val)) {
-            return 30;
-        }
-        if ((typeof val == "object") && (val.version !== undefined)) {
-            return 20;
-        }
-        return 10;
-    }
-
-    fieldComparer(f1,f2) {
-        if (this.getTypeNumber(f1) == this.getTypeNumber(f2)) {
-            return f1.localeCompare(f2);
-        }
-        this.getTypeNumber(f1) > this.getTypeNumber(f2) ? 1 : -1;
-    }
-
+class StateCommands extends React.Component {
     render() {
-        switch (this.getNodeType()) {
-            case "object":
-                if (Object.keys(this.props.json).length > 0){
-                    return e("fieldset",{key:genUUID()},[
-                        this.props.name !== undefined ? e("legend",{key:genUUID()},this.props.name):null,
-                        Object.keys(this.getValue())
-                            .sort(this.fieldComparer.bind(this))
-                            .map(prop=>e(JSONNode,{key:genUUID(),editable:this.props.editable, name:prop,json:this.getValue()[prop]}))
-                    ])
-                } else {
-                    return null;
-                }
-            case "array":
-                return this.getValue().length ? e(Table, { key: genUUID(), sortable: !this.props.editable, name: this.props.name, label: this.props.name, json: this.getValue() }):null;
-            default:
-                return this.renderField();
-        }
+        return e("div",{key:genUUID(),name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
+            key:genUUID(),
+            caption:cmd.caption || cmd.command,
+            command:cmd.command,
+            name:this.props.name,
+            onSuccess:this.props.onSuccess,
+            onError:this.props.onError,
+            param1:cmd.param1,
+            param2:cmd.param2,
+            HTTP_METHOD:cmd.HTTP_METHOD
+        })));
     }
 }
 
 class JSONEditor extends React.Component {
-    render() {
-        if (this.props.json && this.props.name) {
-            return e("div",{key:genUUID(),className: "jsoneditor"},[
-                e("div",{key:genUUID(),className: "controlPanel"},
-                    e("div",{key:genUUID(),className: "pendingUpdates"})
-                ),
-                e("div",{key:genUUID(),className:"jsonNodes"},e(JSONNode,{key:genUUID(),editable:this.props.editable, json:this.props.json,name:"Config"}))
-            ]);
+    constructor(props) {
+        super(props);
+        this.state = {
+            value:props.json,
+            class: props.json?.class,
+            name: props.json?.name
+        };
+        if (this.props.registerEventInstanceCallback && this.state.class && this.state.name) {
+            this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.state.class}-${this.state.name}`);
         }
     }
-}
-class ROProp extends React.Component {
+
+    componentWillUnmount() {
+        this.mounted=false;
+    }
+
+    componentDidMount() {
+        this.mounted=true;
+    }
+
+    ProcessEvent(evt) {
+        if (this.mounted && evt?.data){
+            if ((evt.data?.class == this.state.class) && (evt.data?.name == this.state.name)){
+                this.setState({value: evt.data});
+            }
+        }
+    }
+
+    removeField(fld){
+        delete this.state.value[fld];
+        this.setState({value:this.state.value});
+    }
+
+    BuildTablePannel(){
+        if (this.props.editable) {
+            return e("div",{key:genUUID(),className:"popupMenu"},[
+                e("div",{key:genUUID()},"*"),
+                e("div",{key:genUUID(),className:"menuItems"},[
+                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.addRow(elem)},"Add Empty Row")
+                ])
+            ])
+        }
+        return null;
+    }
+
+
+    fieldControlPannel(fld){
+        if (!this.props.editable){
+            return e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, fld);
+        }
+
+        return e("div",{key:genUUID(),className:"fieldHeader"},[
+            e("div",{key:genUUID(),className:"label"},fld),
+            e("div",{key:genUUID(),className:"popupMenu"},[
+                e("div",{key:genUUID()},"*"),
+                e("div",{key:genUUID(),className:"menuItems"},[
+                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.removeField(fld)},"Remove Field")
+                ])
+            ])
+        ]);
+    }
+
+    Parse(json) {
+        if ((json !== undefined) && (json != null)) {
+            if ((typeof json == "object") && (json.version === undefined)){
+                return e("div",{key: genUUID(),className:"statusclass jsonNodes"},this.getSortedProperties(json).map(fld => {
+                    if (Array.isArray(json[fld])) {
+                        if (fld == "commands"){
+                            return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
+                        }
+                        return {fld:fld,element:e(Table, { key: genUUID(), name: fld, label: fld, json: json[fld], registerEventInstanceCallback: this.props.registerEventInstanceCallback, editable:this.props.editable, sortable: this.props.sortable })};
+                    } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
+                        return {fld:fld,element:e(JSONEditor, { 
+                            key: genUUID(), 
+                            name: fld, 
+                            label: fld, 
+                            editable: this.props.editable,
+                            json: json[fld],
+                            updateAppStatus:this.props.updateAppStatus,
+                            registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
+                    } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
+                        return {
+                            fld:fld,
+                            element: this.props.editable ?
+                                    e("label",{key:genUUID()},[
+                                        this.fieldControlPannel(fld),
+                                        e("input",{key:genUUID(),defaultValue:json[fld]?.value || json[fld], onChange: elem => this.processUpdate(elem,fld)})]):
+                                    e(ROProp, { 
+                                        key: genUUID(), 
+                                        value: json[fld], 
+                                        name: fld, 
+                                        label: fld 
+                                    })
+                        };
+                    }
+                }).reduce((pv,cv)=>{
+                    if (cv){
+                        var fc = this.getFieldClass(json,cv.fld);
+                        var item = pv.find(it=>it.fclass == fc);
+                        if (item) {
+                            item.elements.push(cv.element);
+                        } else {
+                            pv.push({fclass:fc,elements:[cv.element]});
+                        }
+                    }
+                    return pv;
+                },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
+            } else {
+                return (json.version !== undefined) || (this.props.editable && (typeof json != "object")) ?
+                            e("input",{key:genUUID(),defaultValue:json.value !== undefined ? json.value : json,onChange: this.processUpdate.bind(this)}):
+                            e(ROProp, { 
+                                key: genUUID(), 
+                                value: json, 
+                                name: "" 
+                            });
+            }
+        } else {
+            return null;
+        }
+    }
+
+    processUpdate(elem,fld) {
+        if (fld) {
+            if (!this.state.value[fld]) {
+                this.state.value[fld]={version:-1};
+            }
+            this.state.value[fld].value=elem.target.value;
+            this.state.value[fld].version++;
+        } else {
+            this.state.value.value=elem.target.value;
+            this.state.value.version++;
+        }
+    }
+
+    getSortedProperties(json) {
+        return Object.keys(json)
+            .sort((f1, f2) => { 
+                var f1s = this.getFieldWeight(json, f1);
+                var f2s = this.getFieldWeight(json, f2);
+                if (f1s == f2s) {
+                    return f1.localeCompare(f2);
+                }
+                return f1s > f2s ? 1 : f2s > f1s ? -1 : 0;
+            }).filter(fld => !json[fld] || !(typeof(json[fld]) == "object" && Object.keys(json[fld]).filter(fld=>fld != "class" && fld != "name").length==0));
+    }
+
+    getFieldWeight(json, f1) {
+        if (!IsDatetimeValue(f1) && (!json || !json[f1])) {
+            return 2;
+        }
+        return Array.isArray(json[f1]) ? 6 : typeof json[f1] == 'object' ? json[f1]["commands"] ? 4 : 5 : IsDatetimeValue(f1) ? 1 : 3;
+    }
+
+    getFieldClass(json, f1) {
+        if (!json || !json[f1]) {
+            return "field";
+        }
+        return Array.isArray(json[f1]) ? "array" : typeof json[f1] == 'object' && json[f1].version === undefined ? json[f1]["commands"] ? "commandable" : "object" : "field";
+    }
+
+    addNewProperty(){
+        this.state.value[`prop${Object.keys(this.state.value).filter(prop => prop.match(/^prop.*/)).length+1}`]=null;
+        this.setState({value:this.state.value});
+    }
+
+    objectControlPannel(){
+        return [
+            e("div",{key:genUUID(),className:"jsonlabel"},this.props.label),
+            this.props.editable?e("div",{key:genUUID(),className:"popupMenu"},[
+                e("div",{key:genUUID(),className:"menuItems"},[
+                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.addNewProperty()},"Add Property"),
+                    this.props.onRemove?e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.props.onRemove},"Remove"):null
+                ]),
+                e("div",{key:genUUID()},"*")
+            ]):null
+        ];
+
+    }
+
+    render() {
+        if (this.state === null || this.state === undefined) {
+            return e("div", { id: `loading${this.id}` }, "Loading...");
+        } else if (this.props.label != null) {
+            return e("fieldset", { id: `fs${this.props.label}`,className:"jsonNodes" }, [
+                e("legend", { key: genUUID() }, this.objectControlPannel()),
+                this.Parse(this.state.value)
+            ]);
+        } else {
+            return this.Parse(this.props.json);
+        }
+    }
+}class ROProp extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
@@ -551,16 +643,21 @@ class ROProp extends React.Component {
     }
 
     render() {
-        return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
-            e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, this.props.label),
-            e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
-        ]);
+        if (this.props.label) {
+            return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
+                e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, this.props.label),
+                e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
+            ]);
+        } else {
+            return e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value));
+        }
     }
 }
 class Table extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
+        this.state = {json:this.props.json};
     }
     SortTable(th) {
         if (this.props.sortable){
@@ -571,22 +668,64 @@ class Table extends React.Component {
         }
     }
 
+    BuildHeaderField(fld) {
+        return fld;
+    }
+
+    addRow(e){
+        e.stopPropagation();
+        e.preventDefault();
+        if ((this.state.json.length == 0) || (typeof this.state.json[0] == "object")){
+            this.state.json.push({});
+        } else if (Array.isArray(this.state.json[0])) {
+            this.state.json.push([]);
+        } else {
+            this.state.json.push("");
+        }
+        this.setState({json:this.state.json});
+    }
+
+    BuildTablePannel(){
+        if (this.props.editable) {
+            return e("div",{key:genUUID(),className:"popupMenu"},[
+                e("div",{key:genUUID()},"*"),
+                e("div",{key:genUUID(),className:"menuItems"},[
+                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.addRow(elem)},"Add Empty Row")
+                ])
+            ])
+        }
+        return null;
+    }
+
+    BuildCaption(){
+        if (this.props.editable) {
+            return e("caption", { key: genUUID() },[
+                    e("div",{key:genUUID(),className:"objectButtons"}, this.BuildTablePannel()),
+                    e("div",{key:genUUID(),className:"jsonlabel"},this.props.label)
+                   ]);
+        }
+        return e("caption", { key: genUUID() }, this.props.label);
+    }
+
     BuildHead(json) {
         if (json) {
             this.cols=[];
-            return [e("thead", { key: genUUID(), onClick: this.SortTable.bind(this) }, e("tr", { key: genUUID() },
-                json.flatMap(row => Object.keys(row))
-                    .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
-                    .map(fld => {
-                        if (!this.cols.some(col => fld == col)) {
-                            this.cols.push(fld);
-                            var val = this.getValue(fld,json[0][fld]);
-                            if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
-                                this.sortedOn = fld;
-                            }
-                        }
-                        return e("th", { key: genUUID() }, fld);
-                    }))), this.props.label !== undefined ? e("caption", { key: genUUID() }, this.props.label):null];
+            return [e("thead", { key: genUUID(), onClick: this.SortTable.bind(this) }, 
+                      e("tr", { key: genUUID() },
+                        [this.props.editable?e("th", { key: genUUID() }):null,
+                         ...json.flatMap(row => Object.keys(row))
+                            .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
+                            .map(fld => {
+                                if (!this.cols.some(col => fld == col)) {
+                                    this.cols.push(fld);
+                                    var val = this.getValue(fld,json[0][fld]);
+                                    if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
+                                        this.sortedOn = fld;
+                                    }
+                                }
+                                return e("th", { key: genUUID() }, this.BuildHeaderField(fld));
+                            })]
+                        )), this.props.label !== undefined ? this.BuildCaption():null];
         } else {
             return null;
         }
@@ -633,130 +772,88 @@ class Table extends React.Component {
         }
     }
 
+    DeleteLine(line,e) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.state.json.splice(this.state.json.indexOf(line),1);
+        this.setState({json:this.state.json});
+    }
+
+    DuplicateLine(line,e) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.state.json.push(line);
+        this.setState({json:this.state.json});
+    }
+
+    BuildLinePannel(line){
+        if (this.props.editable) {
+            return e("div",{key:genUUID(),className:"popupMenu"},[
+                e("div",{key:genUUID()},"*"),
+                e("div",{key:genUUID(),className:"menuItems"},[
+                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.DeleteLine(line,elem)},"Delete"),
+                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.DuplicateLine(line,elem)},"Duplicate")
+                ])
+            ])
+        }
+        return null;
+    }
+
     BuildLine(line) {
-        return e("tr", { key: genUUID() },
-            this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" },
-                Array.isArray(line[fld]) ?
-                    line[fld].length ? e(Table, { key: genUUID(), sortable: this.props.sortable, name: fld, json: line[fld] }) : null :
-                    line[fld] !== undefined  && e(JSONNode, { key: genUUID(),editable:!this.props.sortable, json: line[fld] })
-            )));
+        return e("tr", { key: genUUID() },[
+            [
+                this.props.editable?e("td", { key: genUUID(), className: "readonly" },this.BuildLinePannel(line)):null,
+                this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" },this.BuildCell(line, fld)))
+            ]
+        ]);
+    }
+
+    addString(line,fld) {
+        line[fld] = {value:"",version:0};
+        this.setState({json:this.state.json});
+    }
+
+    clearCell(line,fld) {
+        line[fld].value?line[fld].value=null:line[fld]=null;
+        this.setState({json:this.state.json});
+    }
+
+    BuildCellControlPannel(line,fld){
+        if (this.props.editable) {
+            var val = line[fld];
+            return e("div",{key:genUUID(),className:"popupMenu"},[
+                e("div",{key:genUUID()},"*"),
+                e("div",{key:genUUID(),className:"menuItems"},[
+                    val?null:e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.addString(line,fld)},"Add String"),
+                    val?e("div",{key:genUUID(),className:"menuItem",onClick:elem=>this.clearCell(line,fld) },"Clear"):null
+                ])
+            ])
+        }
+        return null;
+    }
+
+    BuildCell(line, fld) {
+        return [Array.isArray(line[fld]) ?
+            line[fld].length ? e(Table, { key: genUUID(), editable: this.props.editable, sortable: this.props.sortable, name: fld, json: line[fld], name: fld }) : null :
+            e(JSONEditor, { key: genUUID(), editable: this.props.editable, json: line[fld], name: fld, registerEventInstanceCallback: this.props.registerEventInstanceCallback }),
+            this.BuildCellControlPannel(line,fld)
+        ];
     }
 
     render() {
-        if (!this.props?.json) {
+        if (this.state.json === undefined) {
             return null;
         }
 
         return e("label", { key: genUUID(), id: this.id, className: "table" }, 
-               e("table", { key: genUUID(), className: "greyGridTable" }, 
-               [this.BuildHead(this.props.json), 
-               this.BuildBody(this.props.json)]));
+                e("table", { key: genUUID(), className: "greyGridTable" }, [
+                    this.BuildHead(this.state.json), 
+                    this.BuildBody(this.state.json)
+                ])
+               );
     }
 }
-class StateCommands extends React.Component {
-    render() {
-        return e("div",{key:genUUID(),name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
-            key:genUUID(),
-            caption:cmd.caption || cmd.command,
-            command:cmd.command,
-            name:this.props.name,
-            onSuccess:this.props.onSuccess,
-            onError:this.props.onError,
-            param1:cmd.param1,
-            param2:cmd.param2,
-            HTTP_METHOD:cmd.HTTP_METHOD
-        })));
-    }
-}
-
-class AppState extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = props.json;
-    }
-
-    componentWillUnmount() {
-        this.mounted=false;
-    }
-
-    componentDidMount() {
-        this.mounted=true;
-    }
-
-    Parse(json) {
-        if (json) {
-            return e("div",{key: genUUID(),className:"statusclass"},this.getSortedProperties(json).map(fld => {
-                if (Array.isArray(json[fld])) {
-                    if (fld == "commands"){
-                        return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
-                    }
-                    return {fld:fld,element:e(Table, { key: genUUID(), name: fld, label: fld, json: json[fld], sortable: true })};
-                } else if ((typeof json[fld] == 'object') && !Object.keys(json[fld]).find(fld => fld=="value")) {
-                    return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus,registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
-                } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
-                    return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
-                }
-            }).reduce((pv,cv)=>{
-                if (cv){
-                    var fc = this.getFieldClass(json,cv.fld);
-                    var item = pv.find(it=>it.fclass == fc);
-                    if (item) {
-                        item.elements.push(cv.element);
-                    } else {
-                        pv.push({fclass:fc,elements:[cv.element]});
-                    }
-                }
-                return pv;
-            },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
-        } else {
-            return e("div", { id: `loading${this.id}` }, "Loading...");
-        }
-    }
-
-    getSortedProperties(json) {
-        return Object.keys(json)
-            .sort((f1, f2) => { 
-                var f1s = this.getFieldWeight(json, f1);
-                var f2s = this.getFieldWeight(json, f2);
-                if (f1s == f2s) {
-                    return f1.localeCompare(f2);
-                }
-                return f1s > f2s ? 1 : f2s > f1s ? -1 : 0;
-            }).filter(fld => !(typeof(json[fld]) == "object" && Object.keys(json[fld]).filter(fld=>fld != "class" && fld != "name").length==0));
-    }
-
-    getFieldWeight(json, f1) {
-        return Array.isArray(json[f1]) ? 5 : typeof json[f1] == 'object' ? json[f1]["commands"] ? 3 : 4 : IsDatetimeValue(f1) ? 1 : 2;
-    }
-
-    getFieldClass(json, f1) {
-        return Array.isArray(json[f1]) ? "array" : typeof json[f1] == 'object' ? json[f1]["commands"] ? "commandable" : "object" : "field";
-    }
-
-    ProcessEvent(evt) {
-        if (this.mounted && evt?.data){
-            if ((evt.data?.class == this.state.class) && (evt.data?.name == this.state.name)){
-                this.setState({...evt.data});
-            }
-        }
-    }
-
-    render() {
-        if (this.state === null || this.state === undefined) {
-            return e("div", { id: `loading${this.id}` }, "Loading...");
-        }
-        if (this.props.label != null) {
-            if (this.props.registerEventInstanceCallback) {
-                this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.state.className}-${this.state.name}`);
-            }
-            return e("fieldset", { id: `fs${this.props.label}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.state)]);
-        } else {
-            return e("fieldset", { key: genUUID(), id: `fs${this.id}` }, this.Parse(this.state));
-        }
-    }
-}
-
-class MainAppState extends React.Component {
+class StatusPage extends React.Component {
     constructor(props) {
         super(props);
         this.mounted=false;
@@ -870,11 +967,12 @@ class MainAppState extends React.Component {
         if (this.state?.status){
             return [
                 e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
-                e(AppState, {
+                e(JSONEditor, {
                     key: genUUID(), 
                     json: this.state.status, 
+                    editable: false,
                     selectedDeviceId: this.props.selectedDeviceId,
-                    updateAppStatus: this.updateAppStatus.bind(this),
+                    registerStateCallback: this.props.registerStateCallback,
                     registerEventInstanceCallback: this.props.registerEventInstanceCallback
                 })
             ];
@@ -885,410 +983,43 @@ class MainAppState extends React.Component {
 }
 class ConfigPage extends React.Component {
     componentDidMount() {
-        if (window.location.hostname || httpPrefix)
-            this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}));
+        if (window.location.host || httpPrefix){
+            var abort = new AbortController()
+            var timer = setTimeout(() => abort.abort(), 4000);
+            wfetch(`${httpPrefix}/config/${this.props.selectedDeviceId=="current"?"":this.props.selectedDeviceId+".json"}`, {
+                method: 'post',
+                signal: abort.signal
+            }).then(resp => resp.json())
+              .then(this.orderResults)
+              .then(config=>{
+                clearTimeout(timer);
+                this.setState({config: config});
+            });
+        }
     }
 
-    getJsonConfig(devid) {
-        return new Promise((resolve, reject) => {
-            if (window.location.host || httpPrefix){
-                const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
-                wfetch(`${httpPrefix}/config${devid&&devid!="current"?`/${devid}`:""}`, {
-                    method: 'post',
-                    signal: this.props.pageControler.signal
-                }).then(data => {
-                    clearTimeout(timer);
-                    resolve(data.json());
-                }).catch((err) => {
-                    clearTimeout(timer);
-                    reject(err);
-                });
-            } else {
-                reject({error:"Not connected"});
-            }
-        });
-    }
-
-    SaveForm(form) {
-        this.getJsonConfig(this.props.selectedDeviceId).then(vcfg => fromPlainToVersionned(this.state.config, vcfg))
-            .then(cfg => wfetch(form.target.action.replace("file://", httpPrefix) + "/" + (this.props.selectedDeviceId == "current" ? "" : this.props.selectedDeviceId), {
-                method: 'put',
-                body: JSON.stringify(cfg)
-            }).then(res => alert(JSON.stringify(res)))
-              .catch(res => alert(JSON.stringify(res))));
-        form.preventDefault();
+    orderResults(res) {
+        var ret = {};
+        Object.keys(res).filter(fld => (typeof res[fld] != 'object') && !Array.isArray(res[fld])).sort((a, b) => a.localeCompare(b)).forEach(fld => ret[fld] = res[fld]);
+        Object.keys(res).filter(fld => (typeof res[fld] == 'object') && !Array.isArray(res[fld])).sort((a, b) => a.localeCompare(b)).forEach(fld => ret[fld] = res[fld]);
+        Object.keys(res).filter(fld => Array.isArray(res[fld])).forEach(fld => ret[fld] = res[fld]);
+        return ret;
     }
 
     render() {
-        if (this.state?.config) {
-            return e("form", { onSubmit: form => this.SaveForm(form), key: `${this.props.id || genUUID()}`, action: "/config", method: "post" }, [
+        if (this.state?.config){
+            return [
+                e("button", { key: genUUID(), onClick: elem => this.componentDidMount() }, "Refresh"),
                 e(JSONEditor, {
                     key: genUUID(), 
-                    json: this.state.config,
-                    name: "config",
+                    json: this.state.config, 
+                    selectedDeviceId: this.props.selectedDeviceId,
                     editable: true
-                }),
-                e("button", { key: genUUID(), type: "button", onClick:(elem) => this.getJsonConfig(this.props.selectedDeviceId).then(config => this.setState({config:config}))} , "Refresh")
-            ]);
+                })
+            ];
         } else {
             return e("div",{key:genUUID()},"Loading....");
         }
-    }
-}
-
-class ControlPanel extends React.Component {
-    constructor(props) {
-        super(props);
-        this.anims=[];
-        this.state = {
-            autoRefresh:props.autoRefresh
-        }
-
-        if (!this.props?.OnLineDevices?.length && (!httpPrefix && !window.location.hostname)){
-            this.lookForDevs();
-        } else if (this.props?.autoRefresh) {
-            console.log(`from mount ${JSON.stringify(this.state)}`);
-            this.openWs();
-        }
-    }
-
-    componentDidMount() {
-        this.mountWidget();
-        window.requestAnimationFrame(this.drawDidget.bind(this));
-    }
-
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        this.mountWidget();
-    }
-
-
-    lookForDevs() {
-        if (this.state?.scanning) {
-            return
-        }
-        this.setState({scanning:true});
-        var devices = [];
-        for (var idx = 254; idx > 0; idx--) {
-            devices.push(`192.168.1.${idx}`);
-        }
-        console.log(`Scanning for ${devices.length} devices`);
-        var foundDevices=[];
-        for (var idx = 0; idx < Math.min(10, devices.length); idx++) {
-            if (devices.length) {
-                this.scanForDevices(devices,foundDevices);
-            }
-        }
-    }
-
-    scanForDevices(devices,foundDevices) {
-        if (devices.length) {
-            var device = devices.pop();
-            var abort = new AbortController()
-            var timer = setTimeout(() => abort.abort(), 1000);
-            var onLine=false;
-            wfetch(`http://${device}/config/`, {
-                method: 'post',
-                signal: abort.signal
-            }).then(data => {clearTimeout(timer); onLine=true; return data.json()})
-              .then(fromVersionedToPlain)
-              .then(dev => {
-                  if (dev?.deviceid) {
-                    foundDevices.push(dev);
-                  }
-                  if (devices.length) {
-                    this.scanForDevices(devices,foundDevices);
-                  } else {
-                    if (!this.props?.OnLineDevices?.length) {
-                        httpPrefix=`http://${foundDevices[0].devName}`
-                        if (this.state?.autoRefresh && !this.state.connecting && !this.state.connected)
-                            console.log("from scan finished good");
-                            this.props.OnToggleAutoRefresh(true);
-                        this.props.OnLiveDevChange(foundDevices);
-                    }
-                  }
-                })
-              .catch(err => {
-                if (devices.length) {
-                    this.scanForDevices(devices,foundDevices);
-                } else {
-                    if (!this.props?.OnLineDevices?.length) {
-                        httpPrefix=`http://${foundDevices[0].devName}`
-                        if (this.state?.autoRefresh && !this.state.connecting && !this.state.connected)
-                            console.log("from scan finished bad");
-                            this.props.OnToggleAutoRefresh(true);
-                        this.props.OnLiveDevChange(foundDevices);
-                    }
-                }
-              });
-        }
-    }
-
-    mountWidget() {
-        this.widget.addEventListener("click", (event) => {
-            if ((event.offsetX > 2) &&
-                (event.offsetX < 32) &&
-                (event.offsetY > 2) &&
-                (event.offsetY < 32)) {
-                this.props.OnToggleAutoRefresh(!this.state?.autoRefresh);
-            }
-        });
-    }
-
-    closeWs() {
-        this.props.OnToggleAutoRefresh(off);
-        if (this.ws) {
-            this.ws.close();
-            this.ws = null;
-        }
-    }
-
-    openWs() {
-        if (!window.location.hostname && !httpPrefix) {
-            console.log("Not ws as not connected");
-            return;
-        }
-        if (this.state?.connecting || this.state?.connected) {
-            return;
-        }
-        console.log(`Connecting to ${httpPrefix || window.location.hostname } ${JSON.stringify(this.state)}...`);
-        this.setState({connecting:true,running:false});
-        console.log(`Connecting to ${httpPrefix || window.location.hostname } ${JSON.stringify(this.state)}`);
-        var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-        var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.setState({connecting:false});}, 3000);
-        ws.onmessage = (event) => {
-            clearTimeout(stopItWithThatShit);
-            if (!this.state.running || this.state.timeout) {
-                console.log("Running");
-                this.setState({ running: true, error: null, timeout: null });
-            }
-
-            if (event && event.data) {
-                if (event.data[0] == "{") {
-                    if (event.data.startsWith('{"eventBase"')) {
-                        this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
-                    } else {
-                        this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
-                    }
-                } else if (event.data.match(/.*\) ([^:]*)/g)) {
-                    this.AddLogLine(event.data);
-                }
-            }
-            stopItWithThatShit = setTimeout(() => { this.setState({timeout:"Message"}); ws.close();console.log("Message timeout")},3000)
-        };
-        ws.onopen = () => {
-            clearTimeout(stopItWithThatShit);
-            this.setState({ connected: true, connecting:false });
-            ws.send("Connected");
-            console.log("Connected");
-            stopItWithThatShit = setTimeout(() => { this.setState({timeout:"Connect"}); ws.close();console.log("Connect timeout")},3000)
-        };
-        ws.onerror = (err) => {
-            console.error(err);
-            clearTimeout(stopItWithThatShit);
-            this.setState({error: err});
-            ws.close();
-        };
-        ws.onclose = (evt => {
-            console.log("Closed");
-            clearTimeout(stopItWithThatShit);
-            this.setState({connected:false,connecting:false});
-        });
-    }
-
-    drawDidget(){
-        if (!this.widget)
-            return;
-            
-        var canvas = this.widget.getContext("2d");
-        canvas.clearRect(0,0,100,40);
-
-        this.browser(canvas, 2, 2, 30, 30, 10);
-        this.chip(canvas, 100-20-10, 2, 20, 30, 5);
-
-        if (this.anims.length){
-            var animGroups = this.anims.reduce((pv,cv)=>{
-                (pv[cv.type]=pv[cv.type]||[]).push(cv);
-                return pv
-            },{});
-            for (var agn in animGroups) {
-                canvas.beginPath();
-                animGroups[agn].forEach(anim => {
-                    this.drawSprite(anim, canvas);
-                });
-            }
-
-            this.anims = this.anims.filter(anim => anim.state != 2);
-        }
-        window.requestAnimationFrame(this.drawDidget.bind(this));
-    }
-
-    drawSprite(anim, canvas) {
-        if (!anim.state) {
-            anim.state = 1;
-            anim.x = anim.startX;
-            anim.y = anim.startY;
-        } else {
-            anim.x -= 3+anim.weight;
-        }
-        canvas.strokeStyle = anim.lineColor;
-        canvas.lineWidth = 1;
-        canvas.shadowBlur = 1;
-        canvas.shadowColor = anim.shadowColor;
-        canvas.fillStyle = anim.color;
-        canvas.moveTo(anim.x, anim.y);
-        canvas.arc(anim.x, anim.y, 4 + (anim.weight), 0, 2 * Math.PI);
-        canvas.fill();
-        if (anim.x < 30) {
-            anim.state = 2;
-        }
-        return anim;
-    }
-
-    browser(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
-        canvas.beginPath();
-        canvas.strokeStyle = '#00ffff';
-        canvas.lineWidth = 2;
-        canvas.shadowBlur = 2;
-        canvas.shadowColor = '#00ffff';
-        canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#0396966b") : "#000000"
-        this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
-        canvas.fill();
-        canvas.stroke();
-    }
-
-    chip(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
-        canvas.beginPath();
-        const pinWidth = 4;
-        const pinHeight = 2;
-        const pinVCount = 3;
-
-        canvas.strokeStyle = '#00ffff';
-        canvas.lineWidth = 2;
-        canvas.shadowBlur = 2;
-        canvas.shadowColor = '#00ffff';
-        canvas.fillStyle = "#00ffff";
-        this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
-
-        for (var idx = 0; idx < pinVCount; idx++) {
-            canvas.moveTo(startX,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX-pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX-pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-
-            canvas.moveTo(startX+boxWidht,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX+boxWidht+pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX+boxWidht+pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX+boxWidht,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-        }
-        canvas.stroke();
-    }
-
-    roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
-        canvas.moveTo(startX + cornerSize, startY);
-        canvas.lineTo(startX + boxWidht - (2 * cornerSize), startY);
-        canvas.arcTo(startX + boxWidht, startY, startX + boxWidht, startY + cornerSize, cornerSize);
-        canvas.lineTo(startX + boxWidht, startY + boxHeight - cornerSize);
-        canvas.arcTo(startX + boxWidht, startY + boxHeight, startX + boxWidht - cornerSize, startY + boxHeight, cornerSize);
-        canvas.lineTo(startX + cornerSize, startY + boxHeight);
-        canvas.arcTo(startX, startY + boxHeight, startX, startY + boxHeight - cornerSize, cornerSize);
-        canvas.lineTo(startX, startY + cornerSize);
-        canvas.arcTo(startX, startY, startX + cornerSize, startY, cornerSize);
-    }
-
-    AddLogLine(ln) {
-        var anims = this.anims.filter(anim => anim.type == "log");
-        var curAnims = anims.filter(anim => anim.level == ln[0]);
-        if ((anims.length > 4) && (curAnims.length>1)) {
-            (curAnims.find(anim => anim.weight < 3) || curAnims[0]).weight++;
-        } else {
-            this.anims.push({
-                type:"log",
-                level:ln[0],
-                color:ln[0] == 'D' ? "green" : ln[0] == 'W' ? "yellow" : "red",
-                weight: 1,
-                lineColor: '#00ffff',
-                shadowColor: '#00ffff',
-                startX: 70,
-                startY: 25,
-                renderer: this.drawSprite
-            })
-        }
-        if (ln && this.props.logCBFn) {
-            this.props.logCBFn.forEach(logCBFn=>logCBFn(ln));
-        }
-    }
-    
-    UpdateState(state) {
-        var anims = this.anims.filter(anim => anim.type == "state");
-        if (anims.length > 4) {
-            (anims.find(anim => anim.weight < 3) || anims[0]).weight++;
-        } else {
-            this.anims.push({
-                type:"state",
-                color:"#00ffff",
-                weight: 1,
-                lineColor: '#00ffff',
-                shadowColor: '#00ffff',
-                startX: 70,
-                startY: 15,
-                renderer: this.drawSprite
-            });
-        }
-      if (this.props.stateCBFn) {
-        this.props.stateCBFn.forEach(stateCBFn=>stateCBFn(state));
-      }
-    }
-  
-    ProcessEvent(event) {
-        var anims = this.anims.filter(anim => anim.type == "event");
-        var curAnims = anims.filter(anim => anim.eventBase == event.eventBase);
-        if ((anims.length > 4) && (curAnims.length>1)) {
-            (curAnims.find(anim => anim.weight < 3) || curAnims[0]).weight++;
-        } else {
-            this.anims.push({
-                type:"event",
-                eventBase: event.eventBase,
-                color:"#7fffd4",
-                weight: 1,
-                lineColor: '#00ffff',
-                shadowColor: '#00ffff',
-                startX: 70,
-                startY: 5,
-                renderer: this.drawSprite
-            });
-        }
-
-        if (this.props.eventCBFn) {
-            this.props.eventCBFn.forEach(eventCBFn=>eventCBFn(event));
-        }
-    }
-
-    render() {
-     return e('fieldset', { key: genUUID(), className:`slides`, id: "controls", key: this.id }, [
-        this.props?.OnLineDevices?.length && !window.location.hostname ?
-            e("select",{
-                key: genUUID(),
-                className: "landevices",
-                value: httpPrefix.substring(7),
-                onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.props.ReloadPage()}
-            },this.props.OnLineDevices.map(lanDev=>e("option",{
-                key:genUUID(),
-                className: "landevice"
-            },lanDev.devName))):null,
-        e("canvas",{
-            key: genUUID(),
-            height: 40,
-            width:100,
-            ref: (elem) => this.widget = elem
-        }),
-        e(DeviceList, {
-            key: genUUID(),
-            selectedDeviceId: this.props.selectedDeviceId,
-            devices: this.state?.devices,
-            onSet: this.props.onSelectedDeviceId,
-            onGotDevices: devices=>this.setState({devices:devices})
-        })
-     ]);
     }
 }
 class TypedField extends React.Component {
@@ -1546,7 +1277,7 @@ class EventsPage extends React.Component {
                 e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
             ];
         } else {
-            return e("div",{key: genUUID()},"Loading...");
+            return e("div",{key: genUUID()},"Loading.....");
         }
     }
 }
@@ -1910,7 +1641,7 @@ class StorageViewer extends React.Component {
 
     render() {
         if (!this.state?.files) {
-            return e("div", { key: genUUID() }, "Loading...");
+            return e("div", { key: genUUID() }, "Loading......");
         } else {
             return e("div", { key: genUUID(), 
                 id: this.id, 
@@ -1982,7 +1713,8 @@ class LogLines extends React.Component {
         if (this.props.registerLogCallback) {
             this.props.registerLogCallback(this.AddLogLine.bind(this));
         }
-        return e("div", { key: genUUID(), className: "loglines" }, this.state?.logLines ? this.state.logLines.map(logln => e(LogLine,{ key: genUUID(), logln:logln})):null)
+        return e("div", { key: genUUID(), className: "logContainer" },
+                    e("div", { key: genUUID(), className: "loglines" }, this.state?.logLines ? this.state.logLines.map(logln => e(LogLine,{ key: genUUID(), logln:logln})):null));
     }
 }
 
@@ -2022,12 +1754,14 @@ class TripViewer extends React.Component {
         this.needsRefresh=true;
         this.canvas = this.widget.getContext("2d");                    
         this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
+        this.getTripTiles();
         window.requestAnimationFrame(this.drawMap.bind(this));
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         this.canvas = this.widget.getContext("2d");                    
         this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
+        this.getTripTiles();
         this.needsRefresh=true;
     }
 
@@ -2037,7 +1771,6 @@ class TripViewer extends React.Component {
             if (!this.mounted || !this.widget || !this.props.points || !this.props.points.length){
                 return;
             } else {
-                this.getTripTiles()
                 this.drawTripTiles()
                     .then(this.drawTrip.bind(this))
                     .then(this.drawPointPopup.bind(this))
@@ -2062,8 +1795,8 @@ class TripViewer extends React.Component {
                 bottomTile: points.reduce((a,b)=>a<b.tileY?a:b.tileY,99999),
                 topTile: points.reduce((a,b)=>a>b.tileY?a:b.tileY,0)
             },
-            maxXTiles: Math.ceil(window.innerWidth/256),
-            maxYTiles: Math.ceil(window.innerHeight/256)
+            maxXTiles: Math.ceil(window.innerWidth/256)+1,
+            maxYTiles: Math.ceil(window.innerHeight/256)+1
         }
         this.tiles.trip.XTiles = this.tiles.trip.rightTile-this.tiles.trip.leftTile+1;
         this.tiles.trip.YTiles = this.tiles.trip.bottomTile-this.tiles.trip.bottomTile+1;
@@ -2073,9 +1806,9 @@ class TripViewer extends React.Component {
         };
         this.tiles.margin.right=this.tiles.maxXTiles>this.tiles.trip.XTiles?this.tiles.maxXTiles-this.tiles.trip.XTiles-this.tiles.margin.left:0;
         this.tiles.margin.top= this.tiles.maxYTiles>this.tiles.trip.YTiles?this.tiles.maxYTiles-this.tiles.trip.YTiles-this.tiles.margin.bottom:0;
-        this.tiles.leftTile=this.tiles.trip.leftTile-this.tiles.margin.left;
+        this.tiles.leftTile=Math.max(0,this.tiles.trip.leftTile-this.tiles.margin.left);
         this.tiles.rightTile=this.tiles.trip.rightTile+this.tiles.margin.right;
-        this.tiles.bottomTile=this.tiles.trip.bottomTile-this.tiles.margin.bottom;
+        this.tiles.bottomTile=Math.max(0,this.tiles.trip.bottomTile-this.tiles.margin.bottom);
         this.tiles.topTile=this.tiles.trip.topTile + this.tiles.margin.top;
     }
 
@@ -2233,11 +1966,16 @@ class TripViewer extends React.Component {
                         }).catch(reject);
                 } else {
                     var tileImage = this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY];
-                    this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
-                    if (tiles.length) {
+                    try {
+                        this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
+                        if (tiles.length) {
+                            resolve(this.drawTile(tiles));
+                        } else {
+                            resolve({});
+                        }
+                    } catch (err) {
+                        this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]=null;
                         resolve(this.drawTile(tiles));
-                    } else {
-                        resolve({});
                     }
                 }
             } else {
@@ -2843,7 +2581,7 @@ class MainApp extends React.Component {
       return e(StorageViewer, { pageControler: this.state.pageControler, active: this.state.tabs["Storage"].active});
     }
     if (name == "Status") {
-      return e(MainAppState,  { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Status"].active, registerEventInstanceCallback:this.registerEventInstanceCallback.bind(this), registerStateCallback:this.registerStateCallback.bind(this) });
+      return e(StatusPage,  { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Status"].active, registerEventInstanceCallback:this.registerEventInstanceCallback.bind(this), registerStateCallback:this.registerStateCallback.bind(this) });
     }
     if (name == "Config") {
       return e(ConfigPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Config"].active });

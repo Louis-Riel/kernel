@@ -1,107 +1,4 @@
-class StateCommands extends React.Component {
-    render() {
-        return e("div",{key:genUUID(),name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
-            key:genUUID(),
-            caption:cmd.caption || cmd.command,
-            command:cmd.command,
-            name:this.props.name,
-            onSuccess:this.props.onSuccess,
-            onError:this.props.onError,
-            param1:cmd.param1,
-            param2:cmd.param2,
-            HTTP_METHOD:cmd.HTTP_METHOD
-        })));
-    }
-}
-
-class AppState extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = props.json;
-    }
-
-    componentWillUnmount() {
-        this.mounted=false;
-    }
-
-    componentDidMount() {
-        this.mounted=true;
-    }
-
-    Parse(json) {
-        if (json) {
-            return e("div",{key: genUUID(),className:"statusclass"},this.getSortedProperties(json).map(fld => {
-                if (Array.isArray(json[fld])) {
-                    if (fld == "commands"){
-                        return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
-                    }
-                    return {fld:fld,element:e(Table, { key: genUUID(), name: fld, label: fld, json: json[fld], sortable: true })};
-                } else if ((typeof json[fld] == 'object') && !Object.keys(json[fld]).find(fld => fld=="value")) {
-                    return {fld:fld,element:e(AppState, { key: genUUID(), name: fld, label: fld, json: json[fld],updateAppStatus:this.props.updateAppStatus,registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
-                } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
-                    return {fld:fld,element:e(ROProp, { key: genUUID(), value: json[fld], name: fld, label: fld })};
-                }
-            }).reduce((pv,cv)=>{
-                if (cv){
-                    var fc = this.getFieldClass(json,cv.fld);
-                    var item = pv.find(it=>it.fclass == fc);
-                    if (item) {
-                        item.elements.push(cv.element);
-                    } else {
-                        pv.push({fclass:fc,elements:[cv.element]});
-                    }
-                }
-                return pv;
-            },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
-        } else {
-            return e("div", { id: `loading${this.id}` }, "Loading...");
-        }
-    }
-
-    getSortedProperties(json) {
-        return Object.keys(json)
-            .sort((f1, f2) => { 
-                var f1s = this.getFieldWeight(json, f1);
-                var f2s = this.getFieldWeight(json, f2);
-                if (f1s == f2s) {
-                    return f1.localeCompare(f2);
-                }
-                return f1s > f2s ? 1 : f2s > f1s ? -1 : 0;
-            }).filter(fld => !(typeof(json[fld]) == "object" && Object.keys(json[fld]).filter(fld=>fld != "class" && fld != "name").length==0));
-    }
-
-    getFieldWeight(json, f1) {
-        return Array.isArray(json[f1]) ? 5 : typeof json[f1] == 'object' ? json[f1]["commands"] ? 3 : 4 : IsDatetimeValue(f1) ? 1 : 2;
-    }
-
-    getFieldClass(json, f1) {
-        return Array.isArray(json[f1]) ? "array" : typeof json[f1] == 'object' ? json[f1]["commands"] ? "commandable" : "object" : "field";
-    }
-
-    ProcessEvent(evt) {
-        if (this.mounted && evt?.data){
-            if ((evt.data?.class == this.state.class) && (evt.data?.name == this.state.name)){
-                this.setState({...evt.data});
-            }
-        }
-    }
-
-    render() {
-        if (this.state === null || this.state === undefined) {
-            return e("div", { id: `loading${this.id}` }, "Loading...");
-        }
-        if (this.props.label != null) {
-            if (this.props.registerEventInstanceCallback) {
-                this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.state.className}-${this.state.name}`);
-            }
-            return e("fieldset", { id: `fs${this.props.label}` }, [e("legend", { key: genUUID() }, this.props.label), this.Parse(this.state)]);
-        } else {
-            return e("fieldset", { key: genUUID(), id: `fs${this.id}` }, this.Parse(this.state));
-        }
-    }
-}
-
-class MainAppState extends React.Component {
+class StatusPage extends React.Component {
     constructor(props) {
         super(props);
         this.mounted=false;
@@ -215,11 +112,12 @@ class MainAppState extends React.Component {
         if (this.state?.status){
             return [
                 e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
-                e(AppState, {
+                e(JSONEditor, {
                     key: genUUID(), 
                     json: this.state.status, 
+                    editable: false,
                     selectedDeviceId: this.props.selectedDeviceId,
-                    updateAppStatus: this.updateAppStatus.bind(this),
+                    registerStateCallback: this.props.registerStateCallback,
                     registerEventInstanceCallback: this.props.registerEventInstanceCallback
                 })
             ];

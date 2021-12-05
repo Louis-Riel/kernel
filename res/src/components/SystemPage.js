@@ -44,7 +44,8 @@ class LogLines extends React.Component {
         if (this.props.registerLogCallback) {
             this.props.registerLogCallback(this.AddLogLine.bind(this));
         }
-        return e("div", { key: genUUID(), className: "loglines" }, this.state?.logLines ? this.state.logLines.map(logln => e(LogLine,{ key: genUUID(), logln:logln})):null)
+        return e("div", { key: genUUID(), className: "logContainer" },
+                    e("div", { key: genUUID(), className: "loglines" }, this.state?.logLines ? this.state.logLines.map(logln => e(LogLine,{ key: genUUID(), logln:logln})):null));
     }
 }
 

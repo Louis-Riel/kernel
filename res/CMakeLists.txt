@@ -17,7 +17,7 @@ ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/Program.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/FirmwarUpdater.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/TripViewer.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/StorageViewer.js
-${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/AppState.js
+${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/StatusPage.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/SystemPage.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/Event.js
 )

@@ -84,7 +84,7 @@ void TinyGPSPlus::waitOnStop(void *param)
 {
   TinyGPSPlus *gps = (TinyGPSPlus *)param;
   ESP_LOGD(__FUNCTION__, "We are stopped, checking bumps");
-  if ((xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdFALSE, 5000 / portTICK_PERIOD_MS) & gpsEvent::locationChanged) && (gps->speed.kmph() > 5))
+  if ((xEventGroupWaitBits(gps->eg, gpsEvent::locationChanged, pdFALSE, pdFALSE, 5000 / portTICK_PERIOD_MS) & gpsEvent::locationChanged) && (gps->speed.kmph() > 10))
   {
     ESP_LOGD(__FUNCTION__, "We are not so stopped, not using bump bumps");
   }
@@ -477,7 +477,7 @@ void TinyGPSPlus::gpsEventProcessor(void *handler_args, esp_event_base_t base, i
       ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(sleepTimes[gps->curFreqIdx] * 1000000));
 
       WaitToSleep();
-      ESP_LOGV(__FUNCTION__, "Napping for %d", sleepTimes[gps->curFreqIdx]);
+      ESP_LOGD(__FUNCTION__, "Napping for %d", sleepTimes[gps->curFreqIdx]);
       ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::sleeping, NULL, 0, portMAX_DELAY));
       ESP_ERROR_CHECK(esp_light_sleep_start());
       ESP_ERROR_CHECK(gps->gps_esp_event_post(gps->GPSPLUS_EVENTS, TinyGPSPlus::gpsEvent::wakingup, (void *)&sleepTimes[gps->curFreqIdx], sizeof(uint8_t), portMAX_DELAY));

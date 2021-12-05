@@ -250,7 +250,7 @@ class StorageViewer extends React.Component {
 
     render() {
         if (!this.state?.files) {
-            return e("div", { key: genUUID() }, "Loading...");
+            return e("div", { key: genUUID() }, "Loading......");
         } else {
             return e("div", { key: genUUID(), 
                 id: this.id, 

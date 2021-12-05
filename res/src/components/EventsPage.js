@@ -174,7 +174,7 @@ class EventsPage extends React.Component {
                 e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
             ];
         } else {
-            return e("div",{key: genUUID()},"Loading...");
+            return e("div",{key: genUUID()},"Loading.....");
         }
     }
 }

@@ -106,9 +106,13 @@ class ROProp extends React.Component {
     }
 
     render() {
-        return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
-            e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, this.props.label),
-            e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
-        ]);
+        if (this.props.label) {
+            return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
+                e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, this.props.label),
+                e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
+            ]);
+        } else {
+            return e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value));
+        }
     }
 }
