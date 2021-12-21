@@ -10,6 +10,8 @@
 #define RMT_FILTER_THRESH 100 // ticks
 #define RMT_IDLE_TIMEOUT 8000 // ticks
 
+const char* emptySpaces = "                                       ";
+
 static bool isRunning=false;
 
 /*
@@ -64,8 +66,8 @@ IRDecoder::IRDecoder(AppConfig* config)
     ESP_LOGV(__FUNCTION__,"IRDecoder(%d):%s",pinNo,name);
     apin->SetPinNoProperty("pinNo",pinNo);
     apin->SetIntProperty("numCodes",0);
-    apin->SetStringProperty("lastCode","                                       ");
-    apin->SetStringProperty("lastProvider","                                       ");
+    apin->SetStringProperty("lastCode",emptySpaces);
+    apin->SetStringProperty("lastProvider",emptySpaces);
     lastCode = apin->GetPropertyHolder("lastCode");
     numCodes = apin->GetPropertyHolder("numCodes");
     lastProvider = apin->GetPropertyHolder("lastProvider");

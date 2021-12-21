@@ -4,10 +4,6 @@ table.greyGridTable th {
     border-style: inset;
 }
 
-table.greyGridTable tbody td {
-    /* vertical-align: middle; */
-}
-
 table.greyGridTable td:nth-child(even) {
     background: #2a34288c;
 }
@@ -119,14 +115,12 @@ textarea {
 }
 
 label {
-    /* font-style: italic; */
     font-size: small;
     background: linear-gradient(to bottom, #2d332d, #091308);
     display: flex;
     flex-direction: column;
-    align-content: center;
-    justify-content: space-between;
     align-items: center;
+    justify-content: flex-start;
 }
 
 div.slider {
@@ -154,19 +148,6 @@ div.slides {
 
 .slides::-webkit-scrollbar-track {
     background: transparent;
-}
-
-.slides>div {
-    /* border-radius: 10px; */
-    /* border: solid; */
-    /* border-color: silver; */
-    /* padding-left: 15px; */
-    /* padding-top: 10px; */
-    /* height: -webkit-fill-available; */
-    /* display: flex; */
-    /* border-radius: 10px; */
-    /* border: solid; */
-    /* border-color: silver; */
 }
 
 .author-info {
@@ -251,15 +232,9 @@ option {
 .slides fieldset {
     border-style: none;
     background: linear-gradient(to bottom, #151a15, #273426);
-    /* display: flex; */
-    /* flex-wrap: wrap; */
-    /* flex-direction: row; */
-    /* padding-left: 0.3em; */
     padding-right: 0;
-    /* width: fit-content; */
     height: fit-content;
     padding-bottom: 0;
-    /* justify-content: center; */
 }
 
 .slides fieldset>fieldset {
@@ -349,10 +324,7 @@ label.textarea {
 
 .label {
     margin-top: 10px;
-    /* font-size: small; */
     color: aqua;
-    /* text-align: center; */
-    /* width: 100%; */
     font-style: italic;
     padding-bottom: 10px;
 }
@@ -363,7 +335,6 @@ fieldset>label.table {
 }
 
 label>div.value {
-    /* margin-top: 10px; */
     white-space: pre-wrap;
 }
 
@@ -482,20 +453,11 @@ form .jsoneditor-navigation-bar {
     background-color: #242d23 !important;
 }
 
-form .jsoneditor {
-    /* border: thin solid #77797c !important; */
-    /* display: flex; */
-    /* flex-wrap: wrap; */
-    /* flex-direction: row; */
-}
-
 form .jsoneditor-frame {
     background-color: #242d23
 }
 
 .slider form {
-    /* width: 100%; */
-    /* display: flex; */
     flex-wrap: wrap;
     flex-direction: row;
 }
@@ -525,8 +487,6 @@ div.slider > div.slide {
 .eventPanel {
     display: flex;
     flex-direction: column;
-    /* overflow: auto; */
-    /* height: 100%; */
     margin-left: auto;
     padding-right: 1em;
     padding-top: 10px;
@@ -580,7 +540,6 @@ div.events button {
 
 .designer {
     position: relative;
-    /* width: fit-content; */
     display: flex;
     flex-wrap: wrap;
 }
@@ -830,17 +789,10 @@ a {
 .fieldgroup {
     display: flex;
     flex-direction: row;
-    /* justify-content: space-between; */
     flex-wrap: wrap;
     width: fit-content;
     height: fit-content;
     min-width: -webkit-fill-available;
-}
-
-.fieldgroup.array {
-    /* display: flex; */
-    /* flex-wrap: wrap; */
-    /* flex-direction: row; */
 }
 
 .jsonNodes input {
@@ -855,13 +807,6 @@ td>fieldset {
 
 .slides canvas {
     padding-right: 5px;
-}
-
-.fieldgroup.field {
-    /* display: flex; */
-    /* flex-direction: row; */
-    /* justify-content: flex-start; */
-    /* flex-wrap: wrap; */
 }
 
 .fieldgroup.commandable {
@@ -894,12 +839,8 @@ td>fieldset {
 .logpannel {
     position: sticky;
     top: 0;
-    /* width: 100%; */
     background: black;
-    /* height: fit-content; */
 }
-
-.logpannel {}
 
 .file>td {
     flex-direction: row;
@@ -907,13 +848,6 @@ td>fieldset {
 }
 
 .pageContent>.jsonNodes>.fieldgroup {
-    border-radius: 10px;
-    border: solid;
-    border-color: silver;
-    padding-left: 15px;
-    padding-bottom: 10px;
-    padding-top: 10px;
-    padding-right: 15px;
     margin-bottom: 10px;
 }
 
@@ -926,13 +860,6 @@ td>fieldset {
 
 .jsonNodes>legend {
     display: flex;
-    /* width: 100%; */
-}
-
-.jsonlabel {
-    /* display: flex; */
-    /* width: 100%; */
-    /* justify-content: space-around; */
 }
 
 button.objectButton, .fieldButton, .lineButton {

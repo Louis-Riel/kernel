@@ -23,16 +23,24 @@ class StatusPage extends React.Component {
     refreshStatus(stat) {
         if (this.mounted){
             if (stat){
-                const flds = Object.keys(stat);
-                var status = this.state?.status || {};
-                for (const fld in flds) {
-                    status[flds[fld]] = stat[flds[fld]];    
-                }
-                this.setState({status:status});
+                this.filterProperties(stat).then(stat=>{
+                    const flds = Object.keys(stat);
+                    var status = this.state?.status || {};
+                    for (const fld in flds) {
+                        status[flds[fld]] = stat[flds[fld]];    
+                    }
+                    this.setState({status:status});
+                });
             } else {
                 this.updateAppStatus();
             }
         }
+    }
+
+    filterProperties(props) {
+        return new Promise((resolve,reject)=>{
+            resolve(Object.keys(props).filter(fld=> !fld.match(/^MALLOC_.*/) || props[fld]!=0).reduce((ret,fld)=>{ret[fld]=props[fld];return ret},{}));
+        });
     }
 
     updateStatuses(requests, newState) {
@@ -46,8 +54,8 @@ class StatusPage extends React.Component {
                             method: 'post',
                             signal: abort.signal
                         }).then(data => data.json())
-                        .then(fromVersionedToPlain)
-                        .then(jstats => {
+                          .then(this.filterProperties.bind(this))
+                          .then(jstats => {
                                 requests = requests.filter(req => req != request);
                                 if (request.path) {
                                     newState[request.path] = Object.values(jstats);

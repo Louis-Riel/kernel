@@ -8,3 +8,4 @@ build
 sdkconfig.old
 wget-log
 node_modules
+.cache

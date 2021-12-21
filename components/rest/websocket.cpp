@@ -14,6 +14,7 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 static WebsocketManager* stateHandler = NULL;
+const char* emptySpace = "                              ";
 
 WebsocketManager::WebsocketManager():
     ManagedDevice("WebsocketManager","WebsocketManager",BuildStatus,ManagedDevice::HealthCheck),
@@ -104,6 +105,10 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
       }
       wsMsg->client=&clients[idx];
       if ((ret = httpd_queue_work(clients[idx].hd,PostToClient,wsMsg)) != ESP_OK) {
+        ldfree(wsMsg);
+        if (msg){
+          ldfree(wsMsg->buf);
+        }
         cJSON_SetIntValue(clients[idx].jIsLive,false);
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
         stateChange=true;
@@ -112,7 +117,6 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
         if (msg)
           ESP_LOGV(__FUNCTION__,"Client %d:%s",idx,(char*) msg);
       }
-      //ldfree(wsMsg);
     }
   }
   if (stateChange){
@@ -164,13 +168,13 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
         clients[idx].jBytesIn = cJSON_AddNumberToObject(client,"BytesIn",0);
         clients[idx].jBytesOut = cJSON_AddNumberToObject(client,"BytesOut",0);
         clients[idx].jIsLive = cJSON_AddNumberToObject(client,"IsLive",true);
-        clients[idx].jAddr = cJSON_AddStringToObject(client,"Address","                              ");
-        clients[idx].jLastTs = cJSON_AddStringToObject(client,"LastTs","                              ");
+        clients[idx].jAddr = cJSON_AddStringToObject(client,"Address",emptySpace);
+        clients[idx].jLastTs = cJSON_AddStringToObject(client,"LastTs",emptySpace);
       }
       cJSON_SetIntValue(clients[idx].jBytesIn,0);
       cJSON_SetIntValue(clients[idx].jBytesOut,0);
       cJSON_SetIntValue(clients[idx].jErrCount,0);
-      cJSON_SetValuestring(clients[idx].jLastTs,"                              ");
+      cJSON_SetValuestring(clients[idx].jLastTs,emptySpace);
       cJSON_SetIntValue(clients[idx].jIsLive,true);
 
       sockaddr_in6 addr;
@@ -273,15 +277,13 @@ esp_err_t TheRest::ws_handler(httpd_req_t *req) {
       GetServer()->jBytesOut->valuedouble = GetServer()->jBytesOut->valueint+=ws_pkt.len;
       switch (ws_pkt.type)
       {
-      case HTTPD_WS_TYPE_TEXT:
-          ESP_LOGV(__FUNCTION__,"msg:%s",(char*)ws_pkt.payload);
-      break;
-      case HTTPD_WS_TYPE_CONTINUE:  ESP_LOGD(__FUNCTION__,"Packet type(%d): CONTINUE: %s",ws_pkt.len, (char*)ws_pkt.payload); break;
-      case HTTPD_WS_TYPE_BINARY:    ESP_LOGD(__FUNCTION__,"Packet type(%d): BINARY",ws_pkt.len);   break;
-      case HTTPD_WS_TYPE_CLOSE:     ESP_LOGD(__FUNCTION__,"Packet type(%d): CLOSE",ws_pkt.len);    break;
-      case HTTPD_WS_TYPE_PING:      ESP_LOGD(__FUNCTION__,"Packet type(%d): PING",ws_pkt.len);     break;
-      case HTTPD_WS_TYPE_PONG:      ESP_LOGD(__FUNCTION__,"Packet type(%d): PONG",ws_pkt.len);     break;
-      default:                      ESP_LOGW(__FUNCTION__,"Packet type(%d): UNKNOWN",ws_pkt.len);  break;
+        case HTTPD_WS_TYPE_TEXT: ESP_LOGV(__FUNCTION__,"msg:%s",(char*)ws_pkt.payload);break;
+        case HTTPD_WS_TYPE_CONTINUE:  ESP_LOGD(__FUNCTION__,"Packet type(%d): CONTINUE: %s",ws_pkt.len, (char*)ws_pkt.payload); break;
+        case HTTPD_WS_TYPE_BINARY:    ESP_LOGD(__FUNCTION__,"Packet type(%d): BINARY",ws_pkt.len);   break;
+        case HTTPD_WS_TYPE_CLOSE:     ESP_LOGD(__FUNCTION__,"Packet type(%d): CLOSE",ws_pkt.len);    break;
+        case HTTPD_WS_TYPE_PING:      ESP_LOGD(__FUNCTION__,"Packet type(%d): PING",ws_pkt.len);     break;
+        case HTTPD_WS_TYPE_PONG:      ESP_LOGD(__FUNCTION__,"Packet type(%d): PONG",ws_pkt.len);     break;
+        default:                      ESP_LOGW(__FUNCTION__,"Packet type(%d): UNKNOWN",ws_pkt.len);  break;
       }
     } else {
       ESP_LOGE(__FUNCTION__, "httpd_ws_recv_frame failed: %s", esp_err_to_name(ret));
