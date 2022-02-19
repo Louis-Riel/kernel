@@ -60,7 +60,7 @@ static const char *gps_protocol_name[] = {
     "GPS_GST",
     "GPS_ZDA"};
 
-unsigned long IRAM_ATTR millis()
+unsigned long millis()
 {
   return (unsigned long)(esp_timer_get_time() / 1000LL);
 }

@@ -11,7 +11,7 @@
 #include "logs.h"
 #include "errno.h"
 #include "freertos/semphr.h"
-#include "esp32/rom/md5_hash.h"
+#include <esp32/rom/md5_hash.h>
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "eventmgr.h"

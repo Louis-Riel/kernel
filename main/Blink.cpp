@@ -35,6 +35,7 @@
 #include "../components/pins/pins.h"
 #include "mfile.h"
 #include "../components/IR/ir.h"
+#include "../components/bluetooth/bt.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -1238,4 +1239,6 @@ void app_main(void)
     ESP_LOGE(__FUNCTION__, "caps integrity error");
   }
   ESP_LOGD(__FUNCTION__, "Battery: %f", getBatteryVoltage());
+
+  new Bt();
 }

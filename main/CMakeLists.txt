@@ -1,5 +1,5 @@
-set(COMPONENT_REQUIRES esp_adc_cal json pthread )
-set(COMPONENT_PRIV_REQUIRES wifi rest TinyGPS esp_littlefs eventmgr pins mfile IR )
+set(COMPONENT_REQUIRES esp_adc_cal json pthread wpa_supplicant )
+set(COMPONENT_PRIV_REQUIRES wifi rest TinyGPS esp_littlefs eventmgr pins mfile IR bluetooth )
 
 set(COMPONENT_ADD_INCLUDEDIRS "." "../components/TinyGPS" "../components/esp_littlefs/include" )
 set(COMPONENT_SRCS "log.cpp" "Blink.cpp" "utils.cpp" "configmgmt.cpp" "mallocdbg.cpp")

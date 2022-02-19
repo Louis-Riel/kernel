@@ -99,7 +99,7 @@ typedef enum {
 //const uint8_t GGA_On[] =  { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X00, 0X00, 0X01, 0X01, 0X00, 0X00, 0X00, 0X01, 0X2C};
 
 
-unsigned long IRAM_ATTR millis();
+unsigned long millis();
 
 struct RawDegrees
 {
