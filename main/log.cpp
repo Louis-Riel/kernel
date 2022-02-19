@@ -90,50 +90,51 @@ void unregisterLogCallback( LogFunction_t callback) {
 int loggit(const char *fmt, va_list args) {
     if (*fmt != 'V'){
         xSemaphoreTake(logMutex,portMAX_DELAY);
-        if (!logFile) {
-            struct tm timeinfo = { 0 };
-            time_t now;
-            time(&now);
-            localtime_r(&now, &timeinfo);
-
-            if (!buildingLogf && 
-                ((timeinfo.tm_year > 70) || (curLogBuf && (strlen(curLogBuf) >= LOG_BUF_ULIMIT))) &&
-                AppConfig::HasActiveStorage()) {
-                buildingLogf = true;
-                char* lpath=(char*)dmalloc(255);
-                char* logfname=(char*)dmalloc(355);
-                sprintf(lpath,"%s/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
+        if ((*fmt == 'E') || (*fmt == 'W') || AppConfig::HasSDCard()) {
+            if (!logFile) {
+                struct tm timeinfo = { 0 };
+                time_t now;
+                time(&now);
                 localtime_r(&now, &timeinfo);
-                strftime(logfname, 254, lpath, &timeinfo);
-                //printf("\nlogname2:%s\n",logfname);
-                logFile = new BufferedFile(logfname);
-                ldfree(lpath);
-                ldfree(logfname);
-            }
-            if (!curLogBuf) {
-                curLogBuf = (char*)dmalloc(LOG_BUF_SIZE);
-                *curLogBuf=0;
-                curLogLine = curLogBuf;
-            }
-        }
 
-        if (logFile) {
-            if (curLogBuf) {
-                if (*curLogBuf != 0) {
-                    logFile->Write((uint8_t*)curLogBuf,strlen(curLogBuf));
+                if (!buildingLogf && 
+                    ((timeinfo.tm_year > 70) || (curLogBuf && (strlen(curLogBuf) >= LOG_BUF_ULIMIT))) &&
+                    AppConfig::HasActiveStorage()) {
+                    buildingLogf = true;
+                    char* lpath=(char*)dmalloc(255);
+                    char* logfname=(char*)dmalloc(355);
+                    sprintf(lpath,"%s/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
+                    localtime_r(&now, &timeinfo);
+                    strftime(logfname, 254, lpath, &timeinfo);
+                    //printf("\nlogname2:%s\n",logfname);
+                    logFile = new BufferedFile(logfname);
+                    ldfree(lpath);
+                    ldfree(logfname);
                 }
-                ldfree(curLogBuf);
-                curLogBuf=NULL;
-                curLogLine=(char*)dmalloc(LOG_LN_SIZE);
+                if (!curLogBuf) {
+                    curLogBuf = (char*)dmalloc(LOG_BUF_SIZE);
+                    *curLogBuf=0;
+                    curLogLine = curLogBuf;
+                }
+            }
+
+            if (logFile) {
+                if (curLogBuf) {
+                    if (*curLogBuf != 0) {
+                        logFile->Write((uint8_t*)curLogBuf,strlen(curLogBuf));
+                    }
+                    ldfree(curLogBuf);
+                    curLogBuf=NULL;
+                    curLogLine=(char*)dmalloc(LOG_LN_SIZE);
+                    *curLogLine=0;
+                }
+                vsprintf(curLogLine,fmt,args);
+                logFile->Write((uint8_t*)curLogLine,strlen(curLogLine));
+            } else {
+                curLogLine+=vsprintf(curLogLine,fmt,args);
                 *curLogLine=0;
             }
-            vsprintf(curLogLine,fmt,args);
-            logFile->Write((uint8_t*)curLogLine,strlen(curLogLine));
-        } else {
-            curLogLine+=vsprintf(curLogLine,fmt,args);
-            *curLogLine=0;
         }
-
         for (int idx=0; idx < 5; idx++){
             if (callbacks[idx] != NULL) {
                 if (!callbacks[idx](params[idx],curLogLine)){

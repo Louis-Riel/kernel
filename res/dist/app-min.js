@@ -329,7 +329,7 @@ class IntInput extends React.Component {
 }
 class StateCommands extends React.Component {
     render() {
-        return e("div",{key:genUUID(),name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
+        return e("div",{key:'commands',name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
             key:genUUID(),
             caption:cmd.caption || cmd.command,
             command:cmd.command,
@@ -340,6 +340,46 @@ class StateCommands extends React.Component {
             param2:cmd.param2,
             HTTP_METHOD:cmd.HTTP_METHOD
         })));
+    }
+}
+
+class EditableLabel extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state ={
+            editing: false
+        }
+    }
+
+    getLabel() {
+        return e("div",{onClick: elem=>this.setState({"editing":true}), className:"label"},this.props.label);
+    }
+
+    updateLabel(elem){
+        this.newLabel= elem.target.value;
+    }
+
+    cancelUpdate(elem) {
+        this.newLabel=undefined;
+        this.setState({editing:false});
+    }
+
+    getEditable() {
+        return [
+            e("input",{key: "edit", defaultValue: this.props.label, onChange:this.updateLabel.bind(this)}),
+            e("div",{key: "ok", onClick: elem=>this.setState({"editing":false}), className:"ok-button", dangerouslySetInnerHTML: {__html: "&check;"}}),
+            e("div",{key: "cancel", onClick: this.cancelUpdate.bind(this), className:"cancel-button", dangerouslySetInnerHTML: {__html: "&Chi;"}})
+        ]
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.props.onChange && this.newLabel && (prevState.editing !== this.state.editing)) {
+            this.props.onChange(this.newLabel, this.props.label);
+        }
+    }
+
+    render() {
+        return this.state.editing ? this.getEditable() : this.getLabel();
     }
 }
 
@@ -377,31 +417,24 @@ class JSONEditor extends React.Component {
         this.setState({value:this.state.value});
     }
 
-    BuildTablePannel(){
-        if (this.props.editable) {
-            return e("div",{key:genUUID(),className:"popupMenu"},[
-                e("div",{key:genUUID()},"*"),
-                e("div",{key:genUUID(),className:"menuItems"},[
-                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.addRow(elem)},"Add Empty Row")
-                ])
-            ])
+    changeLabel(newLabel, oldLabel) {
+        if (newLabel !== oldLabel) {
+            Object.defineProperty(this.state.value, newLabel,
+                Object.getOwnPropertyDescriptor(this.state.value, oldLabel));
+            delete this.state.value[oldLabel];
+            this.setState(this.state);
         }
-        return null;
     }
-
 
     fieldControlPannel(fld){
         if (!this.props.editable){
-            return e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, fld);
+            return e("div", { key: `fcpnolabel${fld}`, className: "label", id: `dlbl${this.id}` }, fld);
         }
 
-        return e("div",{key:genUUID(),className:"fieldHeader"},[
-            e("div",{key:genUUID(),className:"label"},fld),
-            e("div",{key:genUUID(),className:"popupMenu"},[
-                e("div",{key:genUUID()},"*"),
-                e("div",{key:genUUID(),className:"menuItems"},[
-                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.removeField(fld)},"Remove Field")
-                ])
+        return e("div",{key:`fcpnolabel${fld}header`,className:"fieldHeader"},[
+            e(EditableLabel,{key:`flabel${fld}`,label: fld, onChange: this.changeLabel.bind(this)}),
+            e("div",{key:`fcpnolabel${fld}popupmenu`,className:"popupMenu"},[
+                e("div",{key:`removefield`, onClick:elem=> this.removeField(fld)},"Remove")
             ])
         ]);
     }
@@ -409,15 +442,23 @@ class JSONEditor extends React.Component {
     Parse(json) {
         if ((json !== undefined) && (json != null)) {
             if ((typeof json == "object") && (json.version === undefined)){
-                return e("div",{key: genUUID(),className:"statusclass jsonNodes"},this.getSortedProperties(json).map(fld => {
+                return e("div",{key: `jsonobject`,className:"statusclass jsonNodes"},this.getSortedProperties(json).map(fld => {
                     if (Array.isArray(json[fld])) {
                         if (fld == "commands"){
-                            return {fld:fld,element:e(StateCommands,{key:genUUID(),name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
+                            return {fld:fld,element:e(StateCommands,{key:`jofieldcmds`,name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
                         }
-                        return {fld:fld,element:e(Table, { key: genUUID(), name: fld, label: fld, json: json[fld], registerEventInstanceCallback: this.props.registerEventInstanceCallback, editable:this.props.editable, sortable: this.props.sortable })};
+                        return {fld:fld,element:e(Table, { key: `Table-Object-${this.props.path}/${fld}`, 
+                                                           name: fld, 
+                                                           path: `${this.props.path}/${fld}`,
+                                                           label: fld, 
+                                                           json: json[fld], 
+                                                           registerEventInstanceCallback: this.props.registerEventInstanceCallback, 
+                                                           editable: this.props.editable, 
+                                                           sortable: this.props.sortable })};
                     } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
                         return {fld:fld,element:e(JSONEditor, { 
-                            key: genUUID(), 
+                            key: `JE-${this.props.path}/${fld}`,
+                            path: `${this.props.path}/${fld}`,
                             name: fld, 
                             label: fld, 
                             editable: this.props.editable,
@@ -428,11 +469,11 @@ class JSONEditor extends React.Component {
                         return {
                             fld:fld,
                             element: this.props.editable ?
-                                    e("label",{key:genUUID()},[
+                                    e("label",{key:`${fld}label`},[
                                         this.fieldControlPannel(fld),
-                                        e("input",{key:genUUID(),defaultValue:json[fld]?.value || json[fld], onChange: elem => this.processUpdate(elem,fld)})]):
+                                        e("input",{key:`input`,defaultValue:json[fld].value === undefined ?  json[fld] : json[fld].value ,onChange: this.processUpdate.bind(this)})]):
                                     e(ROProp, { 
-                                        key: genUUID(), 
+                                        key: `rofld${fld}`, 
                                         value: json[fld], 
                                         name: fld, 
                                         label: fld 
@@ -450,12 +491,12 @@ class JSONEditor extends React.Component {
                         }
                     }
                     return pv;
-                },[]).map(item =>e("div",{key: genUUID(),className: `fieldgroup ${item.fclass}`},item.elements)))
+                },[]).map((item,idx) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
             } else {
                 return (json.version !== undefined) || (this.props.editable && (typeof json != "object")) ?
-                            e("input",{key:genUUID(),defaultValue:json.value !== undefined ? json.value : json,onChange: this.processUpdate.bind(this)}):
+                            e("input",{key:`input`,defaultValue:json.value === undefined?json:json.value,onChange: this.processUpdate.bind(this)}):
                             e(ROProp, { 
-                                key: genUUID(), 
+                                key: 'rofield', 
                                 value: json, 
                                 name: "" 
                             });
@@ -467,7 +508,7 @@ class JSONEditor extends React.Component {
 
     processUpdate(elem,fld) {
         if (fld) {
-            if (!this.state.value[fld]) {
+            if (this.state.value[fld] === undefined) {
                 this.state.value[fld]={version:-1};
             }
             this.state.value[fld].value=elem.target.value;
@@ -491,10 +532,10 @@ class JSONEditor extends React.Component {
     }
 
     getFieldWeight(json, f1) {
-        if (!IsDatetimeValue(f1) && (!json || !json[f1])) {
+        if (!IsDatetimeValue(f1) && (!json || (json[f1] === undefined))) {
             return 2;
         }
-        return Array.isArray(json[f1]) ? 6 : typeof json[f1] == 'object' ? json[f1]["commands"] ? 4 : 5 : IsDatetimeValue(f1) ? 1 : 3;
+        return Array.isArray(json[f1]) ? 6 : typeof json[f1] == 'object' ? json[f1] && json[f1]["commands"] ? 4 : 5 : IsDatetimeValue(f1) ? 1 : 3;
     }
 
     getFieldClass(json, f1) {
@@ -511,14 +552,9 @@ class JSONEditor extends React.Component {
 
     objectControlPannel(){
         return [
-            e("div",{key:genUUID(),className:"jsonlabel"},this.props.label),
-            this.props.editable?e("div",{key:genUUID(),className:"popupMenu"},[
-                e("div",{key:genUUID(),className:"menuItems"},[
-                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.addNewProperty()},"Add Property"),
-                    this.props.onRemove?e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.props.onRemove},"Remove"):null
-                ]),
-                e("div",{key:genUUID()},"*")
-            ]):null
+            e("div",{key:'ocplabel',className:"jsonlabel"},this.props.label),
+            this.props.editable?e("div",{key:genUUID(),className:"popupMenu"},
+                e("div",{key:`removeprop`, onClick:elem=> this.addNewProperty()},"Add Column")):null
         ];
 
     }
@@ -528,7 +564,7 @@ class JSONEditor extends React.Component {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         } else if (this.props.label != null) {
             return e("fieldset", { id: `fs${this.props.label}`,className:"jsonNodes" }, [
-                e("legend", { key: genUUID() }, this.objectControlPannel()),
+                e("legend", { key: 'legend' }, this.objectControlPannel()),
                 this.Parse(this.state.value)
             ]);
         } else {
@@ -539,6 +575,17 @@ class JSONEditor extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
+        if (IsNumberValue(this.props.value)) {
+            this.state = {
+                maxLastStates: 50,
+                lastStates:[
+                    {
+                        value:this.props.value,
+                        ts: Date.now()
+                    }
+                ]
+            };
+        }
     }
 
     getValue(fld,val) {
@@ -568,9 +615,18 @@ class JSONEditor extends React.Component {
         }
     }
 
-    componentDidMount() {
+    componentDidUpdate(prevProps, prevState, snapshot) {
         if (IsDatetimeValue(this.props.name)) {
             this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
+        }
+        if (this.state?.lastStates && (this.props.value !== prevProps?.value)) {
+            this.state.lastStates.push({
+                value:this.props.value,
+                ts: Date.now()
+            });
+            while (this.state.lastStates.length > this.state.maxLastStates) {
+                this.state.lastStates.pop();
+            }
         }
     }
 
@@ -639,17 +695,16 @@ class JSONEditor extends React.Component {
         ctx.fillStyle = 'rgba(00, 255, 255, 1)';
         txtbx = ctx.measureText(time);
         ctx.fillText(time, (rect.width * 0.50) - txtbx.width / 2, rect.height * 0.45);
-
     }
 
     render() {
         if (this.props.label) {
             return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
-                e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, this.props.label),
-                e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
+                e("div", { key: 'label', className: "label", id: `dlbl${this.id}` }, this.props.label),
+                e("div", { key: 'value', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
             ]);
         } else {
-            return e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value));
+            return e("div", { key: 'timevalue', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value));
         }
     }
 }
@@ -687,32 +742,28 @@ class Table extends React.Component {
 
     BuildTablePannel(){
         if (this.props.editable) {
-            return e("div",{key:genUUID(),className:"popupMenu"},[
-                e("div",{key:genUUID()},"*"),
-                e("div",{key:genUUID(),className:"menuItems"},[
-                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.addRow(elem)},"Add Empty Row")
-                ])
-            ])
+            return e("div",{key:genUUID(),className:"popupMenu"},
+                    e("div",{key:`removeprop`, onClick:elem=> this.addRow(elem)},"Add Row"));
         }
         return null;
     }
 
     BuildCaption(){
         if (this.props.editable) {
-            return e("caption", { key: genUUID() },[
-                    e("div",{key:genUUID(),className:"objectButtons"}, this.BuildTablePannel()),
-                    e("div",{key:genUUID(),className:"jsonlabel"},this.props.label)
+            return e("caption", { key: `caption` },[
+                    e("div",{key:'table-panel',className:"objectButtons"}, this.BuildTablePannel()),
+                    e("div",{key:`label`,className:"jsonlabel"},this.props.label)
                    ]);
         }
-        return e("caption", { key: genUUID() }, this.props.label);
+        return e("caption", { key: 'caption' }, this.props.label);
     }
 
     BuildHead(json) {
         if (json) {
             this.cols=[];
-            return [e("thead", { key: genUUID(), onClick: this.SortTable.bind(this) }, 
-                      e("tr", { key: genUUID() },
-                        [this.props.editable?e("th", { key: genUUID() }):null,
+            return [e("thead", { key: `head`, onClick: this.SortTable.bind(this) }, 
+                      e("tr", { key: `headrow` },
+                        [this.props.editable?e("th", { key: `header` }):null,
                          ...json.flatMap(row => Object.keys(row))
                             .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
                             .map(fld => {
@@ -723,7 +774,7 @@ class Table extends React.Component {
                                         this.sortedOn = fld;
                                     }
                                 }
-                                return e("th", { key: genUUID() }, this.BuildHeaderField(fld));
+                                return e("th", { key: `header-col-${fld}` }, this.BuildHeaderField(fld));
                             })]
                         )), this.props.label !== undefined ? this.BuildCaption():null];
         } else {
@@ -761,7 +812,7 @@ class Table extends React.Component {
 
     BuildBody(json) {
         if (json) {
-            return e("tbody", { key: genUUID() },
+            return e("tbody", { key: 'body' },
                 this.props.sortable ? 
                     json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
                         .map(this.BuildLine.bind(this)):
@@ -775,35 +826,34 @@ class Table extends React.Component {
     DeleteLine(line,e) {
         e.stopPropagation();
         e.preventDefault();
-        this.state.json.splice(this.state.json.indexOf(line),1);
+        this.state.json.splice(line,1);
         this.setState({json:this.state.json});
     }
 
     DuplicateLine(line,e) {
         e.stopPropagation();
         e.preventDefault();
-        this.state.json.push(line);
+        this.state.json.push(this.state.json[line]);
         this.setState({json:this.state.json});
     }
 
-    BuildLinePannel(line){
+    BuildLinePannel(idx){
         if (this.props.editable) {
-            return e("div",{key:genUUID(),className:"popupMenu"},[
-                e("div",{key:genUUID()},"*"),
-                e("div",{key:genUUID(),className:"menuItems"},[
-                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.DeleteLine(line,elem)},"Delete"),
-                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.DuplicateLine(line,elem)},"Duplicate")
-                ])
+            return e("div",{key:`linepanel`,className:"stackedMenu"},[
+                e("div",{key:genUUID(),className:"popupMenu"},
+                    e("div",{key:`del`, onClick:elem=> this.DeleteLine(idx,elem)},"Delete")),
+                e("div",{key:genUUID(),className:"popupMenu"},
+                    e("div",{key:`dup`, onClick:elem=> this.DuplicateLine(idx,elem)},"Duplicate"))
             ])
         }
         return null;
     }
 
-    BuildLine(line) {
-        return e("tr", { key: genUUID() },[
+    BuildLine(line,idx) {
+        return e("tr", { key: `row-${idx}` },[
             [
-                this.props.editable?e("td", { key: genUUID(), className: "readonly" },this.BuildLinePannel(line)):null,
-                this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" },this.BuildCell(line, fld)))
+                this.props.editable?e("td", { key: `row-${idx}-panel`, className: "readonly" },this.BuildLinePannel(idx)):null,
+                this.cols.map(fld => e("td", { key: `row-${idx}-${fld}-cell-panel`, className: "readonly" },this.BuildCell(line, fld)))
             ]
         ]);
     }
@@ -821,21 +871,33 @@ class Table extends React.Component {
     BuildCellControlPannel(line,fld){
         if (this.props.editable) {
             var val = line[fld];
-            return e("div",{key:genUUID(),className:"popupMenu"},[
-                e("div",{key:genUUID()},"*"),
-                e("div",{key:genUUID(),className:"menuItems"},[
-                    val?null:e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.addString(line,fld)},"Add String"),
-                    val?e("div",{key:genUUID(),className:"menuItem",onClick:elem=>this.clearCell(line,fld) },"Clear"):null
-                ])
-            ])
+            return e("div",{key:genUUID(),className:"popupMenu"},
+                        val?
+                            e("div",{key:`addpropr`, onClick:elem=> this.clearCell(line,fld)},"Set Null"):
+                            e("div",{key:`addpropr`, onClick:elem=> this.addString(line,fld)},"Add String"));
         }
         return null;
     }
 
     BuildCell(line, fld) {
         return [Array.isArray(line[fld]) ?
-            line[fld].length ? e(Table, { key: genUUID(), editable: this.props.editable, sortable: this.props.sortable, name: fld, json: line[fld], name: fld }) : null :
-            e(JSONEditor, { key: genUUID(), editable: this.props.editable, json: line[fld], name: fld, registerEventInstanceCallback: this.props.registerEventInstanceCallback }),
+                      line[fld].length ? 
+                        e(Table, { key: `Table-Array-Line-${this.props.path}/${fld}`, 
+                                   path: `${this.props.path}/${fld}`,
+                                   editable: this.props.editable, 
+                                   sortable: this.props.sortable, 
+                                   name: fld, 
+                                   json: line[fld], 
+                                   name: fld 
+                                 }) : 
+                        null :
+                e(JSONEditor, { key: `JE-${this.props.path}/${fld}`, 
+                                path: `${this.props.path}/${fld}`,
+                                editable: this.props.editable, 
+                                json: line[fld], 
+                                name: fld, 
+                                registerEventInstanceCallback: this.props.registerEventInstanceCallback 
+                              }),
             this.BuildCellControlPannel(line,fld)
         ];
     }
@@ -845,8 +907,8 @@ class Table extends React.Component {
             return null;
         }
 
-        return e("label", { key: genUUID(), id: this.id, className: "table" }, 
-                e("table", { key: genUUID(), className: "greyGridTable" }, [
+        return e("label", { key: `label`, id: this.id, className: "table" }, 
+                e("table", { key: `table`, className: "greyGridTable" }, [
                     this.BuildHead(this.state.json), 
                     this.BuildBody(this.state.json)
                 ])
@@ -976,7 +1038,8 @@ class StatusPage extends React.Component {
             return [
                 e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
                 e(JSONEditor, {
-                    key: genUUID(), 
+                    key: 'StateViewer', 
+                    path: '/',
                     json: this.state.status, 
                     editable: false,
                     selectedDeviceId: this.props.selectedDeviceId,
@@ -1019,7 +1082,8 @@ class ConfigPage extends React.Component {
             return [
                 e("button", { key: genUUID(), onClick: elem => this.componentDidMount() }, "Refresh"),
                 e(JSONEditor, {
-                    key: genUUID(), 
+                    key: 'ConfigEditor', 
+                    path: '/',
                     json: this.state.config, 
                     selectedDeviceId: this.props.selectedDeviceId,
                     editable: true
@@ -2114,30 +2178,36 @@ function wfetch(requestInfo, params) {
       }));
     }
 
-    fetch(requestInfo,params).then(resp => {
-      var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
-      var inSpot = getInSpot(anims, "chip");
-
-      if (inSpot) {
-        inSpot.weight++;
-      } else {
-        app.anims.push({
-            type:"post",
-            from: "chip",
-            weight: 1,
-            lineColor: '#00ffff',
-            shadowColor: '#00ffff',
-            startY: 25,
-            renderer: app.drawSprite
-        });
-      }
-      resolve(resp);
-    })
-    .catch(err => {
+    try{
+      fetch(requestInfo,params).then(resp => {
+        var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
+        var inSpot = getInSpot(anims, "chip");
+  
+        if (inSpot) {
+          inSpot.weight++;
+        } else {
+          app.anims.push({
+              type:"post",
+              from: "chip",
+              weight: 1,
+              lineColor: '#00ffff',
+              shadowColor: '#00ffff',
+              startY: 25,
+              renderer: app.drawSprite
+          });
+        }
+        resolve(resp);
+      })
+      .catch(err => {
+        reqAnim.color="red";
+        reqAnim.lineColor="red";
+        reject(err);
+      });
+    } catch(e) {
       reqAnim.color="red";
       reqAnim.lineColor="red";
       reject(err);
-    });
+    }
   })
 }
 

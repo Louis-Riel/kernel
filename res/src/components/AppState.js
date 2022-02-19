@@ -121,7 +121,8 @@ class StatusPage extends React.Component {
             return [
                 e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
                 e(JSONEditor, {
-                    key: genUUID(), 
+                    key: 'StateViewer', 
+                    path: '/',
                     json: this.state.status, 
                     editable: false,
                     selectedDeviceId: this.props.selectedDeviceId,

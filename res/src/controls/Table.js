@@ -32,32 +32,28 @@ class Table extends React.Component {
 
     BuildTablePannel(){
         if (this.props.editable) {
-            return e("div",{key:genUUID(),className:"popupMenu"},[
-                e("div",{key:genUUID()},"*"),
-                e("div",{key:genUUID(),className:"menuItems"},[
-                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.addRow(elem)},"Add Empty Row")
-                ])
-            ])
+            return e("div",{key:genUUID(),className:"popupMenu"},
+                    e("div",{key:`removeprop`, onClick:elem=> this.addRow(elem)},"Add Row"));
         }
         return null;
     }
 
     BuildCaption(){
         if (this.props.editable) {
-            return e("caption", { key: genUUID() },[
-                    e("div",{key:genUUID(),className:"objectButtons"}, this.BuildTablePannel()),
-                    e("div",{key:genUUID(),className:"jsonlabel"},this.props.label)
+            return e("caption", { key: `caption` },[
+                    e("div",{key:'table-panel',className:"objectButtons"}, this.BuildTablePannel()),
+                    e("div",{key:`label`,className:"jsonlabel"},this.props.label)
                    ]);
         }
-        return e("caption", { key: genUUID() }, this.props.label);
+        return e("caption", { key: 'caption' }, this.props.label);
     }
 
     BuildHead(json) {
         if (json) {
             this.cols=[];
-            return [e("thead", { key: genUUID(), onClick: this.SortTable.bind(this) }, 
-                      e("tr", { key: genUUID() },
-                        [this.props.editable?e("th", { key: genUUID() }):null,
+            return [e("thead", { key: `head`, onClick: this.SortTable.bind(this) }, 
+                      e("tr", { key: `headrow` },
+                        [this.props.editable?e("th", { key: `header` }):null,
                          ...json.flatMap(row => Object.keys(row))
                             .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
                             .map(fld => {
@@ -68,7 +64,7 @@ class Table extends React.Component {
                                         this.sortedOn = fld;
                                     }
                                 }
-                                return e("th", { key: genUUID() }, this.BuildHeaderField(fld));
+                                return e("th", { key: `header-col-${fld}` }, this.BuildHeaderField(fld));
                             })]
                         )), this.props.label !== undefined ? this.BuildCaption():null];
         } else {
@@ -106,7 +102,7 @@ class Table extends React.Component {
 
     BuildBody(json) {
         if (json) {
-            return e("tbody", { key: genUUID() },
+            return e("tbody", { key: 'body' },
                 this.props.sortable ? 
                     json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
                         .map(this.BuildLine.bind(this)):
@@ -120,35 +116,34 @@ class Table extends React.Component {
     DeleteLine(line,e) {
         e.stopPropagation();
         e.preventDefault();
-        this.state.json.splice(this.state.json.indexOf(line),1);
+        this.state.json.splice(line,1);
         this.setState({json:this.state.json});
     }
 
     DuplicateLine(line,e) {
         e.stopPropagation();
         e.preventDefault();
-        this.state.json.push(line);
+        this.state.json.push(this.state.json[line]);
         this.setState({json:this.state.json});
     }
 
-    BuildLinePannel(line){
+    BuildLinePannel(idx){
         if (this.props.editable) {
-            return e("div",{key:genUUID(),className:"popupMenu"},[
-                e("div",{key:genUUID()},"*"),
-                e("div",{key:genUUID(),className:"menuItems"},[
-                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.DeleteLine(line,elem)},"Delete"),
-                    e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.DuplicateLine(line,elem)},"Duplicate")
-                ])
+            return e("div",{key:`linepanel`,className:"stackedMenu"},[
+                e("div",{key:genUUID(),className:"popupMenu"},
+                    e("div",{key:`del`, onClick:elem=> this.DeleteLine(idx,elem)},"Delete")),
+                e("div",{key:genUUID(),className:"popupMenu"},
+                    e("div",{key:`dup`, onClick:elem=> this.DuplicateLine(idx,elem)},"Duplicate"))
             ])
         }
         return null;
     }
 
-    BuildLine(line) {
-        return e("tr", { key: genUUID() },[
+    BuildLine(line,idx) {
+        return e("tr", { key: `row-${idx}` },[
             [
-                this.props.editable?e("td", { key: genUUID(), className: "readonly" },this.BuildLinePannel(line)):null,
-                this.cols.map(fld => e("td", { key: genUUID(), className: "readonly" },this.BuildCell(line, fld)))
+                this.props.editable?e("td", { key: `row-${idx}-panel`, className: "readonly" },this.BuildLinePannel(idx)):null,
+                this.cols.map(fld => e("td", { key: `row-${idx}-${fld}-cell-panel`, className: "readonly" },this.BuildCell(line, fld)))
             ]
         ]);
     }
@@ -166,21 +161,33 @@ class Table extends React.Component {
     BuildCellControlPannel(line,fld){
         if (this.props.editable) {
             var val = line[fld];
-            return e("div",{key:genUUID(),className:"popupMenu"},[
-                e("div",{key:genUUID()},"*"),
-                e("div",{key:genUUID(),className:"menuItems"},[
-                    val?null:e("div",{key:genUUID(),className:"menuItem", onClick:elem=> this.addString(line,fld)},"Add String"),
-                    val?e("div",{key:genUUID(),className:"menuItem",onClick:elem=>this.clearCell(line,fld) },"Clear"):null
-                ])
-            ])
+            return e("div",{key:genUUID(),className:"popupMenu"},
+                        val?
+                            e("div",{key:`addpropr`, onClick:elem=> this.clearCell(line,fld)},"Set Null"):
+                            e("div",{key:`addpropr`, onClick:elem=> this.addString(line,fld)},"Add String"));
         }
         return null;
     }
 
     BuildCell(line, fld) {
         return [Array.isArray(line[fld]) ?
-            line[fld].length ? e(Table, { key: genUUID(), editable: this.props.editable, sortable: this.props.sortable, name: fld, json: line[fld], name: fld }) : null :
-            e(JSONEditor, { key: genUUID(), editable: this.props.editable, json: line[fld], name: fld, registerEventInstanceCallback: this.props.registerEventInstanceCallback }),
+                      line[fld].length ? 
+                        e(Table, { key: `Table-Array-Line-${this.props.path}/${fld}`, 
+                                   path: `${this.props.path}/${fld}`,
+                                   editable: this.props.editable, 
+                                   sortable: this.props.sortable, 
+                                   name: fld, 
+                                   json: line[fld], 
+                                   name: fld 
+                                 }) : 
+                        null :
+                e(JSONEditor, { key: `JE-${this.props.path}/${fld}`, 
+                                path: `${this.props.path}/${fld}`,
+                                editable: this.props.editable, 
+                                json: line[fld], 
+                                name: fld, 
+                                registerEventInstanceCallback: this.props.registerEventInstanceCallback 
+                              }),
             this.BuildCellControlPannel(line,fld)
         ];
     }
@@ -190,8 +197,8 @@ class Table extends React.Component {
             return null;
         }
 
-        return e("label", { key: genUUID(), id: this.id, className: "table" }, 
-                e("table", { key: genUUID(), className: "greyGridTable" }, [
+        return e("label", { key: `label`, id: this.id, className: "table" }, 
+                e("table", { key: `table`, className: "greyGridTable" }, [
                     this.BuildHead(this.state.json), 
                     this.BuildBody(this.state.json)
                 ])

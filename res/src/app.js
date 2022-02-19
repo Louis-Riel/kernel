@@ -20,30 +20,36 @@ function wfetch(requestInfo, params) {
       }));
     }
 
-    fetch(requestInfo,params).then(resp => {
-      var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
-      var inSpot = getInSpot(anims, "chip");
-
-      if (inSpot) {
-        inSpot.weight++;
-      } else {
-        app.anims.push({
-            type:"post",
-            from: "chip",
-            weight: 1,
-            lineColor: '#00ffff',
-            shadowColor: '#00ffff',
-            startY: 25,
-            renderer: app.drawSprite
-        });
-      }
-      resolve(resp);
-    })
-    .catch(err => {
+    try{
+      fetch(requestInfo,params).then(resp => {
+        var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
+        var inSpot = getInSpot(anims, "chip");
+  
+        if (inSpot) {
+          inSpot.weight++;
+        } else {
+          app.anims.push({
+              type:"post",
+              from: "chip",
+              weight: 1,
+              lineColor: '#00ffff',
+              shadowColor: '#00ffff',
+              startY: 25,
+              renderer: app.drawSprite
+          });
+        }
+        resolve(resp);
+      })
+      .catch(err => {
+        reqAnim.color="red";
+        reqAnim.lineColor="red";
+        reject(err);
+      });
+    } catch(e) {
       reqAnim.color="red";
       reqAnim.lineColor="red";
       reject(err);
-    });
+    }
   })
 }
 

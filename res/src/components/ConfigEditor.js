@@ -28,7 +28,8 @@ class ConfigPage extends React.Component {
             return [
                 e("button", { key: genUUID(), onClick: elem => this.componentDidMount() }, "Refresh"),
                 e(JSONEditor, {
-                    key: genUUID(), 
+                    key: 'ConfigEditor', 
+                    path: '/',
                     json: this.state.config, 
                     selectedDeviceId: this.props.selectedDeviceId,
                     editable: true

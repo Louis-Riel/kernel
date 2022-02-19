@@ -213,6 +213,14 @@ body {
     color: #97ea44;
 }
 
+.ok-button {
+    content: "\2713";
+}
+
+.cancel-button {
+    content: "\292C";
+}
+
 .system-config fieldset label>input,
 textarea,
 select {
@@ -860,6 +868,12 @@ td>fieldset {
 
 .jsonNodes>legend {
     display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
 }
 
 button.objectButton, .fieldButton, .lineButton {
@@ -902,10 +916,36 @@ caption>.jsonlabel {
 
 .popupMenu:hover .menuItems {display: block;}
 
-.popupMenu:hover .popupMenu {background-color: #3e8e41;}
+.popupMenu:hover {background-color: #3e8e41;}
 
 .popupMenu {
     float: right;
     cursor: pointer;
-    margin-left: 10px;
+    /* margin-left: 10px; */
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+    border-style: solid;
+    border-width: 1px;
+    height: 15px;
+    border-radius: 15px;
+}
+
+.popupMenu > div {
+    font-size: x-small;
+    padding-left: 5px;
+    padding-right: 5px;
+    color: aqua;
+}
+
+.stackedMenu {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
 }

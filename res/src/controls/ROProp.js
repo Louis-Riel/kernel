@@ -2,6 +2,17 @@ class ROProp extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
+        if (IsNumberValue(this.props.value)) {
+            this.state = {
+                maxLastStates: 50,
+                lastStates:[
+                    {
+                        value:this.props.value,
+                        ts: Date.now()
+                    }
+                ]
+            };
+        }
     }
 
     getValue(fld,val) {
@@ -31,9 +42,18 @@ class ROProp extends React.Component {
         }
     }
 
-    componentDidMount() {
+    componentDidUpdate(prevProps, prevState, snapshot) {
         if (IsDatetimeValue(this.props.name)) {
             this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
+        }
+        if (this.state?.lastStates && (this.props.value !== prevProps?.value)) {
+            this.state.lastStates.push({
+                value:this.props.value,
+                ts: Date.now()
+            });
+            while (this.state.lastStates.length > this.state.maxLastStates) {
+                this.state.lastStates.pop();
+            }
         }
     }
 
@@ -102,17 +122,16 @@ class ROProp extends React.Component {
         ctx.fillStyle = 'rgba(00, 255, 255, 1)';
         txtbx = ctx.measureText(time);
         ctx.fillText(time, (rect.width * 0.50) - txtbx.width / 2, rect.height * 0.45);
-
     }
 
     render() {
         if (this.props.label) {
             return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
-                e("div", { key: genUUID(), className: "label", id: `dlbl${this.id}` }, this.props.label),
-                e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
+                e("div", { key: 'label', className: "label", id: `dlbl${this.id}` }, this.props.label),
+                e("div", { key: 'value', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
             ]);
         } else {
-            return e("div", { key: genUUID(), className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value));
+            return e("div", { key: 'timevalue', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value));
         }
     }
 }
