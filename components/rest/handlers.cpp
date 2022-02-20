@@ -13,6 +13,7 @@
 #include "mfile.h"
 #include "../TinyGPS/TinyGPS++.h"
 #include "pins.h"
+#include "mbedtls/md.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -1136,7 +1137,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
         ESP_LOGD(__FUNCTION__, "OTA REQUEST!!!!! RAM:%d...", esp_get_free_heap_size());
 
         buf_len = httpd_req_get_url_query_len(req) + 1;
-        char md5[33];
+        char md5[70];
         md5[0] = 0;
         uint32_t totLen = 0;
 
@@ -1146,7 +1147,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
             {
                 ESP_LOGV(__FUNCTION__, "Found URL query => %s", buf);
-                char param[33];
+                char param[70];
                 if (httpd_query_key_value(buf, "md5", param, sizeof(param)) == ESP_OK)
                 {
                     strcpy(md5, param);
@@ -1178,7 +1179,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             ESP_LOGD(__FUNCTION__, "Reading MD5 RAM:%d...", esp_get_free_heap_size());
             if ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
             {
-                char ccmd5[33];
+                char ccmd5[70];
                 uint32_t len = 0;
                 if ((len = fRead((void *)ccmd5, 1, 33, fw)) > 0)
                 {
@@ -1218,10 +1219,14 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             memset(img, 0, totLen);
             ESP_LOGV(__FUNCTION__, "RAM:%d...%d md5:%s", esp_get_free_heap_size(), totLen, md5);
 
-            uint8_t cmd5[16];
-            uint8_t ccmd5[33];
-            MD5Context md5_context;
-            MD5Init(&md5_context);
+            uint8_t ccmd5[70];
+            mbedtls_md_context_t ctx;
+            mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
+
+            mbedtls_md_init(&ctx);
+            mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
+            mbedtls_md_starts(&ctx);
+
             uint32_t curLen = 0;
             int len = 0;
 
@@ -1246,16 +1251,19 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                 }
                 else
                 {
-                    MD5Update(&md5_context, img + curLen, len);
+                    mbedtls_md_update(&ctx, img + curLen, len);
                     curLen += len;
                 }
             } while (curLen < totLen);
-            MD5Final(cmd5, &md5_context);
+
+            uint8_t shaResult[32];
+            mbedtls_md_finish(&ctx, shaResult);
+            mbedtls_md_free(&ctx);
             ESP_LOGV(__FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
 
-            for (uint8_t i = 0; i < 16; ++i)
+            for (uint8_t i = 0; i < sizeof(shaResult); ++i)
             {
-                sprintf((char *)&ccmd5[i * 2], "%02x", (unsigned int)cmd5[i]);
+                sprintf((char *)&shaResult[i * 2], "%02x", (unsigned int)shaResult[i]);
             }
 
             FILE *fw;
@@ -1364,19 +1372,19 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             FILE *fw = NULL;
             if ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
             {
-                char ccmd5[33];
+                char ccmd5[70];
                 uint32_t len = 0;
-                if ((len = fRead((void *)ccmd5, 1, 32, fw)) > 0)
+                if ((len = fRead((void *)ccmd5, 1, 70, fw)) > 0)
                 {
-                    ccmd5[32] = 0;
+                    ccmd5[len] = 0;
                     esp_err_t ret;
-                    if ((ret = httpd_resp_send(req, ccmd5, 32)) != ESP_OK)
+                    if ((ret = httpd_resp_send(req, ccmd5, len)) != ESP_OK)
                     {
                         ESP_LOGE(__FUNCTION__, "Error sending MD5:%s", esp_err_to_name(ret));
                     }
                     else
                     {
-                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 32;
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += len;
                         ESP_LOGD(__FUNCTION__, "Sent MD5:%s", ccmd5);
                     }
                     fClose(fw);

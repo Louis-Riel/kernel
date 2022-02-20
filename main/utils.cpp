@@ -11,11 +11,11 @@
 #include "logs.h"
 #include "errno.h"
 #include "freertos/semphr.h"
-#include <esp32/rom/md5_hash.h>
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "eventmgr.h"
 #include "/home/riell/esp-4.3/esp-idf/components/pthread/include/esp_pthread.h"
+#include "mbedtls/md.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -895,9 +895,9 @@ void UpgradeFirmware()
   if ((stat(md5fName, &md5St) == 0) && (stat(fwfName, &fwSt) == 0))
   {
     ESP_LOGD(__FUNCTION__, "We have a pending upgrade to process");
-    char srvrmd5[33], localmd5[33];
-    memset(srvrmd5,0,33);
-    memset(localmd5,0,33);
+    char srvrmd5[70], localmd5[70];
+    memset(srvrmd5,0,70);
+    memset(localmd5,0,70);
     FILE *fmd5 = fOpen(md5fName, "r");
     FILE *ffw = NULL;
     size_t chunckLen = 0, fwlen = 0;
@@ -913,20 +913,26 @@ void UpgradeFirmware()
           {
             uint8_t *fwbits = (uint8_t *)dmalloc(fwSt.st_size);
 
-            MD5Context md5_context;
-            MD5Init(&md5_context);
+            mbedtls_md_context_t ctx;
+            mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
+
+            mbedtls_md_init(&ctx);
+            mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
+            mbedtls_md_starts(&ctx);
+
             while ((chunckLen = fRead(fwbits + fwlen, sizeof(uint8_t), fwSt.st_size - fwlen, ffw)) > 0)
             {
-              MD5Update(&md5_context, fwbits + fwlen, chunckLen);
+              mbedtls_md_update(&ctx, fwbits + fwlen, chunckLen);
               fwlen += chunckLen;
               ESP_LOGD(__FUNCTION__, "FW %d bits read", fwlen);
             }
-            uint8_t fmd[16];
-            MD5Final(fmd, &md5_context);
+            uint8_t shaResult[32];
+            mbedtls_md_finish(&ctx, shaResult);
+            mbedtls_md_free(&ctx);
 
-            for (uint8_t i = 0; i < 16; ++i)
+            for (uint8_t i = 0; i < sizeof(shaResult); ++i)
             {
-              sprintf(&localmd5[i * 2], "%02x", (unsigned int)fmd[i]);
+              sprintf(&localmd5[i * 2], "%02x", (unsigned int)shaResult[i]);
             }
 
             fClose(fmd5);

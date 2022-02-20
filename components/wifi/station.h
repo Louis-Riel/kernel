@@ -8,6 +8,7 @@
 #include "esp_wifi.h"
 #include "eventmgr.h"
 #include "cJSON.h"
+#include "../../main/utils.h"
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_SCANING_BIT BIT1

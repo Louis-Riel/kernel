@@ -1,4 +1,6 @@
 #include "route.h"
+#include "mbedtls/md.h"
+
 
 bool TheRest::GetLocalMD5(char* ccmd5) {
     FILE *fw = NULL;
@@ -43,13 +45,20 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
         SendRequest(url,HTTP_METHOD_GET,&plen,newFw);
         if (newFw && (plen == fwLen))
         {
-            MD5Context md5_context;
-            uint8_t srvmd[16];
-            char ssrvmd[33];
-            MD5Init(&md5_context);
-            MD5Update(&md5_context, (uint8_t *)newFw, plen);
-            MD5Final(srvmd, &md5_context);
-            for (uint8_t i = 0; i < 16; ++i)
+            uint8_t srvmd[32];
+            char ssrvmd[70];
+
+            mbedtls_md_context_t ctx;
+            mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
+
+            mbedtls_md_init(&ctx);
+            mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
+            mbedtls_md_starts(&ctx);
+            mbedtls_md_update(&ctx, (uint8_t *)newFw, plen);
+            uint8_t shaResult[32];
+            mbedtls_md_finish(&ctx, shaResult);
+            mbedtls_md_free(&ctx);
+            for (uint8_t i = 0; i < sizeof(shaResult); ++i)
             {
                 sprintf(&ssrvmd[i * 2], "%02x", (unsigned int)srvmd[i]);
             }
@@ -115,17 +124,17 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
 
 void TheRest::CheckUpgrade(void* param){
     ESP_LOGD(__FUNCTION__,"Checking firmware");
-    char localMd5[33];
-    char serverMd5[33];
+    char localMd5[70];
+    char serverMd5[70];
     char* url =(char*)dmalloc(266);
     bool needsUpgrade = false;
-    memset(localMd5,0,33);
-    memset(serverMd5,0,33);
+    memset(localMd5,0,70);
+    memset(serverMd5,0,70);
     size_t len;
     TheRest* restInstance = TheRest::GetServer();
 
     if (restInstance->GetLocalMD5(localMd5)) {
-        len=33;
+        len=70;
         sprintf(url,"http://%s/ota/getmd5",restInstance->gwAddr);
         restInstance->SendRequest(url,HTTP_METHOD_POST,&len,serverMd5);
         if (strlen(serverMd5) == strlen(localMd5)) {
