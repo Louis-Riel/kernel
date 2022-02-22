@@ -14,6 +14,8 @@
 #include "../TinyGPS/TinyGPS++.h"
 #include "pins.h"
 #include "mbedtls/md.h"
+#include <cstdio>
+#include <cstring>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -1138,7 +1140,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
 
         buf_len = httpd_req_get_url_query_len(req) + 1;
         char md5[70];
-        md5[0] = 0;
+        memset(md5, 0, 70);
         uint32_t totLen = 0;
 
         if (buf_len > 1)
@@ -1147,13 +1149,12 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
             {
                 ESP_LOGV(__FUNCTION__, "Found URL query => %s", buf);
-                char param[70];
-                if (httpd_query_key_value(buf, "md5", param, sizeof(param)) == ESP_OK)
+                if (httpd_query_key_value(buf, "md5", md5, 70) == ESP_OK)
                 {
-                    strcpy(md5, param);
                     ESP_LOGV(__FUNCTION__, "Found URL query parameter => md5=%s", md5);
                 }
-                if (httpd_query_key_value(buf, "len", param, sizeof(param)) == ESP_OK)
+                char param[30];
+                if (httpd_query_key_value(buf, "len", param, 30) == ESP_OK)
                 {
                     totLen = atoi(param);
                     ESP_LOGV(__FUNCTION__, "Found URL query parameter => len=%s", param);
@@ -1181,7 +1182,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             {
                 char ccmd5[70];
                 uint32_t len = 0;
-                if ((len = fRead((void *)ccmd5, 1, 33, fw)) > 0)
+                if ((len = fRead((void *)ccmd5, 1, 70, fw)) > 0)
                 {
                     ccmd5[len] = 0;
                     ESP_LOGD(__FUNCTION__, "Local MD5:%s", ccmd5);
@@ -1205,7 +1206,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             }
             else
             {
-                ESP_LOGE(__FUNCTION__, "Failed in opeing md5");
+                ESP_LOGE(__FUNCTION__, "Failed in opeing md5..");
             }
         }
         else
@@ -1220,6 +1221,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             ESP_LOGV(__FUNCTION__, "RAM:%d...%d md5:%s", esp_get_free_heap_size(), totLen, md5);
 
             uint8_t ccmd5[70];
+            memset(ccmd5, 0, 70);
             mbedtls_md_context_t ctx;
             mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
 
@@ -1256,14 +1258,14 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                 }
             } while (curLen < totLen);
 
-            uint8_t shaResult[32];
+            uint8_t shaResult[70];
             mbedtls_md_finish(&ctx, shaResult);
             mbedtls_md_free(&ctx);
             ESP_LOGV(__FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
 
-            for (uint8_t i = 0; i < sizeof(shaResult); ++i)
+            for (uint8_t i = 0; i < 32; ++i)
             {
-                sprintf((char *)&shaResult[i * 2], "%02x", (unsigned int)shaResult[i]);
+                sprintf((char *)&ccmd5[i * 2], "%02x", (unsigned int)shaResult[i]);
             }
 
             FILE *fw;
@@ -1352,10 +1354,13 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             else
             {
                 ESP_LOGV(__FUNCTION__, "md5:(%s)(%s)", ccmd5, md5);
-                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 12;
-                httpd_resp_send(req, "Bad Checksum", 12);
+                char* tmp = (char*)dmalloc(200);
+                sprintf(tmp, "Bad Checksum:(%s)(%s) len:%d", ccmd5, md5, totLen);
+                httpd_resp_send(req, tmp, strlen(tmp));
+                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(tmp);
+                ldfree(tmp);
+                ldfree(img);
             }
-            ldfree(img);
         }
         else
         {
@@ -1399,7 +1404,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             }
             else
             {
-                ESP_LOGE(__FUNCTION__, "Failed in opeing md5");
+                ESP_LOGE(__FUNCTION__, "Failed in opeing md5...");
             }
             deinitSDCard();
         }

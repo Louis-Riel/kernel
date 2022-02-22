@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "";//"http://tracer";
+var httpPrefix = "http://192.168.4.1";
 
 //#region SHA-1
 /*
@@ -1393,7 +1393,7 @@ class FirmwareUpdater extends React.Component {
             var reader = new FileReader();
             reader.onload = () => {
                 var res = reader.resultString || reader.result;
-                var md5 = CryptoJS.algo.MD5.create();
+                var md5 = CryptoJS.algo.SHA256.create();
                 md5.update(CryptoJS.enc.Latin1.parse(reader.result));
                 this.state.fwdata = new Uint8Array(this.state.firmware.size);
                 for (var i = 0; i < res.length; i++) {
@@ -1405,6 +1405,7 @@ class FirmwareUpdater extends React.Component {
                     fwdata: this.state.fwdata,
                     len: this.state.firmware.size
                 });
+                console.log(JSON.stringify(this.state.md5));
             };
             reader.onprogress = (evt) => this.setState({
                 loaded: `${((this.state.firmware.size * 1.0) / (evt.loaded * 1.0)) * 100.0}% loaded`
@@ -2349,7 +2350,7 @@ class MainApp extends React.Component {
     this.state.connecting=true;
     this.state.running=false;
     var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false}, 3000);
+    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false}, 3500);
     ws.onmessage = (event) => {
         clearTimeout(stopItWithThatShit);
         if (!this.state.running || this.state.timeout) {
@@ -2369,17 +2370,17 @@ class MainApp extends React.Component {
                 this.AddLogLine(event.data);
             }
         }
-        stopItWithThatShit = setTimeout(() => { this.state.timeout="Message"; ws.close();console.log("Message timeout")},3000)
+        stopItWithThatShit = setTimeout(() => { this.state.timeout="Message"; ws.close();console.log("Message timeout")},3500)
     };
     ws.onopen = () => {
       clearTimeout(stopItWithThatShit);
-        this.state.connected=true;
-        this.state.connecting=false;
-        ws.send("Connected");
-        stopItWithThatShit = setTimeout(() => { this.state.timeout="Connect"; ws.close();console.log("Connect timeout")},3000)
-    };
+      this.state.connected=true;
+      this.state.connecting=false;
+      ws.send("Connected");
+      stopItWithThatShit = setTimeout(() => { this.state.timeout="Connect"; ws.close();console.log("Connect timeout")},3500)
+    };    
     ws.onerror = (err) => {
-        console.error(err);
+        console.error(err.error);
         clearTimeout(stopItWithThatShit);
         this.state.error= err;
         ws.close();

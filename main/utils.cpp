@@ -926,11 +926,11 @@ void UpgradeFirmware()
               fwlen += chunckLen;
               ESP_LOGD(__FUNCTION__, "FW %d bits read", fwlen);
             }
-            uint8_t shaResult[32];
+            uint8_t shaResult[70];
             mbedtls_md_finish(&ctx, shaResult);
             mbedtls_md_free(&ctx);
 
-            for (uint8_t i = 0; i < sizeof(shaResult); ++i)
+            for (uint8_t i = 0; i < 32; ++i)
             {
               sprintf(&localmd5[i * 2], "%02x", (unsigned int)shaResult[i]);
             }

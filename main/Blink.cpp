@@ -1185,7 +1185,7 @@ void app_main(void)
 
     initLog();
     sampleBatteryVoltage();
-    UpgradeFirmware();
+    //UpgradeFirmware();
     //initSDCard();
 
     gpio_reset_pin(BLINK_GPIO);
@@ -1240,5 +1240,5 @@ void app_main(void)
   }
   ESP_LOGD(__FUNCTION__, "Battery: %f", getBatteryVoltage());
 
-  new Bt();
+  //new Bt();
 }

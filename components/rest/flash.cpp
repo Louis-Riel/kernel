@@ -24,7 +24,7 @@ bool TheRest::GetLocalMD5(char* ccmd5) {
     }
     else
     {
-        ESP_LOGE(__FUNCTION__, "Failed in opeing md5");
+        ESP_LOGE(__FUNCTION__, "Failed in opeing md5.");
     }
     return retVal;
 }

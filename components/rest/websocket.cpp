@@ -57,13 +57,14 @@ void WebsocketManager::PostToClient(void* msg) {
   struct tm timeinfo;
 
   httpd_ws_frame_t ws_pkt;
-  ws_pkt.type = HTTPD_WS_TYPE_TEXT;
   ws_pkt.final = true;
   ws_msg_t* wsMsg = (ws_msg_t*)msg;
   if (wsMsg->buf != NULL) {
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
     ws_pkt.len = strlen((const char*)wsMsg->buf);
     ws_pkt.payload  = (uint8_t*)wsMsg->buf;
   } else {
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
     ws_pkt.len=0;
     ws_pkt.payload=(uint8_t*)&stateHandler->emptyString;
   }
@@ -75,7 +76,7 @@ void WebsocketManager::PostToClient(void* msg) {
       httpd_sess_trigger_close(wsMsg->client->hd, wsMsg->client->fd);
       wsMsg->client->fd=NULL;
       wsMsg->client->hd=NULL;
-      ESP_LOGD(__FUNCTION__,"Client disconnected: %s",esp_err_to_name(ret));
+      ESP_LOGI(__FUNCTION__,"Client disconnected: %s",esp_err_to_name(ret));
       AppConfig::SignalStateChange(state_change_t::MAIN);
     }
   } else {
@@ -112,10 +113,12 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
         cJSON_SetIntValue(clients[idx].jIsLive,false);
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
         stateChange=true;
-        ESP_LOGD(__FUNCTION__,"Client %d disconnected",idx);
+        clients[idx].fd=NULL;
+        clients[idx].hd=NULL;
+        ESP_LOGW(__FUNCTION__,"Client disconnected: %s",esp_err_to_name(ret));
       } else {
         if (msg)
-          ESP_LOGV(__FUNCTION__,"Client %d:%s",idx,(char*) msg);
+          ESP_LOGW(__FUNCTION__,"Client %d:%s",idx,(char*) msg);
       }
     }
   }
@@ -125,7 +128,7 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
 }
 
 void WebsocketManager::QueueHandler(void* param){
-  ESP_LOGD(__FUNCTION__,"QueueHandler Starting");
+  ESP_LOGW(__FUNCTION__,"QueueHandler Starting");
   uint8_t* buf = (uint8_t*)dmalloc(JSON_BUFFER_SIZE);
   while(stateHandler && stateHandler->msgQueue && stateHandler->isLive){
     memset(buf,0,JSON_BUFFER_SIZE);
@@ -135,7 +138,7 @@ void WebsocketManager::QueueHandler(void* param){
       stateHandler->ProcessMessage(NULL);
     }
   }
-  ESP_LOGD(__FUNCTION__,"QueueHandler Done");
+  ESP_LOGW(__FUNCTION__,"QueueHandler Done");
   ldfree(buf);
 }
 
@@ -161,7 +164,7 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
       clients[idx].fd = fd;
 
       if (!clients[idx].jIsLive) {
-        ESP_LOGD(__FUNCTION__,"Client is inserted at position %d",idx);
+        ESP_LOGV(__FUNCTION__,"Client is inserted at position %d",idx);
         cJSON* client = cJSON_CreateObject();
         cJSON_AddItemToArray(jClients,client);
         clients[idx].jErrCount = cJSON_AddNumberToObject(client,"Errors",0);
@@ -180,7 +183,7 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
       sockaddr_in6 addr;
       socklen_t addr_size = sizeof(addr);
       if (getpeername(fd, (struct sockaddr *)&addr, &addr_size) < 0) {
-        ESP_LOGW(__FUNCTION__, "Error getting client IP");
+        ESP_LOGV(__FUNCTION__, "Error getting client IP");
       } else {
         inet_ntop(AF_INET6, &addr.sin6_addr, clients[idx].jAddr->valuestring, 30);
       }
@@ -188,7 +191,7 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
       return true;
     }
   }
-  ESP_LOGD(__FUNCTION__,"Client could not be added");
+  ESP_LOGW(__FUNCTION__,"Client could not be added");
   return false;
 }
 
@@ -260,12 +263,16 @@ void WebsocketManager::StatePoller(void *instance){
 esp_err_t TheRest::ws_handler(httpd_req_t *req) {
   ESP_LOGV(__FUNCTION__, "WEBSOCKET Session");
   if (stateHandler == NULL) {
-    ESP_LOGD(__FUNCTION__, "Staring Manager");
+    ESP_LOGV(__FUNCTION__, "Staring Manager");
     stateHandler = new WebsocketManager();
   }
 
+  if (req->method == HTTP_GET) {
+        ESP_LOGV(__FUNCTION__, "Handshake done, the new connection was opened");
+        return ESP_OK;
+  }
+
   if (stateHandler->RegisterClient(req->handle,httpd_req_to_sockfd(req))){
-    ESP_LOGV(__FUNCTION__,"Client Connected");
     httpd_ws_frame_t ws_pkt;
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
     ws_pkt.payload = (uint8_t*)dmalloc(128);
@@ -277,7 +284,7 @@ esp_err_t TheRest::ws_handler(httpd_req_t *req) {
       GetServer()->jBytesOut->valuedouble = GetServer()->jBytesOut->valueint+=ws_pkt.len;
       switch (ws_pkt.type)
       {
-        case HTTPD_WS_TYPE_TEXT: ESP_LOGV(__FUNCTION__,"msg:%s",(char*)ws_pkt.payload);break;
+        case HTTPD_WS_TYPE_TEXT:      ESP_LOGD(__FUNCTION__,"msg:%s",(char*)ws_pkt.payload);break;
         case HTTPD_WS_TYPE_CONTINUE:  ESP_LOGD(__FUNCTION__,"Packet type(%d): CONTINUE: %s",ws_pkt.len, (char*)ws_pkt.payload); break;
         case HTTPD_WS_TYPE_BINARY:    ESP_LOGD(__FUNCTION__,"Packet type(%d): BINARY",ws_pkt.len);   break;
         case HTTPD_WS_TYPE_CLOSE:     ESP_LOGD(__FUNCTION__,"Packet type(%d): CLOSE",ws_pkt.len);    break;
