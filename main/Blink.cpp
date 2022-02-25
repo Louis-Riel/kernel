@@ -70,7 +70,6 @@ RTC_DATA_ATTR uint8_t lastRate = 0;
 RTC_DATA_ATTR char tripFName[35];
 RTC_DATA_ATTR bool hibernate = false;
 RTC_DATA_ATTR time_t lastDpTs;
-RTC_DATA_ATTR poiState_t lastPoiState;
 bool gpsto = false;
 bool sgpsto = false;
 bool buto = false;
@@ -241,12 +240,12 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
               if ((bvalPos == NULL) && (evalPos == NULL))
               {
                 bvalPos = cchr;
-                ESP_LOGV(__FUNCTION__, "bval:%ul", (uint32_t)bvalPos);
+                ESP_LOGV(__FUNCTION__, "bval:%sl", bvalPos);
               }
               else if ((bvalPos != NULL) && (evalPos == NULL))
               {
                 evalPos = cchr - 4;
-                ESP_LOGV(__FUNCTION__, "eval:%ul", (uint32_t)evalPos);
+                ESP_LOGV(__FUNCTION__, "eval:%sl", evalPos);
                 if (evalPos > bvalPos)
                 {
                   memcpy(keyName, bvalPos, evalPos - bvalPos + 1);
@@ -295,7 +294,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
                       {
                         if (fldNo == 1)
                         {
-                          fprintf(kml, pmpt1);
+                          fprintf(kml, "%s", pmpt1);
                           ts[tsLen] = 0;
                         }
                         if ((fldNo >= 2) && (fldNo <= 3))
@@ -310,11 +309,11 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
                         }
                         if (fldNo == 7)
                         {
-                          fprintf(kml, pmpt4);
+                          fprintf(kml, "%s", pmpt4);
                         }
                         if (fldNo == 8)
                         {
-                          fprintf(kml, pmpt5);
+                          fprintf(kml, "%s", pmpt5);
                         }
                         fldNo++;
                       }
@@ -376,7 +375,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
                 }
                 else
                 {
-                  ESP_LOGV(__FUNCTION__, "bad eval pos bval:%ul eval:%ul", (uint32_t)bvalPos, (uint32_t)evalPos);
+                  ESP_LOGV(__FUNCTION__, "bad eval pos bval:%sl eval:%sl", bvalPos, evalPos);
                 }
                 bvalPos = NULL;
                 evalPos = NULL;
@@ -384,7 +383,7 @@ bool bakeKml(char *cvsFileName, char *kmlFileName)
               }
               else
               {
-                ESP_LOGV(__FUNCTION__, "closing key bval:%ul eval:%ul", (uint32_t)bvalPos, (uint32_t)evalPos);
+                ESP_LOGV(__FUNCTION__, "closing key bval:%sl eval:%sl", bvalPos, evalPos);
                 bvalPos = NULL;
                 evalPos = NULL;
                 bkeyPos = NULL;
@@ -527,7 +526,6 @@ void doHibernate(void *param)
     lastDpTs = gps->time.value();
     bumpCnt = 0;
     lastRate = 0;
-    lastPoiState = poiState_t::unknown;
     gpio_set_level(BLINK_GPIO, 1);
     gpio_set_level(gps->enPin(), 0);
     gpio_hold_dis(gps->enPin());
@@ -1204,7 +1202,6 @@ void app_main(void)
       lastSpeed = 0;
       lastRate = 0;
       bumpCnt = 0;
-      lastPoiState = poiState_t::unknown;
     }
     else
     {

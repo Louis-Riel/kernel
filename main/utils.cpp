@@ -350,7 +350,7 @@ esp_err_t setupLittlefs()
   }
   free(spiffState);
 
-  ESP_LOGV(__FUNCTION__, "Space: %d/%d", used_bytes, total_bytes);
+  ESP_LOGV(__FUNCTION__, "Space: %zu/%zu", used_bytes, total_bytes);
   struct dirent *de;
   bool hasLogs = false;
   bool hasFw = false;
@@ -547,7 +547,7 @@ bool initSPISDCard(bool log){
           if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
             sdmmc_card_print_info(stdout, card);
           if (log)
-            ESP_LOGD(__FUNCTION__, "SD card mounted %d", (int)card);
+            ESP_LOGD(__FUNCTION__, "SD card mounted" );
           sdcState->SetStateProperty("state", item_state_t::ACTIVE);
           FATFS *fs;
           DWORD fre_clust, fre_sect, tot_sect;
@@ -819,11 +819,9 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
   if (update_partition->address == configured->address)
   {
     isOnOta = true;
-    assert(update_partition != NULL);
     ESP_LOGD(__FUNCTION__, "Skipping partition subtype %d at offset 0x%x",
              update_partition->subtype, update_partition->address);
   }
-  assert(update_partition != NULL);
   ESP_LOGD(__FUNCTION__, "Writing to partition subtype %d at offset 0x%x",
            update_partition->subtype, update_partition->address);
 
@@ -905,7 +903,7 @@ void UpgradeFirmware()
     {
       if (((md5len = fRead(srvrmd5, sizeof(uint8_t), 33, fmd5)) >= 32) && (md5len <=33))
       {
-        ESP_LOGD(__FUNCTION__, "FW MD5 %d bits read", md5len);
+        ESP_LOGD(__FUNCTION__, "FW MD5 %zu bits read", md5len);
         if ((ffw = fOpen(fwfName, "r")) != NULL)
         {
           ESP_LOGD(__FUNCTION__, "FW %d bits to read", (int)fwSt.st_size);
@@ -924,7 +922,7 @@ void UpgradeFirmware()
             {
               mbedtls_md_update(&ctx, fwbits + fwlen, chunckLen);
               fwlen += chunckLen;
-              ESP_LOGD(__FUNCTION__, "FW %d bits read", fwlen);
+              ESP_LOGD(__FUNCTION__, "FW %zu bits read", fwlen);
             }
             uint8_t shaResult[70];
             mbedtls_md_finish(&ctx, shaResult);
@@ -961,7 +959,7 @@ void UpgradeFirmware()
       }
       else
       {
-        ESP_LOGE(__FUNCTION__, "Bad md5 len:%d.", md5len);
+        ESP_LOGE(__FUNCTION__, "Bad md5 len:%zu.", md5len);
       }
       fClose(fmd5);
     }
@@ -979,9 +977,9 @@ void UpgradeFirmware()
 }
 
 void DisplayMemInfo(){
-	ESP_LOGD(__FUNCTION__,"heap_caps_get_free_size: %d", heap_caps_get_free_size(MALLOC_CAP_8BIT));
-	ESP_LOGD(__FUNCTION__,"heap_caps_get_minimum_free_size: %d", heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
-	ESP_LOGD(__FUNCTION__,"heap_caps_get_largest_free_block: %d", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+	ESP_LOGD(__FUNCTION__,"heap_caps_get_free_size: %zu", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+	ESP_LOGD(__FUNCTION__,"heap_caps_get_minimum_free_size: %zu", heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
+	ESP_LOGD(__FUNCTION__,"heap_caps_get_largest_free_block: %zu", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
 	ESP_LOGD(__FUNCTION__,"heap total size: %zu, heap free head %d, can use minimum is %d\n",heap_caps_get_total_size(MALLOC_CAP_DEFAULT), esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
   volatile UBaseType_t numTasks = uxTaskGetNumberOfTasks();
   uint32_t totalRunTime;
