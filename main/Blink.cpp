@@ -1128,6 +1128,7 @@ void app_main(void)
   memoryHook.free_fn = free;
   cJSON_InitHooks(&memoryHook);
   startTs = esp_timer_get_time();
+  esp_log_level_set("*",ESP_LOG_INFO);
 
   if (setupLittlefs() == ESP_OK)
   {

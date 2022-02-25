@@ -708,9 +708,9 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             if (!theWifi->isSidPuller((const char *)theWifi->wifi_config.sta.ssid, true))
                 CreateBackgroundTask(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, &timeHandle);
 
-            //CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
+            CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
 
-            restSallyForth(evtGrp);
+            //restSallyForth(evtGrp);
             break;
         case IP_EVENT_STA_LOST_IP:
             ESP_LOGI(__FUNCTION__, "lost ip");
@@ -815,8 +815,8 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             client = theWifi->GetAper(station->mac);
             if (client != NULL)
             {
-                restSallyForth(evtGrp);
-                //CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
+                //restSallyForth(evtGrp);
+                CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
                 xEventGroupSetBits(s_app_eg, app_bits_t::REST);
                 client->Associate();
                 ESP_LOGD(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x join, AID=%d",
@@ -828,7 +828,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
                          MAC2STR(station->mac), station->aid);
             }
             theWifi->RefreshApMembers(theWifi->apStat);
-            initSDCard();
+            //initSDCard();
             ESP_LOGD(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x joined, AID=%d",
                      MAC2STR(station->mac), station->aid);
             break;

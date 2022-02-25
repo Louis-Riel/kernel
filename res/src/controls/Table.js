@@ -2,7 +2,6 @@ class Table extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
-        this.state = {json:this.props.json};
     }
     SortTable(th) {
         if (this.props.sortable){
@@ -20,14 +19,14 @@ class Table extends React.Component {
     addRow(e){
         e.stopPropagation();
         e.preventDefault();
-        if ((this.state.json.length == 0) || (typeof this.state.json[0] == "object")){
-            this.state.json.push({});
-        } else if (Array.isArray(this.state.json[0])) {
-            this.state.json.push([]);
+        if ((this.props.json.length == 0) || (typeof this.props.json[0] == "object")){
+            this.props.json.push({});
+        } else if (Array.isArray(this.props.json[0])) {
+            this.props.json.push([]);
         } else {
-            this.state.json.push("");
+            this.props.json.push("");
         }
-        this.setState({json:this.state.json});
+        this.setState({json:this.props.json});
     }
 
     BuildTablePannel(){
@@ -46,30 +45,6 @@ class Table extends React.Component {
                    ]);
         }
         return e("caption", { key: 'caption' }, this.props.label);
-    }
-
-    BuildHead(json) {
-        if (json) {
-            this.cols=[];
-            return [e("thead", { key: `head`, onClick: this.SortTable.bind(this) }, 
-                      e("tr", { key: `headrow` },
-                        [this.props.editable?e("th", { key: `header` }):null,
-                         ...json.flatMap(row => Object.keys(row))
-                            .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
-                            .map(fld => {
-                                if (!this.cols.some(col => fld == col)) {
-                                    this.cols.push(fld);
-                                    var val = this.getValue(fld,json[0][fld]);
-                                    if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
-                                        this.sortedOn = fld;
-                                    }
-                                }
-                                return e("th", { key: `header-col-${fld}` }, this.BuildHeaderField(fld));
-                            })]
-                        )), this.props.label !== undefined ? this.BuildCaption():null];
-        } else {
-            return null;
-        }
     }
 
     getValue(fld, val) {
@@ -100,31 +75,18 @@ class Table extends React.Component {
         }
     }
 
-    BuildBody(json) {
-        if (json) {
-            return e("tbody", { key: 'body' },
-                this.props.sortable ? 
-                    json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
-                        .map(this.BuildLine.bind(this)):
-                    json.map(this.BuildLine.bind(this))
-                )
-        } else {
-            return null;
-        }
-    }
-
     DeleteLine(line,e) {
         e.stopPropagation();
         e.preventDefault();
-        this.state.json.splice(line,1);
-        this.setState({json:this.state.json});
+        this.props.json.splice(line,1);
+        this.setState({json:this.props.json});
     }
 
     DuplicateLine(line,e) {
         e.stopPropagation();
         e.preventDefault();
-        this.state.json.push(this.state.json[line]);
-        this.setState({json:this.state.json});
+        this.props.json.push(this.props.json[line]);
+        this.setState({json:this.props.json});
     }
 
     BuildLinePannel(idx){
@@ -150,12 +112,12 @@ class Table extends React.Component {
 
     addString(line,fld) {
         line[fld] = {value:"",version:0};
-        this.setState({json:this.state.json});
+        this.setState({json:this.props.json});
     }
 
     clearCell(line,fld) {
         line[fld].value?line[fld].value=null:line[fld]=null;
-        this.setState({json:this.state.json});
+        this.setState({json:this.props.json});
     }
 
     BuildCellControlPannel(line,fld){
@@ -193,15 +155,34 @@ class Table extends React.Component {
     }
 
     render() {
-        if (this.state.json === undefined) {
+        if (this.props.json === undefined) {
             return null;
         }
-
+        this.cols=[];
         return e("label", { key: `label`, id: this.id, className: "table" }, 
                 e("table", { key: `table`, className: "greyGridTable" }, [
-                    this.BuildHead(this.state.json), 
-                    this.BuildBody(this.state.json)
+                    [e("thead", { key: `head`, onClick: this.SortTable.bind(this) }, 
+                        e("tr", { key: `headrow` },
+                        [this.props.editable?e("th", { key: `header` }):null,
+                            ...this.props.json.flatMap(row => Object.keys(row))
+                            .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
+                            .map(fld => {
+                                if (!this.cols.some(col => fld == col)) {
+                                    this.cols.push(fld);
+                                    var val = this.getValue(fld,this.props.json[0][fld]);
+                                    if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
+                                        this.sortedOn = fld;
+                                    }
+                                }
+                                return e("th", { key: `header-col-${fld}` }, this.BuildHeaderField(fld));
+                            })]
+                        )), this.props.label !== undefined ? this.BuildCaption():null], 
+                    e("tbody", { key: 'body' },
+                        this.props.sortable ? 
+                        this.props.json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
+                            .map(this.BuildLine.bind(this)):
+                        this.props.json.map(this.BuildLine.bind(this)))
                 ])
-               );
+            );
     }
 }

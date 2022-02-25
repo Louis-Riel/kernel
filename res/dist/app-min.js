@@ -387,12 +387,10 @@ class JSONEditor extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            value:props.json,
-            class: props.json?.class,
-            name: props.json?.name
+            json: props.json
         };
-        if (this.props.registerEventInstanceCallback && this.state.class && this.state.name) {
-            this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.state.class}-${this.state.name}`);
+        if (this.props.registerEventInstanceCallback && this.props.name) {
+            this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.props.class}-${this.props.name}`);
         }
     }
 
@@ -404,25 +402,30 @@ class JSONEditor extends React.Component {
         this.mounted=true;
     }
 
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps && prevProps.json && (prevProps.json != this.props.json)){
+            this.setState({json: this.props.json});
+        }
+    }
+
     ProcessEvent(evt) {
         if (this.mounted && evt?.data){
-            if ((evt.data?.class == this.state.class) && (evt.data?.name == this.state.name)){
-                this.setState({value: evt.data});
+            if (evt.data?.name == this.props.name){
+                this.setState({json: evt.data});
             }
         }
     }
 
     removeField(fld){
-        delete this.state.value[fld];
-        this.setState({value:this.state.value});
+        delete this.state.json[fld];
+        this.setState({value:this.state.json});
     }
 
     changeLabel(newLabel, oldLabel) {
         if (newLabel !== oldLabel) {
-            Object.defineProperty(this.state.value, newLabel,
-                Object.getOwnPropertyDescriptor(this.state.value, oldLabel));
-            delete this.state.value[oldLabel];
-            this.setState(this.state);
+            Object.defineProperty(this.state.json, newLabel,
+                Object.getOwnPropertyDescriptor(this.state.json, oldLabel));
+            delete this.state.json[oldLabel];
         }
     }
 
@@ -508,14 +511,14 @@ class JSONEditor extends React.Component {
 
     processUpdate(elem,fld) {
         if (fld) {
-            if (this.state.value[fld] === undefined) {
-                this.state.value[fld]={version:-1};
+            if (this.state.json[fld] === undefined) {
+                this.state.json[fld]={version:-1};
             }
-            this.state.value[fld].value=elem.target.value;
-            this.state.value[fld].version++;
+            this.state.json[fld].value=elem.target.value;
+            this.state.json[fld].version++;
         } else {
-            this.state.value.value=elem.target.value;
-            this.state.value.version++;
+            this.state.json.value=elem.target.value;
+            this.state.json.version++;
         }
     }
 
@@ -546,8 +549,8 @@ class JSONEditor extends React.Component {
     }
 
     addNewProperty(){
-        this.state.value[`prop${Object.keys(this.state.value).filter(prop => prop.match(/^prop.*/)).length+1}`]=null;
-        this.setState({value:this.state.value});
+        this.state.json[`prop${Object.keys(this.state.json).filter(prop => prop.match(/^prop.*/)).length+1}`]=null;
+        this.setState({value:this.state.json});
     }
 
     objectControlPannel(){
@@ -560,15 +563,15 @@ class JSONEditor extends React.Component {
     }
 
     render() {
-        if (this.state === null || this.state === undefined) {
+        if (this.state.json === null || this.state.json === undefined) {
             return e("div", { id: `loading${this.id}` }, "Loading...");
         } else if (this.props.label != null) {
             return e("fieldset", { id: `fs${this.props.label}`,className:"jsonNodes" }, [
                 e("legend", { key: 'legend' }, this.objectControlPannel()),
-                this.Parse(this.state.value)
+                this.Parse(this.state.json)
             ]);
         } else {
-            return this.Parse(this.props.json);
+            return this.Parse(this.state.json);
         }
     }
 }class ROProp extends React.Component {
@@ -712,7 +715,6 @@ class Table extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
-        this.state = {json:this.props.json};
     }
     SortTable(th) {
         if (this.props.sortable){
@@ -730,14 +732,14 @@ class Table extends React.Component {
     addRow(e){
         e.stopPropagation();
         e.preventDefault();
-        if ((this.state.json.length == 0) || (typeof this.state.json[0] == "object")){
-            this.state.json.push({});
-        } else if (Array.isArray(this.state.json[0])) {
-            this.state.json.push([]);
+        if ((this.props.json.length == 0) || (typeof this.props.json[0] == "object")){
+            this.props.json.push({});
+        } else if (Array.isArray(this.props.json[0])) {
+            this.props.json.push([]);
         } else {
-            this.state.json.push("");
+            this.props.json.push("");
         }
-        this.setState({json:this.state.json});
+        this.setState({json:this.props.json});
     }
 
     BuildTablePannel(){
@@ -756,30 +758,6 @@ class Table extends React.Component {
                    ]);
         }
         return e("caption", { key: 'caption' }, this.props.label);
-    }
-
-    BuildHead(json) {
-        if (json) {
-            this.cols=[];
-            return [e("thead", { key: `head`, onClick: this.SortTable.bind(this) }, 
-                      e("tr", { key: `headrow` },
-                        [this.props.editable?e("th", { key: `header` }):null,
-                         ...json.flatMap(row => Object.keys(row))
-                            .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
-                            .map(fld => {
-                                if (!this.cols.some(col => fld == col)) {
-                                    this.cols.push(fld);
-                                    var val = this.getValue(fld,json[0][fld]);
-                                    if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
-                                        this.sortedOn = fld;
-                                    }
-                                }
-                                return e("th", { key: `header-col-${fld}` }, this.BuildHeaderField(fld));
-                            })]
-                        )), this.props.label !== undefined ? this.BuildCaption():null];
-        } else {
-            return null;
-        }
     }
 
     getValue(fld, val) {
@@ -810,31 +788,18 @@ class Table extends React.Component {
         }
     }
 
-    BuildBody(json) {
-        if (json) {
-            return e("tbody", { key: 'body' },
-                this.props.sortable ? 
-                    json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
-                        .map(this.BuildLine.bind(this)):
-                    json.map(this.BuildLine.bind(this))
-                )
-        } else {
-            return null;
-        }
-    }
-
     DeleteLine(line,e) {
         e.stopPropagation();
         e.preventDefault();
-        this.state.json.splice(line,1);
-        this.setState({json:this.state.json});
+        this.props.json.splice(line,1);
+        this.setState({json:this.props.json});
     }
 
     DuplicateLine(line,e) {
         e.stopPropagation();
         e.preventDefault();
-        this.state.json.push(this.state.json[line]);
-        this.setState({json:this.state.json});
+        this.props.json.push(this.props.json[line]);
+        this.setState({json:this.props.json});
     }
 
     BuildLinePannel(idx){
@@ -860,12 +825,12 @@ class Table extends React.Component {
 
     addString(line,fld) {
         line[fld] = {value:"",version:0};
-        this.setState({json:this.state.json});
+        this.setState({json:this.props.json});
     }
 
     clearCell(line,fld) {
         line[fld].value?line[fld].value=null:line[fld]=null;
-        this.setState({json:this.state.json});
+        this.setState({json:this.props.json});
     }
 
     BuildCellControlPannel(line,fld){
@@ -903,16 +868,35 @@ class Table extends React.Component {
     }
 
     render() {
-        if (this.state.json === undefined) {
+        if (this.props.json === undefined) {
             return null;
         }
-
+        this.cols=[];
         return e("label", { key: `label`, id: this.id, className: "table" }, 
                 e("table", { key: `table`, className: "greyGridTable" }, [
-                    this.BuildHead(this.state.json), 
-                    this.BuildBody(this.state.json)
+                    [e("thead", { key: `head`, onClick: this.SortTable.bind(this) }, 
+                        e("tr", { key: `headrow` },
+                        [this.props.editable?e("th", { key: `header` }):null,
+                            ...this.props.json.flatMap(row => Object.keys(row))
+                            .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
+                            .map(fld => {
+                                if (!this.cols.some(col => fld == col)) {
+                                    this.cols.push(fld);
+                                    var val = this.getValue(fld,this.props.json[0][fld]);
+                                    if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
+                                        this.sortedOn = fld;
+                                    }
+                                }
+                                return e("th", { key: `header-col-${fld}` }, this.BuildHeaderField(fld));
+                            })]
+                        )), this.props.label !== undefined ? this.BuildCaption():null], 
+                    e("tbody", { key: 'body' },
+                        this.props.sortable ? 
+                        this.props.json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
+                            .map(this.BuildLine.bind(this)):
+                        this.props.json.map(this.BuildLine.bind(this)))
                 ])
-               );
+            );
     }
 }
 class StatusPage extends React.Component {

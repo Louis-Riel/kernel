@@ -1154,6 +1154,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                     ESP_LOGV(__FUNCTION__, "Found URL query parameter => md5=%s", md5);
                 }
                 char param[30];
+                memset(param, 0, 30);
                 if (httpd_query_key_value(buf, "len", param, 30) == ESP_OK)
                 {
                     totLen = atoi(param);
@@ -1297,8 +1298,8 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                             fWrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
                             fClose(fw);
                             ESP_LOGD(__FUNCTION__, "Firmware md5 written");
-                            esp_partition_iterator_t pi;    // Iterator for find
-                            const esp_partition_t *factory; // Factory partition
+                            esp_partition_iterator_t pi;
+                            const esp_partition_t *factory;
                             esp_err_t err;
 
                             pi = esp_partition_find(ESP_PARTITION_TYPE_APP,            // Get partition iterator for

@@ -74,7 +74,7 @@ void WebsocketManager::PostToClient(void* msg) {
     if (wsMsg->client->jErrCount->valueint > 10){
       cJSON_SetIntValue(wsMsg->client->jIsLive,false);
       httpd_sess_trigger_close(wsMsg->client->hd, wsMsg->client->fd);
-      wsMsg->client->fd=NULL;
+      wsMsg->client->fd=0;
       wsMsg->client->hd=NULL;
       ESP_LOGI(__FUNCTION__,"Client disconnected: %s",esp_err_to_name(ret));
       AppConfig::SignalStateChange(state_change_t::MAIN);
@@ -84,7 +84,7 @@ void WebsocketManager::PostToClient(void* msg) {
     time(&wsMsg->client->lastTs);
     localtime_r(&wsMsg->client->lastTs, &timeinfo);
     strftime(wsMsg->client->jLastTs->valuestring, 30, "%c", &timeinfo);
-    ESP_LOGV(__FUNCTION__,"Client %s - %d bytes:%s", wsMsg->client->jLastTs->valuestring, ws_pkt.len,(char*)ws_pkt.payload);
+    ESP_LOGV(__FUNCTION__,"Client %s - %zu bytes:%s", wsMsg->client->jLastTs->valuestring, ws_pkt.len,(char*)ws_pkt.payload);
   }
   if (wsMsg->buf)
     ldfree(wsMsg->buf);
@@ -113,12 +113,12 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
         cJSON_SetIntValue(clients[idx].jIsLive,false);
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
         stateChange=true;
-        clients[idx].fd=NULL;
+        clients[idx].fd=0;
         clients[idx].hd=NULL;
-        ESP_LOGW(__FUNCTION__,"Client disconnected: %s",esp_err_to_name(ret));
+        ESP_LOGW(__FUNCTION__,"Client %d disconnected: %s",idx, esp_err_to_name(ret));
       } else {
         if (msg)
-          ESP_LOGW(__FUNCTION__,"Client %d:%s",idx,(char*) msg);
+          ESP_LOGV(__FUNCTION__,"Client %d:%s",idx,(char*) msg);
       }
     }
   }
@@ -128,7 +128,7 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
 }
 
 void WebsocketManager::QueueHandler(void* param){
-  ESP_LOGW(__FUNCTION__,"QueueHandler Starting");
+  ESP_LOGD(__FUNCTION__,"QueueHandler Starting");
   uint8_t* buf = (uint8_t*)dmalloc(JSON_BUFFER_SIZE);
   while(stateHandler && stateHandler->msgQueue && stateHandler->isLive){
     memset(buf,0,JSON_BUFFER_SIZE);
@@ -138,7 +138,7 @@ void WebsocketManager::QueueHandler(void* param){
       stateHandler->ProcessMessage(NULL);
     }
   }
-  ESP_LOGW(__FUNCTION__,"QueueHandler Done");
+  ESP_LOGD(__FUNCTION__,"QueueHandler Done");
   ldfree(buf);
 }
 
@@ -164,7 +164,7 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
       clients[idx].fd = fd;
 
       if (!clients[idx].jIsLive) {
-        ESP_LOGV(__FUNCTION__,"Client is inserted at position %d",idx);
+        ESP_LOGD(__FUNCTION__,"Client is inserted at position %d",idx);
         cJSON* client = cJSON_CreateObject();
         cJSON_AddItemToArray(jClients,client);
         clients[idx].jErrCount = cJSON_AddNumberToObject(client,"Errors",0);
@@ -183,7 +183,7 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
       sockaddr_in6 addr;
       socklen_t addr_size = sizeof(addr);
       if (getpeername(fd, (struct sockaddr *)&addr, &addr_size) < 0) {
-        ESP_LOGV(__FUNCTION__, "Error getting client IP");
+        ESP_LOGW(__FUNCTION__, "Error getting client IP");
       } else {
         inet_ntop(AF_INET6, &addr.sin6_addr, clients[idx].jAddr->valuestring, 30);
       }
@@ -191,7 +191,7 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
       return true;
     }
   }
-  ESP_LOGW(__FUNCTION__,"Client could not be added");
+  ESP_LOGD(__FUNCTION__,"Client could not be added");
   return false;
 }
 
@@ -244,7 +244,7 @@ void WebsocketManager::StatePoller(void *instance){
       }
       if (cJSON_PrintPreallocated(state,stateBuffer,JSON_BUFFER_SIZE,pdFALSE)){
         if (xQueueSend(stateHandler->msgQueue,stateBuffer,portMAX_DELAY) == pdTRUE) {
-          ESP_LOGV(__FUNCTION__,"State sent %d",strlen(stateBuffer));
+          ESP_LOGV(__FUNCTION__,"State sent %zu",strlen(stateBuffer));
         } else {
           ESP_LOGW(__FUNCTION__,"Failed to queue state");
         }
@@ -263,7 +263,7 @@ void WebsocketManager::StatePoller(void *instance){
 esp_err_t TheRest::ws_handler(httpd_req_t *req) {
   ESP_LOGV(__FUNCTION__, "WEBSOCKET Session");
   if (stateHandler == NULL) {
-    ESP_LOGV(__FUNCTION__, "Staring Manager");
+    ESP_LOGD(__FUNCTION__, "Staring Manager");
     stateHandler = new WebsocketManager();
   }
 
@@ -284,13 +284,13 @@ esp_err_t TheRest::ws_handler(httpd_req_t *req) {
       GetServer()->jBytesOut->valuedouble = GetServer()->jBytesOut->valueint+=ws_pkt.len;
       switch (ws_pkt.type)
       {
-        case HTTPD_WS_TYPE_TEXT:      ESP_LOGD(__FUNCTION__,"msg:%s",(char*)ws_pkt.payload);break;
-        case HTTPD_WS_TYPE_CONTINUE:  ESP_LOGD(__FUNCTION__,"Packet type(%d): CONTINUE: %s",ws_pkt.len, (char*)ws_pkt.payload); break;
-        case HTTPD_WS_TYPE_BINARY:    ESP_LOGD(__FUNCTION__,"Packet type(%d): BINARY",ws_pkt.len);   break;
-        case HTTPD_WS_TYPE_CLOSE:     ESP_LOGD(__FUNCTION__,"Packet type(%d): CLOSE",ws_pkt.len);    break;
-        case HTTPD_WS_TYPE_PING:      ESP_LOGD(__FUNCTION__,"Packet type(%d): PING",ws_pkt.len);     break;
-        case HTTPD_WS_TYPE_PONG:      ESP_LOGD(__FUNCTION__,"Packet type(%d): PONG",ws_pkt.len);     break;
-        default:                      ESP_LOGW(__FUNCTION__,"Packet type(%d): UNKNOWN",ws_pkt.len);  break;
+        case HTTPD_WS_TYPE_TEXT: ESP_LOGV(__FUNCTION__,"msg:%s",(char*)ws_pkt.payload);break;
+        case HTTPD_WS_TYPE_CONTINUE:  ESP_LOGD(__FUNCTION__,"Packet type(%zu): CONTINUE: %s",ws_pkt.len, (char*)ws_pkt.payload); break;
+        case HTTPD_WS_TYPE_BINARY:    ESP_LOGD(__FUNCTION__,"Packet type(%zu): BINARY",ws_pkt.len);   break;
+        case HTTPD_WS_TYPE_CLOSE:     ESP_LOGD(__FUNCTION__,"Packet type(%zu): CLOSE",ws_pkt.len);    break;
+        case HTTPD_WS_TYPE_PING:      ESP_LOGD(__FUNCTION__,"Packet type(%zu): PING",ws_pkt.len);     break;
+        case HTTPD_WS_TYPE_PONG:      ESP_LOGD(__FUNCTION__,"Packet type(%zu): PONG",ws_pkt.len);     break;
+        default:                      ESP_LOGW(__FUNCTION__,"Packet type(%zu): UNKNOWN",ws_pkt.len);  break;
       }
     } else {
       ESP_LOGE(__FUNCTION__, "httpd_ws_recv_frame failed: %s", esp_err_to_name(ret));
