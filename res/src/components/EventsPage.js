@@ -44,6 +44,7 @@ class LiveEventPannel extends React.Component {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
         this.mounted=false;
+        this.state = {filters:{}};
     }
 
     componentDidMount() {
@@ -60,7 +61,37 @@ class LiveEventPannel extends React.Component {
             while (lastEvents.length > 100) {
                 lastEvents.shift();
             }
-            this.setState({lastEvents:lastEvents.concat(evt)});
+            var curFilters = Object.entries(lastEvents.filter(evt=>evt.eventBase && evt.eventId)
+                                   .reduce((ret,evt)=>{
+                                       if (!ret[evt.eventBase]) {
+                                          ret[evt.eventBase] = {filtered: false, eventIds:[{filtered: false, eventId: evt.eventId}]};
+                                       } else if (!ret[evt.eventBase].eventIds.find(vevt=>vevt.eventId === evt.eventId)) {
+                                        ret[evt.eventBase].eventIds.push({filtered:false, eventId: evt.eventId});
+                                       }
+                                       return ret;
+                                    },{}))
+            var hasUpdates = false;
+            Object.values(curFilters).forEach(filter => {
+                if (!this.state.filters[filter[0]]) {
+                    this.state.filters[filter[0]] = filter[1];
+                    hasUpdates = true;
+                } else if (filter[1].eventIds.find(newEvt => !this.state.filters[filter[0]].eventIds.find(eventId => eventId.eventId === newEvt.eventId))) {
+                    this.state.filters[filter[0]].eventIds = this.state.filters[filter[0]].eventIds.concat(filter[1].eventIds.filter(eventId=> !this.state.filters[filter[0]].eventIds.find(eventId2=> eventId.eventId === eventId2.eventId) ))
+                    hasUpdates = true;
+                }
+            });
+
+            if (hasUpdates) {
+                this.setState({
+                    filters: this.state.filters
+                });
+            }
+
+            if (!Object.entries(this.state.filters).find(filter => filter[0] === evt.eventBase && filter[1].filtered || (filter[0] === evt.eventBase && filter[1].eventIds.find(eventId=>eventId.filtered && eventId.eventId === evt.eventId)))){
+                this.setState({
+                    lastEvents:lastEvents.concat(evt)
+                });
+            }
         }
     }
 
@@ -111,13 +142,40 @@ class LiveEventPannel extends React.Component {
         })
     }
 
+    updateFilters(eventId, enabled) {
+        eventId.filtered = enabled;
+        this.setState({filters: this.state.filters});
+    }
+
+    filterPanel() {
+        return e("div",{className:"filterPanel"},
+            Object.entries(this.state.filters)
+                   .map(event => e('div',{key:event[0], className: `filter ${event[0]}`}, [
+                        e("input",{key:"filtered",
+                                 checked: event[1].filtered, 
+                                 onChange: event=> this.updateFilters(event[1], event.target.checked),
+                                 type:"checkbox"}),
+                        e("div",{key:"label", className:`label ${event[0]}`},event[0]),
+                        e("div",{key:"filterList", className: `filters`},event[1].eventIds.map(eventId => e("div",{key:eventId.eventId, className:`filteritem ${eventId.eventId}`},[
+                            e("input",{key:"filtered",
+                                       checked: eventId.filtered, 
+                                       onChange: event=> this.updateFilters(eventId, event.target.checked),
+                                       type:"checkbox"}),
+                            e("div",{key:"chklabel",className:"label"},eventId.eventId)
+                        ])))
+                        ])
+                    )
+        );
+    }
+
     render() {
-        return  e("div", { key: genUUID() ,className: "eventPanel" }, [
-            e("div", { key: genUUID(), className:"control" }, [
-                e("div",{ key: genUUID()}, `${this.state?.lastEvents?.length || "Waiting on "} event${this.state?.lastEvents?.length?'s':''}`),
-                e("button",{ key: genUUID(), onClick: elem => this.setState({lastEvents:[]})},"Clear")
+        return  e("div", { key: "eventPanel" ,className: "eventPanel" }, [
+            e("div", { key: "control", className:"control" }, [
+                e("div",{ key: "header"}, `${this.state?.lastEvents?.length || "Waiting on "} event${this.state?.lastEvents?.length?'s':''}`),
+                e("button",{ key: "clearbtn", onClick: elem => this.setState({lastEvents:[]})},"Clear")
             ]),
-            e("div",{ key: genUUID(), className:"eventList"},this.state?.lastEvents?.map(event => e(LiveEvent,{ key: genUUID(), event:this.parseEvent(event)})).reverse())
+            this.filterPanel(),
+            e("div",{ key: "eventList", className:"eventList"},this.state?.lastEvents?.map((event,idx) => e(LiveEvent,{ key: idx, event:this.parseEvent(event)})).reverse())
         ])
 
     }
@@ -159,22 +217,10 @@ class EventsPage extends React.Component {
     render() {
         if (this.state?.events){
             return [
-                e("div", { key: genUUID() ,className: "designer" },[
-                    e("details",{ key: genUUID() ,className: "configuredEvents", onClick:elem=>elem.target.parentElement.nextSibling.removeAttribute("open"), open:true}, [
-                        e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), 
-                        e("div",{key:genUUID(),className:"content"},
-                            this.state.events?.map(event => e(Event,{ key: genUUID(),...event})))
-                    ]),
-                    e("details",{ key: genUUID() ,className: "programs", onClick:elem=>elem.target.parentElement.previousSibling.removeAttribute("open")},[
-                        e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), 
-                        e("div",{key:genUUID(),className:"content"},
-                            this.state.programs?.map(program => e(Program,{ key: genUUID(),...program})))
-                    ])
-                ]),
-                e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
+                e(LiveEventPannel,{ key: "eventpannel",registerEventCallback:this.props.registerEventCallback})
             ];
         } else {
-            return e("div",{key: genUUID()},"Loading.....");
+            return e("div",{key: "loading"},"Loading.....");
         }
     }
 }

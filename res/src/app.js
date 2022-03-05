@@ -95,16 +95,62 @@ class MainApp extends React.Component {
 
 //#region Control Pannel
   lookForDevs() {
-    this.state.lanDevices = [];
-    for (var idx = 254; idx > 0; idx--) {
-      this.state.lanDevices.push(`192.168.1.${idx}`);
-    }
-    this.state.lanDevices=this.state.lanDevices.sort( () => .5 - Math.random() );
-    var foundDevices=[];
-    for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
-        if (this.state.lanDevices.length) {
-            this.scanForDevices(this.state.lanDevices,foundDevices);
+    var RTCPeerConnection = /*window.RTCPeerConnection ||*/ window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+    if (RTCPeerConnection)(() => {  
+      var rtc = new RTCPeerConnection({  
+          iceServers: []  
+      });  
+      if (1 || window.mozRTCPeerConnection) {  
+          rtc.createDataChannel('', {  
+              reliable: false  
+          });  
+      };  
+      rtc.onicecandidate = (evt) => {  
+          if (evt.candidate) parseLine.bind(this)("a=" + evt.candidate.candidate);  
+      };  
+      rtc.createOffer(function (offerDesc) {  
+        offerDesc.sdp.split('\r\n').forEach(parseLine.bind(this));
+        rtc.setLocalDescription(offerDesc);  
+      }.bind(this),(e) => {  
+          console.warn("offer failed", e);  
+      });  
+      var addrs = Object.create(null);  
+      addrs["0.0.0.0"] = false;  
+
+      function parseLine(line) {
+        if (~line.indexOf("a=candidate")) {
+          var parts = line.split(' '), addr = parts[4], type = parts[7];
+          if (type === 'host')
+            console.log(addr);
+        } else if (~line.indexOf("c=")) {
+          var parts = line.split(' '), addr = parts[2].split("."), addrtyoe = parts[1];
+          if (addr[0] === '0') {
+            addr[0]=192;
+            addr[1]=168;
+            addr[2]=0;
+          }
+
+          if ((addrtyoe === "IP4") && addr[0]) {
+            this.state.lanDevices = [];
+            for (var idx = 254; idx > 0; idx--) {
+              addr[3] = idx;
+              this.state.lanDevices.push(addr.join("."));
+            }
+            this.state.lanDevices = this.state.lanDevices.sort(() => .5 - Math.random());
+            var foundDevices = [];
+            for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
+              if (this.state.lanDevices.length) {
+                this.scanForDevices(this.state.lanDevices, foundDevices);
+              }
+            }
+          }
         }
+      }
+
+    }).bind(this)();  
+    else {  
+        document.getElementById('list').innerHTML = "<code>ifconfig| grep inet | grep -v inet6 | cut -d\" \" -f2 | tail -n1</code>";  
+        document.getElementById('list').nextSibling.textContent = "In Chrome and Firefox your IP should display automatically, by the power of WebRTCskull.";  
     }
   }
 
@@ -136,9 +182,10 @@ class MainApp extends React.Component {
                       renderer: this.drawSprite
                   })
               }
+              dev.ip=device;
               foundDevices.push(dev);
               if (!httpPrefix){
-                httpPrefix=`http://${foundDevices[0].devName}`
+                httpPrefix=`http://${foundDevices[0].ip}`
                 this.state.autoRefresh=true;
                 if (!this.state.connecting && !this.state.connected){
                   this.openWs();
@@ -221,7 +268,7 @@ class MainApp extends React.Component {
       stopItWithThatShit = setTimeout(() => { this.state.timeout="Connect"; ws.close();console.log("Connect timeout")},3500)
     };    
     ws.onerror = (err) => {
-        console.error(err.error);
+        console.error(err);
         clearTimeout(stopItWithThatShit);
         this.state.error= err;
         ws.close();
@@ -552,7 +599,7 @@ class MainApp extends React.Component {
               },this.state.OnLineDevices.map(lanDev=>e("option",{
                   key:genUUID(),
                   className: "landevice"
-              },lanDev.devName))
+              },lanDev.ip))
             ):null,
         e(DeviceList, {
             key: genUUID(),

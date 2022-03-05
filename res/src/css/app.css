@@ -495,7 +495,6 @@ div.slider > div.slide {
 .eventPanel {
     display: flex;
     flex-direction: column;
-    margin-left: auto;
     padding-right: 1em;
     padding-top: 10px;
 }
@@ -539,11 +538,8 @@ div.events button {
 }
 
 .eventList {
-    text-align: -webkit-center;
-    display: flex;
-    flex-direction: column;
-    overflow: auto;
-    align-items: flex-end;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
 }
 
 .designer {
@@ -948,4 +944,30 @@ caption>.jsonlabel {
     align-content: center;
     justify-content: center;
     align-items: center;
+}
+
+.filter>input[type="checkbox"] {
+    display: none;
+}
+
+.filters {
+    border: solid aquamarine 1px;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    column-gap: 10px;
+    padding: 0 5px;
+    font-size: small;
+    justify-content: space-between;
+}
+
+.filteritem {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+    column-gap: 5px;
 }

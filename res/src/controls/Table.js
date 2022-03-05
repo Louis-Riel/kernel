@@ -143,7 +143,7 @@ class Table extends React.Component {
                                    name: fld 
                                  }) : 
                         null :
-                e(JSONEditor, { key: `JE-${this.props.path}/${fld}`, 
+                e(LocalJSONEditor, { key: `JE-${this.props.path}/${fld}`, 
                                 path: `${this.props.path}/${fld}`,
                                 editable: this.props.editable, 
                                 json: line[fld], 

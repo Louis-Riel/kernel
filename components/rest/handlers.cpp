@@ -979,7 +979,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
     deviceId ? deviceId : deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
 
     char *path = (char *)req->uri + 8;
-    ESP_LOGV(__FUNCTION__, "uri:%s method: %s path:%s", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path);
+    ESP_LOGI(__FUNCTION__, "uri:%s method: %s path:%s", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path);
 
     if (req->method == http_method::HTTP_POST)
     {
@@ -1011,7 +1011,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         }
         else if (strcmp(path, "app") == 0)
         {
-            ESP_LOGV(__FUNCTION__, "Getting app");
+            ESP_LOGI(__FUNCTION__, "Getting app");
             ManagedDevice::UpdateStatuses();
             sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(NULL));
         }
@@ -1027,6 +1027,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         }
         else
         {
+            ESP_LOGE(__FUNCTION__, "Invalid uri:(%s) method: %s path:(%s)", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path);
             ret = httpd_resp_send_404(req);
         }
         ldfree(sjson);

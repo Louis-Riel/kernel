@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "http://192.168.4.1";
+var httpPrefix = "";//"http://192.168.4.1";
 
 //#region SHA-1
 /*
@@ -383,7 +383,7 @@ class EditableLabel extends React.Component {
     }
 }
 
-class JSONEditor extends React.Component {
+class LocalJSONEditor extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
@@ -459,7 +459,7 @@ class JSONEditor extends React.Component {
                                                            editable: this.props.editable, 
                                                            sortable: this.props.sortable })};
                     } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
-                        return {fld:fld,element:e(JSONEditor, { 
+                        return {fld:fld,element:e(LocalJSONEditor, { 
                             key: `JE-${this.props.path}/${fld}`,
                             path: `${this.props.path}/${fld}`,
                             name: fld, 
@@ -856,7 +856,7 @@ class Table extends React.Component {
                                    name: fld 
                                  }) : 
                         null :
-                e(JSONEditor, { key: `JE-${this.props.path}/${fld}`, 
+                e(LocalJSONEditor, { key: `JE-${this.props.path}/${fld}`, 
                                 path: `${this.props.path}/${fld}`,
                                 editable: this.props.editable, 
                                 json: line[fld], 
@@ -1021,7 +1021,7 @@ class StatusPage extends React.Component {
         if (this.state?.status){
             return [
                 e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
-                e(JSONEditor, {
+                e(LocalJSONEditor, {
                     key: 'StateViewer', 
                     path: '/',
                     json: this.state.status, 
@@ -1048,8 +1048,21 @@ class ConfigPage extends React.Component {
               .then(this.orderResults)
               .then(config=>{
                 clearTimeout(timer);
-                this.setState({config: config});
+                this.setState({config: fromVersionedToPlain(config),
+                               original: config});
             });
+        }
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.state?.config && this.jsoneditor === undefined) {
+            try {
+                this.jsoneditor = new JSONEditor(this.container, {
+                    onChangeJSON: json => this.setState({newconfig: json})
+                }, this.state.config);
+            } catch (err) {
+                this.jsoneditor = null;
+            }
         }
     }
 
@@ -1061,17 +1074,41 @@ class ConfigPage extends React.Component {
         return ret;
     }
 
+    getEditor() {
+        return [
+            e("div", { key: 'fancy-editor', ref: (elem) => this.container = elem, id: `${this.props.id || genUUID()}`, "data-theme": "spectre" }),
+            this.jsoneditor === null && this.state?.config ? e(LocalJSONEditor, {
+                key: 'ConfigEditor', 
+                path: '/',
+                json: this.state.config, 
+                selectedDeviceId: this.props.selectedDeviceId,
+                editable: true
+            }) : null,
+            this.state?.newconfig ? e("button", {key:"save", onClick:this.saveChanges.bind(this)}, "Save") : null
+        ]
+    }
+
+    saveChanges() {
+        var abort = new AbortController()
+        var timer = setTimeout(() => abort.abort(), 4000);
+        wfetch(`${httpPrefix}/config`, {
+            method: 'put',
+            signal: abort.signal,
+            body: JSON.stringify(fromPlainToVersionned(this.state.newconfig,this.state.original))
+        }).then(resp => resp.json())
+          .then(this.orderResults)
+          .then(fromVersionedToPlain)
+          .then(config=>{
+            clearTimeout(timer);
+            this.setState({config: config});
+        }).catch(console.err);
+    }
+
     render() {
-        if (this.state?.config){
+        if (window.location.host || httpPrefix){
             return [
                 e("button", { key: genUUID(), onClick: elem => this.componentDidMount() }, "Refresh"),
-                e(JSONEditor, {
-                    key: 'ConfigEditor', 
-                    path: '/',
-                    json: this.state.config, 
-                    selectedDeviceId: this.props.selectedDeviceId,
-                    editable: true
-                })
+                this.getEditor() 
             ];
         } else {
             return e("div",{key:genUUID()},"Loading....");
@@ -1203,6 +1240,7 @@ class LiveEventPannel extends React.Component {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
         this.mounted=false;
+        this.state = {filters:{}};
     }
 
     componentDidMount() {
@@ -1219,7 +1257,37 @@ class LiveEventPannel extends React.Component {
             while (lastEvents.length > 100) {
                 lastEvents.shift();
             }
-            this.setState({lastEvents:lastEvents.concat(evt)});
+            var curFilters = Object.entries(lastEvents.filter(evt=>evt.eventBase && evt.eventId)
+                                   .reduce((ret,evt)=>{
+                                       if (!ret[evt.eventBase]) {
+                                          ret[evt.eventBase] = {filtered: false, eventIds:[{filtered: false, eventId: evt.eventId}]};
+                                       } else if (!ret[evt.eventBase].eventIds.find(vevt=>vevt.eventId === evt.eventId)) {
+                                        ret[evt.eventBase].eventIds.push({filtered:false, eventId: evt.eventId});
+                                       }
+                                       return ret;
+                                    },{}))
+            var hasUpdates = false;
+            Object.values(curFilters).forEach(filter => {
+                if (!this.state.filters[filter[0]]) {
+                    this.state.filters[filter[0]] = filter[1];
+                    hasUpdates = true;
+                } else if (filter[1].eventIds.find(newEvt => !this.state.filters[filter[0]].eventIds.find(eventId => eventId.eventId === newEvt.eventId))) {
+                    this.state.filters[filter[0]].eventIds = this.state.filters[filter[0]].eventIds.concat(filter[1].eventIds.filter(eventId=> !this.state.filters[filter[0]].eventIds.find(eventId2=> eventId.eventId === eventId2.eventId) ))
+                    hasUpdates = true;
+                }
+            });
+
+            if (hasUpdates) {
+                this.setState({
+                    filters: this.state.filters
+                });
+            }
+
+            if (!Object.entries(this.state.filters).find(filter => filter[0] === evt.eventBase && filter[1].filtered || (filter[0] === evt.eventBase && filter[1].eventIds.find(eventId=>eventId.filtered && eventId.eventId === evt.eventId)))){
+                this.setState({
+                    lastEvents:lastEvents.concat(evt)
+                });
+            }
         }
     }
 
@@ -1270,13 +1338,40 @@ class LiveEventPannel extends React.Component {
         })
     }
 
+    updateFilters(eventId, enabled) {
+        eventId.filtered = enabled;
+        this.setState({filters: this.state.filters});
+    }
+
+    filterPanel() {
+        return e("div",{className:"filterPanel"},
+            Object.entries(this.state.filters)
+                   .map(event => e('div',{key:event[0], className: `filter ${event[0]}`}, [
+                        e("input",{key:"filtered",
+                                 checked: event[1].filtered, 
+                                 onChange: event=> this.updateFilters(event[1], event.target.checked),
+                                 type:"checkbox"}),
+                        e("div",{key:"label", className:`label ${event[0]}`},event[0]),
+                        e("div",{key:"filterList", className: `filters`},event[1].eventIds.map(eventId => e("div",{key:eventId.eventId, className:`filteritem ${eventId.eventId}`},[
+                            e("input",{key:"filtered",
+                                       checked: eventId.filtered, 
+                                       onChange: event=> this.updateFilters(eventId, event.target.checked),
+                                       type:"checkbox"}),
+                            e("div",{key:"chklabel",className:"label"},eventId.eventId)
+                        ])))
+                        ])
+                    )
+        );
+    }
+
     render() {
-        return  e("div", { key: genUUID() ,className: "eventPanel" }, [
-            e("div", { key: genUUID(), className:"control" }, [
-                e("div",{ key: genUUID()}, `${this.state?.lastEvents?.length || "Waiting on "} event${this.state?.lastEvents?.length?'s':''}`),
-                e("button",{ key: genUUID(), onClick: elem => this.setState({lastEvents:[]})},"Clear")
+        return  e("div", { key: "eventPanel" ,className: "eventPanel" }, [
+            e("div", { key: "control", className:"control" }, [
+                e("div",{ key: "header"}, `${this.state?.lastEvents?.length || "Waiting on "} event${this.state?.lastEvents?.length?'s':''}`),
+                e("button",{ key: "clearbtn", onClick: elem => this.setState({lastEvents:[]})},"Clear")
             ]),
-            e("div",{ key: genUUID(), className:"eventList"},this.state?.lastEvents?.map(event => e(LiveEvent,{ key: genUUID(), event:this.parseEvent(event)})).reverse())
+            this.filterPanel(),
+            e("div",{ key: "eventList", className:"eventList"},this.state?.lastEvents?.map((event,idx) => e(LiveEvent,{ key: idx, event:this.parseEvent(event)})).reverse())
         ])
 
     }
@@ -1318,22 +1413,10 @@ class EventsPage extends React.Component {
     render() {
         if (this.state?.events){
             return [
-                e("div", { key: genUUID() ,className: "designer" },[
-                    e("details",{ key: genUUID() ,className: "configuredEvents", onClick:elem=>elem.target.parentElement.nextSibling.removeAttribute("open"), open:true}, [
-                        e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), 
-                        e("div",{key:genUUID(),className:"content"},
-                            this.state.events?.map(event => e(Event,{ key: genUUID(),...event})))
-                    ]),
-                    e("details",{ key: genUUID() ,className: "programs", onClick:elem=>elem.target.parentElement.previousSibling.removeAttribute("open")},[
-                        e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), 
-                        e("div",{key:genUUID(),className:"content"},
-                            this.state.programs?.map(program => e(Program,{ key: genUUID(),...program})))
-                    ])
-                ]),
-                e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
+                e(LiveEventPannel,{ key: "eventpannel",registerEventCallback:this.props.registerEventCallback})
             ];
         } else {
-            return e("div",{key: genUUID()},"Loading.....");
+            return e("div",{key: "loading"},"Loading.....");
         }
     }
 }
@@ -2238,16 +2321,62 @@ class MainApp extends React.Component {
 
 //#region Control Pannel
   lookForDevs() {
-    this.state.lanDevices = [];
-    for (var idx = 254; idx > 0; idx--) {
-      this.state.lanDevices.push(`192.168.1.${idx}`);
-    }
-    this.state.lanDevices=this.state.lanDevices.sort( () => .5 - Math.random() );
-    var foundDevices=[];
-    for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
-        if (this.state.lanDevices.length) {
-            this.scanForDevices(this.state.lanDevices,foundDevices);
+    var RTCPeerConnection = /*window.RTCPeerConnection ||*/ window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+    if (RTCPeerConnection)(() => {  
+      var rtc = new RTCPeerConnection({  
+          iceServers: []  
+      });  
+      if (1 || window.mozRTCPeerConnection) {  
+          rtc.createDataChannel('', {  
+              reliable: false  
+          });  
+      };  
+      rtc.onicecandidate = (evt) => {  
+          if (evt.candidate) parseLine.bind(this)("a=" + evt.candidate.candidate);  
+      };  
+      rtc.createOffer(function (offerDesc) {  
+        offerDesc.sdp.split('\r\n').forEach(parseLine.bind(this));
+        rtc.setLocalDescription(offerDesc);  
+      }.bind(this),(e) => {  
+          console.warn("offer failed", e);  
+      });  
+      var addrs = Object.create(null);  
+      addrs["0.0.0.0"] = false;  
+
+      function parseLine(line) {
+        if (~line.indexOf("a=candidate")) {
+          var parts = line.split(' '), addr = parts[4], type = parts[7];
+          if (type === 'host')
+            console.log(addr);
+        } else if (~line.indexOf("c=")) {
+          var parts = line.split(' '), addr = parts[2].split("."), addrtyoe = parts[1];
+          if (addr[0] === '0') {
+            addr[0]=192;
+            addr[1]=168;
+            addr[2]=0;
+          }
+
+          if ((addrtyoe === "IP4") && addr[0]) {
+            this.state.lanDevices = [];
+            for (var idx = 254; idx > 0; idx--) {
+              addr[3] = idx;
+              this.state.lanDevices.push(addr.join("."));
+            }
+            this.state.lanDevices = this.state.lanDevices.sort(() => .5 - Math.random());
+            var foundDevices = [];
+            for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
+              if (this.state.lanDevices.length) {
+                this.scanForDevices(this.state.lanDevices, foundDevices);
+              }
+            }
+          }
         }
+      }
+
+    }).bind(this)();  
+    else {  
+        document.getElementById('list').innerHTML = "<code>ifconfig| grep inet | grep -v inet6 | cut -d\" \" -f2 | tail -n1</code>";  
+        document.getElementById('list').nextSibling.textContent = "In Chrome and Firefox your IP should display automatically, by the power of WebRTCskull.";  
     }
   }
 
@@ -2279,9 +2408,10 @@ class MainApp extends React.Component {
                       renderer: this.drawSprite
                   })
               }
+              dev.ip=device;
               foundDevices.push(dev);
               if (!httpPrefix){
-                httpPrefix=`http://${foundDevices[0].devName}`
+                httpPrefix=`http://${foundDevices[0].ip}`
                 this.state.autoRefresh=true;
                 if (!this.state.connecting && !this.state.connected){
                   this.openWs();
@@ -2364,7 +2494,7 @@ class MainApp extends React.Component {
       stopItWithThatShit = setTimeout(() => { this.state.timeout="Connect"; ws.close();console.log("Connect timeout")},3500)
     };    
     ws.onerror = (err) => {
-        console.error(err.error);
+        console.error(err);
         clearTimeout(stopItWithThatShit);
         this.state.error= err;
         ws.close();
@@ -2695,7 +2825,7 @@ class MainApp extends React.Component {
               },this.state.OnLineDevices.map(lanDev=>e("option",{
                   key:genUUID(),
                   className: "landevice"
-              },lanDev.devName))
+              },lanDev.ip))
             ):null,
         e(DeviceList, {
             key: genUUID(),

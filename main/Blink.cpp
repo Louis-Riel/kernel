@@ -984,6 +984,7 @@ static void serviceLoop(void *param)
   EventGroupHandle_t app_eg = getAppEG();
   AppConfig *appCfg = AppConfig::GetAppConfig();
   ESP_LOGV(__FUNCTION__, "ServiceLoop started");
+  TaskHandle_t gpsTask = NULL;
   while (true)
   {
     serviceBits = (APP_SERVICE_BITS & xEventGroupWaitBits(app_eg, waitMask, pdFALSE, pdFALSE, portMAX_DELAY));
@@ -1031,12 +1032,12 @@ static void serviceLoop(void *param)
       doHibernate(NULL);
     }
     ESP_LOGV(__FUNCTION__,"Checking GPS");
-    if (serviceBits & app_bits_t::GPS_ON)
+    if (serviceBits & app_bits_t::GPS_ON && !gpsTask)
     {
       if ((TinyGPSPlus::runningInstance() == NULL) && (appCfg->HasProperty("/gps/rxPin") && appCfg->GetIntProperty("/gps/rxPin")))
       {
-          ESP_LOGV(__FUNCTION__, "Starting GPS");
-          CreateBackgroundTask(gpsSallyForth, "gpsSallyForth", 8196, appCfg, tskIDLE_PRIORITY, NULL);
+          ESP_LOGI(__FUNCTION__, "Starting GPS");
+          CreateBackgroundTask(gpsSallyForth, "gpsSallyForth", 8196, appCfg, tskIDLE_PRIORITY, &gpsTask);
           ESP_LOGV(__FUNCTION__, "Started GPS");
       } else {
         ESP_LOGV(__FUNCTION__,"Cannot start GPS. Already running:%d has rx pin:%d",TinyGPSPlus::runningInstance()!=NULL,appCfg->HasProperty("/gps/rxPin"));
@@ -1049,6 +1050,7 @@ static void serviceLoop(void *param)
       {
         ESP_LOGI(__FUNCTION__, "Stopping GPS");
         delete gps;
+        gpsTask = NULL;
       }
     }
     waitMask = (APP_SERVICE_BITS ^ serviceBits);

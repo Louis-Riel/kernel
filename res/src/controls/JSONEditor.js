@@ -54,7 +54,7 @@ class EditableLabel extends React.Component {
     }
 }
 
-class JSONEditor extends React.Component {
+class LocalJSONEditor extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
@@ -130,7 +130,7 @@ class JSONEditor extends React.Component {
                                                            editable: this.props.editable, 
                                                            sortable: this.props.sortable })};
                     } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
-                        return {fld:fld,element:e(JSONEditor, { 
+                        return {fld:fld,element:e(LocalJSONEditor, { 
                             key: `JE-${this.props.path}/${fld}`,
                             path: `${this.props.path}/${fld}`,
                             name: fld, 

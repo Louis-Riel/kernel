@@ -132,7 +132,7 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
                 cJSON_AddNumberToObject(jevt,"data",(int)postedEvent->event_data);
                 break;
             default:
-                ESP_LOGW(__FUNCTION__,"Unknown event data type for %s-%s",edesc->baseName,edesc->eventName);
+                ESP_LOGV(__FUNCTION__,"Unknown event data type for %s-%s",edesc->baseName,edesc->eventName);
                 break;
             }
             if (cJSON_PrintPreallocated(jevt,evtMgr->eventBuffer,JSON_BUFFER_SIZE,false)){

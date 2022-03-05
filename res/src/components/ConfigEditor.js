@@ -10,8 +10,21 @@ class ConfigPage extends React.Component {
               .then(this.orderResults)
               .then(config=>{
                 clearTimeout(timer);
-                this.setState({config: config});
+                this.setState({config: fromVersionedToPlain(config),
+                               original: config});
             });
+        }
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.state?.config && this.jsoneditor === undefined) {
+            try {
+                this.jsoneditor = new JSONEditor(this.container, {
+                    onChangeJSON: json => this.setState({newconfig: json})
+                }, this.state.config);
+            } catch (err) {
+                this.jsoneditor = null;
+            }
         }
     }
 
@@ -23,17 +36,41 @@ class ConfigPage extends React.Component {
         return ret;
     }
 
+    getEditor() {
+        return [
+            e("div", { key: 'fancy-editor', ref: (elem) => this.container = elem, id: `${this.props.id || genUUID()}`, "data-theme": "spectre" }),
+            this.jsoneditor === null && this.state?.config ? e(LocalJSONEditor, {
+                key: 'ConfigEditor', 
+                path: '/',
+                json: this.state.config, 
+                selectedDeviceId: this.props.selectedDeviceId,
+                editable: true
+            }) : null,
+            this.state?.newconfig ? e("button", {key:"save", onClick:this.saveChanges.bind(this)}, "Save") : null
+        ]
+    }
+
+    saveChanges() {
+        var abort = new AbortController()
+        var timer = setTimeout(() => abort.abort(), 4000);
+        wfetch(`${httpPrefix}/config`, {
+            method: 'put',
+            signal: abort.signal,
+            body: JSON.stringify(fromPlainToVersionned(this.state.newconfig,this.state.original))
+        }).then(resp => resp.json())
+          .then(this.orderResults)
+          .then(fromVersionedToPlain)
+          .then(config=>{
+            clearTimeout(timer);
+            this.setState({config: config});
+        }).catch(console.err);
+    }
+
     render() {
-        if (this.state?.config){
+        if (window.location.host || httpPrefix){
             return [
                 e("button", { key: genUUID(), onClick: elem => this.componentDidMount() }, "Refresh"),
-                e(JSONEditor, {
-                    key: 'ConfigEditor', 
-                    path: '/',
-                    json: this.state.config, 
-                    selectedDeviceId: this.props.selectedDeviceId,
-                    editable: true
-                })
+                this.getEditor() 
             ];
         } else {
             return e("div",{key:genUUID()},"Loading....");

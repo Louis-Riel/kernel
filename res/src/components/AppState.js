@@ -120,7 +120,7 @@ class StatusPage extends React.Component {
         if (this.state?.status){
             return [
                 e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
-                e(JSONEditor, {
+                e(LocalJSONEditor, {
                     key: 'StateViewer', 
                     path: '/',
                     json: this.state.status, 
