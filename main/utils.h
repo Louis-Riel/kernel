@@ -167,7 +167,7 @@ public:
   static void SignalStateChange(state_change_t state);
   uint32_t version;
 
-  void SetStringProperty(const char* path,const char* value);
+  bool SetStringProperty(const char* path,const char* value);
   void SetIntProperty(const char* path,int32_t value);
   void SetLongProperty(const char* path,uint64_t value);
   void SetPinNoProperty(const char* path,gpio_num_t value);
@@ -212,7 +212,6 @@ char* lastIndexOf(const char* str, const char* key);
 bool endsWith(const char* str,const char* val) ;
 bool stringContains(const char* str,const char* val) ;
 
-void commitTripToDisk(void* param);
 int64_t getSleepTime();
 int64_t getUpTime();
 uint32_t GetNumOpenFiles();

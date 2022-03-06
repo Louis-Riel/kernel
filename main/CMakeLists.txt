@@ -3,7 +3,7 @@ set(COMPONENT_PRIV_REQUIRES wifi rest TinyGPS esp_littlefs eventmgr pins mfile I
 
 set(COMPONENT_ADD_INCLUDEDIRS "." "../components/TinyGPS" "../components/esp_littlefs/include" )
 set(COMPONENT_SRCS "log.cpp" "Blink.cpp" "utils.cpp" "configmgmt.cpp" "mallocdbg.cpp")
-set(COMPONENT_EMBED_TXTFILES "../res/trip.kml" "../res/defaultconfig.json" )
+set(COMPONENT_EMBED_TXTFILES "../res/defaultconfig.json" )
 
 register_component()
 

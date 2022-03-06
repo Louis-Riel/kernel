@@ -231,8 +231,8 @@ void TinyGPSPlus::theLoop(void *param)
   gps->toBeFreqIdx = 0;
 
   ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(10 * 1000000));
-  gpio_hold_en(gps->enpin);
-  gpio_deep_sleep_hold_en();
+  //gpio_hold_en(gps->enpin);
+  gpio_deep_sleep_hold_dis();
 
   uint8_t retryCnt = 0;
 #ifdef BLINKY
@@ -537,7 +537,33 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
   AppConfig* stat = AppConfig::GetAppStatus()->GetConfig("gps");
   stat->SetStringProperty("firmware","");
   gpsVersion=stat->GetPropertyHolder("firmware"); 
-  gpsStatus=stat->GetConfig("status"); 
+  gpsStatus=stat->GetConfig("status");
+  cJSON* methods = cJSON_AddArrayToObject(stat->GetJSONConfig(NULL),"commands");
+  cJSON* flush = cJSON_CreateObject();
+  cJSON_AddItemToArray(methods,flush);
+  cJSON_AddStringToObject(flush,"command","gpsstate");
+  cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+  cJSON_AddStringToObject(flush,"param1","pause");
+  cJSON_AddStringToObject(flush,"caption","Pause");
+  flush = cJSON_CreateObject();
+  cJSON_AddItemToArray(methods,flush);
+  cJSON_AddStringToObject(flush,"command","gpsstate");
+  cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+  cJSON_AddStringToObject(flush,"param1","resume");
+  cJSON_AddStringToObject(flush,"caption","Resume");
+  flush = cJSON_CreateObject();
+  cJSON_AddItemToArray(methods,flush);
+  cJSON_AddStringToObject(flush,"command","gpsstate");
+  cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+  cJSON_AddStringToObject(flush,"param1","on");
+  cJSON_AddStringToObject(flush,"caption","On");
+  flush = cJSON_CreateObject();
+  cJSON_AddItemToArray(methods,flush);
+  cJSON_AddStringToObject(flush,"command","gpsstate");
+  cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+  cJSON_AddStringToObject(flush,"param1","off");
+  cJSON_AddStringToObject(flush,"caption","Off");
+
   delete stat;
   insertCustom(gpTxt, "GPTXT", 4);
   ESP_ERROR_CHECK(esp_event_handler_instance_register(GPSPLUS_EVENTS, ESP_EVENT_ANY_ID, gpsEventProcessor, this, NULL));
@@ -566,7 +592,7 @@ TinyGPSPlus::TinyGPSPlus(gpio_num_t rxpin, gpio_num_t txpin, gpio_num_t enpin)
   term[0] = 0;
   bool woke = esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED;
 
-  ESP_LOGV(__FUNCTION__, "Initializing GPS Pins");
+  ESP_LOGI(__FUNCTION__, "Initializing GPS Pins en:%d tx:%d rx:%d",enpin,txpin,rxpin);
   ESP_ERROR_CHECK(gpio_hold_dis(enpin));
   ESP_ERROR_CHECK(gpio_reset_pin(enpin));
   ESP_ERROR_CHECK(gpio_set_direction(enpin, GPIO_MODE_OUTPUT));
@@ -897,6 +923,7 @@ int32_t TinyGPSPlus::parseDecimal(const char *term)
 bool TinyGPSPlus::parseDegrees(const char *term, RawDegrees &deg)
 {
   uint32_t slen = strlen(term);
+  bool changed=false;
   if ((slen < 6) || (slen > 10))
   {
     ESP_LOGV(__FUNCTION__, "Bad Degree to parse:%s len:%d", term, slen);
@@ -918,6 +945,7 @@ bool TinyGPSPlus::parseDegrees(const char *term, RawDegrees &deg)
   uint32_t multiplier = 10000000UL;
   uint32_t tenMillionthsOfMinutes = minutes * multiplier;
 
+  changed|=deg.deg != (int16_t)(leftOfDecimal / 100);
   deg.deg = (int16_t)(leftOfDecimal / 100);
 
   while (isdigit(*term))
@@ -930,6 +958,7 @@ bool TinyGPSPlus::parseDegrees(const char *term, RawDegrees &deg)
       tenMillionthsOfMinutes += (*term - '0') * multiplier;
     }
 
+  changed|=deg.billionths != (5 * tenMillionthsOfMinutes + 1) / 3;
   deg.billionths = (5 * tenMillionthsOfMinutes + 1) / 3;
   deg.negative = false;
   return true;
@@ -1062,13 +1091,13 @@ bool TinyGPSPlus::isSignificant()
 
 void TinyGPSPlus::gpsStop()
 {
-  ESP_LOGD(__FUNCTION__, "Turning off enable pin(%d)", enpin);
+  ESP_LOGI(__FUNCTION__, "Turning off enable pin(%d)", enpin);
   ESP_ERROR_CHECK(gpio_set_level(enpin, 0));
 }
 
 void TinyGPSPlus::gpsStart()
 {
-  ESP_LOGV(__FUNCTION__, "Turning on enable pin(%d)", enpin);
+  ESP_LOGI(__FUNCTION__, "Turning on enable pin(%d)", enpin);
   ESP_ERROR_CHECK(gpio_set_level(enpin, 1));
 }
 
@@ -1076,14 +1105,14 @@ void TinyGPSPlus::gpsResume()
 {
   int bw = uart_write_bytes(UART_NUM_2, (const char *)active_tracking, sizeof(active_tracking));
   ESP_ERROR_CHECK(uart_flush(UART_NUM_2));
-  ESP_LOGV(__FUNCTION__, "Resumed GPS Output(%d)", bw);
+  ESP_LOGI(__FUNCTION__, "Resumed GPS Output(%d)", bw);
 }
 
 void TinyGPSPlus::gpsPause()
 {
   int bw = uart_write_bytes(UART_NUM_2, (const char *)silent_tracking, sizeof(silent_tracking) / sizeof(uint8_t));
   ESP_ERROR_CHECK(uart_flush(UART_NUM_2));
-  ESP_LOGV(__FUNCTION__, "Paused GPS Output(%d)", bw);
+  ESP_LOGI(__FUNCTION__, "Paused GPS Output(%d)", bw);
 }
 
 void TinyGPSPlus::adjustRate()
@@ -1200,10 +1229,7 @@ bool TinyGPSPlus::endOfTermHandler()
       break;
     case COMBINE(GPS_SENTENCE_GPRMC, 3): // Latitude
     case COMBINE(GPS_SENTENCE_GPGGA, 2):
-      if (!location.setLatitude(term))
-      {
-        ESP_LOGV(__FUNCTION__, "sent:%d term:%d comba:%d combb:%d comp:%d", curSentenceType, curTermNumber, COMBINE(GPS_SENTENCE_GPRMC, 3), COMBINE(GPS_SENTENCE_GPGGA, 2), COMBINE(curSentenceType, curTermNumber));
-      }
+      location.setLatitude(term);
       break;
     case COMBINE(GPS_SENTENCE_GPRMC, 4): // N/S
     case COMBINE(GPS_SENTENCE_GPGGA, 3):
@@ -1211,10 +1237,7 @@ bool TinyGPSPlus::endOfTermHandler()
       break;
     case COMBINE(GPS_SENTENCE_GPRMC, 5): // Longitude
     case COMBINE(GPS_SENTENCE_GPGGA, 4):
-      if (!location.setLongitude(term))
-      {
-        ESP_LOGV(__FUNCTION__, "sent:%d term:%d comba:%d combb:%d comp:%d", curSentenceType, curTermNumber, COMBINE(GPS_SENTENCE_GPRMC, 5), COMBINE(GPS_SENTENCE_GPGGA, 4), COMBINE(curSentenceType, curTermNumber));
-      }
+      location.setLongitude(term);
       break;
     case COMBINE(GPS_SENTENCE_GPRMC, 6): // E/W
     case COMBINE(GPS_SENTENCE_GPGGA, 5):
@@ -1233,7 +1256,9 @@ bool TinyGPSPlus::endOfTermHandler()
       sentenceHasFix = term[0] > '0';
       break;
     case COMBINE(GPS_SENTENCE_GPGGA, 7): // Satellites used (GPGGA)
-      satellites.set(term);
+      if (satellites.set(term)){
+        AppConfig::SignalStateChange(state_change_t::GPS);
+      }
       break;
     case COMBINE(GPS_SENTENCE_GPGGA, 8): // HDOP
       hdop.set(term);
@@ -1263,14 +1288,19 @@ bool TinyGPSPlus::endOfTermHandler()
       equal=indexOf(term,"=");
       if (equal) {
         *equal=0;
-        gpsStatus->SetStringProperty(term,equal+1);
-        ESP_LOGV(__FUNCTION__,"%s set to %s",term,equal+1);
+        if (gpsStatus->SetStringProperty(term,equal+1)){
+          AppConfig::SignalStateChange(state_change_t::GPS);
+          ESP_LOGV(__FUNCTION__,"%s set to %s",term,equal+1);
+        }
         *equal='=';
       } else if (xEventGroupGetBits(eg)&gpsEvent::error) {
-        if (xEventGroupGetBitsFromISR(app_eg) & app_bits_t::WIFI_OFF)
-          gpsStatus->SetStringProperty("error",term);
+        if (gpsStatus->SetStringProperty("error",term)){
+          AppConfig::SignalStateChange(state_change_t::GPS);
+        }
       } else if (xEventGroupGetBits(eg)&gpsEvent::initialized) {
-        gpsStatus->SetStringProperty("action",term);
+        if (gpsStatus->SetStringProperty("action",startsWith(term,"LLC") ? "Running" : term)){
+          AppConfig::SignalStateChange(state_change_t::GPS);
+        }
       } else {
         msglen=strlen(gpsVersion->valuestring);
         if (msglen) {
@@ -1281,10 +1311,12 @@ bool TinyGPSPlus::endOfTermHandler()
           strcpy(msgbuf,term);
         }
         cJSON_SetValuestring(gpsVersion,msgbuf);
+        AppConfig::SignalStateChange(state_change_t::GPS);
         ldfree(msgbuf);
       }
       if (startsWith(term,"LLC")) {
         gps_esp_event_post(GPSPLUS_EVENTS,gpsEvent::initialized,NULL,0,portMAX_DELAY);
+        AppConfig::SignalStateChange(state_change_t::GPS);
         ESP_LOGI(__FUNCTION__,"GPS INITIALIZED");
       }
       break;
@@ -1500,9 +1532,11 @@ void TinyGPSInteger::commit()
   }
 }
 
-void TinyGPSInteger::set(const char *term)
+bool TinyGPSInteger::set(const char *term)
 {
+  bool ret = newval != atol(term);
   newval = atol(term);
+  return ret;
 }
 
 TinyGPSCustom::TinyGPSCustom(TinyGPSPlus &gps, const char *_sentenceName, int _termNumber)

@@ -148,7 +148,7 @@ class LiveEventPannel extends React.Component {
     }
 
     filterPanel() {
-        return e("div",{className:"filterPanel"},
+        return e("div",{key: "filterPanel", className:"filterPanel"},
             Object.entries(this.state.filters)
                    .map(event => e('div',{key:event[0], className: `filter ${event[0]}`}, [
                         e("input",{key:"filtered",

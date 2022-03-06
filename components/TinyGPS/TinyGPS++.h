@@ -262,7 +262,7 @@ private:
    uint32_t lastCommitTime;
    uint32_t val, newval, diff;
    void commit();
-   void set(const char *term);
+   bool set(const char *term);
    const char* name;
    cJSON* jval;
 };

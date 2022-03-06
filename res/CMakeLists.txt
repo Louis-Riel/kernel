@@ -1,4 +1,4 @@
-#execute_process(COMMAND bash -c "cd ${CMAKE_CURRENT_SOURCE_DIR}; ./minify.sh ")
+execute_process(COMMAND bash -c "cd ${CMAKE_CURRENT_SOURCE_DIR}; ./minify.sh ")
 
 set(js_in_files
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/main.js
@@ -20,11 +20,6 @@ ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/StorageViewer.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/StatusPage.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/SystemPage.js
 ${CMAKE_CURRENT_SOURCE_DIR}/res/src/components/Event.js
-)
-
-set(combined_files
-${CMAKE_CURRENT_SOURCE_DIR}/res/dist/app-min-min.js
-${CMAKE_CURRENT_SOURCE_DIR}/res/dist/app-min-min.css
 )
 
 find_program(YUI_EXECUTABLE yui-compressor)
@@ -53,22 +48,3 @@ else()
     endforeach(jsfile)
 endif()
 
-foreach(jsfile ${combined_files})
-    install(FILES ${jsfile}
-        message(STATUS "${jsfile} will be installed to ${CMAKE_CURRENT_SOURCE_DIR}/res/dist/.")
-        DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/res/dist/"
-    )
-    set(js_out_files ${js_out_files} ${jsfile})
-endforeach(jsfile)
-
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/res/dist/app-min.js
-    cat ./res/src/main.js ./res/src/misc/*.js ./res/src/controls/*.js ./res/src/components/*.js ./res/src/app.js > ./res/dist/app-min.js
-    DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/res/dist/"
-)
-
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/res/dist/app-min.css
-    cat ./res/src/css/app.css > ./res/dist/app-min.css
-    DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/res/dist/"
-)
-
-add_custom_target(combinbejs ALL DEPENDS ${combined_files})

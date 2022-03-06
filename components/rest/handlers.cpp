@@ -448,12 +448,6 @@ void parseFiles(void *param)
     if (diff > 0) {
         ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","parseFolderForTars",diff);
     }
-    stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
-    //commitTripToDisk(NULL);
-    diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
-    if (diff > 0) {
-        ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","commitTripToDisk",diff);
-    }
 }
 
 esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
@@ -607,6 +601,31 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                 } else {
                     ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,"Not Implemented");
+                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
+                }
+            }
+            else if (jitem && (strcmp(jitem->valuestring, "gpsstate") == 0))
+            {
+                cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
+                uint32_t slen = 0;
+                TinyGPSPlus* gps = TinyGPSPlus::runningInstance();
+                if (gps) {
+                    if (strcmp(event->valuestring, "pause") == 0) {
+                        gps->gpsPause();
+                    }
+                    if (strcmp(event->valuestring, "resume") == 0) {
+                        gps->gpsResume();
+                    }
+                    if (strcmp(event->valuestring, "on") == 0) {
+                        gps->gpsStart();
+                    }
+                    if (strcmp(event->valuestring, "off") == 0) {
+                        gps->gpsStop();
+                    }
+                    ret = httpd_resp_send(req, "OK", 2);
+                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                } else {
+                    ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"GPS not running");
                     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
                 }
             }

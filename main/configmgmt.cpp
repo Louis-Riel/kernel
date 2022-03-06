@@ -600,16 +600,16 @@ const char *AppConfig::GetStringProperty(const char *path)
   return emptyString;
 }
 
-void AppConfig::SetStringProperty(const char *path, const char *value)
+bool AppConfig::SetStringProperty(const char *path, const char *value)
 {
   if (!isValid())
   {
     ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s from null config", path);
-    return;
+    return false;
   }
   if (value == NULL) {
     ESP_LOGW(__FUNCTION__, "Cannot set property at path:%s from null value", path);
-    return;
+    return false;
   }
 
   cJSON *holder = GetJSONConfig(json, path, false);
@@ -664,8 +664,12 @@ void AppConfig::SetStringProperty(const char *path, const char *value)
   } else {
     ESP_LOGV(__FUNCTION__, "No change for %s to %s", path, value);
   }
-  if (hasChanges)
+  if (hasChanges){
     SaveAppConfig();
+    return true;
+  }
+
+  return false;
   //xSemaphoreGiveRecursive(sema);
 }
 

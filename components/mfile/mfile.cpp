@@ -287,6 +287,7 @@ void BufferedFile::Flush() {
         MFile::Write(buf,pos);
         pos=0;
         cJSON_SetIntValue(bytesCached,pos);
+        AppConfig::SignalStateChange(state_change_t::MAIN);
     } else {
         ESP_LOGV(__FUNCTION__,"Not Flushing %s, pos:%d",fileName,pos);
     }

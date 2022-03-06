@@ -363,12 +363,7 @@ uint8_t EventInterpretor::RunMethod(EventInterpretor *instance, const char *meth
     TaskFunction_t theFunc = NULL;
     cJSON *mParams = event_data == NULL ? instance->params : *(cJSON **)event_data;
 
-    if (strcmp(method, "commitTripToDisk") == 0)
-    {
-        theFunc = commitTripToDisk;
-        jeventbase = cJSON_GetObjectItem(cJSON_GetObjectItem(instance->params, "flags"), "value");
-    }
-    else if (strcmp(method, "wifioff") == 0)
+    if (strcmp(method, "wifioff") == 0)
     {
         xEventGroupClearBits(app_eg, app_bits_t::WIFI_ON);
         xEventGroupSetBits(app_eg, app_bits_t::WIFI_OFF);

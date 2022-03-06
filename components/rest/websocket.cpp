@@ -106,10 +106,10 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
       }
       wsMsg->client=&clients[idx];
       if ((ret = httpd_queue_work(clients[idx].hd,PostToClient,wsMsg)) != ESP_OK) {
-        ldfree(wsMsg);
         if (msg){
           ldfree(wsMsg->buf);
         }
+        ldfree(wsMsg);
         cJSON_SetIntValue(clients[idx].jIsLive,false);
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
         stateChange=true;
