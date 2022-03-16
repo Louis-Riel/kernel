@@ -105,9 +105,9 @@ void TinyGPSPlus::waitOnStop(void *param)
     if (xEventGroupGetBits(getAppEG()) & app_bits_t::WIFI_ON)
     {
       ESP_LOGD(__FUNCTION__, "We are stopped with wifi on, waiting on bumps");
+      gps->gpsPause();
       while ((timeToGo > 0) && !(xEventGroupWaitBits(gps->eg, gpsEvent::outSyncPoint, pdFALSE, pdTRUE, 500 / portTICK_PERIOD_MS) & gpsEvent::outSyncPoint))
       {
-        gps->gpsPause();
 #ifdef BLINKY
         gpio_set_level(BLINK_GPIO, 0);
 #endif
@@ -115,12 +115,12 @@ void TinyGPSPlus::waitOnStop(void *param)
 #ifdef BLINKY
         gpio_set_level(BLINK_GPIO, 1);
 #endif
-        gps->gpsResume();
         timeToGo -= 804;
       }
 #ifdef BLINKY
       gpio_set_level(BLINK_GPIO, 1);
 #endif
+      gps->gpsResume();
     }
     else
     {
@@ -692,7 +692,8 @@ void TinyGPSPlus::processEncoded(void)
       ESP_ERROR_CHECK(gps_esp_event_post(GPSPLUS_EVENTS, gpsEvent::gpsResumed, NULL, 0, portMAX_DELAY));
     }
   }
-  if (date.isValid() && time.isValid() && time.isUpdated())
+  if (date.isValid() && time.isValid() && time.isUpdated() &&
+     (time.minute() || time.hour())) // workaroute time parse error, skipping 1irst minute of the day
   {
     struct tm tm;
 

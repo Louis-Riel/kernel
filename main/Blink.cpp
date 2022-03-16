@@ -82,20 +82,6 @@ uint8_t batSmplCnt = NUM_VOLT_CYCLE + 1;
 bool balFullSet = false;
 uint64_t sleepTime = 0;
 
-static const char *pmpt1 = "    <Placemark>\n\
-      <styleUrl>#SpeedPlacemark</styleUrl>\n\
-      <Point>\n\
-        <coordinates>";
-static const char *pmpt2 = "</coordinates>\n\
-      </Point>\n\
-      <description>";
-static const char *pmpt3 = "km/h\n\
-RAM:";
-static const char *pmpt4 = "\nBattery:";
-static const char *pmpt5 = "</description>\n\
-    </Placemark>\n\
-";
-
 TinyGPSPlus *gps = NULL;
 esp_adc_cal_characteristics_t characteristics;
 uint16_t timeout = GPS_TIMEOUT;
@@ -675,7 +661,7 @@ static void serviceLoop(void *param)
     } 
     if (serviceBits & app_bits_t::WIFI_ON && !TheWifi::GetInstance())
     {
-      CreateForegroundTask(wifiSallyForth, "WifiSallyForth", NULL);
+      CreateBackgroundTask(wifiSallyForth, "WifiSallyForth", 4096, NULL, tskIDLE_PRIORITY, NULL);
     }
     else if ((serviceBits & app_bits_t::WIFI_OFF) && TheWifi::GetInstance())
     {
@@ -689,7 +675,7 @@ static void serviceLoop(void *param)
     if (((serviceBits & (app_bits_t::REST | app_bits_t::WIFI_ON)) == (app_bits_t::REST | app_bits_t::WIFI_ON)) && !TheRest::GetServer())
     {
       ESP_LOGV(__FUNCTION__,"Turning Rest On");
-      CreateForegroundTask(restSallyForth, "restSallyForth", TheWifi::GetEventGroup());
+      CreateBackgroundTask(restSallyForth, "restSallyForth", 8192, TheWifi::GetEventGroup(),tskIDLE_PRIORITY,NULL);
     }
     else if (((serviceBits & (app_bits_t::REST | app_bits_t::WIFI_OFF)) == (app_bits_t::REST | app_bits_t::WIFI_OFF)) && TheRest::GetServer())
     {
