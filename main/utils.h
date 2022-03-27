@@ -107,7 +107,9 @@ struct gpio_driver_t {
     digital_out = BIT1,
     pullup = BIT2,
     pulldown = BIT3,
-    touch = BIT4
+    touch = BIT4,
+    wakeonhigh = BIT5,
+    wakeonlow = BIT6
   } driverFlags;
 };
 

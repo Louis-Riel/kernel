@@ -699,6 +699,7 @@ static void serviceLoop(void *param)
       {
           ESP_LOGI(__FUNCTION__, "Starting GPS");
           CreateBackgroundTask(gpsSallyForth, "gpsSallyForth", 8196, appCfg, tskIDLE_PRIORITY, &gpsTask);
+          ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, gpsEvent, NULL, NULL));
           ESP_LOGV(__FUNCTION__, "Started GPS");
       } else {
         ESP_LOGV(__FUNCTION__,"Cannot start GPS. Already running:%d has rx pin:%d",TinyGPSPlus::runningInstance()!=NULL,appCfg->HasProperty("/gps/rxPin"));
@@ -789,7 +790,18 @@ void app_main(void)
   memoryHook.free_fn = free;
   cJSON_InitHooks(&memoryHook);
   startTs = esp_timer_get_time();
-  esp_log_level_set("*",ESP_LOG_INFO);
+
+  esp_pm_config_esp32_t pm_config;
+  pm_config.max_freq_mhz = 80;
+  pm_config.min_freq_mhz = 80;
+  pm_config.light_sleep_enable = true;
+
+  esp_err_t ret;
+  if ((ret = esp_pm_configure(&pm_config)) != ESP_OK)
+  {
+      ESP_LOGE(__FUNCTION__, "pm config error %s\n",
+                ret == ESP_ERR_INVALID_ARG ? "ESP_ERR_INVALID_ARG" : "ESP_ERR_NOT_SUPPORTED");
+  }
 
   if (setupLittlefs() == ESP_OK)
   {
@@ -878,7 +890,6 @@ void app_main(void)
     ESP_LOGV(__FUNCTION__,"gps rx pin:%d",appcfg->GetIntProperty("/gps/rxPin"));
     if (appcfg->GetIntProperty("/gps/rxPin")){
       xEventGroupSetBits(app_eg, app_bits_t::GPS_ON);
-      ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, gpsEvent, NULL, NULL));
     }
     if (appcfg->IsAp() || firstRun || !isTracker)
     {
@@ -892,7 +903,7 @@ void app_main(void)
     } else {
       ESP_LOGV(__FUNCTION__,"No IR");
     }
-    
+
     CreateBackgroundTask(serviceLoop, "ServiceLoop", 8192, NULL, tskIDLE_PRIORITY, NULL);
   }
   if (!heap_caps_check_integrity_all(true))

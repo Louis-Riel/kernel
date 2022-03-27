@@ -1,4 +1,5 @@
 #include "pins.h"
+#include "esp_sleep.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -101,7 +102,25 @@ void Pin::InitDevice(){
     io_conf.mode = flags&gpio_driver_t::driver_type_t::digital_out ? GPIO_MODE_OUTPUT : GPIO_MODE_INPUT;
     io_conf.pull_up_en = flags&gpio_driver_t::driver_type_t::pullup?GPIO_PULLUP_ENABLE:GPIO_PULLUP_DISABLE;
     io_conf.pull_down_en = flags&gpio_driver_t::driver_type_t::pullup?GPIO_PULLDOWN_ENABLE:GPIO_PULLDOWN_DISABLE;
-    gpio_config(&io_conf);
+    esp_err_t ret = gpio_config(&io_conf);
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(__FUNCTION__,"Error in pin(%d):%s init failed: %s", pinNo, name, esp_err_to_name(ret));
+    }
+
+    if (flags&gpio_driver_t::driver_type_t::wakeonhigh || flags&gpio_driver_t::driver_type_t::wakeonlow) {
+        ret = gpio_wakeup_enable(pinNo, flags&gpio_driver_t::driver_type_t::wakeonhigh ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
+
+        if (ret != ESP_OK) {
+            ESP_LOGE(__FUNCTION__,"Error in pin(%d):%s wakeup failed: %s", pinNo, name, esp_err_to_name(ret));
+        } else {
+            ret = esp_sleep_enable_gpio_wakeup();
+
+            if (ret != ESP_OK) {
+                ESP_LOGE(__FUNCTION__,"Error in pin(%d):%s gpio wakeup failed: %s", pinNo, name, esp_err_to_name(ret));
+            }
+        }
+    }
 
     ESP_LOGV(__FUNCTION__,"Pin(%d):%s Direction:%s",pinNo,name,flags&gpio_driver_t::driver_type_t::digital_out ? "Out":"In");
     if (flags&gpio_driver_t::driver_type_t::pullup) {
@@ -161,106 +180,75 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
     if (strcmp(base,PIN_BASE)==0){
         Pin* pin = NULL;
         ESP_LOGV(__FUNCTION__,"Event %s-%d - %" PRIXPTR " %" PRIXPTR, base,id,(uintptr_t)event_data,(uintptr_t)*(cJSON**)event_data);
-        cJSON* params=*(cJSON**)event_data;
-        if (cJSON_IsInvalid(params)) {
-            if (*(char*)event_data == '{') {
-                params = cJSON_Parse((char*)event_data);
+        uint32_t pinNo=0;
+        char* pinName = NULL;
+        cJSON* jsonParams=NULL;
+
+        if ((uintptr_t)event_data < 35) {
+            pinNo = (uint32_t) event_data;
+        } else {
+            if (!cJSON_IsInvalid(*(cJSON**)event_data)) {
+                jsonParams = *(cJSON**)event_data;
+            } else if (*(char*)event_data == '{') {
+                jsonParams = cJSON_Parse((char*)event_data);
                 ESP_LOGV(__FUNCTION__,"evt:%s",(char*)event_data);
             } else {
                 ESP_LOGW(__FUNCTION__,"Unknown param type");
             }
+
+            if (jsonParams != NULL) {
+                if (cJSON_HasObjectItem(jsonParams,"pinNo")) {
+                    ESP_LOGV(__FUNCTION__,"Getting pinno");
+                    cJSON* item = cJSON_GetObjectItem(jsonParams,"pinNo");
+                    if (item) {
+                        if (cJSON_HasObjectItem(item,"value")) {
+                            ESP_LOGV(__FUNCTION__,"Getting pinno value");
+                            pinNo = cJSON_GetNumberValue(cJSON_GetObjectItem(item,"value"));
+                        } else {
+                            ESP_LOGV(__FUNCTION__,"Getting pinno raw value");
+                            pinNo = cJSON_GetNumberValue(item);
+                        }
+                    }
+                }
+                if (cJSON_HasObjectItem(jsonParams,"name")) {
+                    ESP_LOGV(__FUNCTION__,"Getting pinname");
+                    cJSON* item = cJSON_GetObjectItem(jsonParams,"name");
+                    if (item) {
+                        if (cJSON_HasObjectItem(item,"value")) {
+                            ESP_LOGV(__FUNCTION__,"Getting pinname value");
+                            pinName = cJSON_GetStringValue(cJSON_GetObjectItem(item,"value"));
+                        } else {
+                            ESP_LOGV(__FUNCTION__,"Getting pinname raw value");
+                            pinName = cJSON_GetStringValue(item);
+                        }
+                    }
+                }
+            }
         }
 
-        if (!cJSON_IsInvalid(params)) {
-            ESP_LOGV(__FUNCTION__,"Params(0x%" PRIXPTR " 0x%" PRIXPTR ")",(uintptr_t)event_data,(uintptr_t)params);
-            if (params != NULL) {
-                if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
-                    char* stmp = cJSON_Print(params);
-                    ESP_LOGV(__FUNCTION__,"req: %s", stmp);
-                    ldfree(stmp);
-                }
-                uint32_t pinNo=0;
-                char* pinName = NULL;
-                if ((uintptr_t)params < 35) {
-                    pinNo =(uint32_t) params;
+        if (pinNo || pinName) {
+            for (uint32_t idx = 0; idx < numPins; idx++) {
+                if (pins[idx]){
+                    ESP_LOGV(__FUNCTION__,"%d:Checking %d==%d",idx, pins[idx]->pinNo,pinNo);
+                    if ((pinNo && (pins[idx]->pinNo == pinNo)) || 
+                        (pinName && (strcmp(pins[idx]->name,pinName)==0))) {
+                        pin = pins[idx];
+                        break;
+                    }
                 } else {
-                    if (cJSON_HasObjectItem(params,"pinNo")) {
-                        ESP_LOGV(__FUNCTION__,"Getting pinno");
-                        cJSON* item = cJSON_GetObjectItem(params,"pinNo");
-                        if (item) {
-                            if (cJSON_HasObjectItem(item,"value")) {
-                                ESP_LOGV(__FUNCTION__,"Getting pinno value");
-                                pinNo = cJSON_GetNumberValue(cJSON_GetObjectItem(item,"value"));
-                            } else {
-                                ESP_LOGV(__FUNCTION__,"Getting pinno raw value");
-                                pinNo = cJSON_GetNumberValue(item);
-                            }
-                        } else {
-                            char* stmp = cJSON_Print(params);
-                            ESP_LOGV(__FUNCTION__,"Invalid pin cfg %s", stmp);
-                            ldfree(stmp);
-                            return;
-                        }
-                    }
-                    if (cJSON_HasObjectItem(params,"name")) {
-                        ESP_LOGV(__FUNCTION__,"Getting pinname");
-                        cJSON* item = cJSON_GetObjectItem(params,"name");
-                        if (item) {
-                            if (cJSON_HasObjectItem(item,"value")) {
-                                ESP_LOGV(__FUNCTION__,"Getting pinname value");
-                                pinName = cJSON_GetStringValue(cJSON_GetObjectItem(item,"value"));
-                            } else {
-                                ESP_LOGV(__FUNCTION__,"Getting pinname raw value");
-                                pinName = cJSON_GetStringValue(item);
-                            }
-                        } else {
-                            char* stmp = cJSON_Print(params);
-                            ESP_LOGV(__FUNCTION__,"Invalid pin cfg %s", stmp);
-                            ldfree(stmp);
-                            return;
-                        }
-                    }
+                    ESP_LOGV(__FUNCTION__,"No pin at idx:%d",idx);
                 }
-                for (uint32_t idx = 0; idx < numPins; idx++) {
-                    if (pins[idx]){
-                        ESP_LOGV(__FUNCTION__,"%d:Checking %d==%d",idx, pins[idx]->pinNo,pinNo);
-                        if (pinNo && (pins[idx]->pinNo == pinNo)) {
-                            pin = pins[idx];
-                            if (pin && pin->flags&gpio_driver_t::driver_type_t::digital_in) {
-                                if (params != *(cJSON**)event_data) {
-                                    cJSON_free(params);
-                                }
-                                return;
-                            }
-                            break;
-                        }
-                        if (pinName && (strcmp(pins[idx]->name,pinName)==0)) {
-                            pin = pins[idx];
-                            if (pin && pin->flags&gpio_driver_t::driver_type_t::digital_in) {
-                                if (params != *(cJSON**)event_data) {
-                                    cJSON_free(params);
-                                }
-                                return;
-                            }
-                            break;
-                        }
-                    } else {
-                        ESP_LOGV(__FUNCTION__,"No pin at idx:%d",idx);
-                    }
-                }
-                if (pin) {
-                    pin->ProcessEvent((Pin::eventIds)id,id == Pin::eventIds::STATUS ? pin->pinStatus->valueint : id == Pin::eventIds::TRIGGER ? !pin->pinStatus->valueint : id);
-                } else {
-                    ESP_LOGV(__FUNCTION__,"Invalid pin msg");
-                }
-                if (params != *(cJSON**)event_data) {
-                    cJSON_free(params);
-                }
-            } else {
-                ESP_LOGE(__FUNCTION__,"Missing params");
             }
-        } else {
-            ESP_LOGW(__FUNCTION__,"Cannot parse param");
+            if (pin && !(pin->flags&gpio_driver_t::driver_type_t::digital_in)) {
+                pin->ProcessEvent((Pin::eventIds)id,id == Pin::eventIds::STATUS ? pin->pinStatus->valueint : id == Pin::eventIds::TRIGGER ? !pin->pinStatus->valueint : id);
+            } else {
+                ESP_LOGV(__FUNCTION__,"Invalid pin msg");
+            }
+        }
+
+
+        if (jsonParams != *(cJSON**)event_data) {
+            cJSON_free(jsonParams);
         }
     }
 }
@@ -294,7 +282,6 @@ bool Pin::ProcessEvent(Pin::eventIds event,uint8_t state){
         ESP_LOGV(__FUNCTION__,"Pin %s from %d to %d",name,pinStatus->valueint,state);
         if (!isRtcGpio || flags&gpio_driver_t::driver_type_t::digital_out) {
             cJSON_SetIntValue(pinStatus,state);
-            memset(buf,0,1024);
             if (cJSON_PrintPreallocated(ManagedDevice::BuildStatus(this),this->buf,1024,false)){
                 //AppConfig::SignalStateChange(state_change_t::MAIN);
                 esp_event_post(eventBase,pinStatus->valueint ? eventIds::ON : eventIds::OFF,buf,strlen(buf)+1,portMAX_DELAY);

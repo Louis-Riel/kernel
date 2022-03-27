@@ -92,22 +92,12 @@ TheWifi::TheWifi(AppConfig *appcfg)
     if (handlerDescriptors == NULL)
         EventManager::RegisterEventHandler((handlerDescriptors = BuildHandlerDescriptors()));
 
-    esp_pm_config_esp32_t pm_config;
-    pm_config.max_freq_mhz = 240;
-    pm_config.min_freq_mhz = 240;
-    pm_config.light_sleep_enable = false;
     memset(&apIp, 0, sizeof(apIp));
     memset(&staIp, 0, sizeof(staIp));
     memset(clients, 0, sizeof(void *) * MAX_NUM_CLIENTS);
     memset(&wifi_config, 0, sizeof(wifi_config));
 
     esp_err_t ret;
-    if ((ret = esp_pm_configure(&pm_config)) != ESP_OK)
-    {
-        ESP_LOGE(__FUNCTION__, "pm config error %s\n",
-                 ret == ESP_ERR_INVALID_ARG ? "ESP_ERR_INVALID_ARG" : "ESP_ERR_NOT_SUPPORTED");
-    }
-
     xEventGroupClearBits(eventGroup, 0xff);
 
     ESP_LOGD(__FUNCTION__, "Wifi mode isap:%d issta:%d %s", appcfg->IsAp(), appcfg->IsSta(), appcfg->GetStringProperty("wifitype"));

@@ -348,7 +348,6 @@ uint8_t EventInterpretor::RunMethod(EventInterpretor *instance, const char *meth
 {
     cJSON *jeventbase;
     cJSON *jeventid;
-    int32_t eventId = -1;
     esp_err_t ret;
     EventGroupHandle_t app_eg = instance ? instance->app_eg : getAppEG();
 

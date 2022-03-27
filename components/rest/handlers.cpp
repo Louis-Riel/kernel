@@ -486,13 +486,13 @@ esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
                     ESP_LOGE(__FUNCTION__,"Cannot find device named %s",name);
                 }
             } else {
-                ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,postData);
+                ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"Missing name");
                 ESP_LOGE(__FUNCTION__,"Missing name in %s",postData);
             }
             delete appStat;
             cJSON_Delete(stat);
         } else {
-            ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,postData);
+            ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"Cannot parse JSON");
             ESP_LOGE(__FUNCTION__,"Cannot parse(%s)",postData);
         }
     }
@@ -508,7 +508,6 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
     if (rlen == 0)
     {
         ESP_LOGE(__FUNCTION__, "no body");
-        ldfree(postData);
         ret = httpd_resp_send_500(req);
     }
     else
@@ -517,7 +516,6 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
         *(postData + rlen) = 0;
         ESP_LOGV(__FUNCTION__, "Got %s", postData);
         cJSON *jresponse = cJSON_ParseWithLength(postData, rlen);
-        ldfree(postData);
         if (jresponse != NULL)
         {
             cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
@@ -597,8 +595,6 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                         ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"Pin not found");
                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 14;
                     }
-                    ret = httpd_resp_send(req, "OK", 2);
-                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                 } else {
                     ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,"Not Implemented");
                     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
@@ -643,6 +639,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 25;
         }
     }
+    ldfree(postData);
     return ret;
 }
 
