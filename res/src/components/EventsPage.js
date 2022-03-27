@@ -87,11 +87,9 @@ class LiveEventPannel extends React.Component {
                 });
             }
 
-            if (!Object.entries(this.state.filters).find(filter => filter[0] === evt.eventBase && filter[1].filtered || (filter[0] === evt.eventBase && filter[1].eventIds.find(eventId=>eventId.filtered && eventId.eventId === evt.eventId)))){
-                this.setState({
-                    lastEvents:lastEvents.concat(evt)
-                });
-            }
+            this.setState({
+                lastEvents:lastEvents.concat(evt)
+            });
         }
     }
 
@@ -142,40 +140,76 @@ class LiveEventPannel extends React.Component {
         })
     }
 
-    updateFilters(eventId, enabled) {
+    updateEventIdFilter(eventId, enabled) {
         eventId.filtered = enabled;
         this.setState({filters: this.state.filters});
     }
 
+    updateEventBaseFilter(eventBase, enabled) {
+        eventBase.filtered = enabled;
+        this.setState({filters: this.state.filters});
+    }
+
     filterPanel() {
-        return e("div",{key: "filterPanel", className:"filterPanel"},
-            Object.entries(this.state.filters)
-                   .map(event => e('div',{key:event[0], className: `filter ${event[0]}`}, [
-                        e("input",{key:"filtered",
-                                 checked: event[1].filtered, 
-                                 onChange: event=> this.updateFilters(event[1], event.target.checked),
-                                 type:"checkbox"}),
-                        e("div",{key:"label", className:`label ${event[0]}`},event[0]),
-                        e("div",{key:"filterList", className: `filters`},event[1].eventIds.map(eventId => e("div",{key:eventId.eventId, className:`filteritem ${eventId.eventId}`},[
-                            e("input",{key:"filtered",
-                                       checked: eventId.filtered, 
-                                       onChange: event=> this.updateFilters(eventId, event.target.checked),
-                                       type:"checkbox"}),
-                            e("div",{key:"chklabel",className:"label"},eventId.eventId)
-                        ])))
-                        ])
+        return e("div",{key: "filterPanel", className:"filterPanel"},[
+                e("div",{key:"filters",className:"filters"},[
+                    e("div",{ key: "label", className:"header"}, `Filters`),
+                    e("div",{key:"filterlist",className:"filterlist"},Object.entries(this.state.filters).map(this.renderFilter.bind(this)))
+                ]),
+                e("div", { key: "control", className:"control" }, [
+                    this.state?.lastEvents ? e("div",{ key: "label", className:"header"}, `${this.state.lastEvents.length}/${this.state.lastEvents.filter(this.isEventVisible.bind(this)).length} event${this.state?.lastEvents?.length?'s':''}`) : "No events",
+                    e("button",{ key: "clearbtn", onClick: elem => this.setState({lastEvents:[]})},"Clear")
+                ])
+               ]);
+    }
+
+    renderFilter(filter) {
+        return e('div', { key: filter[0], className: `filter ${filter[0]}` },
+            e("div",{key:"evbfiltered",className:"evbfiltered"},
+                e(MaterialUI.FormControlLabel,{
+                    key:"filtered",
+                    className:"ebfiltered",
+                    label: filter[0],
+                    control:e(MaterialUI.Checkbox, {
+                        key: "ctrl",
+                        checked: filter[1].filtered,
+                        onChange: event => this.updateEventIdFilter(filter[1], event.target.checked)
+                    })})
+            ),
+            e("div", { key: "filterList", className: `eventIds` }, filter[1].eventIds.map(eventId => e("div", { key: eventId.eventId, className: `filteritem ${eventId.eventId}` }, [
+                e("div",{key:"evifiltered",className:"evifiltered"},
+                    e(MaterialUI.FormControlLabel,{
+                        key:eventId.eventId,
+                        className:"eifiltered",
+                        label: eventId.eventId,
+                        control:e(MaterialUI.Checkbox, {
+                            key: "ctrl",
+                            checked: eventId.filtered,
+                            onChange: event => this.updateEventIdFilter(eventId, event.target.checked),
+                        })}
                     )
-        );
+                )
+            ]))));
+    }
+
+    isEventVisible(event) {
+        return !Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].filtered) &&
+               !Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
+                                                                  !this.state.filters[eventBase].filtered &&
+                                                                  this.state.filters[eventBase].eventIds
+                                                                    .some(eventId=> eventId.eventId === event.eventId && eventId.filtered));
+    }
+
+    getFilteredEvents() {
+        return e("div", { key: "eventList", className: "eventList" }, 
+                this.state?.lastEvents?.filter(this.isEventVisible.bind(this))
+                           .map((event, idx) => e(LiveEvent, { key: idx, event: this.parseEvent(event) })).reverse());
     }
 
     render() {
         return  e("div", { key: "eventPanel" ,className: "eventPanel" }, [
-            e("div", { key: "control", className:"control" }, [
-                e("div",{ key: "header"}, `${this.state?.lastEvents?.length || "Waiting on "} event${this.state?.lastEvents?.length?'s':''}`),
-                e("button",{ key: "clearbtn", onClick: elem => this.setState({lastEvents:[]})},"Clear")
-            ]),
             this.filterPanel(),
-            e("div",{ key: "eventList", className:"eventList"},this.state?.lastEvents?.map((event,idx) => e(LiveEvent,{ key: idx, event:this.parseEvent(event)})).reverse())
+            this.getFilteredEvents()
         ])
 
     }

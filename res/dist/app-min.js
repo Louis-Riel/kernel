@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "";//"http://192.168.4.1";
+var httpPrefix = "http://192.168.1.30/irtracker";
 
 //#region SHA-1
 /*
@@ -594,28 +594,27 @@ class LocalJSONEditor extends React.Component {
     getValue(fld,val) {
         if (val?.value !== undefined) {
             return this.getValue(fld,val.value);
-        } else {
-            if (IsNumberValue(val)) {
-                if (isFloat(val)) {
-                    if ((this.props.name.toLowerCase() != "lattitude") &&
-                        (this.props.name.toLowerCase() != "longitude") &&
-                        (this.props.name != "lat") && (this.props.name != "lng")) {
-                        val = parseFloat(val).toFixed(2);
-                    } else {
-                        val = parseFloat(val).toFixed(8);
-                    }
-                }
-            }
-            if (IsBooleanValue(val)) {
-                val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
-            }
-
-            if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-                return e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
-            }
-
-            return val;
         }
+
+        if (IsNumberValue(val) && isFloat(val)) {
+            return parseFloat(val).toFixed(this.isGeoField() ? 8 : 2).replace(/0+$/,'');
+        }
+        
+        if (IsBooleanValue(val)) {
+            return ((val === "true") || (val === "yes") || (val === true)) ? "Y" : "N"
+        }
+
+        if ((this.props.name === "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+            return e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
+        }
+        return val;
+    }
+
+    isGeoField() {
+        return (this.props.name.toLowerCase() === "lattitude") ||
+            (this.props.name.toLowerCase() === "longitude") ||
+            (this.props.name === "lat") || 
+            (this.props.name === "lng");
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
@@ -623,14 +622,18 @@ class LocalJSONEditor extends React.Component {
             this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
         }
         if (this.state?.lastStates && (this.props.value !== prevProps?.value)) {
-            this.state.lastStates.push({
-                value:this.props.value,
+            this.setState({lastStates: [...this.getActiveLastStates(), {
+                value: this.getValue(this.props.name,this.props.value),
                 ts: Date.now()
-            });
-            while (this.state.lastStates.length > this.state.maxLastStates) {
-                this.state.lastStates.pop();
-            }
+            }]});
         }
+    }
+
+    getActiveLastStates() {
+        if (this.state.lastStates.length > (this.state.maxLastStates - 1)) {
+            return this.state.lastStates.splice(this.state.lastStates.length - this.state.maxLastStates);
+        }
+        return this.state.lastStates;
     }
 
     renderTime(input, fld, val) {
@@ -659,7 +662,6 @@ class LocalJSONEditor extends React.Component {
                 time = ('0'+hrs).slice(-2) + ":" + ('0'+min).slice(-2) + ":" + ('0'+sec).slice(-2);
         }
 
-
         var canvas = input.querySelector(`canvas`) || input.appendChild(document.createElement("canvas"));
         canvas.height = 100;
         canvas.width = 110;
@@ -672,24 +674,14 @@ class LocalJSONEditor extends React.Component {
         rect.height = canvas.height;
         rect.width = canvas.width;
 
-        //Background
-        var gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
-        gradient.addColorStop(0, "#03303a");
-        gradient.addColorStop(1, "black");
-        ctx.fillStyle = gradient;
-        ctx.clearRect(0, 0, rect.width, rect.height);
+        this.drawBackground(ctx, rect, hrs, smoothmin);
+        this.drawClock(ctx, today, rect, time);
+    }
 
-        ctx.beginPath();
-        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad(270+((hrs>12?hrs-12:hrs)*30)));
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad(270+(smoothmin * 6)));
-        ctx.stroke();
-
+    drawClock(ctx, today, rect, time) {
         //Date
         ctx.font = "12px Helvetica";
-        ctx.fillStyle = 'rgba(00, 255, 255, 1)'
+        ctx.fillStyle = 'rgba(00, 255, 255, 1)';
         var txtbx = ctx.measureText(today);
         ctx.fillText(today, (rect.width / 2) - txtbx.width / 2, rect.height * .65);
 
@@ -700,15 +692,69 @@ class LocalJSONEditor extends React.Component {
         ctx.fillText(time, (rect.width * 0.50) - txtbx.width / 2, rect.height * 0.45);
     }
 
-    render() {
-        if (this.props.label) {
-            return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
-                e("div", { key: 'label', className: "label", id: `dlbl${this.id}` }, this.props.label),
-                e("div", { key: 'value', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
-            ]);
-        } else {
-            return e("div", { key: 'timevalue', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value));
+    drawBackground(ctx, rect, hrs, smoothmin) {
+        var gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
+        gradient.addColorStop(0, "#03303a");
+        gradient.addColorStop(1, "black");
+        ctx.fillStyle = gradient;
+        ctx.clearRect(0, 0, rect.width, rect.height);
+
+        ctx.beginPath();
+        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad(270 + ((hrs > 12 ? hrs - 12 : hrs) * 30)));
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad(270 + (smoothmin * 6)));
+        ctx.stroke();
+    }
+
+    getGraphButton() {
+        var ret = null;
+        if (this.hasStats()) {
+            ret = e(MaterialUI.Tooltip,{
+                      className: "graphtooltip",
+                      key:"tooltip",
+                      width: "200",
+                      height: "100",
+                      title: this.state.graph ? "Close" : this.getReport(true)
+                    },e('i',{className: "reportbtn fa fa-line-chart", key: "graphbtn", onClick: elem=>this.setState({"graph":this.state.graph?false:true})})
+                  );
         }
+        return ret;
+    }
+
+    hasStats() {
+        return !IsDatetimeValue(this.props.name) &&
+            IsNumberValue(this.props.value) &&
+            this.state?.lastStates &&
+            this.state.lastStates.reduce((ret, state) => ret.find(it => it === state.value) ? ret : [state.value, ...ret], []).length > 2;
+    }
+
+    getReport(summary) {
+        return e(Recharts.ResponsiveContainer,{key:"chartcontainer", className: "chartcontainer"},
+                e(Recharts.LineChart,{key:"chart", data: this.state.lastStates, className: "chart", margin: {left:20}},[
+                    e(Recharts.Line, {key:"line", dot: !summary, type:"monotone", dataKey:"value", stroke:"#8884d8", isAnimationActive: false}),
+                    summary?null:e(Recharts.CartesianGrid, {key:"grid", hide:summary, strokeDasharray:"5 5", stroke:"#ccc"}),
+                    e(Recharts.XAxis, {key:"thexs", hide:summary, dataKey:"ts",type: 'number', domain: ['auto', 'auto'],name: 'Time', tickFormatter: (unixTime) => new Date(unixTime).toLocaleTimeString(), type: "number"}),
+                    e(Recharts.YAxis, {key:"theys", hide:summary, dataKey:"value", domain: ['auto', 'auto']}),
+                    e(Recharts.Tooltip, {key:"tooltip", contentStyle: {backgroundColor: "black"}, labelStyle: {backgroundColor: "black"}, className:"tooltip", labelFormatter: t => new Date(t).toLocaleString()})
+        ]));
+    }
+
+    getLabeledField() {
+        return e('label', { className: `readonly ${ this.state?.graph ? 'graph' : '' }`, id: `lbl${this.id}`, key: this.id }, [
+            e("div", { key: 'label', className: "label", id: `dlbl${this.id}` }, [this.props.label, this.getGraphButton()]),
+            e("div", { key: 'value', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name, this.props.value)),
+            this.state?.graph && this.hasStats() ? this.getReport(false) : null
+        ]);
+    }
+
+    getTableField() {
+        return e("div", { key: 'timevalue', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name, this.props.value));
+    }
+
+    render() {
+        return this.props.label ? this.getLabeledField() : this.getTableField();
     }
 }
 class Table extends React.Component {
@@ -903,6 +949,9 @@ class StatusPage extends React.Component {
     constructor(props) {
         super(props);
         this.mounted=false;
+        this.state={
+            refreshRate:"Manual"
+        }
     }
 
     componentWillUnmount() {
@@ -914,6 +963,25 @@ class StatusPage extends React.Component {
         this.updateAppStatus();
         if (this.props.registerStateCallback) {
             this.props.registerStateCallback(this.refreshStatus.bind(this));
+        }
+    }
+
+    getRefreshRate() {
+        if (this.state.refreshRate.indexOf("secs")>0) {
+            return Number(this.state.refreshRate.replace(/([0-9]+).*/,"$1"))*1000
+        } 
+        return Number(this.state.refreshRate.replace(/([0-9]+).*/,"$1"))*60000
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.state.refreshRate !== prevState.refreshRate) {
+            if (this.refreshTimer) {
+                clearInterval(this.refreshTimer);
+            }
+
+            if (this.state.refreshRate !== "Manual"){
+                this.refreshTimer = setInterval(()=>{this.updateAppStatus()},this.getRefreshRate());
+            }
         }
     }
 
@@ -949,29 +1017,8 @@ class StatusPage extends React.Component {
             var abort = new AbortController()
             var timer = setTimeout(() => abort.abort(), 4000);
             if (this.props.selectedDeviceId == "current") {
-                Promise.all(requests.map(request => {
-                    return new Promise((resolve, reject) => {
-                        wfetch(`${httpPrefix}${request.url}`, {
-                            method: 'post',
-                            signal: abort.signal
-                        }).then(data => data.json())
-                          .then(this.filterProperties.bind(this))
-                          .then(jstats => {
-                                requests = requests.filter(req => req != request);
-                                if (request.path) {
-                                    newState[request.path] = Object.values(jstats);
-                                } else {
-                                    Object.assign(newState, jstats);
-                                }
-                                resolve({ path: request.path, stat: jstats });
-                            }).catch(err => {
-                                request.retryCnt = (request.retryCnt | 0) + 1;
-                                request.waitFor = 1000;
-                                request.error = err;
-                                reject(err);
-                            });
-                    });
-                })).then(results => {
+                Promise.all(requests.map(request => this.updateStatus(request, abort, newState)))
+                       .then(results => {
                     clearTimeout(timer);
                     document.getElementById("Status").style.opacity = 1;
                     if (this.mounted){
@@ -1009,6 +1056,27 @@ class StatusPage extends React.Component {
         }
     }
 
+    updateStatus(request, abort, newState) {
+        return new Promise((resolve, reject) => wfetch(`${httpPrefix}${request.url}`, {
+            method: 'post',
+            signal: abort.signal
+        }).then(data => data.json())
+            .then(this.filterProperties.bind(this))
+            .then(jstats => {
+                if (request.path) {
+                    newState[request.path] = Object.values(jstats);
+                } else {
+                    Object.assign(newState, jstats);
+                }
+                resolve({ path: request.path, stat: jstats });
+            }).catch(err => {
+                request.retryCnt = (request.retryCnt | 0) + 1;
+                request.waitFor = 1000;
+                request.error = err;
+                reject(err);
+            }));
+    }
+
     orderResults(res) {
         var ret = {};
         Object.keys(res).filter(fld => (typeof res[fld] != 'object') && !Array.isArray(res[fld])).sort((a, b) => a.localeCompare(b)).forEach(fld => ret[fld] = res[fld]);
@@ -1020,7 +1088,24 @@ class StatusPage extends React.Component {
     render() {
         if (this.state?.status){
             return [
-                e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
+                e("div",{key: "buttonbar", className: "buttonbar"},[
+                    e("button", { key: "refresh", onClick: elem => this.updateAppStatus() }, "Refresh"),
+                    e( MaterialUI.FormControl,{key: "refreshRate"},[
+                        e(MaterialUI.InputLabel,{
+                            key: "label",
+                            className: "label",
+                            id: "stat-refresh-label"
+                        },"Refresh Rate"),
+                        e(MaterialUI.Select,{
+                            key:"options",
+                            id: "stat-refresh",
+                            labelId:"stat-refresh-label", 
+                            label: "Refresh Rate",
+                            value: this.state.refreshRate,
+                            onChange: elem => this.setState({refreshRate:elem.target.value})
+                        },["Manual", "2 secs", "5 secs", "10 secs","30 secs","1 mins","5 mins","10 mins","30 mins","60 mins"].map((term,idx)=>e(MaterialUI.MenuItem,{key:idx,value:term},term)))
+                    ])
+                ]),
                 e(LocalJSONEditor, {
                     key: 'StateViewer', 
                     path: '/',
@@ -1272,11 +1357,9 @@ class LiveEventPannel extends React.Component {
                 });
             }
 
-            if (!Object.entries(this.state.filters).find(filter => filter[0] === evt.eventBase && filter[1].filtered || (filter[0] === evt.eventBase && filter[1].eventIds.find(eventId=>eventId.filtered && eventId.eventId === evt.eventId)))){
-                this.setState({
-                    lastEvents:lastEvents.concat(evt)
-                });
-            }
+            this.setState({
+                lastEvents:lastEvents.concat(evt)
+            });
         }
     }
 
@@ -1327,40 +1410,76 @@ class LiveEventPannel extends React.Component {
         })
     }
 
-    updateFilters(eventId, enabled) {
+    updateEventIdFilter(eventId, enabled) {
         eventId.filtered = enabled;
         this.setState({filters: this.state.filters});
     }
 
+    updateEventBaseFilter(eventBase, enabled) {
+        eventBase.filtered = enabled;
+        this.setState({filters: this.state.filters});
+    }
+
     filterPanel() {
-        return e("div",{key: "filterPanel", className:"filterPanel"},
-            Object.entries(this.state.filters)
-                   .map(event => e('div',{key:event[0], className: `filter ${event[0]}`}, [
-                        e("input",{key:"filtered",
-                                 checked: event[1].filtered, 
-                                 onChange: event=> this.updateFilters(event[1], event.target.checked),
-                                 type:"checkbox"}),
-                        e("div",{key:"label", className:`label ${event[0]}`},event[0]),
-                        e("div",{key:"filterList", className: `filters`},event[1].eventIds.map(eventId => e("div",{key:eventId.eventId, className:`filteritem ${eventId.eventId}`},[
-                            e("input",{key:"filtered",
-                                       checked: eventId.filtered, 
-                                       onChange: event=> this.updateFilters(eventId, event.target.checked),
-                                       type:"checkbox"}),
-                            e("div",{key:"chklabel",className:"label"},eventId.eventId)
-                        ])))
-                        ])
+        return e("div",{key: "filterPanel", className:"filterPanel"},[
+                e("div",{key:"filters",className:"filters"},[
+                    e("div",{ key: "label", className:"header"}, `Filters`),
+                    e("div",{key:"filterlist",className:"filterlist"},Object.entries(this.state.filters).map(this.renderFilter.bind(this)))
+                ]),
+                e("div", { key: "control", className:"control" }, [
+                    this.state?.lastEvents ? e("div",{ key: "label", className:"header"}, `${this.state.lastEvents.length}/${this.state.lastEvents.filter(this.isEventVisible.bind(this)).length} event${this.state?.lastEvents?.length?'s':''}`) : "No events",
+                    e("button",{ key: "clearbtn", onClick: elem => this.setState({lastEvents:[]})},"Clear")
+                ])
+               ]);
+    }
+
+    renderFilter(filter) {
+        return e('div', { key: filter[0], className: `filter ${filter[0]}` },
+            e("div",{key:"evbfiltered",className:"evbfiltered"},
+                e(MaterialUI.FormControlLabel,{
+                    key:"filtered",
+                    className:"ebfiltered",
+                    label: filter[0],
+                    control:e(MaterialUI.Checkbox, {
+                        key: "ctrl",
+                        checked: filter[1].filtered,
+                        onChange: event => this.updateEventIdFilter(filter[1], event.target.checked)
+                    })})
+            ),
+            e("div", { key: "filterList", className: `eventIds` }, filter[1].eventIds.map(eventId => e("div", { key: eventId.eventId, className: `filteritem ${eventId.eventId}` }, [
+                e("div",{key:"evifiltered",className:"evifiltered"},
+                    e(MaterialUI.FormControlLabel,{
+                        key:eventId.eventId,
+                        className:"eifiltered",
+                        label: eventId.eventId,
+                        control:e(MaterialUI.Checkbox, {
+                            key: "ctrl",
+                            checked: eventId.filtered,
+                            onChange: event => this.updateEventIdFilter(eventId, event.target.checked),
+                        })}
                     )
-        );
+                )
+            ]))));
+    }
+
+    isEventVisible(event) {
+        return !Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].filtered) &&
+               !Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
+                                                                  !this.state.filters[eventBase].filtered &&
+                                                                  this.state.filters[eventBase].eventIds
+                                                                    .some(eventId=> eventId.eventId === event.eventId && eventId.filtered));
+    }
+
+    getFilteredEvents() {
+        return e("div", { key: "eventList", className: "eventList" }, 
+                this.state?.lastEvents?.filter(this.isEventVisible.bind(this))
+                           .map((event, idx) => e(LiveEvent, { key: idx, event: this.parseEvent(event) })).reverse());
     }
 
     render() {
         return  e("div", { key: "eventPanel" ,className: "eventPanel" }, [
-            e("div", { key: "control", className:"control" }, [
-                e("div",{ key: "header"}, `${this.state?.lastEvents?.length || "Waiting on "} event${this.state?.lastEvents?.length?'s':''}`),
-                e("button",{ key: "clearbtn", onClick: elem => this.setState({lastEvents:[]})},"Clear")
-            ]),
             this.filterPanel(),
-            e("div",{ key: "eventList", className:"eventList"},this.state?.lastEvents?.map((event,idx) => e(LiveEvent,{ key: idx, event:this.parseEvent(event)})).reverse())
+            this.getFilteredEvents()
         ])
 
     }

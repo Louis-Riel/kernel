@@ -18,28 +18,27 @@ class ROProp extends React.Component {
     getValue(fld,val) {
         if (val?.value !== undefined) {
             return this.getValue(fld,val.value);
-        } else {
-            if (IsNumberValue(val)) {
-                if (isFloat(val)) {
-                    if ((this.props.name.toLowerCase() != "lattitude") &&
-                        (this.props.name.toLowerCase() != "longitude") &&
-                        (this.props.name != "lat") && (this.props.name != "lng")) {
-                        val = parseFloat(val).toFixed(2);
-                    } else {
-                        val = parseFloat(val).toFixed(8);
-                    }
-                }
-            }
-            if (IsBooleanValue(val)) {
-                val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
-            }
-
-            if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-                return e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
-            }
-
-            return val;
         }
+
+        if (IsNumberValue(val) && isFloat(val)) {
+            return parseFloat(val).toFixed(this.isGeoField() ? 8 : 2).replace(/0+$/,'');
+        }
+        
+        if (IsBooleanValue(val)) {
+            return ((val === "true") || (val === "yes") || (val === true)) ? "Y" : "N"
+        }
+
+        if ((this.props.name === "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+            return e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
+        }
+        return val;
+    }
+
+    isGeoField() {
+        return (this.props.name.toLowerCase() === "lattitude") ||
+            (this.props.name.toLowerCase() === "longitude") ||
+            (this.props.name === "lat") || 
+            (this.props.name === "lng");
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
@@ -47,14 +46,18 @@ class ROProp extends React.Component {
             this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
         }
         if (this.state?.lastStates && (this.props.value !== prevProps?.value)) {
-            this.state.lastStates.push({
-                value:this.props.value,
+            this.setState({lastStates: [...this.getActiveLastStates(), {
+                value: this.getValue(this.props.name,this.props.value),
                 ts: Date.now()
-            });
-            while (this.state.lastStates.length > this.state.maxLastStates) {
-                this.state.lastStates.pop();
-            }
+            }]});
         }
+    }
+
+    getActiveLastStates() {
+        if (this.state.lastStates.length > (this.state.maxLastStates - 1)) {
+            return this.state.lastStates.splice(this.state.lastStates.length - this.state.maxLastStates);
+        }
+        return this.state.lastStates;
     }
 
     renderTime(input, fld, val) {
@@ -83,7 +86,6 @@ class ROProp extends React.Component {
                 time = ('0'+hrs).slice(-2) + ":" + ('0'+min).slice(-2) + ":" + ('0'+sec).slice(-2);
         }
 
-
         var canvas = input.querySelector(`canvas`) || input.appendChild(document.createElement("canvas"));
         canvas.height = 100;
         canvas.width = 110;
@@ -96,24 +98,14 @@ class ROProp extends React.Component {
         rect.height = canvas.height;
         rect.width = canvas.width;
 
-        //Background
-        var gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
-        gradient.addColorStop(0, "#03303a");
-        gradient.addColorStop(1, "black");
-        ctx.fillStyle = gradient;
-        ctx.clearRect(0, 0, rect.width, rect.height);
+        this.drawBackground(ctx, rect, hrs, smoothmin);
+        this.drawClock(ctx, today, rect, time);
+    }
 
-        ctx.beginPath();
-        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad(270+((hrs>12?hrs-12:hrs)*30)));
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad(270+(smoothmin * 6)));
-        ctx.stroke();
-
+    drawClock(ctx, today, rect, time) {
         //Date
         ctx.font = "12px Helvetica";
-        ctx.fillStyle = 'rgba(00, 255, 255, 1)'
+        ctx.fillStyle = 'rgba(00, 255, 255, 1)';
         var txtbx = ctx.measureText(today);
         ctx.fillText(today, (rect.width / 2) - txtbx.width / 2, rect.height * .65);
 
@@ -124,14 +116,68 @@ class ROProp extends React.Component {
         ctx.fillText(time, (rect.width * 0.50) - txtbx.width / 2, rect.height * 0.45);
     }
 
-    render() {
-        if (this.props.label) {
-            return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
-                e("div", { key: 'label', className: "label", id: `dlbl${this.id}` }, this.props.label),
-                e("div", { key: 'value', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
-            ]);
-        } else {
-            return e("div", { key: 'timevalue', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value));
+    drawBackground(ctx, rect, hrs, smoothmin) {
+        var gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
+        gradient.addColorStop(0, "#03303a");
+        gradient.addColorStop(1, "black");
+        ctx.fillStyle = gradient;
+        ctx.clearRect(0, 0, rect.width, rect.height);
+
+        ctx.beginPath();
+        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad(270 + ((hrs > 12 ? hrs - 12 : hrs) * 30)));
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad(270 + (smoothmin * 6)));
+        ctx.stroke();
+    }
+
+    getGraphButton() {
+        var ret = null;
+        if (this.hasStats()) {
+            ret = e(MaterialUI.Tooltip,{
+                      className: "graphtooltip",
+                      key:"tooltip",
+                      width: "200",
+                      height: "100",
+                      title: this.state.graph ? "Close" : this.getReport(true)
+                    },e('i',{className: "reportbtn fa fa-line-chart", key: "graphbtn", onClick: elem=>this.setState({"graph":this.state.graph?false:true})})
+                  );
         }
+        return ret;
+    }
+
+    hasStats() {
+        return !IsDatetimeValue(this.props.name) &&
+            IsNumberValue(this.props.value) &&
+            this.state?.lastStates &&
+            this.state.lastStates.reduce((ret, state) => ret.find(it => it === state.value) ? ret : [state.value, ...ret], []).length > 2;
+    }
+
+    getReport(summary) {
+        return e(Recharts.ResponsiveContainer,{key:"chartcontainer", className: "chartcontainer"},
+                e(Recharts.LineChart,{key:"chart", data: this.state.lastStates, className: "chart", margin: {left:20}},[
+                    e(Recharts.Line, {key:"line", dot: !summary, type:"monotone", dataKey:"value", stroke:"#8884d8", isAnimationActive: false}),
+                    summary?null:e(Recharts.CartesianGrid, {key:"grid", hide:summary, strokeDasharray:"5 5", stroke:"#ccc"}),
+                    e(Recharts.XAxis, {key:"thexs", hide:summary, dataKey:"ts",type: 'number', domain: ['auto', 'auto'],name: 'Time', tickFormatter: (unixTime) => new Date(unixTime).toLocaleTimeString(), type: "number"}),
+                    e(Recharts.YAxis, {key:"theys", hide:summary, dataKey:"value", domain: ['auto', 'auto']}),
+                    e(Recharts.Tooltip, {key:"tooltip", contentStyle: {backgroundColor: "black"}, labelStyle: {backgroundColor: "black"}, className:"tooltip", labelFormatter: t => new Date(t).toLocaleString()})
+        ]));
+    }
+
+    getLabeledField() {
+        return e('label', { className: `readonly ${ this.state?.graph ? 'graph' : '' }`, id: `lbl${this.id}`, key: this.id }, [
+            e("div", { key: 'label', className: "label", id: `dlbl${this.id}` }, [this.props.label, this.getGraphButton()]),
+            e("div", { key: 'value', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name, this.props.value)),
+            this.state?.graph && this.hasStats() ? this.getReport(false) : null
+        ]);
+    }
+
+    getTableField() {
+        return e("div", { key: 'timevalue', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name, this.props.value));
+    }
+
+    render() {
+        return this.props.label ? this.getLabeledField() : this.getTableField();
     }
 }

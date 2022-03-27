@@ -119,7 +119,7 @@ label {
     background: linear-gradient(to bottom, #2d332d, #091308);
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     justify-content: flex-start;
 }
 
@@ -237,7 +237,7 @@ option {
     color: #12e0fc;
 }
 
-.slides fieldset {
+.fieldgroup>fieldset {
     border-style: none;
     background: linear-gradient(to bottom, #151a15, #273426);
     padding-right: 0;
@@ -517,7 +517,7 @@ div.slider > div.slide {
 
 .eventBase {
     color: aqua;
-    margin-right: 5px;
+    /* margin-right: 5px; */
 }
 
 .eventId {
@@ -526,11 +526,15 @@ div.slider > div.slide {
 
 .control {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     position: sticky;
     top: 0;
     font: caption;
     color: aquamarine;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    align-items: center;
 }
 
 div.events button {
@@ -538,8 +542,11 @@ div.events button {
 }
 
 .eventList {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
 }
 
 .designer {
@@ -946,20 +953,18 @@ caption>.jsonlabel {
     align-items: center;
 }
 
-.filter>input[type="checkbox"] {
-    display: none;
-}
-
 .filters {
-    border: solid aquamarine 1px;
-    border-radius: 10px;
+    /* border: solid aquamarine 1px; */
+    /* border-radius: 0px 0px 10px 10px; */
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     flex-wrap: wrap;
     column-gap: 10px;
     padding: 0 5px;
     font-size: small;
     justify-content: space-between;
+    align-content: center;
+    align-items: center;
 }
 
 .filteritem {
@@ -970,4 +975,824 @@ caption>.jsonlabel {
     justify-content: center;
     align-items: center;
     column-gap: 5px;
+}
+
+.reportbtn {
+    margin-left: 5px;
+    cursor: pointer;
+}
+
+.chartcontainer {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: space-between;
+    align-items: stretch;
+    max-width: 700px;
+    min-height: 200px;
+}
+
+.MuiTooltip-tooltip>.chartcontainer {
+    min-height: 80px;
+}
+
+.buttonbar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: space-between;
+    align-items: center;
+    margin: 20px 5px;
+}
+
+.MuiFormControl-root {
+    width: 150px;
+}
+
+.MuiFormControl-root>*, .MuiInputBase-root>* {
+    color: inherit !important;
+}
+
+.filterPanel {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: flex-start;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 10px;
+}
+
+.flters {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: 10px;
+}
+
+.filter {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: stretch;
+}/* dark styling of the editor */
+div.jsoneditor,
+div.jsoneditor-menu {
+  border-color: #4b4b4b;
+}
+div.jsoneditor-menu {
+    background: linear-gradient(to left, #040404, #222b21);
+}
+div.jsoneditor-tree,
+div.jsoneditor textarea.jsoneditor-text {
+    background: linear-gradient(to bottom, #040404, #3a4a38) !important;
+    color: #ffffff;
+}
+table.jsoneditor-search div.jsoneditor-frame {
+  background: #808080;
+}
+
+tr.jsoneditor-highlight,
+tr.jsoneditor-selected {
+  background-color: #808080;
+}
+
+div.jsoneditor-field[contenteditable=true]:focus,
+div.jsoneditor-field[contenteditable=true]:hover,
+div.jsoneditor-value[contenteditable=true]:focus,
+div.jsoneditor-value[contenteditable=true]:hover,
+div.jsoneditor-field.jsoneditor-highlight,
+div.jsoneditor-value.jsoneditor-highlight {
+  background-color: #808080;
+  border-color: #808080;
+}
+
+div.jsoneditor-field.highlight-active,
+div.jsoneditor-field.highlight-active:focus,
+div.jsoneditor-field.highlight-active:hover,
+div.jsoneditor-value.highlight-active,
+div.jsoneditor-value.highlight-active:focus,
+div.jsoneditor-value.highlight-active:hover {
+  background-color: #b1b1b1;
+  border-color: #b1b1b1;
+}
+
+div.jsoneditor-tree button:focus {
+  background-color: #868686;
+}
+
+/* coloring of JSON in tree mode */
+div.jsoneditor-readonly {
+  color: #acacac;
+}
+div.jsoneditor td.jsoneditor-separator {
+  color: #acacac;
+}
+div.jsoneditor-value.jsoneditor-string {
+  color: #00ff88;
+}
+div.jsoneditor-value.jsoneditor-object,
+div.jsoneditor-value.jsoneditor-array {
+  color: #bababa;
+}
+div.jsoneditor-value.jsoneditor-number {
+  color: #ff4040;
+}
+div.jsoneditor-value.jsoneditor-boolean {
+  color: #ff8048;
+}
+div.jsoneditor-value.jsoneditor-null {
+  color: #49a7fc;
+}
+div.jsoneditor-value.jsoneditor-invalid {
+  color: white;
+}
+
+div.jsoneditor-readonly {
+    color: aquamarine !important;
+}
+
+tr.jsoneditor-highlight {
+    background: linear-gradient(to left, #040404, #222b21);
+    border: 1px black solid;
+}
+
+div.jsoneditor-field {
+    color: deepskyblue !important;
+}
+
+div.jsoneditor-navigation-bar {
+    color: aliceblue;
+    background: linear-gradient(to left, #040404, #222b21);
+}
+
+button.jsoneditor-transform {
+    color: red;
+}
+
+.jsoneditor-frame {
+    background-color: transparent !important;
+}
+
+div.jsoneditor-frame >  input {
+    background-color: #d1e2cf;
+}
+
+div.jsoneditor-value.jsoneditor-string {
+    color: lightgreen !important;
+}
+
+div.jsoneditor-value.jsoneditor-number {
+    color: lightseagreen !important ;
+}
+/* dark styling of the editor */
+div.jsoneditor,
+div.jsoneditor-menu {
+  border-color: #4b4b4b;
+}
+div.jsoneditor-menu {
+    background: linear-gradient(to left, #040404, #222b21);
+}
+div.jsoneditor-tree,
+div.jsoneditor textarea.jsoneditor-text {
+    background: linear-gradient(to bottom, #040404, #3a4a38) !important;
+    color: #ffffff;
+}
+table.jsoneditor-search div.jsoneditor-frame {
+  background: #808080;
+}
+
+tr.jsoneditor-highlight,
+tr.jsoneditor-selected {
+  background-color: #808080;
+}
+
+div.jsoneditor-field[contenteditable=true]:focus,
+div.jsoneditor-field[contenteditable=true]:hover,
+div.jsoneditor-value[contenteditable=true]:focus,
+div.jsoneditor-value[contenteditable=true]:hover,
+div.jsoneditor-field.jsoneditor-highlight,
+div.jsoneditor-value.jsoneditor-highlight {
+  background-color: #808080;
+  border-color: #808080;
+}
+
+div.jsoneditor-field.highlight-active,
+div.jsoneditor-field.highlight-active:focus,
+div.jsoneditor-field.highlight-active:hover,
+div.jsoneditor-value.highlight-active,
+div.jsoneditor-value.highlight-active:focus,
+div.jsoneditor-value.highlight-active:hover {
+  background-color: #b1b1b1;
+  border-color: #b1b1b1;
+}
+
+div.jsoneditor-tree button:focus {
+  background-color: #868686;
+}
+
+/* coloring of JSON in tree mode */
+div.jsoneditor-readonly {
+  color: #acacac;
+}
+div.jsoneditor td.jsoneditor-separator {
+  color: #acacac;
+}
+div.jsoneditor-value.jsoneditor-string {
+  color: #00ff88;
+}
+div.jsoneditor-value.jsoneditor-object,
+div.jsoneditor-value.jsoneditor-array {
+  color: #bababa;
+}
+div.jsoneditor-value.jsoneditor-number {
+  color: #ff4040;
+}
+div.jsoneditor-value.jsoneditor-boolean {
+  color: #ff8048;
+}
+div.jsoneditor-value.jsoneditor-null {
+  color: #49a7fc;
+}
+div.jsoneditor-value.jsoneditor-invalid {
+  color: white;
+}
+
+div.jsoneditor-readonly {
+    color: aquamarine !important;
+}
+
+tr.jsoneditor-highlight {
+    background: linear-gradient(to left, #040404, #222b21);
+    border: 1px black solid;
+}
+
+div.jsoneditor-field {
+    color: deepskyblue !important;
+}
+
+div.jsoneditor-navigation-bar {
+    color: aliceblue;
+    background: linear-gradient(to left, #040404, #222b21);
+}
+
+button.jsoneditor-transform {
+    color: red;
+}
+
+.jsoneditor-frame {
+    background-color: transparent !important;
+}
+
+div.jsoneditor-frame >  input {
+    background-color: #d1e2cf;
+}
+
+div.jsoneditor-value.jsoneditor-string {
+    color: lightgreen !important;
+}
+
+div.jsoneditor-value.jsoneditor-number {
+    color: lightseagreen !important ;
+}
+/* dark styling of the editor */
+div.jsoneditor,
+div.jsoneditor-menu {
+  border-color: #4b4b4b;
+}
+div.jsoneditor-menu {
+    background: linear-gradient(to left, #040404, #222b21);
+}
+div.jsoneditor-tree,
+div.jsoneditor textarea.jsoneditor-text {
+    background: linear-gradient(to bottom, #040404, #3a4a38) !important;
+    color: #ffffff;
+}
+table.jsoneditor-search div.jsoneditor-frame {
+  background: #808080;
+}
+
+tr.jsoneditor-highlight,
+tr.jsoneditor-selected {
+  background-color: #808080;
+}
+
+div.jsoneditor-field[contenteditable=true]:focus,
+div.jsoneditor-field[contenteditable=true]:hover,
+div.jsoneditor-value[contenteditable=true]:focus,
+div.jsoneditor-value[contenteditable=true]:hover,
+div.jsoneditor-field.jsoneditor-highlight,
+div.jsoneditor-value.jsoneditor-highlight {
+  background-color: #808080;
+  border-color: #808080;
+}
+
+div.jsoneditor-field.highlight-active,
+div.jsoneditor-field.highlight-active:focus,
+div.jsoneditor-field.highlight-active:hover,
+div.jsoneditor-value.highlight-active,
+div.jsoneditor-value.highlight-active:focus,
+div.jsoneditor-value.highlight-active:hover {
+  background-color: #b1b1b1;
+  border-color: #b1b1b1;
+}
+
+div.jsoneditor-tree button:focus {
+  background-color: #868686;
+}
+
+/* coloring of JSON in tree mode */
+div.jsoneditor-readonly {
+  color: #acacac;
+}
+div.jsoneditor td.jsoneditor-separator {
+  color: #acacac;
+}
+div.jsoneditor-value.jsoneditor-string {
+  color: #00ff88;
+}
+div.jsoneditor-value.jsoneditor-object,
+div.jsoneditor-value.jsoneditor-array {
+  color: #bababa;
+}
+div.jsoneditor-value.jsoneditor-number {
+  color: #ff4040;
+}
+div.jsoneditor-value.jsoneditor-boolean {
+  color: #ff8048;
+}
+div.jsoneditor-value.jsoneditor-null {
+  color: #49a7fc;
+}
+div.jsoneditor-value.jsoneditor-invalid {
+  color: white;
+}
+
+div.jsoneditor-readonly {
+    color: aquamarine !important;
+}
+
+tr.jsoneditor-highlight {
+    background: linear-gradient(to left, #040404, #222b21);
+    border: 1px black solid;
+}
+
+div.jsoneditor-field {
+    color: deepskyblue !important;
+}
+
+div.jsoneditor-navigation-bar {
+    color: aliceblue;
+    background: linear-gradient(to left, #040404, #222b21);
+}
+
+button.jsoneditor-transform {
+    color: red;
+}
+
+.jsoneditor-frame {
+    background-color: transparent !important;
+}
+
+div.jsoneditor-frame >  input {
+    background-color: #d1e2cf;
+}
+
+div.jsoneditor-value.jsoneditor-string {
+    color: lightgreen !important;
+}
+
+div.jsoneditor-value.jsoneditor-number {
+    color: lightseagreen !important ;
+}
+
+.filterlist {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: space-around;
+    justify-content: center;
+    align-items: flex-start;
+    column-gap: 10px;
+}/* dark styling of the editor */
+div.jsoneditor,
+div.jsoneditor-menu {
+  border-color: #4b4b4b;
+}
+div.jsoneditor-menu {
+    background: linear-gradient(to left, #040404, #222b21);
+}
+div.jsoneditor-tree,
+div.jsoneditor textarea.jsoneditor-text {
+    background: linear-gradient(to bottom, #040404, #3a4a38) !important;
+    color: #ffffff;
+}
+table.jsoneditor-search div.jsoneditor-frame {
+  background: #808080;
+}
+
+tr.jsoneditor-highlight,
+tr.jsoneditor-selected {
+  background-color: #808080;
+}
+
+div.jsoneditor-field[contenteditable=true]:focus,
+div.jsoneditor-field[contenteditable=true]:hover,
+div.jsoneditor-value[contenteditable=true]:focus,
+div.jsoneditor-value[contenteditable=true]:hover,
+div.jsoneditor-field.jsoneditor-highlight,
+div.jsoneditor-value.jsoneditor-highlight {
+  background-color: #808080;
+  border-color: #808080;
+}
+
+div.jsoneditor-field.highlight-active,
+div.jsoneditor-field.highlight-active:focus,
+div.jsoneditor-field.highlight-active:hover,
+div.jsoneditor-value.highlight-active,
+div.jsoneditor-value.highlight-active:focus,
+div.jsoneditor-value.highlight-active:hover {
+  background-color: #b1b1b1;
+  border-color: #b1b1b1;
+}
+
+div.jsoneditor-tree button:focus {
+  background-color: #868686;
+}
+
+/* coloring of JSON in tree mode */
+div.jsoneditor-readonly {
+  color: #acacac;
+}
+div.jsoneditor td.jsoneditor-separator {
+  color: #acacac;
+}
+div.jsoneditor-value.jsoneditor-string {
+  color: #00ff88;
+}
+div.jsoneditor-value.jsoneditor-object,
+div.jsoneditor-value.jsoneditor-array {
+  color: #bababa;
+}
+div.jsoneditor-value.jsoneditor-number {
+  color: #ff4040;
+}
+div.jsoneditor-value.jsoneditor-boolean {
+  color: #ff8048;
+}
+div.jsoneditor-value.jsoneditor-null {
+  color: #49a7fc;
+}
+div.jsoneditor-value.jsoneditor-invalid {
+  color: white;
+}
+
+div.jsoneditor-readonly {
+    color: aquamarine !important;
+}
+
+tr.jsoneditor-highlight {
+    background: linear-gradient(to left, #040404, #222b21);
+    border: 1px black solid;
+}
+
+div.jsoneditor-field {
+    color: deepskyblue !important;
+}
+
+div.jsoneditor-navigation-bar {
+    color: aliceblue;
+    background: linear-gradient(to left, #040404, #222b21);
+}
+
+button.jsoneditor-transform {
+    color: red;
+}
+
+.jsoneditor-frame {
+    background-color: transparent !important;
+}
+
+div.jsoneditor-frame >  input {
+    background-color: #d1e2cf;
+}
+
+div.jsoneditor-value.jsoneditor-string {
+    color: lightgreen !important;
+}
+
+div.jsoneditor-value.jsoneditor-number {
+    color: lightseagreen !important ;
+}
+
+.filter>.eventBase {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: 5px;
+    border: solid aquamarine 1px;
+    border-radius: 10px 10px 0px 0px;
+    padding: 0px 10px;
+}
+
+.eventBase>.label {
+    font-size: medium;
+}/* dark styling of the editor */
+div.jsoneditor,
+div.jsoneditor-menu {
+  border-color: #4b4b4b;
+}
+div.jsoneditor-menu {
+    background: linear-gradient(to left, #040404, #222b21);
+}
+div.jsoneditor-tree,
+div.jsoneditor textarea.jsoneditor-text {
+    background: linear-gradient(to bottom, #040404, #3a4a38) !important;
+    color: #ffffff;
+}
+table.jsoneditor-search div.jsoneditor-frame {
+  background: #808080;
+}
+
+tr.jsoneditor-highlight,
+tr.jsoneditor-selected {
+  background-color: #808080;
+}
+
+div.jsoneditor-field[contenteditable=true]:focus,
+div.jsoneditor-field[contenteditable=true]:hover,
+div.jsoneditor-value[contenteditable=true]:focus,
+div.jsoneditor-value[contenteditable=true]:hover,
+div.jsoneditor-field.jsoneditor-highlight,
+div.jsoneditor-value.jsoneditor-highlight {
+  background-color: #808080;
+  border-color: #808080;
+}
+
+div.jsoneditor-field.highlight-active,
+div.jsoneditor-field.highlight-active:focus,
+div.jsoneditor-field.highlight-active:hover,
+div.jsoneditor-value.highlight-active,
+div.jsoneditor-value.highlight-active:focus,
+div.jsoneditor-value.highlight-active:hover {
+  background-color: #b1b1b1;
+  border-color: #b1b1b1;
+}
+
+div.jsoneditor-tree button:focus {
+  background-color: #868686;
+}
+
+/* coloring of JSON in tree mode */
+div.jsoneditor-readonly {
+  color: #acacac;
+}
+div.jsoneditor td.jsoneditor-separator {
+  color: #acacac;
+}
+div.jsoneditor-value.jsoneditor-string {
+  color: #00ff88;
+}
+div.jsoneditor-value.jsoneditor-object,
+div.jsoneditor-value.jsoneditor-array {
+  color: #bababa;
+}
+div.jsoneditor-value.jsoneditor-number {
+  color: #ff4040;
+}
+div.jsoneditor-value.jsoneditor-boolean {
+  color: #ff8048;
+}
+div.jsoneditor-value.jsoneditor-null {
+  color: #49a7fc;
+}
+div.jsoneditor-value.jsoneditor-invalid {
+  color: white;
+}
+
+div.jsoneditor-readonly {
+    color: aquamarine !important;
+}
+
+tr.jsoneditor-highlight {
+    background: linear-gradient(to left, #040404, #222b21);
+    border: 1px black solid;
+}
+
+div.jsoneditor-field {
+    color: deepskyblue !important;
+}
+
+div.jsoneditor-navigation-bar {
+    color: aliceblue;
+    background: linear-gradient(to left, #040404, #222b21);
+}
+
+button.jsoneditor-transform {
+    color: red;
+}
+
+.jsoneditor-frame {
+    background-color: transparent !important;
+}
+
+div.jsoneditor-frame >  input {
+    background-color: #d1e2cf;
+}
+
+div.jsoneditor-value.jsoneditor-string {
+    color: lightgreen !important;
+}
+
+div.jsoneditor-value.jsoneditor-number {
+    color: lightseagreen !important ;
+}
+
+.filter>label {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+    background: transparent;
+}
+
+.filter>label>* {
+    color: #01f7f7;
+}
+/* dark styling of the editor */
+div.jsoneditor,
+div.jsoneditor-menu {
+  border-color: #4b4b4b;
+}
+div.jsoneditor-menu {
+    background: linear-gradient(to left, #040404, #222b21);
+}
+div.jsoneditor-tree,
+div.jsoneditor textarea.jsoneditor-text {
+    background: linear-gradient(to bottom, #040404, #3a4a38) !important;
+    color: #ffffff;
+}
+table.jsoneditor-search div.jsoneditor-frame {
+  background: #808080;
+}
+
+tr.jsoneditor-highlight,
+tr.jsoneditor-selected {
+  background-color: #808080;
+}
+
+div.jsoneditor-field[contenteditable=true]:focus,
+div.jsoneditor-field[contenteditable=true]:hover,
+div.jsoneditor-value[contenteditable=true]:focus,
+div.jsoneditor-value[contenteditable=true]:hover,
+div.jsoneditor-field.jsoneditor-highlight,
+div.jsoneditor-value.jsoneditor-highlight {
+  background-color: #808080;
+  border-color: #808080;
+}
+
+div.jsoneditor-field.highlight-active,
+div.jsoneditor-field.highlight-active:focus,
+div.jsoneditor-field.highlight-active:hover,
+div.jsoneditor-value.highlight-active,
+div.jsoneditor-value.highlight-active:focus,
+div.jsoneditor-value.highlight-active:hover {
+  background-color: #b1b1b1;
+  border-color: #b1b1b1;
+}
+
+div.jsoneditor-tree button:focus {
+  background-color: #868686;
+}
+
+/* coloring of JSON in tree mode */
+div.jsoneditor-readonly {
+  color: #acacac;
+}
+div.jsoneditor td.jsoneditor-separator {
+  color: #acacac;
+}
+div.jsoneditor-value.jsoneditor-string {
+  color: #00ff88;
+}
+div.jsoneditor-value.jsoneditor-object,
+div.jsoneditor-value.jsoneditor-array {
+  color: #bababa;
+}
+div.jsoneditor-value.jsoneditor-number {
+  color: #ff4040;
+}
+div.jsoneditor-value.jsoneditor-boolean {
+  color: #ff8048;
+}
+div.jsoneditor-value.jsoneditor-null {
+  color: #49a7fc;
+}
+div.jsoneditor-value.jsoneditor-invalid {
+  color: white;
+}
+
+div.jsoneditor-readonly {
+    color: aquamarine !important;
+}
+
+tr.jsoneditor-highlight {
+    background: linear-gradient(to left, #040404, #222b21);
+    border: 1px black solid;
+}
+
+div.jsoneditor-field {
+    color: deepskyblue !important;
+}
+
+div.jsoneditor-navigation-bar {
+    color: aliceblue;
+    background: linear-gradient(to left, #040404, #222b21);
+}
+
+button.jsoneditor-transform {
+    color: red;
+}
+
+.jsoneditor-frame {
+    background-color: transparent !important;
+}
+
+div.jsoneditor-frame >  input {
+    background-color: #d1e2cf;
+}
+
+div.jsoneditor-value.jsoneditor-string {
+    color: lightgreen !important;
+}
+
+div.jsoneditor-value.jsoneditor-number {
+    color: lightseagreen !important ;
+}
+
+.filters>.header {
+    font-size: x-large;
+    color: aqua;
+}
+
+.evbfiltered>label,.evifiltered>label {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+    background: transparent;
+}
+
+.evbfiltered>label>.MuiCheckbox-root, .evifiltered>label>.MuiCheckbox-root {
+    color: aqua;
+}
+
+.evbfiltered>label>.MuiFormControlLabel-label, .evifiltered>label>.MuiFormControlLabel-label {
+    color: aquamarine;
+}
+
+.evifiltered>label>.MuiFormControlLabel-label {
+    font-size:small;
+}
+
+.evbfiltered {
+    border: solid aquamarine 1px;
+    border-radius: 10px 10px 0px 0px;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-content: center;
+    align-items: center;
+    padding: 0px 10px;
+}
+
+.eventIds {
+    border: solid aquamarine 1px;
+    border-radius: 0px 0px 10px 10px;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+    padding: 0 10px;
+}
+
+.MuiTooltip-tooltip {
+    width: 200px;
+    background-color: black !important;
 }
