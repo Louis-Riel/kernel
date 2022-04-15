@@ -26,11 +26,15 @@ WebsocketManager::WebsocketManager():
 {
   stateHandler=this;
   memset(&clients,0,sizeof(clients));
-  ESP_LOGV(__FUNCTION__,"Created Websocket");
+  ESP_LOGD(__FUNCTION__,"Created Websocket");
   CreateBackgroundTask(QueueHandler,"WebsocketQH",4096, NULL, tskIDLE_PRIORITY, NULL);
+  ESP_LOGD(__FUNCTION__,"Created WebsocketQH");
   CreateBackgroundTask(StatePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
+  ESP_LOGD(__FUNCTION__,"Created StatePoller");
   registerLogCallback(LogCallback,stateHandler);
+  ESP_LOGD(__FUNCTION__,"Log callback registered");
   BuildStatus(this);
+  ESP_LOGD(__FUNCTION__,"Built Status");
   cJSON* jState = ManagedDevice::BuildStatus(this);
   jClients = cJSON_HasObjectItem(jState,"Clients")?cJSON_GetObjectItem(jState,"Clients"):cJSON_AddArrayToObject(jState,"Clients");
   cJSON_AddNumberToObject(jState,"IsLive",true);
@@ -265,10 +269,11 @@ esp_err_t TheRest::ws_handler(httpd_req_t *req) {
   if (stateHandler == NULL) {
     ESP_LOGD(__FUNCTION__, "Staring Manager");
     stateHandler = new WebsocketManager();
+    ESP_LOGD(__FUNCTION__, "Manager Started");
   }
 
   if (req->method == HTTP_GET) {
-        ESP_LOGV(__FUNCTION__, "Handshake done, the new connection was opened");
+        ESP_LOGD(__FUNCTION__, "Handshake done, the new connection was opened");
         return ESP_OK;
   }
 

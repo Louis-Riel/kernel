@@ -171,7 +171,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             ESP_LOGW(__FUNCTION__, "Cannot run %s as it is already running", pcName);
             return UINT8_MAX;
         }
-        ESP_LOGV(__FUNCTION__, "Running %s", pcName);
+        ESP_LOGD(__FUNCTION__, "Running %s", pcName);
         xSemaphoreTake(threadSema,portMAX_DELAY);
         uint8_t bitNo = GetFreeBit(pcName);
         if (bitNo != UINT8_MAX)
@@ -190,7 +190,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             thread->bitNo = bitNo;
             thread->waitToSleep = waitToSleep;
             thread->started = true;
-            xSemaphoreGive(thread->parent->threadSema);
+            xSemaphoreGive(threadSema);
             xEventGroupClearBits(managedThreadBits, 1 << bitNo);
 
             BaseType_t ret = pdPASS;
@@ -228,6 +228,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         }
         else
         {
+            xSemaphoreGive(threadSema);
             ESP_LOGE(__FUNCTION__, "No more bits for %s", pcName);
             for (uint8_t idx = 0; idx < 32; idx++)
             {
@@ -282,7 +283,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             thread->usStackDepth = usStackDepth;
             thread->waitToSleep = waitToSleep;
             thread->started = true;
-            xSemaphoreGive(thread->parent->threadSema);
+            xSemaphoreGive(threadSema);
             xEventGroupClearBits(managedThreadBits, 1 << bitNo);
             BaseType_t ret = ESP_OK;
             if (onMainThread)
@@ -323,6 +324,8 @@ uint8_t ManagedThreads::NumAllocatedThreads()
                     esp_restart();
                 }
             }
+        } else {
+            xSemaphoreGive(threadSema);
         }
         return ESP_ERR_NO_MEM;
     };
