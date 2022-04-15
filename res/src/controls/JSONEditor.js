@@ -116,45 +116,9 @@ class LocalJSONEditor extends React.Component {
     Parse(json) {
         if ((json !== undefined) && (json != null)) {
             if ((typeof json == "object") && (json.version === undefined)){
-                return e("div",{key: `jsonobject`,className:"statusclass jsonNodes"},this.getSortedProperties(json).map(fld => {
-                    if (Array.isArray(json[fld])) {
-                        if (fld == "commands"){
-                            return {fld:fld,element:e(StateCommands,{key:`jofieldcmds`,name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
-                        }
-                        return {fld:fld,element:e(Table, { key: `Table-Object-${this.props.path}/${fld}`, 
-                                                           name: fld, 
-                                                           path: `${this.props.path}/${fld}`,
-                                                           label: fld, 
-                                                           json: json[fld], 
-                                                           registerEventInstanceCallback: this.props.registerEventInstanceCallback, 
-                                                           editable: this.props.editable, 
-                                                           sortable: this.props.sortable })};
-                    } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
-                        return {fld:fld,element:e(LocalJSONEditor, { 
-                            key: `JE-${this.props.path}/${fld}`,
-                            path: `${this.props.path}/${fld}`,
-                            name: fld, 
-                            label: fld, 
-                            editable: this.props.editable,
-                            json: json[fld],
-                            updateAppStatus:this.props.updateAppStatus,
-                            registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
-                    } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
-                        return {
-                            fld:fld,
-                            element: this.props.editable ?
-                                    e("label",{key:`${fld}label`},[
-                                        this.fieldControlPannel(fld),
-                                        e("input",{key:`input`,defaultValue:json[fld].value === undefined ?  json[fld] : json[fld].value ,onChange: this.processUpdate.bind(this)})]):
-                                    e(ROProp, { 
-                                        key: `rofld${fld}`, 
-                                        value: json[fld], 
-                                        name: fld, 
-                                        label: fld 
-                                    })
-                        };
-                    }
-                }).reduce((pv,cv)=>{
+                return e("div",{key: `jsonobject`,className:"statusclass jsonNodes"},this.getSortedProperties(json)
+                                                                                         .map(fld => this.renderField(json, fld))
+                                                                                         .reduce((pv,cv)=>{
                     if (cv){
                         var fc = this.getFieldClass(json,cv.fld);
                         var item = pv.find(it=>it.fclass == fc);
@@ -167,17 +131,85 @@ class LocalJSONEditor extends React.Component {
                     return pv;
                 },[]).map((item,idx) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
             } else {
-                return (json.version !== undefined) || (this.props.editable && (typeof json != "object")) ?
-                            e("input",{key:`input`,defaultValue:json.value === undefined?json:json.value,onChange: this.processUpdate.bind(this)}):
-                            e(ROProp, { 
-                                key: 'rofield', 
-                                value: json, 
-                                name: "" 
-                            });
+                return this.renderVersioned(json);
             }
         } else {
             return null;
         }
+    }
+
+    renderField(json, fld) {
+        if (Array.isArray(json[fld])) {
+            if (fld == "commands"){
+                return this.renderCommands(fld, json);
+            }
+            return this.renderArray(fld, json);
+        } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
+            return this.renderObject(fld, json);
+        } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
+            return this.renderFieldValue(fld, json);
+        }
+    }
+
+    renderFieldValue(fld, json) {
+        return {
+            fld: fld,
+            element: this.props.editable ?
+                e("label", { key: `${fld}label` }, [
+                    this.fieldControlPannel(fld),
+                    e("input", { key: `input`, defaultValue: json[fld].value === undefined ? json[fld] : json[fld].value, onChange: this.processUpdate.bind(this) })
+                ]) :
+                e(ROProp, {
+                    key: `rofld${fld}`,
+                    value: json[fld],
+                    name: fld,
+                    label: fld
+                })
+        };
+    }
+
+    renderObject(fld, json) {
+        return {
+            fld: fld, element: e(LocalJSONEditor, {
+                key: `JE-${this.props.path}/${fld}`,
+                path: `${this.props.path}/${fld}`,
+                name: fld,
+                label: fld,
+                editable: this.props.editable,
+                json: json[fld],
+                updateAppStatus: this.props.updateAppStatus,
+                registerEventInstanceCallback: this.props.registerEventInstanceCallback
+            })
+        };
+    }
+
+    renderArray(fld, json) {
+        return {
+            fld: fld, element: e(Table, {
+                key: `Table-Object-${this.props.path}/${fld}`,
+                name: fld,
+                path: `${this.props.path}/${fld}`,
+                label: fld,
+                json: json[fld],
+                registerEventInstanceCallback: this.props.registerEventInstanceCallback,
+                editable: this.props.editable,
+                sortable: this.props.sortable
+            })
+        };
+    }
+
+    renderCommands(fld, json) {
+        return { fld: fld, element: e(StateCommands, { key: `jofieldcmds`, name: json["name"], commands: json[fld], onSuccess: this.props.updateAppStatus }) };
+    }
+
+    renderVersioned(json) {
+        return (json.version !== undefined) || (this.props.editable && (typeof json != "object")) ?
+            e("input", { key: `input`, defaultValue: json.value === undefined ? json : json.value, onChange: this.processUpdate.bind(this) }) :
+            e(ROProp, {
+                key: 'rofield',
+                value: json,
+                name: ""
+            });
     }
 
     processUpdate(elem,fld) {

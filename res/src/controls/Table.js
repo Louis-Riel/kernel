@@ -2,7 +2,21 @@ class Table extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
+        this.state = {
+            keyColumn: this.getKeyColumn()
+        }
     }
+
+    getKeyColumn() {
+        if (this.props.json && this.props.json.length > 0) {
+            if (typeof this.props.json[0] === "object") {
+                var keyCol = Object.keys(this.props.json[0])[0]
+                return this.props.json.reduce((acc, cur) => acc.find(row=>row[keyCol] === cur[keyCol]) ? acc : [...acc,cur],[]).length === this.props.json.length ? keyCol : null;
+            }
+        }
+        return undefined;
+    }
+
     SortTable(th) {
         if (this.props.sortable){
             var table,tbody;
@@ -13,7 +27,10 @@ class Table extends React.Component {
     }
 
     BuildHeaderField(fld) {
-        return fld;
+        return e("th", { 
+            key: `header-col-${fld}`,
+            onClick: this.SortTable.bind(this)
+        }, fld);
     }
 
     addRow(e){
@@ -44,7 +61,7 @@ class Table extends React.Component {
                     e("div",{key:`label`,className:"jsonlabel"},this.props.label)
                    ]);
         }
-        return e("caption", { key: 'caption' }, this.props.label);
+        return e("caption", { key: 'caption' }, `${this.props.label} - ${this.state.keyColumn}`);
     }
 
     getValue(fld, val) {
@@ -102,12 +119,16 @@ class Table extends React.Component {
     }
 
     BuildLine(line,idx) {
-        return e("tr", { key: `row-${idx}` },[
+        return e("tr", { key: this.getRowKey(line, idx) },[
             [
-                this.props.editable?e("td", { key: `row-${idx}-panel`, className: "readonly" },this.BuildLinePannel(idx)):null,
-                this.cols.map(fld => e("td", { key: `row-${idx}-${fld}-cell-panel`, className: "readonly" },this.BuildCell(line, fld)))
+                this.props.editable?e("td", { key: `${this.getRowKey(line, idx)}-panel`, className: "readonly" },this.BuildLinePannel(idx)):null,
+                this.cols.map(fld => e("td", { key: `${this.getRowKey(line, idx)}-${fld}-cell-panel`, className: "readonly" },this.BuildCell(line, fld)))
             ]
         ]);
+    }
+
+    getRowKey(line, idx) {
+        return `row-${this.state.keyColumn ? line[this.state.keyColumn] : idx}`;
     }
 
     addString(line,fld) {
@@ -161,7 +182,7 @@ class Table extends React.Component {
         this.cols=[];
         return e("label", { key: `label`, id: this.id, className: "table" }, 
                 e("table", { key: `table`, className: "greyGridTable" }, [
-                    [e("thead", { key: `head`, onClick: this.SortTable.bind(this) }, 
+                    [e("thead", { key: `head` }, 
                         e("tr", { key: `headrow` },
                         [this.props.editable?e("th", { key: `header` }):null,
                             ...this.props.json.flatMap(row => Object.keys(row))
@@ -174,7 +195,7 @@ class Table extends React.Component {
                                         this.sortedOn = fld;
                                     }
                                 }
-                                return e("th", { key: `header-col-${fld}` }, this.BuildHeaderField(fld));
+                                return this.BuildHeaderField(fld);
                             })]
                         )), this.props.label !== undefined ? this.BuildCaption():null], 
                     e("tbody", { key: 'body' },

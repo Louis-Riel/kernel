@@ -164,6 +164,7 @@ class StatusPage extends React.Component {
                     path: '/',
                     json: this.state.status, 
                     editable: false,
+                    sortable: true,
                     selectedDeviceId: this.props.selectedDeviceId,
                     registerStateCallback: this.props.registerStateCallback,
                     registerEventInstanceCallback: this.props.registerEventInstanceCallback

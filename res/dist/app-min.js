@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "http://192.168.1.30/irtracker";
+var httpPrefix = "";//"http://192.168.1.30/irtracker";
 
 //#region SHA-1
 /*
@@ -445,45 +445,9 @@ class LocalJSONEditor extends React.Component {
     Parse(json) {
         if ((json !== undefined) && (json != null)) {
             if ((typeof json == "object") && (json.version === undefined)){
-                return e("div",{key: `jsonobject`,className:"statusclass jsonNodes"},this.getSortedProperties(json).map(fld => {
-                    if (Array.isArray(json[fld])) {
-                        if (fld == "commands"){
-                            return {fld:fld,element:e(StateCommands,{key:`jofieldcmds`,name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
-                        }
-                        return {fld:fld,element:e(Table, { key: `Table-Object-${this.props.path}/${fld}`, 
-                                                           name: fld, 
-                                                           path: `${this.props.path}/${fld}`,
-                                                           label: fld, 
-                                                           json: json[fld], 
-                                                           registerEventInstanceCallback: this.props.registerEventInstanceCallback, 
-                                                           editable: this.props.editable, 
-                                                           sortable: this.props.sortable })};
-                    } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
-                        return {fld:fld,element:e(LocalJSONEditor, { 
-                            key: `JE-${this.props.path}/${fld}`,
-                            path: `${this.props.path}/${fld}`,
-                            name: fld, 
-                            label: fld, 
-                            editable: this.props.editable,
-                            json: json[fld],
-                            updateAppStatus:this.props.updateAppStatus,
-                            registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
-                    } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
-                        return {
-                            fld:fld,
-                            element: this.props.editable ?
-                                    e("label",{key:`${fld}label`},[
-                                        this.fieldControlPannel(fld),
-                                        e("input",{key:`input`,defaultValue:json[fld].value === undefined ?  json[fld] : json[fld].value ,onChange: this.processUpdate.bind(this)})]):
-                                    e(ROProp, { 
-                                        key: `rofld${fld}`, 
-                                        value: json[fld], 
-                                        name: fld, 
-                                        label: fld 
-                                    })
-                        };
-                    }
-                }).reduce((pv,cv)=>{
+                return e("div",{key: `jsonobject`,className:"statusclass jsonNodes"},this.getSortedProperties(json)
+                                                                                         .map(fld => this.renderField(json, fld))
+                                                                                         .reduce((pv,cv)=>{
                     if (cv){
                         var fc = this.getFieldClass(json,cv.fld);
                         var item = pv.find(it=>it.fclass == fc);
@@ -496,17 +460,85 @@ class LocalJSONEditor extends React.Component {
                     return pv;
                 },[]).map((item,idx) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
             } else {
-                return (json.version !== undefined) || (this.props.editable && (typeof json != "object")) ?
-                            e("input",{key:`input`,defaultValue:json.value === undefined?json:json.value,onChange: this.processUpdate.bind(this)}):
-                            e(ROProp, { 
-                                key: 'rofield', 
-                                value: json, 
-                                name: "" 
-                            });
+                return this.renderVersioned(json);
             }
         } else {
             return null;
         }
+    }
+
+    renderField(json, fld) {
+        if (Array.isArray(json[fld])) {
+            if (fld == "commands"){
+                return this.renderCommands(fld, json);
+            }
+            return this.renderArray(fld, json);
+        } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
+            return this.renderObject(fld, json);
+        } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
+            return this.renderFieldValue(fld, json);
+        }
+    }
+
+    renderFieldValue(fld, json) {
+        return {
+            fld: fld,
+            element: this.props.editable ?
+                e("label", { key: `${fld}label` }, [
+                    this.fieldControlPannel(fld),
+                    e("input", { key: `input`, defaultValue: json[fld].value === undefined ? json[fld] : json[fld].value, onChange: this.processUpdate.bind(this) })
+                ]) :
+                e(ROProp, {
+                    key: `rofld${fld}`,
+                    value: json[fld],
+                    name: fld,
+                    label: fld
+                })
+        };
+    }
+
+    renderObject(fld, json) {
+        return {
+            fld: fld, element: e(LocalJSONEditor, {
+                key: `JE-${this.props.path}/${fld}`,
+                path: `${this.props.path}/${fld}`,
+                name: fld,
+                label: fld,
+                editable: this.props.editable,
+                json: json[fld],
+                updateAppStatus: this.props.updateAppStatus,
+                registerEventInstanceCallback: this.props.registerEventInstanceCallback
+            })
+        };
+    }
+
+    renderArray(fld, json) {
+        return {
+            fld: fld, element: e(Table, {
+                key: `Table-Object-${this.props.path}/${fld}`,
+                name: fld,
+                path: `${this.props.path}/${fld}`,
+                label: fld,
+                json: json[fld],
+                registerEventInstanceCallback: this.props.registerEventInstanceCallback,
+                editable: this.props.editable,
+                sortable: this.props.sortable
+            })
+        };
+    }
+
+    renderCommands(fld, json) {
+        return { fld: fld, element: e(StateCommands, { key: `jofieldcmds`, name: json["name"], commands: json[fld], onSuccess: this.props.updateAppStatus }) };
+    }
+
+    renderVersioned(json) {
+        return (json.version !== undefined) || (this.props.editable && (typeof json != "object")) ?
+            e("input", { key: `input`, defaultValue: json.value === undefined ? json : json.value, onChange: this.processUpdate.bind(this) }) :
+            e(ROProp, {
+                key: 'rofield',
+                value: json,
+                name: ""
+            });
     }
 
     processUpdate(elem,fld) {
@@ -750,7 +782,7 @@ class LocalJSONEditor extends React.Component {
     }
 
     getTableField() {
-        return e("div", { key: 'timevalue', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name, this.props.value));
+        return e("div", { key: 'timevalue', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : [this.getValue(this.props.name, this.props.value),this.getGraphButton()]);
     }
 
     render() {
@@ -761,7 +793,21 @@ class Table extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
+        this.state = {
+            keyColumn: this.getKeyColumn()
+        }
     }
+
+    getKeyColumn() {
+        if (this.props.json && this.props.json.length > 0) {
+            if (typeof this.props.json[0] === "object") {
+                var keyCol = Object.keys(this.props.json[0])[0]
+                return this.props.json.reduce((acc, cur) => acc.find(row=>row[keyCol] === cur[keyCol]) ? acc : [...acc,cur],[]).length === this.props.json.length ? keyCol : null;
+            }
+        }
+        return undefined;
+    }
+
     SortTable(th) {
         if (this.props.sortable){
             var table,tbody;
@@ -772,7 +818,10 @@ class Table extends React.Component {
     }
 
     BuildHeaderField(fld) {
-        return fld;
+        return e("th", { 
+            key: `header-col-${fld}`,
+            onClick: this.SortTable.bind(this)
+        }, fld);
     }
 
     addRow(e){
@@ -803,7 +852,7 @@ class Table extends React.Component {
                     e("div",{key:`label`,className:"jsonlabel"},this.props.label)
                    ]);
         }
-        return e("caption", { key: 'caption' }, this.props.label);
+        return e("caption", { key: 'caption' }, `${this.props.label} - ${this.state.keyColumn}`);
     }
 
     getValue(fld, val) {
@@ -861,12 +910,16 @@ class Table extends React.Component {
     }
 
     BuildLine(line,idx) {
-        return e("tr", { key: `row-${idx}` },[
+        return e("tr", { key: this.getRowKey(line, idx) },[
             [
-                this.props.editable?e("td", { key: `row-${idx}-panel`, className: "readonly" },this.BuildLinePannel(idx)):null,
-                this.cols.map(fld => e("td", { key: `row-${idx}-${fld}-cell-panel`, className: "readonly" },this.BuildCell(line, fld)))
+                this.props.editable?e("td", { key: `${this.getRowKey(line, idx)}-panel`, className: "readonly" },this.BuildLinePannel(idx)):null,
+                this.cols.map(fld => e("td", { key: `${this.getRowKey(line, idx)}-${fld}-cell-panel`, className: "readonly" },this.BuildCell(line, fld)))
             ]
         ]);
+    }
+
+    getRowKey(line, idx) {
+        return `row-${this.state.keyColumn ? line[this.state.keyColumn] : idx}`;
     }
 
     addString(line,fld) {
@@ -920,7 +973,7 @@ class Table extends React.Component {
         this.cols=[];
         return e("label", { key: `label`, id: this.id, className: "table" }, 
                 e("table", { key: `table`, className: "greyGridTable" }, [
-                    [e("thead", { key: `head`, onClick: this.SortTable.bind(this) }, 
+                    [e("thead", { key: `head` }, 
                         e("tr", { key: `headrow` },
                         [this.props.editable?e("th", { key: `header` }):null,
                             ...this.props.json.flatMap(row => Object.keys(row))
@@ -933,7 +986,7 @@ class Table extends React.Component {
                                         this.sortedOn = fld;
                                     }
                                 }
-                                return e("th", { key: `header-col-${fld}` }, this.BuildHeaderField(fld));
+                                return this.BuildHeaderField(fld);
                             })]
                         )), this.props.label !== undefined ? this.BuildCaption():null], 
                     e("tbody", { key: 'body' },
@@ -1111,6 +1164,7 @@ class StatusPage extends React.Component {
                     path: '/',
                     json: this.state.status, 
                     editable: false,
+                    sortable: true,
                     selectedDeviceId: this.props.selectedDeviceId,
                     registerStateCallback: this.props.registerStateCallback,
                     registerEventInstanceCallback: this.props.registerEventInstanceCallback
@@ -1137,9 +1191,13 @@ class ConfigPage extends React.Component {
                         original: config
                     });
                     try {
-                        this.jsoneditor = new JSONEditor(this.container, {
-                            onChangeJSON: json => this.setState({ newconfig: json })
-                        }, this.state.config);
+                        if (!this.jsoneditor) {
+                            this.jsoneditor = new JSONEditor(this.container, {
+                                onChangeJSON: json => this.setState({ newconfig: json })
+                            }, this.state.config);
+                        } else {
+                            this.jsoneditor.set(this.state.config);
+                        }
                     } catch (err) {
                         this.nativejsoneditor = e(LocalJSONEditor, {
                             key: 'ConfigEditor',
@@ -1178,7 +1236,7 @@ class ConfigPage extends React.Component {
 
     render() {
         if (this.isConnected()) {
-            return [e("button", { key: genUUID(), onClick: elem => this.componentDidMount() }, "Refresh"), 
+            return [e("button", { key: "refresh", onClick: elem => this.componentDidMount() }, "Refresh"), 
                     this.getEditor()
                    ];
         } else {

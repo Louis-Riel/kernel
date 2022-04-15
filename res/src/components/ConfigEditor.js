@@ -14,9 +14,13 @@ class ConfigPage extends React.Component {
                         original: config
                     });
                     try {
-                        this.jsoneditor = new JSONEditor(this.container, {
-                            onChangeJSON: json => this.setState({ newconfig: json })
-                        }, this.state.config);
+                        if (!this.jsoneditor) {
+                            this.jsoneditor = new JSONEditor(this.container, {
+                                onChangeJSON: json => this.setState({ newconfig: json })
+                            }, this.state.config);
+                        } else {
+                            this.jsoneditor.set(this.state.config);
+                        }
                     } catch (err) {
                         this.nativejsoneditor = e(LocalJSONEditor, {
                             key: 'ConfigEditor',
@@ -55,7 +59,7 @@ class ConfigPage extends React.Component {
 
     render() {
         if (this.isConnected()) {
-            return [e("button", { key: genUUID(), onClick: elem => this.componentDidMount() }, "Refresh"), 
+            return [e("button", { key: "refresh", onClick: elem => this.componentDidMount() }, "Refresh"), 
                     this.getEditor()
                    ];
         } else {
