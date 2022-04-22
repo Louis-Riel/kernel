@@ -337,9 +337,9 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         xEventGroupClearBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
         thread->isRunning = true;
 
-        size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
+        size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
         thread->pvTaskCode(thread->pvParameters);
-        size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+        size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
         if (diff != 0) {
             ESP_LOGV(__FUNCTION__,"%s %d bytes memleak",thread->pcName,diff);
         }

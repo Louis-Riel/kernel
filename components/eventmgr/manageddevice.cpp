@@ -87,9 +87,9 @@ void ManagedDevice::UpdateStatuses(){
   for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
     if (runningInstances[idx] && runningInstances[idx]->statusFnc){
       ESP_LOGV(__FUNCTION__,"Refreshing %s",runningInstances[idx]->GetName());
-      size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
+      size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
       runningInstances[idx]->status = runningInstances[idx]->statusFnc(runningInstances[idx]);
-      size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+      size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
       if (diff > 0) {
           ESP_LOGW(__FUNCTION__,"%s %d bytes memleak",runningInstances[idx]->GetName(),diff);
       }
@@ -120,14 +120,14 @@ bool ManagedDevice::ValidateDevices(){
   bool hasIssues = false;
   for (uint32_t idx = 0; idx < MAX_NUM_DEVICES; idx++) {
     if (runningInstances[idx]) {
-      size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
+      size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
       if (!runningInstances[idx]->hcFnc(runningInstances[idx])){
         ESP_LOGW(__FUNCTION__,"HC Failed for %s",runningInstances[idx]->GetName());
         hasIssues = true;
         numErrors++;
         lastErrorTs = esp_timer_get_time();
       }
-      size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+      size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
       if (diff > 0) {
           ESP_LOGW(__FUNCTION__,"hc:%s %d bytes memleak",runningInstances[idx]->name,diff);
       }

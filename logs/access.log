@@ -1,0 +1,5 @@
+192.168.0.108 - - [17/Apr/2022:04:53:06 +0000] "GET /index.html HTTP/1.1" 404 555 "-" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36" "-"
+192.168.0.108 - - [17/Apr/2022:04:54:18 +0000] "GET /index.html HTTP/1.1" 200 1517 "-" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36" "-"
+192.168.0.108 - - [17/Apr/2022:04:54:18 +0000] "GET /dist/app-min.css HTTP/1.1" 200 41149 "http://192.168.0.108:1234/index.html" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36" "-"
+192.168.0.108 - - [17/Apr/2022:04:54:18 +0000] "GET /dist/app-min.js HTTP/1.1" 200 119823 "http://192.168.0.108:1234/index.html" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36" "-"
+192.168.0.108 - - [17/Apr/2022:04:55:14 +0000] "GET /index.html HTTP/1.1" 304 0 "-" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36" "-"

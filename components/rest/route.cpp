@@ -222,7 +222,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
 
 char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, size_t *len, char *charBuf)
 {
-    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
+    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
     esp_http_client_handle_t client = NULL;
     esp_http_client_config_t *config = NULL;
     bool isPreAllocated = charBuf != NULL;
@@ -266,7 +266,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         esp_http_client_cleanup(client);
         ldfree((void *)config);
         jBytesIn->valuedouble = jBytesIn->valueint+=*len;
-        size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+        size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
         if (diff > 0) {
             ESP_LOGW(__FUNCTION__,"%s %d bytes memleak1",url,diff);
         }
@@ -283,7 +283,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         esp_http_client_cleanup(client);
     }
     ldfree((void *)config);
-    size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+    size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
     if (diff > 0) {
         ESP_LOGW(__FUNCTION__,"%s %d bytes memleak2",url,diff);
     }
@@ -517,12 +517,12 @@ bool TheRest::HealthCheck(void* instance){
         return true;
     }
 
-    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
+    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
     size_t len=0;
     char* resp = theRest->SendRequest(theRest->hcUrl,HTTP_METHOD_POST,&len);
     if (len > 0){
         ldfree(resp);
-        size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+        size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
         if (diff > 0) {
             ESP_LOGW(__FUNCTION__,"TheRest::HealthCheck %d bytes memleak",diff);
         }

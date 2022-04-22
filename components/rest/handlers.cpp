@@ -87,7 +87,7 @@ cJSON* TheRest::status_json()
     cJSON_AddItemToObject(status, "MALLOC_CAP_EXEC", cJSON_CreateNumber(heap_caps_get_free_size(MALLOC_CAP_EXEC)));
     cJSON_AddItemToObject(status, "MALLOC_CAP_32BIT", cJSON_CreateNumber(heap_caps_get_free_size(MALLOC_CAP_32BIT)));
     cJSON_AddItemToObject(status, "MALLOC_CAP_8BIT", cJSON_CreateNumber(heap_caps_get_free_size(MALLOC_CAP_8BIT)));
-    cJSON_AddItemToObject(status, "MALLOC_CAP_DMA", cJSON_CreateNumber(heap_caps_get_free_size(MALLOC_CAP_DMA)));
+    cJSON_AddItemToObject(status, "MALLOC_CAP_DMA", cJSON_CreateNumber(heap_caps_get_free_size(MALLOC_CAP_32BIT)));
     cJSON_AddItemToObject(status, "MALLOC_CAP_PID2", cJSON_CreateNumber(heap_caps_get_free_size(MALLOC_CAP_PID2)));
     cJSON_AddItemToObject(status, "MALLOC_CAP_PID3", cJSON_CreateNumber(heap_caps_get_free_size(MALLOC_CAP_PID3)));
     cJSON_AddItemToObject(status, "MALLOC_CAP_PID4", cJSON_CreateNumber(heap_caps_get_free_size(MALLOC_CAP_PID4)));
@@ -414,11 +414,11 @@ void parseFolderForTars(const char *folder)
             {
                 sprintf(fileName, "%s/%s", folder, di->d_name);
                 ESP_LOGV(__FUNCTION__, "filelist:%s", fileName);
-                size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
+                size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
                 if (extractClientTar(fileName)) {
                     unlink(fileName);
                 }
-                size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+                size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
                 if (diff > 0) {
                     ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","extractClientTar",diff);
                 }
@@ -442,9 +442,9 @@ void parseFiles(void *param)
     } else {
         strcpy(folderName,"/sdcard/tars");
     }
-    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_DMA);
+    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
     parseFolderForTars(folderName);
-    size_t diff = heap_caps_get_free_size(MALLOC_CAP_DMA) - stacksz;
+    size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
     if (diff > 0) {
         ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","parseFolderForTars",diff);
     }
