@@ -7,6 +7,12 @@ class Table extends React.Component {
         }
     }
 
+    componentDidUpdate(prevProps, prevState) {
+        var keycol = this.getKeyColumn();
+        if (this.state.keyColumn != keycol){
+            this.setState({keyColumn:keycol});
+        }
+    }
     getKeyColumn() {
         if (this.props.json && this.props.json.length > 0) {
             if (typeof this.props.json[0] === "object") {
@@ -65,6 +71,9 @@ class Table extends React.Component {
     }
 
     getValue(fld, val) {
+        if (fld === undefined || val === undefined) {
+            return "";
+        }
         if (val?.value !== undefined) {
             return val.value;
         } else {

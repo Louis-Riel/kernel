@@ -43,7 +43,7 @@ IRDecoder::~IRDecoder(){
     ldfree((void*)name);
     EventManager::UnRegisterEventHandler(handlerDescriptors);
     ldfree(buf);
-    ESP_LOGD(__FUNCTION__,"Destructor");
+    ESP_LOGI(__FUNCTION__,"Destructor");
 }
 
 IRDecoder::IRDecoder(AppConfig* config)
@@ -120,7 +120,7 @@ void IRDecoder::IRPoller(void *arg){
     } else {
         ESP_LOGW(__FUNCTION__,"Weirdness s afoot.");
     }
-    ESP_LOGD(__FUNCTION__, "IR Reader done");
+    ESP_LOGI(__FUNCTION__, "IR Reader done");
 }
 
 int8_t IRDecoder::available()

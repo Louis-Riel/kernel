@@ -104,7 +104,7 @@ void bitBlit(void* args) {
                 if (periodLen<bit_tick_len){
                     sstate=serial_state_t::data_bits;
                     //printf(".");
-                    //ESP_LOGD(__FUNCTION__,"Start periodLen:%d bit_tick_len:%dstart:%" PRId64 " end:%" PRId64 ".",periodLen,bit_tick_len,curCalib.rizingTs,curCalib.loweringTs);
+                    //ESP_LOGI(__FUNCTION__,"Start periodLen:%d bit_tick_len:%dstart:%" PRId64 " end:%" PRId64 ".",periodLen,bit_tick_len,curCalib.rizingTs,curCalib.loweringTs);
                 } else {
                     sstate=serial_state_t::stop_bit;
                     //printf("&");
@@ -129,7 +129,7 @@ void bitBlit(void* args) {
                 setByteBit(pin_state_t::rizing,periodLen);
             case serial_state_t::stop_bit:
                 if (curBytePos==9) {
-                    ESP_LOGD(__FUNCTION__,"WE GOT A CHAR:%d",curByte);
+                    ESP_LOGI(__FUNCTION__,"WE GOT A CHAR:%d",curByte);
                 }
                 sstate=serial_state_t::start_bit;
                 break;
@@ -174,7 +174,7 @@ void initUlp(gpio_num_t pinNo) {
     };
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timer_args, &periodic_timer));
 
-    ESP_LOGD(__FUNCTION__,"portTICK_PERIOD_MMS:%f rtc_8md256_period:%d rtc_fast_freq_hz:%d bit tick len:%d",portTICK_PERIOD_MMS,rtc_8md256_period,rtc_fast_freq_hz,bit_tick_len);
+    ESP_LOGI(__FUNCTION__,"portTICK_PERIOD_MMS:%f rtc_8md256_period:%d rtc_fast_freq_hz:%d bit tick len:%d",portTICK_PERIOD_MMS,rtc_8md256_period,rtc_fast_freq_hz,bit_tick_len);
 
     serial_queue = xQueueCreate(10, sizeof(uint32_t));
     sstate=serial_state_t::stop_bit;

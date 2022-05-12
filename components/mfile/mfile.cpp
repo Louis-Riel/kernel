@@ -86,7 +86,7 @@ MFile* MFile::GetFile(const char* fileName){
         ESP_LOGW(__FUNCTION__,"Ran Out of files at %s",fileName);
         for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
             if (openFiles[idx])
-                ESP_LOGD(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+                ESP_LOGI(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
         }
         return NULL;
     }
@@ -234,7 +234,7 @@ void MFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, 
     default:
         break;
     }
-    free(params);
+    ldfree(params);
 }
 
 esp_event_base_t MFile::GetEventBase(){
@@ -320,7 +320,7 @@ BufferedFile* BufferedFile::GetOpenedFile(const char* fileName){
         ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
         for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
             if (openFiles[idx])
-                ESP_LOGD(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+                ESP_LOGI(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
         }
         return NULL;
     }
@@ -350,7 +350,7 @@ BufferedFile* BufferedFile::GetFile(const char* fileName){
         ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
         for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
             if (openFiles[idx])
-                ESP_LOGD(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+                ESP_LOGI(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
         }
 
         return NULL;
@@ -443,7 +443,7 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
         ESP_LOGV(__FUNCTION__,"NAME:%s...",name);
         BufferedFile* efile = (BufferedFile*)GetFile(name);
         if (!efile) {
-            free(params);
+            ldfree(params);
             ESP_LOGE(__FUNCTION__,"No files available, no go");
             return;
         }
@@ -482,8 +482,8 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
             MFile::ProcessEvent(handler_args,base,id,event_data);
             break;
         }
-        free(name);
-        free(params);
+        ldfree(name);
+        ldfree(params);
     }
 }
 

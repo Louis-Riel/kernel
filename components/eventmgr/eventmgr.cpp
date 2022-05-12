@@ -56,7 +56,7 @@ bool EventManager::ValidateConfig(){
             eventInterpretors[idx++] = new EventInterpretor(event,programs);
         }
     }
-    ESP_LOGD(__FUNCTION__,"We have %d Events",idx);
+    ESP_LOGI(__FUNCTION__,"We have %d Events",idx);
     if (eventQueue == NULL) {
         ESP_LOGE(__FUNCTION__,"Event Queue not set");
         isValid=false;

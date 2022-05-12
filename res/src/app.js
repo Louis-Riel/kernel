@@ -71,6 +71,8 @@ class MainApp extends React.Component {
         },
         autoRefresh: (httpPrefix||window.location.hostname) ? true : false
       };
+    this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
+
     if (!httpPrefix && !window.location.hostname){
       this.lookForDevs();
     }
@@ -79,10 +81,6 @@ class MainApp extends React.Component {
     }
   }
   
-  componentDidUpdate(prevProps, prevState, snapshot) {
-    //this.mountWidget();
-  }
-
   componentDidMount() {
     app=this;
     this.mountWidget();
@@ -172,15 +170,16 @@ class MainApp extends React.Component {
               if (inSpot) {
                 inSpot.weight++;
               } else {
-                  this.anims.push({
-                      type:"ping",
-                      from: "chip",
-                      weight: 1,
-                      lineColor: '#00ffff',
-                      shadowColor: '#00ffff',
-                      startY: 30,
-                      renderer: this.drawSprite
-                  })
+                this.anims.push({
+                    type:"ping",
+                    from: "chip",
+                    weight: 1,
+                    lineColor: '#00ffff',
+                    shadowColor: '#00ffff',
+                    startY: 30,
+                    renderer: this.drawSprite
+                })
+                window.requestAnimationFrame(this.drawDidget.bind(this));
               }
               dev.ip=device;
               foundDevices.push(dev);
@@ -225,7 +224,8 @@ class MainApp extends React.Component {
         this.state.autoRefresh=false;
         this.ws.close();
         this.ws = null;
-    }
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+      }
   }
 
   openWs() {
@@ -237,49 +237,77 @@ class MainApp extends React.Component {
     }
     this.state.connecting=true;
     this.state.running=false;
-    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false}, 3500);
-    ws.onmessage = (event) => {
-        clearTimeout(stopItWithThatShit);
-        if (!this.state.running || this.state.timeout) {
-            this.state.running= true;
-            this.state.error= null;
-            this.state.timeout= null;
-        }
+    this.startWs();
+  }
 
-        if (event && event.data) {
-            if (event.data[0] == "{") {
-                if (event.data.startsWith('{"eventBase"')) {
-                    this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
-                } else {
-                    this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
-                }
-            } else if (event.data.match(/.*\) ([^:]*)/g)) {
-                this.AddLogLine(event.data);
-            }
-        }
-        stopItWithThatShit = setTimeout(() => { this.state.timeout="Message"; ws.close();console.log("Message timeout")},3500)
+  startWs() {
+    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
+    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
+    ws.onmessage = (event) => {
+      stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
     };
     ws.onopen = () => {
-      clearTimeout(stopItWithThatShit);
-      this.state.connected=true;
-      this.state.connecting=false;
-      ws.send("Connected");
-      stopItWithThatShit = setTimeout(() => { this.state.timeout="Connect"; ws.close();console.log("Connect timeout")},3500)
-    };    
+      stopItWithThatShit = this.wsOpen(stopItWithThatShit, ws);
+    };
     ws.onerror = (err) => {
-        console.error(err);
-        clearTimeout(stopItWithThatShit);
-        this.state.error= err;
-        ws.close();
+      this.wsError(err, stopItWithThatShit, ws);
     };
     ws.onclose = (evt => {
-        clearTimeout(stopItWithThatShit);
-        this.state.connected=false;
-        this.state.connecting=false;
-        if (this.state.autoRefresh)
-          this.openWs();
+      this.wsClose(stopItWithThatShit);
     });
+  }
+
+  wsClose(stopItWithThatShit) {
+    clearTimeout(stopItWithThatShit);
+    this.state.connected = false;
+    this.state.connecting = false;
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    if (this.state.autoRefresh)
+      this.openWs();
+  }
+
+  wsError(err, stopItWithThatShit, ws) {
+    console.error(err);
+    clearTimeout(stopItWithThatShit);
+    this.state.error = err;
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    ws.close();
+  }
+
+  wsOpen(stopItWithThatShit, ws) {
+    clearTimeout(stopItWithThatShit);
+    this.state.connected = true;
+    this.state.connecting = false;
+    ws.send("Connected");
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3500);
+    return stopItWithThatShit;
+  }
+
+  processMessage(stopItWithThatShit, event, ws) {
+    clearTimeout(stopItWithThatShit);
+    if (!this.state.running || this.state.timeout) {
+      this.state.running = true;
+      this.state.error = null;
+      this.state.timeout = null;
+    }
+
+    if (event && event.data) {
+      if (event.data[0] == "{") {
+        try {
+          if (event.data.startsWith('{"eventBase"')) {
+            this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
+          } else {
+            this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
+          }
+        } catch (e) {
+        }
+      } else if (event.data.match(/.*\) ([^:]*)/g)) {
+        this.AddLogLine(event.data);
+      }
+    }
+    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 3500);
+    return stopItWithThatShit;
   }
 
   drawDidget(){
@@ -305,8 +333,8 @@ class MainApp extends React.Component {
         }
 
         this.anims = this.anims.filter(anim => anim.state != 2);
-    }
-    window.requestAnimationFrame(this.drawDidget.bind(this));
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+      }
   }
 
   drawSprite(anim, canvas) {
@@ -316,8 +344,11 @@ class MainApp extends React.Component {
         anim.endX = anim.from == "chip" ? this.browserX : this.chipX;
         anim.direction=anim.from=="browser"?1:-1;
         anim.y = anim.startY;
+        anim.tripLen = 1600.0;
+        anim.startWindow = performance.now();
+        anim.endWindow = anim.startWindow + anim.tripLen;
     } else {
-        anim.x += (anim.direction)*(2);
+        anim.x += (anim.direction*((performance.now() - anim.startWindow))/anim.tripLen);
     }
     var width=Math.min(15,4 + (anim.weight));
     if ((anim.y-(width/2)) <= 0) {
@@ -420,17 +451,20 @@ class MainApp extends React.Component {
     if (inSpot) {
       inSpot.weight++;
     } else {
-        this.anims.push({
+      var msg = ln.match(/^[^IDVEW]*(.+)/)[1];
+      var lvl = msg.substr(0, 1);
+      this.anims.push({
             type:"log",
             from: "chip",
-            level:ln[0],
-            color:ln[0] == 'D' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+            level:lvl,
+            color:lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
             weight: 1,
             lineColor: '#00ffff',
             shadowColor: '#00ffff',
             startY: 25,
             renderer: this.drawSprite
         })
+        window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.logCBFn.forEach(logCBFn=>logCBFn(ln));
   }
@@ -451,6 +485,7 @@ class MainApp extends React.Component {
         startY: 5,
         renderer: this.drawSprite
       });
+      window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.stateCBFn.forEach(stateCBFn=>stateCBFn(state));
   }
@@ -472,6 +507,7 @@ class MainApp extends React.Component {
           startY: 15,
           renderer: this.drawSprite
       });
+      window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn.fn(event));
   }
@@ -567,7 +603,6 @@ class MainApp extends React.Component {
   }
 
   render() {
-    this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
     return e("div",{key:genUUID(),className:"mainApp"}, [
       Object.keys(this.state.tabs).map(tab => 
         e("details",{key:genUUID(),id:tab, className:"appPage slides", open: this.state.tabs[tab].active, onClick:elem=>{

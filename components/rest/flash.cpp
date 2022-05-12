@@ -6,14 +6,14 @@ bool TheRest::GetLocalMD5(char* ccmd5) {
     FILE *fw = NULL;
     esp_err_t ret;
     bool retVal=false;
-    ESP_LOGD(__FUNCTION__, "Reading MD5 RAM:%d...", esp_get_free_heap_size());
+    ESP_LOGI(__FUNCTION__, "Reading MD5 RAM:%d...", esp_get_free_heap_size());
     if ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
     {
         uint32_t len = 0;
         if ((len = fRead((void *)ccmd5, 1, 33, fw)) > 0)
         {
             ccmd5[32] = 0;
-            ESP_LOGD(__FUNCTION__, "Local MD5:%s", ccmd5);
+            ESP_LOGI(__FUNCTION__, "Local MD5:%s", ccmd5);
             retVal=true;
         }
         else
@@ -38,7 +38,7 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
     if (fwFile && (cJSON_HasObjectItem(fwFile, "size")))
     {
         size_t fwLen = cJSON_GetNumberValue(cJSON_GetObjectItem(fwFile, "size"));
-        ESP_LOGD(__FUNCTION__,"Firmware len:%d", fwLen);
+        ESP_LOGI(__FUNCTION__,"Firmware len:%d", fwLen);
         char *newFw = (char*) dmalloc(fwLen);
         sprintf(url, "http://%s/lfs/firmware/current.bin", gwAddr);
         plen = fwLen;
@@ -65,7 +65,7 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
 
             if (strcmp(srvMd5, ssrvmd) == 0)
             {
-                ESP_LOGD(__FUNCTION__, "MD5 matched, writing FW");
+                ESP_LOGI(__FUNCTION__, "MD5 matched, writing FW");
                 sprintf(url, "/lfs/firmware/current.bin");
                 FILE *newFWf = fOpen(url, "w");
                 if (newFWf)
@@ -123,7 +123,7 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
 }
 
 void TheRest::CheckUpgrade(void* param){
-    ESP_LOGD(__FUNCTION__,"Checking firmware");
+    ESP_LOGI(__FUNCTION__,"Checking firmware");
     char localMd5[70];
     char serverMd5[70];
     char* url =(char*)dmalloc(266);
@@ -138,7 +138,7 @@ void TheRest::CheckUpgrade(void* param){
         sprintf(url,"http://%s/ota/getmd5",restInstance->gwAddr);
         restInstance->SendRequest(url,HTTP_METHOD_POST,&len,serverMd5);
         if (strlen(serverMd5) == strlen(localMd5)) {
-            ESP_LOGD(__FUNCTION__,"local:%s server:%s",localMd5,serverMd5);
+            ESP_LOGI(__FUNCTION__,"local:%s server:%s",localMd5,serverMd5);
             needsUpgrade = strcmp(localMd5,serverMd5)!=0;
         } else {
             ESP_LOGW(__FUNCTION__,"Weird MD5s, local:%s server:%s",localMd5,serverMd5);

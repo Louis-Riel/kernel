@@ -21,31 +21,34 @@ WebsocketManager::WebsocketManager():
     isLive(true),
     logPos(0),
     msgQueue(xQueueCreate(25,JSON_BUFFER_SIZE)),
-    logBuffer((char*)dmalloc(JSON_BUFFER_SIZE)),
-    emptyString(0)
+    emptyString(0),
+    msgQueueBuf((ws_msg_t*)dmalloc(sizeof(ws_msg_t)*25)),
+    msgQueueBufLen(25),
+    msgQueueBufPos(254)
 {
+  memset(msgQueueBuf,0,sizeof(ws_msg_t)*25);
   stateHandler=this;
   memset(&clients,0,sizeof(clients));
-  ESP_LOGD(__FUNCTION__,"Created Websocket");
+  ESP_LOGI(__FUNCTION__,"Created Websocket");
   CreateBackgroundTask(QueueHandler,"WebsocketQH",4096, NULL, tskIDLE_PRIORITY, NULL);
-  ESP_LOGD(__FUNCTION__,"Created WebsocketQH");
+  ESP_LOGI(__FUNCTION__,"Created WebsocketQH");
   CreateBackgroundTask(StatePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
-  ESP_LOGD(__FUNCTION__,"Created StatePoller");
+  ESP_LOGI(__FUNCTION__,"Created StatePoller");
   registerLogCallback(LogCallback,stateHandler);
-  ESP_LOGD(__FUNCTION__,"Log callback registered");
+  ESP_LOGI(__FUNCTION__,"Log callback registered");
   BuildStatus(this);
-  ESP_LOGD(__FUNCTION__,"Built Status");
+  ESP_LOGI(__FUNCTION__,"Built Status");
   cJSON* jState = ManagedDevice::BuildStatus(this);
   jClients = cJSON_HasObjectItem(jState,"Clients")?cJSON_GetObjectItem(jState,"Clients"):cJSON_AddArrayToObject(jState,"Clients");
   cJSON_AddNumberToObject(jState,"IsLive",true);
 };
 
 WebsocketManager::~WebsocketManager(){
-  ESP_LOGD(__FUNCTION__,"State Poller Done");
+  ESP_LOGI(__FUNCTION__,"State Poller Done");
   unregisterLogCallback(LogCallback);
-  ESP_LOGD(__FUNCTION__,"Unregistered log callback");
+  ESP_LOGI(__FUNCTION__,"Unregistered log callback");
   vQueueDelete(msgQueue);
-  ldfree(logBuffer);
+  ldfree(msgQueueBuf);
   cJSON* jState = ManagedDevice::BuildStatus(this);
   cJSON_SetIntValue(cJSON_GetObjectItem(jState,"IsLive"),false);
   cJSON_DeleteItemFromObject(jState,"Clients");
@@ -90,9 +93,10 @@ void WebsocketManager::PostToClient(void* msg) {
     strftime(wsMsg->client->jLastTs->valuestring, 30, "%c", &timeinfo);
     ESP_LOGV(__FUNCTION__,"Client %s - %zu bytes:%s", wsMsg->client->jLastTs->valuestring, ws_pkt.len,(char*)ws_pkt.payload);
   }
-  if (wsMsg->buf)
-    ldfree(wsMsg->buf);
-  ldfree(wsMsg);
+}
+
+WebsocketManager::ws_msg_t* WebsocketManager::getNewMessage(){
+  return &msgQueueBuf[msgQueueBufPos >= msgQueueBufLen ? 0 : ++msgQueueBufPos];
 }
 
 void WebsocketManager::ProcessMessage(uint8_t* msg){
@@ -101,19 +105,17 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
   
   for (uint8_t idx = 0; idx < 5; idx++){
     if (stateHandler && clients[idx].jIsLive && clients[idx].jIsLive->valueint){
-      ws_msg_t* wsMsg = (ws_msg_t*)dmalloc(sizeof(ws_msg_t));
-      memset(wsMsg,0,sizeof(ws_msg_t));
+      ws_msg_t* wsMsg = getNewMessage();
       if (msg) {
-        wsMsg->bufLen = strlen((char*)msg);
-        wsMsg->buf = dmalloc(strlen((char*)msg)+1);
+        if (wsMsg->bufLen < strlen((const char*)msg)) {
+          ldfree(wsMsg->buf);
+          wsMsg->bufLen = strlen((const char*)msg)+1;
+          wsMsg->buf = dmalloc(strlen((char*)msg)+1);
+        }
         strcpy((char*)wsMsg->buf,(const char*)msg);
       }
       wsMsg->client=&clients[idx];
       if ((ret = httpd_queue_work(clients[idx].hd,PostToClient,wsMsg)) != ESP_OK) {
-        if (msg){
-          ldfree(wsMsg->buf);
-        }
-        ldfree(wsMsg);
         cJSON_SetIntValue(clients[idx].jIsLive,false);
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
         stateChange=true;
@@ -132,7 +134,7 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
 }
 
 void WebsocketManager::QueueHandler(void* param){
-  ESP_LOGD(__FUNCTION__,"QueueHandler Starting");
+  ESP_LOGI(__FUNCTION__,"QueueHandler Starting");
   uint8_t* buf = (uint8_t*)dmalloc(JSON_BUFFER_SIZE);
   while(stateHandler && stateHandler->msgQueue && stateHandler->isLive){
     memset(buf,0,JSON_BUFFER_SIZE);
@@ -142,7 +144,7 @@ void WebsocketManager::QueueHandler(void* param){
       stateHandler->ProcessMessage(NULL);
     }
   }
-  ESP_LOGD(__FUNCTION__,"QueueHandler Done");
+  ESP_LOGI(__FUNCTION__,"QueueHandler Done");
   ldfree(buf);
 }
 
@@ -168,7 +170,7 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
       clients[idx].fd = fd;
 
       if (!clients[idx].jIsLive) {
-        ESP_LOGD(__FUNCTION__,"Client is inserted at position %d",idx);
+        ESP_LOGI(__FUNCTION__,"Client is inserted at position %d",idx);
         cJSON* client = cJSON_CreateObject();
         cJSON_AddItemToArray(jClients,client);
         clients[idx].jErrCount = cJSON_AddNumberToObject(client,"Errors",0);
@@ -195,7 +197,7 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
       return true;
     }
   }
-  ESP_LOGD(__FUNCTION__,"Client could not be added");
+  ESP_LOGI(__FUNCTION__,"Client could not be added");
   return false;
 }
 
@@ -205,10 +207,9 @@ time_t GetTime() {
 
 bool WebsocketManager::LogCallback(void* instance, char* logData){
   if (stateHandler && stateHandler->isLive && logData) {
-    strcpy(stateHandler->logBuffer,logData);
-    return xQueueSend(stateHandler->msgQueue,stateHandler->logBuffer,portMAX_DELAY);
+    return xQueueSend(stateHandler->msgQueue,logData,portMAX_DELAY);
   }
-  return false;
+  return true;
 };
 
 bool WebsocketManager::EventCallback(char *event){
@@ -219,9 +220,9 @@ bool WebsocketManager::EventCallback(char *event){
 }
 
 
-void WebsocketManager::StatePoller(void *instance){
+void WebsocketManager::StatePoller(void* instance){
   EventGroupHandle_t stateEg = AppConfig::GetStateGroupHandle();
-  ESP_LOGD(__FUNCTION__,"State poller started");
+  ESP_LOGI(__FUNCTION__,"State poller started");
   EventBits_t bits = 0;
   cJSON* gpsState = NULL;
   cJSON* mainState = AppConfig::GetAppStatus()->GetJSONConfig(NULL);
@@ -259,7 +260,7 @@ void WebsocketManager::StatePoller(void *instance){
     }
   }
   ldfree(stateBuffer);
-  ESP_LOGD(__FUNCTION__,"State poller done");
+  ESP_LOGI(__FUNCTION__,"State poller done");
   delete stateHandler;
 }
 
@@ -267,13 +268,13 @@ void WebsocketManager::StatePoller(void *instance){
 esp_err_t TheRest::ws_handler(httpd_req_t *req) {
   ESP_LOGV(__FUNCTION__, "WEBSOCKET Session");
   if (stateHandler == NULL) {
-    ESP_LOGD(__FUNCTION__, "Staring Manager");
+    ESP_LOGI(__FUNCTION__, "Staring Manager");
     stateHandler = new WebsocketManager();
-    ESP_LOGD(__FUNCTION__, "Manager Started");
+    ESP_LOGI(__FUNCTION__, "Manager Started");
   }
 
   if (req->method == HTTP_GET) {
-        ESP_LOGD(__FUNCTION__, "Handshake done, the new connection was opened");
+        ESP_LOGI(__FUNCTION__, "Handshake done, the new connection was opened");
         return ESP_OK;
   }
 
@@ -290,11 +291,11 @@ esp_err_t TheRest::ws_handler(httpd_req_t *req) {
       switch (ws_pkt.type)
       {
         case HTTPD_WS_TYPE_TEXT: ESP_LOGV(__FUNCTION__,"msg:%s",(char*)ws_pkt.payload);break;
-        case HTTPD_WS_TYPE_CONTINUE:  ESP_LOGD(__FUNCTION__,"Packet type(%zu): CONTINUE: %s",ws_pkt.len, (char*)ws_pkt.payload); break;
-        case HTTPD_WS_TYPE_BINARY:    ESP_LOGD(__FUNCTION__,"Packet type(%zu): BINARY",ws_pkt.len);   break;
-        case HTTPD_WS_TYPE_CLOSE:     ESP_LOGD(__FUNCTION__,"Packet type(%zu): CLOSE",ws_pkt.len);    break;
-        case HTTPD_WS_TYPE_PING:      ESP_LOGD(__FUNCTION__,"Packet type(%zu): PING",ws_pkt.len);     break;
-        case HTTPD_WS_TYPE_PONG:      ESP_LOGD(__FUNCTION__,"Packet type(%zu): PONG",ws_pkt.len);     break;
+        case HTTPD_WS_TYPE_CONTINUE:  ESP_LOGI(__FUNCTION__,"Packet type(%zu): CONTINUE: %s",ws_pkt.len, (char*)ws_pkt.payload); break;
+        case HTTPD_WS_TYPE_BINARY:    ESP_LOGI(__FUNCTION__,"Packet type(%zu): BINARY",ws_pkt.len);   break;
+        case HTTPD_WS_TYPE_CLOSE:     ESP_LOGI(__FUNCTION__,"Packet type(%zu): CLOSE",ws_pkt.len);    break;
+        case HTTPD_WS_TYPE_PING:      ESP_LOGI(__FUNCTION__,"Packet type(%zu): PING",ws_pkt.len);     break;
+        case HTTPD_WS_TYPE_PONG:      ESP_LOGI(__FUNCTION__,"Packet type(%zu): PONG",ws_pkt.len);     break;
         default:                      ESP_LOGW(__FUNCTION__,"Packet type(%zu): UNKNOWN",ws_pkt.len);  break;
       }
     } else {

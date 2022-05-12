@@ -10,11 +10,9 @@ static LogFunction_t callbacks[5];
 static void* params[5];
 static SemaphoreHandle_t logMutex = xSemaphoreCreateMutex();
 static BufferedFile* logFile = NULL;
-static char* curLogLine = NULL;
-static char* curLogBuf = NULL;
+static char* logBuf = NULL;
 static TaskHandle_t dltask = NULL;
 static EventGroupHandle_t app_eg = xEventGroupCreate();
-static bool buildingLogf = false;
 const char* EMPTY_STRING = "";
 
 const char* getLogFName(){
@@ -25,28 +23,6 @@ const char* getLogFName(){
 }
 
 void dumpTheLogs(void* params){
-    if (!logFile && curLogBuf && strlen(curLogBuf)) {
-        xSemaphoreTake(logMutex,portMAX_DELAY);
-        struct tm timeinfo;
-        time_t now = 0;
-        time(&now);
-        char* lpath=(char*)dmalloc(255);
-        char* logfname=(char*)dmalloc(355);
-        sprintf(lpath,"%s/logs/%s/%%Y-%%m-%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
-        localtime_r(&now, &timeinfo);
-        strftime(logfname, 254, lpath, &timeinfo);
-        //printf("\nlogname:%s\n",logfname);
-        logFile = new BufferedFile(logfname);
-        logFile->Write((uint8_t*)curLogBuf,strlen(curLogBuf));
-        ldfree(lpath);
-        ldfree(logfname);
-        ldfree(curLogBuf);
-        curLogBuf=NULL;
-        curLogLine=(char*)dmalloc(LOG_LN_SIZE);
-        *curLogLine=0;
-        xSemaphoreGive(logMutex);
-    }
-
     if (dltask == NULL) {
         dltask = (TaskHandle_t)1; //Just not null
     }
@@ -59,7 +35,7 @@ void dumpTheLogs(void* params){
 
 void dumpLogs(){
     if (xEventGroupGetBits(getAppEG())&app_bits_t::TRIPS_SYNCING) {
-        ESP_LOGD(__FUNCTION__,"Not flushing whilst dumping");
+        ESP_LOGI(__FUNCTION__,"Not flushing whilst dumping");
         return;
     }
 
@@ -90,6 +66,12 @@ void unregisterLogCallback( LogFunction_t callback) {
 int loggit(const char *fmt, va_list args) {
     if (*fmt != 'V'){
         xSemaphoreTake(logMutex,portMAX_DELAY);
+        if (!logBuf) {
+            logBuf = (char*)dmalloc(LOG_LN_SIZE);
+        }
+
+        uint32_t lineLen=vsprintf(logBuf,fmt,args);
+
         if ((*fmt == 'E') || (*fmt == 'W') || AppConfig::HasSDCard()) {
             if (!logFile) {
                 struct tm timeinfo = { 0 };
@@ -97,47 +79,24 @@ int loggit(const char *fmt, va_list args) {
                 time(&now);
                 localtime_r(&now, &timeinfo);
 
-                if (!buildingLogf && 
-                    ((timeinfo.tm_year > 70) || (curLogBuf && (strlen(curLogBuf) >= LOG_BUF_ULIMIT))) &&
-                    AppConfig::HasActiveStorage()) {
-                    buildingLogf = true;
+                if (AppConfig::HasActiveStorage()) {
                     char* lpath=(char*)dmalloc(255);
                     char* logfname=(char*)dmalloc(355);
                     sprintf(lpath,"%s/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
                     localtime_r(&now, &timeinfo);
                     strftime(logfname, 254, lpath, &timeinfo);
-                    //printf("\nlogname2:%s\n",logfname);
                     logFile = new BufferedFile(logfname);
                     ldfree(lpath);
                     ldfree(logfname);
                 }
-                if (!curLogBuf) {
-                    curLogBuf = (char*)dmalloc(LOG_BUF_SIZE);
-                    *curLogBuf=0;
-                    curLogLine = curLogBuf;
-                }
             }
-
-            if (logFile) {
-                if (curLogBuf) {
-                    if (*curLogBuf != 0) {
-                        logFile->Write((uint8_t*)curLogBuf,strlen(curLogBuf));
-                    }
-                    ldfree(curLogBuf);
-                    curLogBuf=NULL;
-                    curLogLine=(char*)dmalloc(LOG_LN_SIZE);
-                    *curLogLine=0;
-                }
-                vsprintf(curLogLine,fmt,args);
-                logFile->Write((uint8_t*)curLogLine,strlen(curLogLine));
-            } else {
-                curLogLine+=vsprintf(curLogLine,fmt,args);
-                *curLogLine=0;
-            }
+        }
+        if (logFile) {
+            logFile->Write((uint8_t*)logBuf,lineLen);
         }
         for (int idx=0; idx < 5; idx++){
             if (callbacks[idx] != NULL) {
-                if (!callbacks[idx](params[idx],curLogLine)){
+                if (!callbacks[idx](params[idx],logBuf)){
                     callbacks[idx] = nullptr;
                 }
             }
@@ -148,8 +107,6 @@ int loggit(const char *fmt, va_list args) {
 }
 
 void initLog() {
-    curLogLine = NULL;
-    curLogBuf = NULL;
     esp_log_set_vprintf(loggit);
 }
 

@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "http://192.168.0.106";
+var httpPrefix = "http://192.168.0.107";
 
 //#region SHA-1
 /*
@@ -798,6 +798,12 @@ class Table extends React.Component {
         }
     }
 
+    componentDidUpdate(prevProps, prevState) {
+        var keycol = this.getKeyColumn();
+        if (this.state.keyColumn != keycol){
+            this.setState({keyColumn:keycol});
+        }
+    }
     getKeyColumn() {
         if (this.props.json && this.props.json.length > 0) {
             if (typeof this.props.json[0] === "object") {
@@ -856,6 +862,9 @@ class Table extends React.Component {
     }
 
     getValue(fld, val) {
+        if (fld === undefined || val === undefined) {
+            return "";
+        }
         if (val?.value !== undefined) {
             return val.value;
         } else {
@@ -1264,7 +1273,7 @@ class StatusPage extends React.Component {
     }
 
     updateAppStatus() {
-        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }, { url: "/status/mallocs", path: 'mallocs' }], {});
     }
 
     refreshStatus(stat) {
@@ -1612,17 +1621,18 @@ class LiveEventPannel extends React.Component {
     }
 
     ProcessEvent(evt) {
-        if (this.mounted){
-            var lastEvents = this.state?.lastEvents||[];
+        if (this.mounted && this.isEventVisible(evt)) {
+            var lastEvents = (this.state?.lastEvents||[]).concat(evt);
             while (lastEvents.length > 100) {
                 lastEvents.shift();
             }
-            var curFilters = Object.entries(lastEvents.filter(evt=>evt.eventBase && evt.eventId)
+            var curFilters = Object.entries(lastEvents
+                                   .filter(evt=>evt.eventBase && evt.eventId)
                                    .reduce((ret,evt)=>{
                                        if (!ret[evt.eventBase]) {
-                                          ret[evt.eventBase] = {filtered: false, eventIds:[{filtered: false, eventId: evt.eventId}]};
+                                          ret[evt.eventBase] = {visible: true, eventIds:[{visible: true, eventId: evt.eventId}]};
                                        } else if (!ret[evt.eventBase].eventIds.find(vevt=>vevt.eventId === evt.eventId)) {
-                                        ret[evt.eventBase].eventIds.push({filtered:false, eventId: evt.eventId});
+                                        ret[evt.eventBase].eventIds.push({visible:true, eventId: evt.eventId});
                                        }
                                        return ret;
                                     },{}))
@@ -1639,13 +1649,14 @@ class LiveEventPannel extends React.Component {
 
             if (hasUpdates) {
                 this.setState({
-                    filters: this.state.filters
+                    filters: this.state.filters,
+                    lastEvents: lastEvents
+                });
+            } else {
+                this.setState({
+                    lastEvents:lastEvents
                 });
             }
-
-            this.setState({
-                lastEvents:lastEvents.concat(evt)
-            });
         }
     }
 
@@ -1697,12 +1708,12 @@ class LiveEventPannel extends React.Component {
     }
 
     updateEventIdFilter(eventId, enabled) {
-        eventId.filtered = enabled;
+        eventId.visible = enabled;
         this.setState({filters: this.state.filters});
     }
 
     updateEventBaseFilter(eventBase, enabled) {
-        eventBase.filtered = enabled;
+        eventBase.visible = enabled;
         this.setState({filters: this.state.filters});
     }
 
@@ -1723,12 +1734,12 @@ class LiveEventPannel extends React.Component {
         return e('div', { key: filter[0], className: `filter ${filter[0]}` },
             e("div",{key:"evbfiltered",className:"evbfiltered"},
                 e(MaterialUI.FormControlLabel,{
-                    key:"filtered",
+                    key:"visible",
                     className:"ebfiltered",
                     label: filter[0],
                     control:e(MaterialUI.Checkbox, {
                         key: "ctrl",
-                        checked: filter[1].filtered,
+                        checked: filter[1].visible,
                         onChange: event => this.updateEventIdFilter(filter[1], event.target.checked)
                     })})
             ),
@@ -1740,7 +1751,7 @@ class LiveEventPannel extends React.Component {
                         label: eventId.eventId,
                         control:e(MaterialUI.Checkbox, {
                             key: "ctrl",
-                            checked: eventId.filtered,
+                            checked: eventId.visible,
                             onChange: event => this.updateEventIdFilter(eventId, event.target.checked),
                         })}
                     )
@@ -1749,11 +1760,10 @@ class LiveEventPannel extends React.Component {
     }
 
     isEventVisible(event) {
-        return !Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].filtered) &&
-               !Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
-                                                                  !this.state.filters[eventBase].filtered &&
+        return (Object.keys(this.state.filters).length === 0) || (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
+               Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
                                                                   this.state.filters[eventBase].eventIds
-                                                                    .some(eventId=> eventId.eventId === event.eventId && eventId.filtered));
+                                                                    .some(eventId=> eventId.eventId === event.eventId && eventId.visible)));
     }
 
     getFilteredEvents() {
@@ -1815,6 +1825,11 @@ class EventsPage extends React.Component {
     }
 }
 class FirmwareUpdater extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {};
+    }
+
     UploadFirmware(form) {
         form.preventDefault();
         this.setState({ loaded: `Sending ${this.state.len} firmware bytes` })
@@ -1935,16 +1950,16 @@ class Program extends React.Component {
     }
 
     getIcon() {
-        return e("svg", { key: genUUID(), xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64",onClick:elem=>this.setState({viewer:"trip"}) }, [
-            e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M17.993 56h20v6h-20zm-4.849-18.151c4.1 4.1 9.475 6.149 14.85 6.149 5.062 0 10.11-1.842 14.107-5.478l.035.035 1.414-1.414-.035-.035c7.496-8.241 7.289-20.996-.672-28.957A20.943 20.943 0 0 0 27.992 2a20.927 20.927 0 0 0-14.106 5.477l-.035-.035-1.414 1.414.035.035c-7.496 8.243-7.289 20.997.672 28.958zM27.992 4.001c5.076 0 9.848 1.976 13.437 5.563 7.17 7.17 7.379 18.678.671 26.129L15.299 8.892c3.493-3.149 7.954-4.891 12.693-4.891zm12.696 33.106c-3.493 3.149-7.954 4.892-12.694 4.892a18.876 18.876 0 0 1-13.435-5.563c-7.17-7.17-7.379-18.678-.671-26.129l26.8 26.8z" }),
-            e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M48.499 2.494l-2.828 2.828c4.722 4.721 7.322 10.999 7.322 17.678s-2.601 12.957-7.322 17.678S34.673 48 27.993 48s-12.957-2.601-17.678-7.322l-2.828 2.828C12.962 48.983 20.245 52 27.993 52s15.031-3.017 20.506-8.494c5.478-5.477 8.494-12.759 8.494-20.506S53.977 7.97 48.499 2.494z" })
+        return e("svg", { key: "svg", xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64",onClick:elem=>this.setState({viewer:"trip"}) }, [
+            e("path", { key: "path1", style: { fill: this.getIconColor() }, d: "M17.993 56h20v6h-20zm-4.849-18.151c4.1 4.1 9.475 6.149 14.85 6.149 5.062 0 10.11-1.842 14.107-5.478l.035.035 1.414-1.414-.035-.035c7.496-8.241 7.289-20.996-.672-28.957A20.943 20.943 0 0 0 27.992 2a20.927 20.927 0 0 0-14.106 5.477l-.035-.035-1.414 1.414.035.035c-7.496 8.243-7.289 20.997.672 28.958zM27.992 4.001c5.076 0 9.848 1.976 13.437 5.563 7.17 7.17 7.379 18.678.671 26.129L15.299 8.892c3.493-3.149 7.954-4.891 12.693-4.891zm12.696 33.106c-3.493 3.149-7.954 4.892-12.694 4.892a18.876 18.876 0 0 1-13.435-5.563c-7.17-7.17-7.379-18.678-.671-26.129l26.8 26.8z" }),
+            e("path", { key: "path2", style: { fill: this.getIconColor() }, d: "M48.499 2.494l-2.828 2.828c4.722 4.721 7.322 10.999 7.322 17.678s-2.601 12.957-7.322 17.678S34.673 48 27.993 48s-12.957-2.601-17.678-7.322l-2.828 2.828C12.962 48.983 20.245 52 27.993 52s15.031-3.017 20.506-8.494c5.478-5.477 8.494-12.759 8.494-20.506S53.977 7.97 48.499 2.494z" })
         ]);
     }
 
     render() {
-        return e("div",{key:genUUID(),className:"rendered trip"},[
+        return e("div",{key:"renderedtrip",className:"rendered trip"},[
             this.getIcon(),
-            this.state?.viewer == "trip"?e(TripViewer,{key:genUUID(),points:this.props.points,cache:this.props.cache}):null
+            this.state?.viewer == "trip"?e(TripViewer,{key:"tripviewer",points:this.props.points,cache:this.props.cache,onClose:()=>this.setState({"viewer":""})}):null
         ]
         );
     }
@@ -1952,68 +1967,95 @@ class Program extends React.Component {
 class FileViewer extends React.Component {
     constructor(props) {
         super(props);
-        this.buildRenderers(0);
+        if (props.registerFileWork) {
+            props.registerFileWork(this.buildRenderers(0));
+        }
+        this.state = {
+            renderers: [
+                {
+                    name: "loading"
+                }
+            ]
+        }
     }
 
     buildRenderers(retryCount) {
-        if (this.props.name.endsWith(".csv") && !this.state?.renderes?.some("trip")){
-            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+        return new Promise((resolve, reject) => {
+            if (this.props.name.endsWith(".csv") && !this.state?.renderers?.some("trip")){
+                this.parseCsv(resolve, retryCount, reject);
+            } else if (this.props.name.endsWith(".log") && !this.state?.renderers?.some("trip")){
+                this.parseLog(resolve, retryCount, reject);
+            } else {
+                resolve();
+            }
+        });
+    }
+
+    parseLog(resolve, retryCount, reject) {
+        wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
             .then(resp => resp.text())
-            .then(content =>{
-                var cols=content.split(/\n|\r\n/)[0].split(",");
-                this.setState({
-                    renderes:[{
-                        name:"trip", 
-                        points:content.split(/\n|\r\n/)
-                                        .splice(1).map(ln => {
-                                            var ret={};
-                                        ln.split(",").forEach((it,idx) => ret[cols[idx]] = isNaN(it)?it:parseFloat(it));
-                                        return ret;
-                                        }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
-                    }]
-                })
-            }).catch(err =>{
-                if (retryCount++ < 3){
-                    this.buildRenderers(retryCount++);
+            .then(content => resolve(this.setState({
+                renderers: [{
+                    name: "trip",
+                    points: content.split("\n")
+                        .filter(ln => ln.match(/[ID] \([0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}\).* Location:.*/))
+                        .map(ln => ln.match(/[ID] \((?<timestamp>.*)\).*Location:\s*(?<latitude>[0-9.-]+),\s*(?<longitude>[0-9.-]+).*speed:\s*(?<speed>[0-9.]+).*altitude:\s*(?<altitude>[0-9.]+).*course:\s*(?<course>[0-9.]+).*bat:\s*(?<Battery>[0-9.]+)/i)?.groups)
+                        .filter(point => point)
+                        .map(point => {
+                            Object.keys(point).forEach(fld => point[fld] = isNaN(point[fld]) ? point[fld] : parseFloat(point[fld]));
+                            point.timestamp = `1970-01-01 ${point.timestamp}`;
+                            point.altitude *= 100;
+                            point.speed *= 100;
+                            return point;
+                        })
+                }]
+            }))
+            ).catch(err => {
+                if (retryCount++ < 3) {
+                    this.buildRenderers(retryCount);
+                } else {
+                    reject(err);
                 }
             });
-        }
-        if (this.props.name.endsWith(".log") && !this.state?.renderes?.some("trip")){
-            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
-                .then(resp => resp.text())
-                .then(content =>this.setState({
-                            renderes:[{
-                                name:"trip", 
-                                points: content.split("\n")
-                                               .filter(ln => ln.match(/[ID] \([0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}\).* Location:.*/))
-                                               .map(ln => ln.match(/[ID] \((?<timestamp>.*)\).*Location:\s*(?<latitude>[0-9.-]+),\s*(?<longitude>[0-9.-]+).*speed:\s*(?<speed>[0-9.]+).*altitude:\s*(?<altitude>[0-9.]+).*course:\s*(?<course>[0-9.]+).*bat:\s*(?<Battery>[0-9.]+)/i)?.groups)
-                                               .filter(point => point)
-                                               .map(point => {
-                                                   Object.keys(point).forEach(fld => point[fld] = isNaN(point[fld]) ? point[fld] : parseFloat(point[fld]));
-                                                   point.timestamp = `1970-01-01 ${point.timestamp}`;
-                                                   point.altitude*=100;
-                                                   point.speed*=100;
-                                                   return point;
-                                                })
-                            }]
-                        })
-                    ).catch(err =>{
-                        if (retryCount++ < 3){
-                            this.buildRenderers(retryCount++);
-                        }
-                    });
+    }
+
+    parseCsv(resolve, retryCount, reject) {
+        wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+            .then(resp => resp.text())
+            .then(content => {
+                var cols = content.split(/\n|\r\n/)[0].split(",");
+                resolve(this.setState({
+                    renderers: [{
+                        name: "trip",
+                        points: content.split(/\n|\r\n/)
+                            .splice(1).map(ln => {
+                                var ret = {};
+                                ln.split(",").forEach((it, idx) => ret[cols[idx]] = isNaN(it) ? it : parseFloat(it));
+                                return ret;
+                            }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
+                    }]
+                }));
+            }).catch(err => {
+                if (retryCount++ < 3) {
+                    this.buildRenderers(retryCount);
+                } else {
+                    reject(err);
                 }
+            });
     }
 
     getRenderers() {
-        if (!this.state?.renderes || !this.state.renderes.length) {
+        if (!this.state?.renderers || !this.state.renderers.length) {
             return null;
         }
-        return this.state.renderes.map(renderer => {
+        return this.state.renderers.map(renderer => {
             switch (renderer.name) {
                 case "trip":
-                    return renderer.points.length?e(TripWithin,{key:genUUID(),points:renderer.points,cache:this.props.cache}):null;
-            
+                    return renderer.points.length?e(TripWithin,{key:"tripwithin",points:renderer.points,cache:this.props.cache}):null;
+
+                case "loading":
+                    return e('i',{className: "rendered reportbtn fa fa-spinner", key: "graphbtn", })
+    
                 default:
                     return null;
             }
@@ -2021,21 +2063,21 @@ class FileViewer extends React.Component {
     }
 
     render() {
-        return [e("a", { key:genUUID(), href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]),this.getRenderers()];
+        return [e("a", { key:"filelink", href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]),this.getRenderers()];
     }
 }
 
 class SFile extends React.Component {
     render() {
-        return  e("tr", { key: genUUID(), className: this.props.file.ftype }, [
-            e("td", { key: genUUID() }, this.getLink(this.props.file)),
-            e("td", { key: genUUID() }, this.props.file.ftype != "file" ? "" : this.props.file.size),
-            e("td", { key: genUUID() }, this.getDeleteLink())]);
+        return  e("tr", { key: "tr", className: this.props.file.ftype }, [
+            e("td", { key: "link" }, this.getLink(this.props.file)),
+            e("td", { key: "size" }, this.props.file.ftype != "file" ? "" : this.props.file.size),
+            e("td", { key: "delete" }, this.getDeleteLink())]);
     }
 
     getDeleteLink() {
         return this.props.path == "/" || this.props.file.name == ".." ? null : e("a", {
-            key: genUUID(),
+            key: "delete",
             href: "#",
             onClick: () => {
                 wfetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
@@ -2055,12 +2097,12 @@ class SFile extends React.Component {
     getLink(file) {
         if (file.ftype == "folder") {
             return e("a", {
-                key: genUUID(),
+                key: file.name,
                 href: "#",
                 onClick: () => this.props.onChangeFolder ? this.props.onChangeFolder(`${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/")):null
             }, file.name);
         } else {
-            return e(FileViewer,{cache:this.props.cache,key:genUUID(),...file});
+            return e(FileViewer,{key:file.name,cache:this.props.cache,registerFileWork:this.props.registerFileWork,...file});
         }
     }
 }
@@ -2071,9 +2113,10 @@ class StorageViewer extends React.Component {
         this.state = { 
             loaded: false, 
             path: "/", 
+            files: null,
             cache:{images:{}},
-            files: null };
-        this.id = this.props.id || genUUID();
+            fileWork: [] 
+        };
     }
 
     getSystemFolders() {
@@ -2088,36 +2131,32 @@ class StorageViewer extends React.Component {
     }
 
     GetFileStat(fileStatsToFetch) {
-        if (fileStatsToFetch.length) {
-            var fileToFetch = fileStatsToFetch.pop()
-            var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
-            wfetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
-                method: 'post',
-                signal: this.props.pageControler.signal
-            }).then(data => {
-                clearTimeout(quitItNow);
-                data.json().then(jdata => {
-                    fileToFetch.size = jdata.size;
-                    if (this.mounted)
-                        this.setState({ loaded: true, files: this.state.files, total: this.state?.total + jdata.size });
-                });
-                if (fileStatsToFetch.length && !this.props.pageControler.signal.aborted) {
-                    if (this.mounted)
-                        this.GetFileStat(fileStatsToFetch);
-                }        
-            }).catch(ex => {
-                clearTimeout(quitItNow);
-                console.err(ex);
+        if (this.mounted){
+            fileStatsToFetch.forEach(fileToFetch => {
+                this.registerFileWork(new Promise((resolve, reject) => {
+                    wfetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
+                        method: 'post'
+                    }).then(data => {
+                        data.json().then(jdata => {
+                            fileToFetch.size = jdata.size;
+                            resolve(this.setState({ loaded: true, files: this.state.files, total: this.state?.total + jdata.size }));
+                        });
+                    }).catch(ex => {
+                        reject(ex);
+                    });
+                }));
             });
         }
     }
 
     fetchFiles() {
         if (window.location.host || httpPrefix){
-            var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
+            var abort = new AbortController();
+        
+            var quitItNow = setTimeout(() => abort.abort(), 3000);
             wfetch(`${httpPrefix}/files` + this.state.path, {
                 method: 'post',
-                signal: this.props.pageControler.signal
+                signal: abort.signal
             }).then(data => {
                 clearInterval(quitItNow);
                 data.json()
@@ -2170,32 +2209,37 @@ class StorageViewer extends React.Component {
                 }
 
     getTableHeader() {
-        return e("thead", { key: genUUID() }, e("tr", { key: genUUID() }, ["Name", "Size"].map(col => e("th", { key: genUUID(), onClick: this.SortTable.bind(this) }, col)).concat(e("th", { key: genUUID() }, "Op"))));
+        return e("thead", { key: "head" }, e("tr", { key: "row" }, ["Name", "Size"].map(col => e("th", { key: col, onClick: this.SortTable.bind(this) }, col)).concat(e("th", { key: "op" }, "Op"))));
+    }
+
+    registerFileWork(fn) {
+        this.setState({ fileWork: [...this.state.fileWork,fn] });
     }
 
     render() {
         if (!this.state?.files) {
-            return e("div", { key: genUUID() }, "Loading......");
+            return e("div", { key: "Loading" }, "Loading......");
         } else {
-            return e("div", { key: genUUID(), 
-                id: this.id, 
+            return e("div", { key: "Files", 
                 className: `file-table ${this.state.loaded?"":"loading"}` }, 
-                    e("table", { key: genUUID(), className: "greyGridTable" }, [
-                        e("caption", { key: genUUID() }, this.state.path),
+                    e("table", { key: "table", className: "greyGridTable" }, [
+                        e("caption", { key: "caption" }, this.state.path),
                         this.getTableHeader(),
-                        e("tbody", { key: genUUID() }, 
-                            this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ 
-                                key: genUUID(), 
-                                file:file, 
-                                path:this.state.path,
-                                cache:this.state.cache,
-                                onChangeFolder: (folder) => this.setState({path:folder}),
-                                OnDelete: ()=>this.fetchFiles()
-                            }))
+                        e("tbody", { key: "body" }, 
+                            this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => 
+                                e(SFile,{ 
+                                    key: file.name, 
+                                    file:file, 
+                                    cache: this.state.cache,
+                                    path:this.state.path,
+                                    registerFileWork: this.registerFileWork.bind(this),
+                                    onChangeFolder: (folder) => this.setState({path:folder, files:[]}),
+                                    OnDelete: ()=>this.fetchFiles()
+                                }))
                             ),
-                        e("tfoot", { key: genUUID() }, e("tr", { key: genUUID() }, [
-                            e("td", { key: genUUID() }, "Total"), 
-                            e("td", { key: genUUID() }, this.state.total)
+                        e("tfoot", { key: "tfoot" }, e("tr", { key: "trow" }, [
+                            e("td", { key: "totallbl" }, "Total"), 
+                            e("td", { key: "total" }, this.state.total)
                         ]))
                     ]));
         }
@@ -2217,11 +2261,11 @@ class LogLine extends React.Component {
         var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
         var logLn = this.props.logln.substr(this.props.logln.indexOf(func) + func.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/.\[..\n$/g, "");
 
-        return e("div", { key: genUUID() , className: `log LOG${lvl}` }, [
-            e("div", { key: genUUID(), ref: ref => this.logdiv = ref, className: "LOGLEVEL" }, lvl),
-            e("div", { key: genUUID(), className: "LOGDATE" }, msg.substr(3, 12)),
-            e("div", { key: genUUID(), className: "LOGFUNCTION" }, func),
-            e("div", { key: genUUID(), className: "LOGLINE" }, logLn)
+        return e("div", { key: "logLine" , className: `log LOG${lvl}` }, [
+            e("div", { key: "level", ref: ref => this.logdiv = ref, className: "LOGLEVEL" }, lvl),
+            e("div", { key: "date", className: "LOGDATE" }, msg.substr(3, 12)),
+            e("div", { key: "source", className: "LOGFUNCTION" }, func),
+            e("div", { key: "message", className: "LOGLINE" }, logLn)
         ]);
     }
 }
@@ -2229,26 +2273,127 @@ class LogLine extends React.Component {
 class LogLines extends React.Component {
     constructor(props) {
         super(props);
-        this.mounted=false;
-        this.state={logLines:[]};
-    }
-
-    componentDidMount() {
-        this.mounted=true;
-    }
-
-    AddLogLine(logln) {
-        if (this.mounted){
-            this.setState({ logLines: [...(this.state?.logLines||[]),logln]});
-        }
-    }
-
-    render() {
+        this.state={logLines:[],logLevels:{}};
         if (this.props.registerLogCallback) {
             this.props.registerLogCallback(this.AddLogLine.bind(this));
         }
-        return e("div", { key: genUUID(), className: "logContainer" },
-                    e("div", { key: genUUID(), className: "loglines" }, this.state?.logLines ? this.state.logLines.map(logln => e(LogLine,{ key: genUUID(), logln:logln})):null));
+    }
+
+    AddLogLine(logln) {
+        if (this.state.logLines.some(clogln => clogln === logln)) {
+            return;
+        }
+
+        var recIdx=-1;
+        var msg = logln.match(/^[^IDVEW]*(.+)/)[1];
+        var lvl = msg.substr(0, 1);
+        var ts = msg.substr(3, 12);
+        var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
+
+        if (this.state.logLines.some((clogln,idx) => {
+            var nmsg = clogln.match(/^[^IDVEW]*(.+)/)[1];
+            var nlvl = nmsg.substr(0, 1);
+            var nts = nmsg.substr(3, 12);
+            var nfunc = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
+            return nlvl == lvl && nts == ts && nfunc == func;
+        })) {
+            recIdx=this.state.logLines.length;
+        }
+        while (this.state.logLines.length > 500) {
+            this.state.logLines.shift();
+        }
+
+        if (this.state.logLevels[lvl] === undefined) {
+            this.state.logLevels[lvl] = {visible:true};
+        }
+
+        if (this.state.logLevels[lvl][func] === undefined) {
+            this.state.logLevels[lvl][func] = true;
+        }
+
+        if (recIdx >= 0) {
+            this.state.logLines[recIdx] = logln;
+        } else {
+            this.state.logLines= [...(this.state?.logLines||[]),logln];
+        }
+        this.setState(this.state);
+    }
+
+    renderLogFunctionFilter(lvl,func,logLines) {    
+        return e(MaterialUI.FormControlLabel,{
+            key:"ffiltered" + lvl + func,
+            className:"effiltered",
+            label: `${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") == func).length})`,
+            control:e(MaterialUI.Checkbox, {
+                key: "ctrl",
+                checked: this.state.logLevels[lvl][func],
+                onChange: event => {this.state.logLevels[lvl][func] = event.target.checked; this.setState(this.state);}
+            })});
+    }
+
+    renderLogLevelFilterControl(lvl,logLines) {   
+        return e(MaterialUI.FormControlLabel,{
+            key:"lfiltered" + lvl,
+            className:"elfiltered",
+            label: `Log Level ${lvl}(${logLines.length})`,
+            control:e(MaterialUI.Checkbox, {
+                key: "ctrl",
+                checked: this.state.logLevels[lvl].visible,
+                onChange: event => {this.state.logLevels[lvl].visible = event.target.checked; this.setState(this.state);}
+            })});
+    }
+
+    renderLogFunctionFilters(lvl, logLines) {
+        return Object.keys(this.state.logLevels[lvl])
+                     .filter(func => func !== "visible")
+                     .map(func => {
+            return this.renderLogFunctionFilter(lvl,func,logLines)
+        })
+    }
+
+    renderLogLevelFilter(lvl,logLines) {
+        return e("div", { key: "logLevelFilter" + lvl, className: "logLevelFilter" }, [
+            e("div", { key: "logLevelFilterTitle" + lvl, className: "logLevelFilterTitle" }, this.renderLogLevelFilterControl(lvl,logLines)), 
+            e("div", { key: "logLevelFilterContent" + lvl, className: "logLevelFilterContent" }, 
+                this.renderLogFunctionFilters(lvl, logLines))
+        ]);
+    }
+
+    renderLogLevelFilters() {
+        return Object.keys(this.state.logLevels).map(lvl => {
+            return this.renderLogLevelFilter(lvl,this.state.logLines.filter(logln => logln.match(/^[^IDVEW]*(.+)/)[1].substr(0, 1) == lvl))
+        })
+    }
+
+    renderFilterPannel() {
+        return e("div", { key: "filterPannel", className: "filterPannel" }, [
+            e("div", { key: "filterPannelTitle",className: "filterPannelTitle" }, "Filters"),
+            e("div", { key: "filterPannelContent",className: "filterPannelContent" }, this.renderLogLevelFilters())
+        ]);
+    }
+
+    renderControlPannel() {
+        return e("div", { key: "logControlPannel", className: "logControlPannel" }, [
+            e("button", { key: "clear", onClick: elem => this.setState({ logLines: [] }) }, "Clear Logs"),
+            this.renderFilterPannel()
+        ]);
+    }
+
+    isLogVisible(logLine) {
+        var msg = logLine.match(/^[^IDVEW]*(.+)/)[1];
+        var lvl = msg.substr(0, 1);
+        var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
+        if (this.state.logLevels[lvl].visible && this.state.logLevels[lvl][func]) {
+            return true;
+        }
+        return false;
+    }
+
+    render() {
+        return e("div", { key: "logContainer", className: "logContainer" },[
+            this.renderControlPannel(),
+            e("div", { key: "logLines", className: "loglines" }, this.state?.logLines ? this.state.logLines.filter(this.isLogVisible.bind(this)).map((logln,idx) => e(LogLine,{ key: idx, logln:logln})):null)            
+        ]);
     }
 }
 
@@ -2264,14 +2409,13 @@ class SystemPage extends React.Component {
 
     render() {
         return [
-            e("div", { key: genUUID(), className: "logpannel" }, [
-                e("button", { key: genUUID(), onClick: elem => this.setState({ logLines: [] }) }, "Clear Logs"),
-                e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'reboot' }) }, "Reboot"),
-                e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'parseFiles' }) }, "Parse Files"),
-                e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
-                e(FirmwareUpdater, { key: genUUID() })
+            e("div", { key: "logpannel", className: "logpannel" }, [
+                e("button", { key: "reboot", onClick: elem => this.SendCommand({ 'command': 'reboot' }) }, "Reboot"),
+                e("button", { key: "parseFiles", onClick: elem => this.SendCommand({ 'command': 'parseFiles' }) }, "Parse Files"),
+                e("button", { key: "factoryReset", onClick: elem => this.SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
+                e(FirmwareUpdater, { key: "firmwareUpdater" })
             ]),
-            e(LogLines, { key: genUUID(), registerLogCallback:this.props.registerLogCallback })
+            e(LogLines, { key: "logLines", registerLogCallback:this.props.registerLogCallback })
         ];
     }
 }
@@ -2280,164 +2424,230 @@ class TripViewer extends React.Component {
         super(props);
         this.state={
             cache:this.props.cache,
-            zoomlevel:15
+            zoomlevel:15,
+            latitude:0,
+            longitude:0
         };
+        this.testing = false;
     }
+
     componentDidMount() {
-        this.mounted=true;
-        this.needsRefresh=true;
-        this.canvas = this.widget.getContext("2d");                    
-        this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
         this.getTripTiles();
-        window.requestAnimationFrame(this.drawMap.bind(this));
+        this.firstRender = true;
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        this.canvas = this.widget.getContext("2d");                    
-        this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
-        this.getTripTiles();
-        this.needsRefresh=true;
+        if (!prevProps.points || !prevProps.points.length || !prevProps.points.length || prevProps.points.length != this.props.points.length){
+            this.firstRender=true;
+        }
+        this.mapCanvas = this.mapWidget.getContext("2d");                    
+        this.tripCanvas = this.tripWidget.getContext("2d");                    
+        this.popupCanvas = this.popupWidget.getContext("2d");                    
+        this.popupWidget.addEventListener("mousemove", this.mouseEvent.bind(this));
+        window.requestAnimationFrame(this.drawMap.bind(this));
     }
 
     drawMap() {
-        if (this.needsRefresh){
-            this.needsRefresh=false;
-            if (!this.mounted || !this.widget || !this.props.points || !this.props.points.length){
-                return;
-            } else {
-                this.drawTripTiles()
-                    .then(this.drawTrip.bind(this))
-                    .then(this.drawPointPopup.bind(this))
-                    .then(ret=>window.requestAnimationFrame(this.drawMap.bind(this)))
-                    .catch(err => {
-                        console.error(err);
-                        window.requestAnimationFrame(this.drawMap.bind(this));
-                    });
-            }
+        if (!this.mapWidget || !this.props.points || !this.props.points.length || this.state.closed){
+            return;
         } else {
-            window.requestAnimationFrame(this.drawMap.bind(this));
+            this.drawTripVisibleTiles();
+            this.drawTrip();
+            this.drawPointPopup();
         }
     }
    
     getTripTiles() {
-        var points = this.props.points.map(this.pointToCartesian.bind(this));
-        this.tiles= {
-            points:points,
-            trip:{
-                leftTile: points.reduce((a,b)=>a<b.tileX?a:b.tileX,99999),
-                rightTile: points.reduce((a,b)=>a>b.tileX?a:b.tileX,0),
-                bottomTile: points.reduce((a,b)=>a<b.tileY?a:b.tileY,99999),
-                topTile: points.reduce((a,b)=>a>b.tileY?a:b.tileY,0)
-            },
-            maxXTiles: Math.ceil(window.innerWidth/256)+1,
-            maxYTiles: Math.ceil(window.innerHeight/256)+1
-        }
-        this.tiles.trip.XTiles = this.tiles.trip.rightTile-this.tiles.trip.leftTile+1;
-        this.tiles.trip.YTiles = this.tiles.trip.bottomTile-this.tiles.trip.bottomTile+1;
-        this.tiles.margin = {
-            left: this.tiles.maxXTiles>this.tiles.trip.XTiles?Math.floor((this.tiles.maxXTiles-this.tiles.trip.XTiles)/2):0,
-            bottom: this.tiles.maxYTiles>this.tiles.trip.YTiles?Math.floor((this.tiles.maxYTiles-this.tiles.trip.YTiles)/2):0
+        var lastPoint=undefined;
+        this.state.points=this.props.points.map(this.pointToCartesian.bind(this))
+                              .filter(point => point.latitude && point.longitude)
+                              .filter(point => point.latitude > -90 && point.latitude < 90)
+                              .filter(point => point.longitude > -180 && point.longitude < 180)
+                              .filter(point => {
+                                  if (lastPoint === undefined) {
+                                      lastPoint = point;
+                                      return true;
+                                  }
+                                  if (Math.abs(lastPoint.longitude - point.longitude) > 1.0) {
+                                      return false;
+                                  }
+                                  lastPoint = point;
+                                  return true;
+                              });
+        this.state.trip={
+                leftTile: this.state.points.reduce((a,b)=>a<b.tileX?a:b.tileX,99999),
+                rightTile: this.state.points.reduce((a,b)=>a>b.tileX?a:b.tileX,-99999),
+                bottomTile: this.state.points.reduce((a,b)=>a<b.tileY?a:b.tileY,99999),
+                topTile: this.state.points.reduce((a,b)=>a>b.tileY?a:b.tileY,-99999)
         };
-        this.tiles.margin.right=this.tiles.maxXTiles>this.tiles.trip.XTiles?this.tiles.maxXTiles-this.tiles.trip.XTiles-this.tiles.margin.left:0;
-        this.tiles.margin.top= this.tiles.maxYTiles>this.tiles.trip.YTiles?this.tiles.maxYTiles-this.tiles.trip.YTiles-this.tiles.margin.bottom:0;
-        this.tiles.leftTile=Math.max(0,this.tiles.trip.leftTile-this.tiles.margin.left);
-        this.tiles.rightTile=this.tiles.trip.rightTile+this.tiles.margin.right;
-        this.tiles.bottomTile=Math.max(0,this.tiles.trip.bottomTile-this.tiles.margin.bottom);
-        this.tiles.topTile=this.tiles.trip.topTile + this.tiles.margin.top;
-    }
-
-    drawTripTiles() {
-        this.widget.width=(this.tiles.rightTile-this.tiles.leftTile)*256;
-        this.widget.height=(this.tiles.topTile-this.tiles.bottomTile)*256;
-        this.canvas.fillStyle = "black";
-        this.canvas.fillRect(0,0,window.innerWidth,window.innerHeight);
-        var tiles=[];
-        for (var tileX = this.tiles.leftTile; tileX <= this.tiles.rightTile; tileX++) {
-            for (var tileY = this.tiles.bottomTile; tileY <= this.tiles.topTile; tileY++) {
-                tiles.unshift({tileX:tileX, tileY:tileY});
+        this.state.maxXTiles= Math.ceil(window.innerWidth/256)+1;
+        this.state.maxYTiles= Math.ceil(window.innerHeight/256)+1;
+        this.state.trip.XTiles = this.state.trip.rightTile-this.state.trip.leftTile+1;
+        this.state.trip.YTiles = this.state.trip.topTile-this.state.trip.bottomTile+1;
+        this.state.margin = {
+            left: this.state.maxXTiles>this.state.trip.XTiles?Math.floor((this.state.maxXTiles-this.state.trip.XTiles)/2):0,
+            bottom: this.state.maxYTiles>this.state.trip.YTiles?Math.floor((this.state.maxYTiles-this.state.trip.YTiles)/2):0
+        };
+        this.state.margin.right=this.state.maxXTiles>this.state.trip.XTiles?this.state.maxXTiles-this.state.trip.XTiles-this.state.margin.left:0;
+        this.state.margin.top= this.state.maxYTiles>this.state.trip.YTiles?this.state.maxYTiles-this.state.trip.YTiles-this.state.margin.bottom:0;
+        this.state.leftTile=Math.max(0,this.state.trip.leftTile-this.state.margin.left);
+        this.state.rightTile=this.state.trip.rightTile+this.state.margin.right;
+        this.state.bottomTile=Math.max(0,this.state.trip.bottomTile-this.state.margin.bottom);
+        this.state.topTile=this.state.trip.topTile + this.state.margin.top;
+        this.state.leftlatitude = this.state.points.reduce((a,b)=>a<b.latitude?a:b.latitude,99999);
+        this.state.rightlatitude = this.state.points.reduce((a,b)=>a>b.latitude?a:b.latitude,-99999);
+        this.state.toplongitude = this.state.points.reduce((a,b)=>a<b.longitude?a:b.longitude,99999);
+        this.state.bottomlongitude = this.state.points.reduce((a,b)=>a>b.longitude?a:b.longitude,-99999);
+        this.state.latitude= this.state.leftlatitude+(this.state.rightlatitude-this.state.leftlatitude)/2;
+        this.state.longitude= this.state.toplongitude+(this.state.bottomlongitude-this.state.toplongitude)/2;
+        this.state.windowTiles = {
+            center: {
+                tileX: this.lon2tile(this.state.longitude, this.state.zoomlevel),
+                tileY: this.lat2tile(this.state.latitude, this.state.zoomlevel),
             }
         }
-        return Promise.all(Array.from(Array(Math.min(3,tiles.length)).keys()).map(unused => this.drawTile(tiles)));
+        this.state.windowTiles.leftTile = this.state.windowTiles.center.tileX - Math.floor(this.state.maxXTiles/2);
+        this.state.windowTiles.rightTile = this.state.windowTiles.center.tileX + Math.floor(this.state.maxXTiles/2);
+        this.state.windowTiles.bottomTile = this.state.windowTiles.center.tileY - Math.floor(this.state.maxYTiles/2);
+        this.state.windowTiles.topTile = this.state.windowTiles.center.tileY + Math.floor(this.state.maxYTiles/2);
+        this.state.windowTiles.XTiles = this.state.windowTiles.rightTile-this.state.windowTiles.leftTile+1;
+        this.state.windowTiles.YTiles = this.state.windowTiles.topTile-this.state.windowTiles.bottomTile+1;
+        this.setState(this.state);
+    }
+
+    drawTripVisibleTiles() {
+        return new Promise(async (resolve,reject)=>{
+            this.popupWidget.width=(this.state.rightTile-this.state.leftTile)*256;
+            this.popupWidget.height=(this.state.topTile-this.state.bottomTile)*256;
+            this.mapWidget.width=(this.state.rightTile-this.state.leftTile)*256;
+            this.mapWidget.height=(this.state.topTile-this.state.bottomTile)*256;
+            this.tripWidget.width=(this.state.rightTile-this.state.leftTile)*256;
+            this.tripWidget.height=(this.state.topTile-this.state.bottomTile)*256;
+
+            this.mapCanvas.fillStyle = "black";
+            this.mapCanvas.fillRect(0,0,window.innerWidth,window.innerHeight);
+            var wasFirstRender=this.firstRender;
+            
+            if (this.firstRender) {
+                this.firstRender=false;
+                const elementRect = this.mapWidget.getBoundingClientRect();
+                this.mapWidget.parentElement.scrollTo((elementRect.width/2)-512, (elementRect.height/2)-256);
+            }
+
+            for (var tileX = this.state.windowTiles.leftTile; tileX <= this.state.windowTiles.rightTile; tileX++) {
+                for (var tileY = this.state.windowTiles.bottomTile; tileY <= this.state.windowTiles.topTile; tileY++) {
+                    if (!this.props.cache.images[this.state.zoomlevel] ||
+                        !this.props.cache.images[this.state.zoomlevel][tileX] || 
+                        !this.props.cache.images[this.state.zoomlevel][tileX][tileY]){
+                        await this.addTileToCache(tileX, tileY).catch(reject);
+                    } else {
+                        await this.getTileFromCache(tileX, tileY).catch(reject);
+                    }        
+                }
+            }
+            if (wasFirstRender) {
+                new Promise((resolve,reject)=>{
+                    for (var tileX = this.state.trip.leftTile; tileX <= this.state.trip.rightTile; tileX++) {
+                        for (var tileY = this.state.trip.bottomTile; tileY <= this.state.trip.topTile; tileY++) {
+                            if (!this.props.cache.images[this.state.zoomlevel] ||
+                                !this.props.cache.images[this.state.zoomlevel][tileX] || 
+                                !this.props.cache.images[this.state.zoomlevel][tileX][tileY]){
+                                this.addTileToCache(tileX, tileY).catch(reject);
+                            }        
+                        }
+                    }
+                    resolve();
+                });
+            }
+            resolve();
+        });
     }
 
     drawPointPopup(){
         if (this.focused) {
-            this.canvas.font = "12px Helvetica";
-            var txtSz = this.canvas.measureText(new Date(`${this.focused.timestamp} UTC`).toLocaleString());
+            this.popupCanvas.clearRect(0,0,this.popupWidget.width,this.popupWidget.height);
+            this.popupCanvas.fillStyle = "transparent";
+            this.popupCanvas.fillRect(0,0,window.innerWidth,window.innerHeight);
+    
+            this.popupCanvas.font = "12px Helvetica";
+            var txtSz = this.popupCanvas.measureText(new Date(`${this.focused.timestamp} UTC`).toLocaleString());
             var props =  Object.keys(this.focused)
                                .filter(prop => prop != "timestamp" && !prop.match(/.*tile.*/i));
 
             var boxHeight=50 + (9*props.length);
             var boxWidth=txtSz.width+10;
-            this.canvas.strokeStyle = 'green';
-            this.canvas.shadowColor = '#00ffff';
-            this.canvas.fillStyle = "#000000";
-            this.canvas.lineWidth = 1;
-            this.canvas.shadowBlur = 2;
-            this.canvas.beginPath();
-            this.canvas.rect(this.getClientX(this.focused),this.getClientY(this.focused)-boxHeight,boxWidth,boxHeight);
-            this.canvas.fill();
-            this.canvas.stroke();
+            this.popupCanvas.strokeStyle = 'green';
+            this.popupCanvas.shadowColor = '#00ffff';
+            this.popupCanvas.fillStyle = "#000000";
+            this.popupCanvas.lineWidth = 1;
+            this.popupCanvas.shadowBlur = 2;
+            this.popupCanvas.beginPath();
+            this.popupCanvas.rect(this.getClientX(this.focused),this.getClientY(this.focused)-boxHeight,boxWidth,boxHeight);
+            this.popupCanvas.fill();
+            this.popupCanvas.stroke();
 
-            this.canvas.fillStyle = 'rgba(00, 0, 0, 1)';
-            this.canvas.strokeStyle = '#000000';
+            this.popupCanvas.fillStyle = 'rgba(00, 0, 0, 1)';
+            this.popupCanvas.strokeStyle = '#000000';
 
-            this.canvas.beginPath();
+            this.popupCanvas.beginPath();
             var ypos = this.getClientY(this.focused)-boxHeight+txtSz.actualBoundingBoxAscent+3;
             var xpos = this.getClientX(this.focused)+3;
 
-            this.canvas.strokeStyle = '#97ea44';
-            this.canvas.shadowColor = '#ffffff';
-            this.canvas.fillStyle = "#97ea44";
-            this.canvas.lineWidth = 1;
-            this.canvas.shadowBlur = 2;
-            this.canvas.fillText(new Date(`${this.focused.timestamp} UTC`).toLocaleString(),xpos,ypos);
+            this.popupCanvas.strokeStyle = '#97ea44';
+            this.popupCanvas.shadowColor = '#ffffff';
+            this.popupCanvas.fillStyle = "#97ea44";
+            this.popupCanvas.lineWidth = 1;
+            this.popupCanvas.shadowBlur = 2;
+            this.popupCanvas.fillText(new Date(`${this.focused.timestamp} UTC`).toLocaleString(),xpos,ypos);
             ypos+=5;
 
             ypos+=txtSz.actualBoundingBoxAscent+3;
             props.forEach(prop => {
                 var propVal = this.getPropValue(prop,this.focused[prop]);
-                this.canvas.strokeStyle = 'aquamarine';
-                this.canvas.shadowColor = '#ffffff';
-                this.canvas.fillStyle = "aquamarine";
-                this.canvas.fillText(`${prop}: `,xpos,ypos);
-                txtSz = this.canvas.measureText(propVal);
-                this.canvas.strokeStyle = '#97ea44';
-                this.canvas.shadowColor = '#ffffff';
-                this.canvas.fillStyle = "#97ea44";
-                this.canvas.fillText(propVal,(xpos+(boxWidth-txtSz.width)-5),ypos);
+                this.popupCanvas.strokeStyle = 'aquamarine';
+                this.popupCanvas.shadowColor = '#ffffff';
+                this.popupCanvas.fillStyle = "aquamarine";
+                this.popupCanvas.fillText(`${prop}: `,xpos,ypos);
+                txtSz = this.popupCanvas.measureText(propVal);
+                this.popupCanvas.strokeStyle = '#97ea44';
+                this.popupCanvas.shadowColor = '#ffffff';
+                this.popupCanvas.fillStyle = "#97ea44";
+                this.popupCanvas.fillText(propVal,(xpos+(boxWidth-txtSz.width)-5),ypos);
                 ypos+=txtSz.actualBoundingBoxAscent+3;
             });
 
-            this.canvas.stroke();
+            this.popupCanvas.stroke();
         }
     }
 
     drawTrip() {
         return new Promise((resolve,reject)=>{
-            var firstPoint = this.tiles.points[0];
+            var firstPoint = this.state.points[0];
             if (firstPoint){
-                this.canvas.strokeStyle = '#00ffff';
-                this.canvas.shadowColor = '#00ffff';
-                this.canvas.fillStyle = "#00ffff";
-                this.canvas.lineWidth = 2;
-                this.canvas.shadowBlur = 2;
+                this.tripCanvas.fillStyle = "transparent";
+                this.tripCanvas.fillRect(0,0,window.innerWidth,window.innerHeight);
+    
+                this.tripCanvas.strokeStyle = '#00ffff';
+                this.tripCanvas.shadowColor = '#00ffff';
+                this.tripCanvas.fillStyle = "#00ffff";
+                this.tripCanvas.lineWidth = 2;
+                this.tripCanvas.shadowBlur = 2;
         
-                this.canvas.beginPath();
-                this.canvas.moveTo(this.getClientX(firstPoint), this.getClientY(firstPoint));
-                this.tiles.points.forEach(point => {
-                    this.canvas.lineTo(this.getClientX(point), this.getClientY(point));
+                this.tripCanvas.beginPath();
+                this.tripCanvas.moveTo(this.getClientX(firstPoint), this.getClientY(firstPoint));
+                this.state.points.forEach(point => {
+                    this.tripCanvas.lineTo(this.getClientX(point), this.getClientY(point));
                 });
-                this.canvas.stroke();
-                this.canvas.strokeStyle = '#0000ff';
-                this.canvas.shadowColor = '#0000ff';
-                this.canvas.fillStyle = "#0000ff";
-                this.tiles.points.forEach(point => {
-                    this.canvas.beginPath();
-                    this.canvas.arc(((point.tileX - this.tiles.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - this.tiles.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
-                    this.canvas.stroke();
+                this.tripCanvas.stroke();
+                this.tripCanvas.strokeStyle = '#0000ff';
+                this.tripCanvas.shadowColor = '#0000ff';
+                this.tripCanvas.fillStyle = "#0000ff";
+                this.state.points.forEach(point => {
+                    this.tripCanvas.beginPath();
+                    this.tripCanvas.arc(((point.tileX - this.state.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - this.state.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
+                    this.tripCanvas.stroke();
                 });
-                resolve(this.tiles);
+                resolve(this.state);
             } else {
                 reject({error:"no points"});
             }
@@ -2446,13 +2656,15 @@ class TripViewer extends React.Component {
 
     mouseEvent(event) {
         var margin = 10;
-        var focused = this.tiles.points.find(point => 
+        var focused = this.state.points.find(point => 
             (this.getClientX(point) >= (event.offsetX - margin)) &&
             (this.getClientX(point) <= (event.offsetX + margin)) &&
             (this.getClientY(point) >= (event.offsetY - margin)) &&
             (this.getClientY(point) <= (event.offsetY + margin)));
-        this.needsRefresh = focused != this.focused;
-        this.focused=focused;
+        if (focused != this.focused){
+            this.focused=focused;
+            window.requestAnimationFrame(this.drawPointPopup.bind(this));
+        }
     }
 
     getPropValue(name,val) {
@@ -2468,52 +2680,36 @@ class TripViewer extends React.Component {
         return Math.round(val);
     }
 
-    drawTile(tiles) {
+    addTileToCache(tileX,tileY) {
         return new Promise((resolve,reject) => {
-            var curTile = tiles.pop();
-            if (curTile){
-                if (!this.state.cache.images[this.state.zoomlevel] ||
-                    !this.state.cache.images[this.state.zoomlevel][curTile.tileX] || 
-                    !this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]){
-                    this.getTile(curTile.tileX,curTile.tileY,0)
-                        .then(imgData => {
-                            var tileImage = new Image();
-                            tileImage.posX = curTile.tileX - this.tiles.leftTile;
-                            tileImage.posY = curTile.tileY - this.tiles.bottomTile;
-                            tileImage.src = (window.URL || window.webkitURL).createObjectURL(imgData);
-                            if (!this.state.cache.images[this.state.zoomlevel]) {
-                                this.state.cache.images[this.state.zoomlevel]={};
-                            } 
-                            if (!this.state.cache.images[this.state.zoomlevel][curTile.tileX]) {
-                                this.state.cache.images[this.state.zoomlevel][curTile.tileX]={};
-                            } 
-                            this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]=tileImage;
-
-                            tileImage.onload = (elem) => {
-                                this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
-                                if (tiles.length) {
-                                    resolve(this.drawTile(tiles));
-                                } else {
-                                    resolve({});
-                                }
-                            };
-                        }).catch(reject);
-                } else {
-                    var tileImage = this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY];
-                    try {
-                        this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
-                        if (tiles.length) {
-                            resolve(this.drawTile(tiles));
-                        } else {
-                            resolve({});
-                        }
-                    } catch (err) {
-                        this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]=null;
-                        resolve(this.drawTile(tiles));
-                    }
+            this.getTile(tileX, tileY, 0).then(imgData => {
+                var tileImage = new Image();
+                tileImage.posX = tileX - this.state.leftTile;
+                tileImage.posY = tileY - this.state.bottomTile;
+                tileImage.src = (window.URL || window.webkitURL).createObjectURL(imgData);
+                if (!this.props.cache.images[this.state.zoomlevel]) {
+                    this.props.cache.images[this.state.zoomlevel] = {};
                 }
-            } else {
-                resolve({});
+                if (!this.props.cache.images[this.state.zoomlevel][tileX]) {
+                    this.props.cache.images[this.state.zoomlevel][tileX] = {};
+                }
+                this.props.cache.images[this.state.zoomlevel][tileX][tileY] = tileImage;
+
+                tileImage.onload = (elem) => {
+                    resolve(this.mapCanvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height));
+                };
+            }).catch(reject);
+        });
+    }
+
+    getTileFromCache(tileX,tileY) {
+        return new Promise((resolve,reject) => {
+            var tileImage = this.props.cache.images[this.state.zoomlevel][tileX][tileY];
+            try {
+                resolve(this.mapCanvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height));
+            } catch (err) {
+                this.props.cache.images[this.state.zoomlevel][tileX][tileY] = null;
+                reject(err);
             }
         });
     }
@@ -2526,20 +2722,28 @@ class TripViewer extends React.Component {
                 .then(imgData => wfetch(`${httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
                     method: 'put',
                     body: (newImg=imgData)
-                }).then(resolve(newImg)))
+                }).then(resolve(newImg)).catch(resolve(newImg)))
                   .catch(reject);
+        })
+    }
+
+    drawWatermark(tileX,tileY) {
+        return new Promise((resolve,reject) => {
+            return this.mapWidget.toBlob(resolve);
         })
     }
 
     getTile(tileX,tileY, retryCount) {
         return new Promise((resolve,reject)=>{
+            if (this.testing) {
+                return resolve(this.drawWatermark(tileX,tileY));
+            }
             wfetch(`${httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
                 .then(resp => resolve(resp.status >= 300? this.downloadTile(tileX,tileY):resp.blob()))
                 .catch(err => {
                     if (retryCount > 3) {
                         reject({error:`Error in downloading ${this.state.zoomlevel}/${tileX}/${tileY}`});
                     } else {
-                        console.log(`retrying ${this.state.zoomlevel}/${tileX}/${tileY}`);
                         resolve(this.getTile(tileX,tileY,retryCount++));
                     }
                 });
@@ -2547,11 +2751,11 @@ class TripViewer extends React.Component {
     }
 
     getClientY(firstPoint) {
-        return ((firstPoint.tileY - this.tiles.bottomTile) * 256) + (256 * firstPoint.posTileY);
+        return ((firstPoint.tileY - this.state.bottomTile) * 256) + (256 * firstPoint.posTileY);
     }
 
     getClientX(firstPoint) {
-        return ((firstPoint.tileX - this.tiles.leftTile) * 256) + (256 * firstPoint.posTileX);
+        return ((firstPoint.tileX - this.state.leftTile) * 256) + (256 * firstPoint.posTileX);
     }
 
     lon2tile(lon) { 
@@ -2591,30 +2795,46 @@ class TripViewer extends React.Component {
 
     closeIt(){
         this.setState({closed:true});
+        if (this.props.onClose) {
+            this.props.onClose();
+        }
     }
 
     render(){
-        return e("div",{key:genUUID(),className:`lightbox ${this.state?.closed?"closed":"opened"}`},[
-            e("div",{key:genUUID()},[
-                e("div",{key:genUUID(),className:"tripHeader"},[
+        return e("div",{key:"trip",className:`lightbox ${this.state?.closed?"closed":"opened"}`},[
+            e("div",{key:"control"},[
+                e("div",{key:"tripHeader",className:"tripHeader"},[
                     `Trip with ${this.props.points.length} points`,
-                    e("br",{key:genUUID()}),
+                    e("br",{key:"daterange"}),
                     `From ${new Date(`${this.props.points[0].timestamp} UTC`).toLocaleString()} `,
                     `To ${new Date(`${this.props.points[this.props.points.length-1].timestamp} UTC`).toLocaleString()} Zoom:`,
                     e("select",{
-                        key:genUUID(),
+                        key:"zoom",
                         onChange: elem=>this.setState({zoomlevel:elem.target.value}),
                         value: this.state.zoomlevel
                     },
-                        Array.from(Array(18).keys()).map(zoom => e("option",{key:genUUID()},zoom+1))
+                        Array.from(Array(18).keys()).map(zoom => e("option",{key:zoom},zoom+1))
                     )
                 ]),
-                e("span",{key:genUUID(),className:"close",onClick:this.closeIt.bind(this)},"X")
+                e("span",{key:"close",className:"close",onClick:this.closeIt.bind(this)},"X")
             ]),
-            e("div",{key:genUUID(),className:"trip"},e("canvas",{
-                key:genUUID(),
-                ref: (elem) => this.widget = elem
-            }))
+            e("div",{key:"map",className:"trip"},[
+                e("canvas",{
+                    key:"mapWidget",
+                    className:"mapCanvas",
+                    ref: (elem) => this.mapWidget = elem
+                }),
+                e("canvas",{
+                    key:"tripWidget",
+                    className:"mapCanvas",
+                    ref: (elem) => this.tripWidget = elem
+                }),
+                e("canvas",{
+                    key:"popupWidget",
+                    className:"mapCanvas",
+                    ref: (elem) => this.popupWidget = elem
+                })
+            ])
         ]);
     }
 }
@@ -2691,6 +2911,8 @@ class MainApp extends React.Component {
         },
         autoRefresh: (httpPrefix||window.location.hostname) ? true : false
       };
+    this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
+
     if (!httpPrefix && !window.location.hostname){
       this.lookForDevs();
     }
@@ -2699,10 +2921,6 @@ class MainApp extends React.Component {
     }
   }
   
-  componentDidUpdate(prevProps, prevState, snapshot) {
-    //this.mountWidget();
-  }
-
   componentDidMount() {
     app=this;
     this.mountWidget();
@@ -2792,15 +3010,16 @@ class MainApp extends React.Component {
               if (inSpot) {
                 inSpot.weight++;
               } else {
-                  this.anims.push({
-                      type:"ping",
-                      from: "chip",
-                      weight: 1,
-                      lineColor: '#00ffff',
-                      shadowColor: '#00ffff',
-                      startY: 30,
-                      renderer: this.drawSprite
-                  })
+                this.anims.push({
+                    type:"ping",
+                    from: "chip",
+                    weight: 1,
+                    lineColor: '#00ffff',
+                    shadowColor: '#00ffff',
+                    startY: 30,
+                    renderer: this.drawSprite
+                })
+                window.requestAnimationFrame(this.drawDidget.bind(this));
               }
               dev.ip=device;
               foundDevices.push(dev);
@@ -2845,7 +3064,8 @@ class MainApp extends React.Component {
         this.state.autoRefresh=false;
         this.ws.close();
         this.ws = null;
-    }
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+      }
   }
 
   openWs() {
@@ -2857,49 +3077,77 @@ class MainApp extends React.Component {
     }
     this.state.connecting=true;
     this.state.running=false;
-    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false}, 3500);
-    ws.onmessage = (event) => {
-        clearTimeout(stopItWithThatShit);
-        if (!this.state.running || this.state.timeout) {
-            this.state.running= true;
-            this.state.error= null;
-            this.state.timeout= null;
-        }
+    this.startWs();
+  }
 
-        if (event && event.data) {
-            if (event.data[0] == "{") {
-                if (event.data.startsWith('{"eventBase"')) {
-                    this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
-                } else {
-                    this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
-                }
-            } else if (event.data.match(/.*\) ([^:]*)/g)) {
-                this.AddLogLine(event.data);
-            }
-        }
-        stopItWithThatShit = setTimeout(() => { this.state.timeout="Message"; ws.close();console.log("Message timeout")},3500)
+  startWs() {
+    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
+    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
+    ws.onmessage = (event) => {
+      stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
     };
     ws.onopen = () => {
-      clearTimeout(stopItWithThatShit);
-      this.state.connected=true;
-      this.state.connecting=false;
-      ws.send("Connected");
-      stopItWithThatShit = setTimeout(() => { this.state.timeout="Connect"; ws.close();console.log("Connect timeout")},3500)
-    };    
+      stopItWithThatShit = this.wsOpen(stopItWithThatShit, ws);
+    };
     ws.onerror = (err) => {
-        console.error(err);
-        clearTimeout(stopItWithThatShit);
-        this.state.error= err;
-        ws.close();
+      this.wsError(err, stopItWithThatShit, ws);
     };
     ws.onclose = (evt => {
-        clearTimeout(stopItWithThatShit);
-        this.state.connected=false;
-        this.state.connecting=false;
-        if (this.state.autoRefresh)
-          this.openWs();
+      this.wsClose(stopItWithThatShit);
     });
+  }
+
+  wsClose(stopItWithThatShit) {
+    clearTimeout(stopItWithThatShit);
+    this.state.connected = false;
+    this.state.connecting = false;
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    if (this.state.autoRefresh)
+      this.openWs();
+  }
+
+  wsError(err, stopItWithThatShit, ws) {
+    console.error(err);
+    clearTimeout(stopItWithThatShit);
+    this.state.error = err;
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    ws.close();
+  }
+
+  wsOpen(stopItWithThatShit, ws) {
+    clearTimeout(stopItWithThatShit);
+    this.state.connected = true;
+    this.state.connecting = false;
+    ws.send("Connected");
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3500);
+    return stopItWithThatShit;
+  }
+
+  processMessage(stopItWithThatShit, event, ws) {
+    clearTimeout(stopItWithThatShit);
+    if (!this.state.running || this.state.timeout) {
+      this.state.running = true;
+      this.state.error = null;
+      this.state.timeout = null;
+    }
+
+    if (event && event.data) {
+      if (event.data[0] == "{") {
+        try {
+          if (event.data.startsWith('{"eventBase"')) {
+            this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
+          } else {
+            this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
+          }
+        } catch (e) {
+        }
+      } else if (event.data.match(/.*\) ([^:]*)/g)) {
+        this.AddLogLine(event.data);
+      }
+    }
+    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 3500);
+    return stopItWithThatShit;
   }
 
   drawDidget(){
@@ -2925,8 +3173,8 @@ class MainApp extends React.Component {
         }
 
         this.anims = this.anims.filter(anim => anim.state != 2);
-    }
-    window.requestAnimationFrame(this.drawDidget.bind(this));
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+      }
   }
 
   drawSprite(anim, canvas) {
@@ -2936,8 +3184,11 @@ class MainApp extends React.Component {
         anim.endX = anim.from == "chip" ? this.browserX : this.chipX;
         anim.direction=anim.from=="browser"?1:-1;
         anim.y = anim.startY;
+        anim.tripLen = 1600.0;
+        anim.startWindow = performance.now();
+        anim.endWindow = anim.startWindow + anim.tripLen;
     } else {
-        anim.x += (anim.direction)*(2);
+        anim.x += (anim.direction*((performance.now() - anim.startWindow))/anim.tripLen);
     }
     var width=Math.min(15,4 + (anim.weight));
     if ((anim.y-(width/2)) <= 0) {
@@ -3040,17 +3291,20 @@ class MainApp extends React.Component {
     if (inSpot) {
       inSpot.weight++;
     } else {
-        this.anims.push({
+      var msg = ln.match(/^[^IDVEW]*(.+)/)[1];
+      var lvl = msg.substr(0, 1);
+      this.anims.push({
             type:"log",
             from: "chip",
-            level:ln[0],
-            color:ln[0] == 'D' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+            level:lvl,
+            color:lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
             weight: 1,
             lineColor: '#00ffff',
             shadowColor: '#00ffff',
             startY: 25,
             renderer: this.drawSprite
         })
+        window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.logCBFn.forEach(logCBFn=>logCBFn(ln));
   }
@@ -3071,6 +3325,7 @@ class MainApp extends React.Component {
         startY: 5,
         renderer: this.drawSprite
       });
+      window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.stateCBFn.forEach(stateCBFn=>stateCBFn(state));
   }
@@ -3092,6 +3347,7 @@ class MainApp extends React.Component {
           startY: 15,
           renderer: this.drawSprite
       });
+      window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn.fn(event));
   }
@@ -3187,7 +3443,6 @@ class MainApp extends React.Component {
   }
 
   render() {
-    this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
     return e("div",{key:genUUID(),className:"mainApp"}, [
       Object.keys(this.state.tabs).map(tab => 
         e("details",{key:genUUID(),id:tab, className:"appPage slides", open: this.state.tabs[tab].active, onClick:elem=>{

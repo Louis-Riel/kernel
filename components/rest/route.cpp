@@ -26,8 +26,9 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
 {
     if (restInstance == NULL)
     {
+        initSDCard();
         deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
-        ESP_LOGD(__FUNCTION__, "First Rest for %d", deviceId);
+        ESP_LOGI(__FUNCTION__, "First Rest for %d", deviceId);
         restInstance = this;
         AppConfig* apin = new AppConfig((status = ManagedDevice::BuildStatus(this)),AppConfig::GetAppStatus());
         apin->SetIntProperty("numRequests",0);
@@ -55,7 +56,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     if (handlerDescriptors == NULL)
         EventManager::RegisterEventHandler((handlerDescriptors = BuildHandlerDescriptors()));
 
-    ESP_LOGD(__FUNCTION__, "Getting Ip for %d", deviceId);
+    ESP_LOGI(__FUNCTION__, "Getting Ip for %d", deviceId);
 
     if ((gwAddr == NULL) && (ipAddr == NULL))
     {
@@ -64,7 +65,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         gwAddr = (char *)dmalloc(16);
         sprintf(ipAddr, IPSTR, IP2STR(&theWifi->staIp.ip));
         sprintf(gwAddr, IPSTR, IP2STR(&theWifi->staIp.gw));
-        ESP_LOGD(__FUNCTION__, "Ip:%s Gw:%s", ipAddr, gwAddr);
+        ESP_LOGI(__FUNCTION__, "Ip:%s Gw:%s", ipAddr, gwAddr);
     }
 
     hcUrl = (char*)dmalloc(30);
@@ -93,7 +94,8 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
 
 TheRest::~TheRest()
 {
-    ESP_LOGD(__FUNCTION__,"Rest resting");
+    ESP_LOGI(__FUNCTION__,"Rest resting");
+    deinitSDCard();
     vEventGroupDelete(eventGroup);
     if (handlerDescriptors != NULL)
         EventManager::UnRegisterEventHandler((handlerDescriptors = BuildHandlerDescriptors()));
@@ -235,7 +237,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
     config->buffer_size = HTTP_RECEIVE_BUFFER_SIZE;
     config->max_redirection_count = 0;
     config->port = 80;
-    ESP_LOGD(__FUNCTION__, "Getting %s", config->url);
+    ESP_LOGI(__FUNCTION__, "Getting %s", config->url);
     esp_err_t err = ESP_ERR_HW_CRYPTO_BASE;
     int hlen = 0;
     int retCode = -1;
@@ -253,7 +255,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
                                                                             : JSON_BUFFER_SIZE;
         *len = 0;
         memset(retVal, 0, bufLen);
-        ESP_LOGD(__FUNCTION__, "Downloading isPreAllocated:%d hlen:%d chunckLen:%d buflen:%d len: %d bytes of data for %s", isPreAllocated, hlen, chunckLen, bufLen, (int)*len, url);
+        ESP_LOGI(__FUNCTION__, "Downloading isPreAllocated:%d hlen:%d chunckLen:%d buflen:%d len: %d bytes of data for %s", isPreAllocated, hlen, chunckLen, bufLen, (int)*len, url);
         while ((chunckLen = esp_http_client_read(client, retVal + *len, chunckLen)) > 0)
         {
             ESP_LOGV(__FUNCTION__, "Chunck %d bytes of data for %s. Totlen:%d", chunckLen, url, *len);
@@ -367,14 +369,14 @@ esp_err_t TheRest::SendConfig(char *addr, cJSON *cfg)
     }
 
     ldfree(sjson);
-    free((void *)config->url);
-    free(config);
+    ldfree((void *)config->url);
+    ldfree(config);
     return ret;
 }
 
 void TheRest::MergeConfig(void *param)
 {
-    ESP_LOGD(__FUNCTION__, "Merging Config %d %d",restInstance == NULL, restInstance == NULL ? 0 : restInstance->gwAddr==NULL);
+    ESP_LOGI(__FUNCTION__, "Merging Config %d %d",restInstance == NULL, restInstance == NULL ? 0 : restInstance->gwAddr==NULL);
     uint32_t addr = ipaddr_addr(restInstance->gwAddr);
     cJSON *newCfg = restInstance->GetDeviceConfig((esp_ip4_addr *)&addr, deviceId);
     cJSON *curCfg = AppConfig::GetAppConfig()->GetJSONConfig(NULL);
@@ -383,7 +385,7 @@ void TheRest::MergeConfig(void *param)
         if (!cJSON_Compare(newCfg, curCfg, true))
         {
             AppConfig::GetAppConfig()->SetAppConfig(newCfg);
-            ESP_LOGD(__FUNCTION__, "Updated config from server");
+            ESP_LOGI(__FUNCTION__, "Updated config from server");
             TheRest::SendConfig(restInstance->gwAddr, newCfg);
             vTaskDelay(1000/portTICK_PERIOD_MS);
             esp_restart();
@@ -391,7 +393,7 @@ void TheRest::MergeConfig(void *param)
         else
         {
             cJSON_free(newCfg);
-            ESP_LOGD(__FUNCTION__, "No config update needed from server");
+            ESP_LOGI(__FUNCTION__, "No config update needed from server");
         }
     }
     else
@@ -513,7 +515,7 @@ bool TheRest::HealthCheck(void* instance){
     return true;
 
     if (xEventGroupGetBits(theRest->app_eg) & app_bits_t::TRIPS_SYNCING) {
-        ESP_LOGD(__FUNCTION__,"Skipping healthcheck whilst synching");
+        ESP_LOGI(__FUNCTION__,"Skipping healthcheck whilst synching");
         return true;
     }
 

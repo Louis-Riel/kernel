@@ -117,7 +117,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             mThread_t *thread = threads[idx];
             if (thread && thread->waitToSleep && thread->isRunning)
             {
-                ESP_LOGD(__FUNCTION__,"%s is sleep blocked running", thread->pcName);
+                ESP_LOGI(__FUNCTION__,"%s is sleep blocked running", thread->pcName);
                 bitsToWaitFor += (1 << idx);
             }
         }
@@ -133,7 +133,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             mThread_t *thread = threads[idx];
             if (thread && thread->waitToSleep && thread->isRunning && !startsWith(thread->pcName,name))
             {
-                ESP_LOGD(__FUNCTION__,"%s is sleep blocked running", thread->pcName);
+                ESP_LOGI(__FUNCTION__,"%s is sleep blocked running", thread->pcName);
                 bitsToWaitFor += (1 << idx);
             }
         }
@@ -145,9 +145,9 @@ uint8_t ManagedThreads::NumAllocatedThreads()
     {
         if (bitsToWaitFor)
         {
-            ESP_LOGD(__FUNCTION__, "Waiting for threads %d", bitsToWaitFor);
+            ESP_LOGI(__FUNCTION__, "Waiting for threads %d", bitsToWaitFor);
             xEventGroupWaitBits(managedThreadBits, bitsToWaitFor, false, true, portMAX_DELAY);
-            ESP_LOGD(__FUNCTION__, "Threads %d done", bitsToWaitFor);
+            ESP_LOGI(__FUNCTION__, "Threads %d done", bitsToWaitFor);
         }
         else
         {
@@ -171,7 +171,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             ESP_LOGW(__FUNCTION__, "Cannot run %s as it is already running", pcName);
             return UINT8_MAX;
         }
-        ESP_LOGD(__FUNCTION__, "Running %s", pcName);
+        ESP_LOGI(__FUNCTION__, "Running %s", pcName);
         xSemaphoreTake(threadSema,portMAX_DELAY);
         uint8_t bitNo = GetFreeBit(pcName);
         if (bitNo != UINT8_MAX)
@@ -233,7 +233,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             for (uint8_t idx = 0; idx < 32; idx++)
             {
                 if ((threads[idx] != NULL) && threads[idx]->isRunning) {
-                    ESP_LOGD(__FUNCTION__,"%d-%s",idx,threads[idx]->pcName);
+                    ESP_LOGI(__FUNCTION__,"%d-%s",idx,threads[idx]->pcName);
                 }
             }
         }
@@ -288,7 +288,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             BaseType_t ret = ESP_OK;
             if (onMainThread)
             {
-                ESP_LOGD(__FUNCTION__, "Starting the %s service", thread->pcName);
+                ESP_LOGI(__FUNCTION__, "Starting the %s service", thread->pcName);
                 thread->isRunning = true;
                 thread->pvTaskCode(thread->pvParameters);
                 thread->isRunning = false;

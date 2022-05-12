@@ -79,7 +79,7 @@ bool moveFolder(const char *folderName,const char *toFolderName)
 
     if ((theFolder = openDir(folderName)) != NULL)
     {
-        ESP_LOGD(__FUNCTION__, "reading files in %s", folderName);
+        ESP_LOGI(__FUNCTION__, "reading files in %s", folderName);
         while ((fi = readDir(theFolder)) != NULL)
         {
             if (strlen(fi->d_name) == 0)
@@ -90,10 +90,10 @@ bool moveFolder(const char *folderName,const char *toFolderName)
             {
                 sprintf(fName, "/sdcard%s/%s", folderName, fi->d_name);
                 sprintf(destfName, "/sdcard%s%s/%s", toFolderName, folderName, fi->d_name);
-                ESP_LOGD(__FUNCTION__, "Moving %s - to %s", fName, destfName);
+                ESP_LOGI(__FUNCTION__, "Moving %s - to %s", fName, destfName);
                 if (moveFile(fName, destfName))
                 {
-                    ESP_LOGD(__FUNCTION__, "%s deleted", fName);
+                    ESP_LOGI(__FUNCTION__, "%s deleted", fName);
                 }
                 else
                 {
@@ -105,7 +105,7 @@ bool moveFolder(const char *folderName,const char *toFolderName)
             else
             {
                 sprintf(fName, "%s/%s", folderName, fi->d_name);
-                ESP_LOGD(__FUNCTION__, "Moving sub folder %s of %s as %s", fi->d_name, folderName, fName);
+                ESP_LOGI(__FUNCTION__, "Moving sub folder %s of %s as %s", fi->d_name, folderName, fName);
                 moveFolder(fName, "/sent");
             }
         }
@@ -144,7 +144,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
     esp_http_client_handle_t client = NULL;
     char dmd5[37];
     esp_err_t ret = ESP_OK;
-    ESP_LOGD(__FUNCTION__, "Checking Version");
+    ESP_LOGI(__FUNCTION__, "Checking Version");
     int len=-1;
     int hrc = 202;
     if ((client = esp_http_client_init(config)) &&
@@ -157,7 +157,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
             if (len == 0){
                 dmd5[0]=0;
             }
-            ESP_LOGD(__FUNCTION__, "Got back (%s)%d char of md5", len ? dmd5 : "null", len);
+            ESP_LOGI(__FUNCTION__, "Got back (%s)%d char of md5", len ? dmd5 : "null", len);
             char ch;
             bool isValid = (len > 0) && (strcmp(dmd5, "BADMD5") != 0);
             if (!isValid && (len > 0))
@@ -169,7 +169,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                                ((ch >= '0') && (ch <= '9')));
                     if (!isValid)
                     {
-                        ESP_LOGD(__FUNCTION__, "Invalid char for %s at pos %d(%c)", dmd5, idx, ch);
+                        ESP_LOGI(__FUNCTION__, "Invalid char for %s at pos %d(%c)", dmd5, idx, ch);
                         break;
                     }
                 }
@@ -185,7 +185,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                     dmd5[32] = 0;
                     if (isValid && strcmp(ccmd5, dmd5) == 0)
                     {
-                        ESP_LOGD(__FUNCTION__, "No firmware update needed, is up to date");
+                        ESP_LOGI(__FUNCTION__, "No firmware update needed, is up to date");
                     }
                     else
                     {
@@ -219,7 +219,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                             {
                                 if (((len += fRead(img+len, 1, st.st_size, fw)) == 0) || (len >= st.st_size))
                                 {
-                                    ESP_LOGD(__FUNCTION__,"Read %d bytes from current bin", len);
+                                    ESP_LOGI(__FUNCTION__,"Read %d bytes from current bin", len);
                                     break;
                                 }
                             }
@@ -228,10 +228,10 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                             sprintf((char *)config->url, "http://" IPSTR "/ota/flash?md5=%s&len=%d", IP2STR(ipInfo), ccmd5, (int)st.st_size);
                             if ((client = esp_http_client_init(config)) &&
                                 ((ret = esp_http_client_open(client, st.st_size)) == ESP_OK)) {
-                                ESP_LOGD(__FUNCTION__,"Sending fw of %d/%d bytes",len,(int)st.st_size);
+                                ESP_LOGI(__FUNCTION__,"Sending fw of %d/%d bytes",len,(int)st.st_size);
                                 if ((len = esp_http_client_write(client, (const char*)img, st.st_size)) > 0)
                                 {                                
-                                    ESP_LOGD(__FUNCTION__, "firmware sent %d bytes", len);
+                                    ESP_LOGI(__FUNCTION__, "firmware sent %d bytes", len);
                                     esp_http_client_fetch_headers(client);
                                     if ((len = esp_http_client_get_status_code(client)) != 200)
                                     {
@@ -243,7 +243,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                                         {
                                             if (strcmp(dmd5, "Flashing") == 0)
                                             {
-                                                ESP_LOGD(__FUNCTION__, "Station will be updated:%s", dmd5);
+                                                ESP_LOGI(__FUNCTION__, "Station will be updated:%s", dmd5);
                                                 retCode = false;
                                             }
                                             else
@@ -311,7 +311,7 @@ cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
     config->timeout_ms = 3000;
     config->port = 80;
     config->user_data = kmlFiles;
-    ESP_LOGD(__FUNCTION__, "Getting %s", config->url);
+    ESP_LOGI(__FUNCTION__, "Getting %s", config->url);
     esp_http_client_handle_t client = esp_http_client_init(config);
     xEventGroupSetBits(TheWifi::GetEventGroup(), GETTING_TRIP_LIST);
     esp_err_t err;
@@ -323,7 +323,7 @@ cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
 
     if (err != ESP_OK)
     {
-        ESP_LOGD(__FUNCTION__, "Probably not a tracker but a lurker %s", esp_err_to_name(err));
+        ESP_LOGI(__FUNCTION__, "Probably not a tracker but a lurker %s", esp_err_to_name(err));
         //ldfree(kmlFiles);
         //deinitSDCard();
     }
@@ -358,7 +358,7 @@ cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
 
 bool extractClientTar(char *tarFName)
 {
-    ESP_LOGD(__FUNCTION__, "Parsing File %s", tarFName);
+    ESP_LOGI(__FUNCTION__, "Parsing File %s", tarFName);
     bool retVal = true;
     mtar_t tar;
     mtar_header_t* header = (mtar_header_t*)dmalloc(sizeof(mtar_header_t));
@@ -382,7 +382,7 @@ bool extractClientTar(char *tarFName)
                 ESP_LOGV(__FUNCTION__,"Different header name %s",header->name);
                 strcpy(prevName,header->name);
             } else {
-                ESP_LOGD(__FUNCTION__, "This is the end..%s",mtar_strerror(ret));
+                ESP_LOGI(__FUNCTION__, "This is the end..%s",mtar_strerror(ret));
                 ret=MTAR_ENULLRECORD;
                 break; //Weirdness ensues with tars. When the same header is sent twice, lets just assume we are done and good.
             }
@@ -439,7 +439,7 @@ bool extractClientTar(char *tarFName)
                             }
                         }
                     } else if (endsWith(header->name, "empty.txt")) {
-                        ESP_LOGD(__FUNCTION__,"%s is empty.", header->name);
+                        ESP_LOGI(__FUNCTION__,"%s is empty.", header->name);
                     } else {
                         if (devid != NULL) {
                             sprintf(fname, "/sdcard/ocf/%d/%s", devid->valueint, lastIndexOf(header->name, "/") + 1);
@@ -463,7 +463,7 @@ bool extractClientTar(char *tarFName)
                                 len += chunkLen;
                             }
                             fClose(fw);
-                            ESP_LOGD(__FUNCTION__, "Saved as %s (tar header %d bytes, file %d bytes, wrote %d bytes)\n", fname, header->size, (int)st.st_size, len);
+                            ESP_LOGI(__FUNCTION__, "Saved as %s (tar header %d bytes, file %d bytes, wrote %d bytes)\n", fname, header->size, (int)st.st_size, len);
                         }
                         else
                         {
@@ -471,7 +471,7 @@ bool extractClientTar(char *tarFName)
                             retVal = false;
                         }
                     } else {
-                        ESP_LOGD(__FUNCTION__, "Skippng %s (%d bytes)..%s", fname, header->size,mtar_strerror(ret));
+                        ESP_LOGI(__FUNCTION__, "Skippng %s (%d bytes)..%s", fname, header->size,mtar_strerror(ret));
                     }
                 }
             }
@@ -537,7 +537,7 @@ cJSON* GetDeviceConfig(esp_ip4_addr_t *ipInfo,uint32_t deviceId)
         ((len=esp_http_client_read(client,sjson,hlen?hlen:JSON_BUFFER_SIZE))>0) &&
         ((ret = cJSON_ParseWithLength(sjson,hlen?hlen:JSON_BUFFER_SIZE)) != NULL))
     {
-        ESP_LOGD(__FUNCTION__,"Parsed %d bytes of config",len);
+        ESP_LOGI(__FUNCTION__,"Parsed %d bytes of config",len);
     } else {
         ESP_LOGE(__FUNCTION__,"Failed sending config request(%s). client is %snull, err:%s, hlen:%d, retCode:%d, len:%d sjson:%s",config->url, client?"not ":"",esp_err_to_name(err),hlen,retCode,len, sjson == NULL ? "null":sjson);
     }
@@ -577,8 +577,8 @@ void pullStation(void *pvParameter)
     if (jcfg)
     {
         AppConfig* cfg = new AppConfig(jcfg,NULL);
-        ESP_LOGD(__FUNCTION__,"Pulling from " IPSTR "/%d", IP2STR(ipInfo),cfg->GetIntProperty("deviceid"));
-        free(cfg);
+        ESP_LOGI(__FUNCTION__,"Pulling from " IPSTR "/%d", IP2STR(ipInfo),cfg->GetIntProperty("deviceid"));
+        ldfree(cfg);
         cJSON_Delete(jcfg);
         esp_http_client_config_t *config = (esp_http_client_config_t *)dmalloc(sizeof(esp_http_client_config_t));
         if (initSDCard())
@@ -599,10 +599,10 @@ void pullStation(void *pvParameter)
             strftime(strftime_buf, sizeof(strftime_buf), "%Y/%m/%d/%H-%M-%S", &timeinfo);
             sprintf(tarFName, "/sdcard/tars/" IPSTR, IP2STR(ipInfo));
             sprintf(tarFName + strlen(tarFName), "/%s.tar", strftime_buf);
-            ESP_LOGD(__FUNCTION__, "Saving as:%s", tarFName);
+            ESP_LOGI(__FUNCTION__, "Saving as:%s", tarFName);
             config->user_data = tarFName;
             config->event_handler = filedownload_event_handler;
-            ESP_LOGD(__FUNCTION__, "Getting %s", config->url);
+            ESP_LOGI(__FUNCTION__, "Getting %s", config->url);
             esp_http_client_handle_t client = esp_http_client_init(config);
             esp_err_t err;
             err = esp_http_client_perform(client);
@@ -627,17 +627,17 @@ void pullStation(void *pvParameter)
                 config->port = 80;
                 esp_http_client_handle_t client = esp_http_client_init(config);
                 const char *postData = "{\"enabled\":\"no\"}";
-                ESP_LOGD(__FUNCTION__, "Sending wifi off %s to %s", postData, config->url);
+                ESP_LOGI(__FUNCTION__, "Sending wifi off %s to %s", postData, config->url);
                 esp_err_t ret = ESP_FAIL;
                 if ((ret = esp_http_client_open(client, strlen(postData))) == ESP_OK)
                 {
                     if (esp_http_client_write(client, postData, strlen(postData)) != strlen(postData))
                     {
-                        ESP_LOGD(__FUNCTION__, "Turn off wifi failed, but that is to be expected: %s", esp_err_to_name(ret));
+                        ESP_LOGI(__FUNCTION__, "Turn off wifi failed, but that is to be expected: %s", esp_err_to_name(ret));
                     }
                     else
                     {
-                        ESP_LOGD(__FUNCTION__, "Sent wifi off %s to %s", postData, config->url);
+                        ESP_LOGI(__FUNCTION__, "Sent wifi off %s to %s", postData, config->url);
                     }
                     esp_http_client_close(client);
                     esp_http_client_cleanup(client);
@@ -718,10 +718,10 @@ esp_err_t http_tar_download_event_handler(esp_http_client_event_t *evt)
         break;
     case HTTP_EVENT_ON_FINISH:
         fClose((FILE *)evt->user_data);
-        ESP_LOGD(__FUNCTION__, "HTTP_EVENT_ON_FINISH");
+        ESP_LOGI(__FUNCTION__, "HTTP_EVENT_ON_FINISH");
         break;
     case HTTP_EVENT_DISCONNECTED:
-        ESP_LOGD(__FUNCTION__, "HTTP_EVENT_DISCONNECTED\n");
+        ESP_LOGI(__FUNCTION__, "HTTP_EVENT_DISCONNECTED\n");
         break;
     }
     return ESP_OK;

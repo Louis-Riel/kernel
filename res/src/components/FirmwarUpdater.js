@@ -1,4 +1,9 @@
 class FirmwareUpdater extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {};
+    }
+
     UploadFirmware(form) {
         form.preventDefault();
         this.setState({ loaded: `Sending ${this.state.len} firmware bytes` })

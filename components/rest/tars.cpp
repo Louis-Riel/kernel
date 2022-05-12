@@ -69,7 +69,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     EventGroupHandle_t eventGroup = TheRest::GetEventGroup();
 
     uint32_t fdpos = filesToDelete == NULL ? 0 : strlen(filesToDelete);
-    ESP_LOGD(__FUNCTION__, "Parsing %s", path);
+    ESP_LOGI(__FUNCTION__, "Parsing %s", path);
     struct timeval tv_start, tv_end, tv_open, tv_stat, tv_rstart, tv_rend, tv_wstart, tv_wend;
     bool folderAdded=false;
 
@@ -167,14 +167,14 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                             if ((strlen(theFName)+strlen(filesToDelete)) > JSON_BUFFER_SIZE){
                                 ESP_LOGW(__FUNCTION__,"%s cannot be added to the deleted files this go round", theFName);
                             } else {
-                                ESP_LOGD(__FUNCTION__,"Flagging %s for deletion",theFName);
+                                ESP_LOGI(__FUNCTION__,"Flagging %s for deletion",theFName);
                                 fdpos+=sprintf(filesToDelete+fdpos,"%s,",theFName);
                                 ESP_LOGV(__FUNCTION__,"Files to delete(%d):%s",fdpos, filesToDelete);
                             }
                         } else {
                             ESP_LOGV(__FUNCTION__,"Not deleting %s",theFName);
                         }
-                        ESP_LOGD(__FUNCTION__, "Added %d bytes from %s %s/%s", len, fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
+                        ESP_LOGI(__FUNCTION__, "Added %d bytes from %s %s/%s", len, fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
                     }
                     else
                     {
@@ -322,7 +322,7 @@ int tarClose(mtar_t *tar)
         xEventGroupSetBits(sp->eventGroup, TAR_BUFFER_FILLED);
     }
 
-    ESP_LOGD(__FUNCTION__, "Wrote %d bytes", sp->len);
+    ESP_LOGI(__FUNCTION__, "Wrote %d bytes", sp->len);
     xEventGroupSetBits(sp->eventGroup, TAR_BUILD_DONE);
 
     return ESP_OK;
@@ -355,7 +355,7 @@ void DeleteTarFiles(void* param){
         if (!indexOf(nextFile,strftime_buf)){
             deleteFile(nextFile);
         } else {
-            ESP_LOGD(__FUNCTION__,"Not deleting %s",nextFile);
+            ESP_LOGI(__FUNCTION__,"Not deleting %s",nextFile);
         }
         if (nextFile == filesToDelete) {
             ESP_LOGV(__FUNCTION__,"Done deleting");
@@ -380,7 +380,7 @@ void BuildTar(void* param){
     memset(filesToDelete,0,JSON_BUFFER_SIZE);
     tarFiles(tar,"/lfs",NULL,true,"current.bin",1024000,true,filesToDelete);
     if (mtar_close(tar) == MTAR_ESUCCESS){
-        ESP_LOGD(__FUNCTION__,"Deleting %s",filesToDelete);
+        ESP_LOGI(__FUNCTION__,"Deleting %s",filesToDelete);
         CreateWokeBackgroundTask(DeleteTarFiles, "DeleteTarFiles", 4096, filesToDelete, tskIDLE_PRIORITY, NULL);
     } else {
         ldfree(filesToDelete);
@@ -462,7 +462,7 @@ void TheRest::SendTar(void* param)
         ((err = esp_http_client_set_header(client, "Content-Type","application/x-tar")) == ESP_OK) &&
         ((err = esp_http_client_open(client, 20000000) == ESP_OK))) {
         
-        ESP_LOGD(__FUNCTION__, "Sending to %s", url);
+        ESP_LOGI(__FUNCTION__, "Sending to %s", url);
         EventBits_t theBits = 0;
 
         while ((theBits=xEventGroupWaitBits(sp->eventGroup, TAR_BUFFER_FILLED, pdTRUE, pdTRUE, portMAX_DELAY)))
@@ -509,11 +509,11 @@ void TheRest::SendTar(void* param)
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         xEventGroupSetBits(sp->eventGroup, TAR_SEND_DONE);
-        ESP_LOGD(__FUNCTION__, "Sent %d to %s", len, url);
+        ESP_LOGI(__FUNCTION__, "Sent %d to %s", len, url);
     } else {
         ESP_LOGE(__FUNCTION__,"Error whilst sending tar:%s hlen:%d",esp_err_to_name(err), hlen);
     }
-    ESP_LOGD(__FUNCTION__, "Done sending to %s", url);
+    ESP_LOGI(__FUNCTION__, "Done sending to %s", url);
     xEventGroupClearBits(getAppEG(),app_bits_t::TRIPS_SYNCING);
     ldfree((void*)config->url);
     ldfree(config);

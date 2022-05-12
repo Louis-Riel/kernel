@@ -256,7 +256,7 @@ void Bt::bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param
 }
 
 void Bt::InitDevice(){
-    ESP_LOGD(__FUNCTION__,"Initializing bt");
+    ESP_LOGI(__FUNCTION__,"Initializing bt");
 
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
 

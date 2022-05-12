@@ -20,7 +20,7 @@ Pin::~Pin(){
     if (numPins == 0) {
         EventManager::UnRegisterEventHandler(handlerDescriptors);
     }
-    ESP_LOGD(__FUNCTION__,"Destructor");
+    ESP_LOGI(__FUNCTION__,"Destructor");
 }
 
 Pin::Pin(AppConfig* config)
@@ -95,7 +95,7 @@ EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
 }
 
 void Pin::InitDevice(){
-    ESP_LOGD(__FUNCTION__,"Initializing pin %d as %s(%d)",pinNo,name,numPins);
+    ESP_LOGI(__FUNCTION__,"Initializing pin %d as %s(%d)",pinNo,name,numPins);
     gpio_config_t io_conf;
     io_conf.intr_type = GPIO_INTR_ANYEDGE;
     io_conf.pin_bit_mask = 1ULL << pinNo;

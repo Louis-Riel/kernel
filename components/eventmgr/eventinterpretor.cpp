@@ -76,7 +76,7 @@ bool EventInterpretor::IsValid(esp_event_base_t eventBase, int32_t id, void *eve
         if (desc)
         {
             this->id = desc->id;
-            ESP_LOGD(__FUNCTION__, "Registered as %s %d", this->eventBase, this->id);
+            ESP_LOGI(__FUNCTION__, "Registered as %s %d", this->eventBase, this->id);
         }
         else
         {
@@ -88,17 +88,17 @@ bool EventInterpretor::IsValid(esp_event_base_t eventBase, int32_t id, void *eve
         ESP_LOGV(__FUNCTION__, "(this->eventBase(%s) == eventBase(%s)) && (id(%d) == this->id(%d))", this->eventBase, eventBase, id, this->id);
     if ((strcmp(this->eventBase, eventBase) == 0) && (id == this->id))
     {
-        ESP_LOGD(__FUNCTION__, "%s-%d Match", eventBase, id);
+        ESP_LOGI(__FUNCTION__, "%s-%d Match", eventBase, id);
         bool ret = true;
         for (int idx = 0; idx < 5; idx++)
         {
             if (conditions[idx])
             {
-                ESP_LOGD(__FUNCTION__, "%s-%d Checking condition %d", eventBase, id, idx);
+                ESP_LOGI(__FUNCTION__, "%s-%d Checking condition %d", eventBase, id, idx);
                 ret = conditions[idx]->IsEventCompliant(event_data);
                 if (!ret && (idx < 4) && (isAnd[idx + 1]))
                 {
-                    ESP_LOGD(__FUNCTION__, "%s-%d Matching condition %d", eventBase, id, idx);
+                    ESP_LOGI(__FUNCTION__, "%s-%d Matching condition %d", eventBase, id, idx);
                     return ret;
                 }
             }
@@ -147,14 +147,14 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
             program = aprog;
             break;
         }
-        free(aprog);
+        ldfree(aprog);
     }
     if (!program)
     {
         ESP_LOGE(__FUNCTION__, "Cannot fing a program named %s", programName);
         return;
     }
-    ESP_LOGD(__FUNCTION__, "Running program %s", programName);
+    ESP_LOGI(__FUNCTION__, "Running program %s", programName);
     if (program->HasProperty("inLineThreads"))
     {
         cJSON *item;
@@ -170,7 +170,7 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
         {
             if ((item == NULL) || cJSON_IsInvalid(item))
             {
-                ESP_LOGD(__FUNCTION__, "Unparsable JSON");
+                ESP_LOGI(__FUNCTION__, "Unparsable JSON");
                 continue;
             }
             if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE)
@@ -205,7 +205,7 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
             {
                 ESP_LOGE(__FUNCTION__, "Nothing to run for inline thread");
             }
-            free(aitem);
+            ldfree(aitem);
         }
     }
     else if (program->HasProperty("parallelThreads"))
@@ -245,12 +245,12 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
                 ESP_LOGE(__FUNCTION__, "Nothing to run for %s", tmp);
                 ldfree(tmp);
             }
-            free(aitem);
+            ldfree(aitem);
         }
         if (threads)
         {
             ManagedThreads::GetInstance()->WaitForThreads(threads);
-            ESP_LOGD(__FUNCTION__, "Program %s done %d", programName, threads);
+            ESP_LOGI(__FUNCTION__, "Program %s done %d", programName, threads);
         }
         else
         {

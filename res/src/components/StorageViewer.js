@@ -10,16 +10,16 @@ class TripWithin extends React.Component {
     }
 
     getIcon() {
-        return e("svg", { key: genUUID(), xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64",onClick:elem=>this.setState({viewer:"trip"}) }, [
-            e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M17.993 56h20v6h-20zm-4.849-18.151c4.1 4.1 9.475 6.149 14.85 6.149 5.062 0 10.11-1.842 14.107-5.478l.035.035 1.414-1.414-.035-.035c7.496-8.241 7.289-20.996-.672-28.957A20.943 20.943 0 0 0 27.992 2a20.927 20.927 0 0 0-14.106 5.477l-.035-.035-1.414 1.414.035.035c-7.496 8.243-7.289 20.997.672 28.958zM27.992 4.001c5.076 0 9.848 1.976 13.437 5.563 7.17 7.17 7.379 18.678.671 26.129L15.299 8.892c3.493-3.149 7.954-4.891 12.693-4.891zm12.696 33.106c-3.493 3.149-7.954 4.892-12.694 4.892a18.876 18.876 0 0 1-13.435-5.563c-7.17-7.17-7.379-18.678-.671-26.129l26.8 26.8z" }),
-            e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M48.499 2.494l-2.828 2.828c4.722 4.721 7.322 10.999 7.322 17.678s-2.601 12.957-7.322 17.678S34.673 48 27.993 48s-12.957-2.601-17.678-7.322l-2.828 2.828C12.962 48.983 20.245 52 27.993 52s15.031-3.017 20.506-8.494c5.478-5.477 8.494-12.759 8.494-20.506S53.977 7.97 48.499 2.494z" })
+        return e("svg", { key: "svg", xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64",onClick:elem=>this.setState({viewer:"trip"}) }, [
+            e("path", { key: "path1", style: { fill: this.getIconColor() }, d: "M17.993 56h20v6h-20zm-4.849-18.151c4.1 4.1 9.475 6.149 14.85 6.149 5.062 0 10.11-1.842 14.107-5.478l.035.035 1.414-1.414-.035-.035c7.496-8.241 7.289-20.996-.672-28.957A20.943 20.943 0 0 0 27.992 2a20.927 20.927 0 0 0-14.106 5.477l-.035-.035-1.414 1.414.035.035c-7.496 8.243-7.289 20.997.672 28.958zM27.992 4.001c5.076 0 9.848 1.976 13.437 5.563 7.17 7.17 7.379 18.678.671 26.129L15.299 8.892c3.493-3.149 7.954-4.891 12.693-4.891zm12.696 33.106c-3.493 3.149-7.954 4.892-12.694 4.892a18.876 18.876 0 0 1-13.435-5.563c-7.17-7.17-7.379-18.678-.671-26.129l26.8 26.8z" }),
+            e("path", { key: "path2", style: { fill: this.getIconColor() }, d: "M48.499 2.494l-2.828 2.828c4.722 4.721 7.322 10.999 7.322 17.678s-2.601 12.957-7.322 17.678S34.673 48 27.993 48s-12.957-2.601-17.678-7.322l-2.828 2.828C12.962 48.983 20.245 52 27.993 52s15.031-3.017 20.506-8.494c5.478-5.477 8.494-12.759 8.494-20.506S53.977 7.97 48.499 2.494z" })
         ]);
     }
 
     render() {
-        return e("div",{key:genUUID(),className:"rendered trip"},[
+        return e("div",{key:"renderedtrip",className:"rendered trip"},[
             this.getIcon(),
-            this.state?.viewer == "trip"?e(TripViewer,{key:genUUID(),points:this.props.points,cache:this.props.cache}):null
+            this.state?.viewer == "trip"?e(TripViewer,{key:"tripviewer",points:this.props.points,cache:this.props.cache,onClose:()=>this.setState({"viewer":""})}):null
         ]
         );
     }
@@ -27,68 +27,95 @@ class TripWithin extends React.Component {
 class FileViewer extends React.Component {
     constructor(props) {
         super(props);
-        this.buildRenderers(0);
+        if (props.registerFileWork) {
+            props.registerFileWork(this.buildRenderers(0));
+        }
+        this.state = {
+            renderers: [
+                {
+                    name: "loading"
+                }
+            ]
+        }
     }
 
     buildRenderers(retryCount) {
-        if (this.props.name.endsWith(".csv") && !this.state?.renderes?.some("trip")){
-            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+        return new Promise((resolve, reject) => {
+            if (this.props.name.endsWith(".csv") && !this.state?.renderers?.some("trip")){
+                this.parseCsv(resolve, retryCount, reject);
+            } else if (this.props.name.endsWith(".log") && !this.state?.renderers?.some("trip")){
+                this.parseLog(resolve, retryCount, reject);
+            } else {
+                resolve();
+            }
+        });
+    }
+
+    parseLog(resolve, retryCount, reject) {
+        wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
             .then(resp => resp.text())
-            .then(content =>{
-                var cols=content.split(/\n|\r\n/)[0].split(",");
-                this.setState({
-                    renderes:[{
-                        name:"trip", 
-                        points:content.split(/\n|\r\n/)
-                                        .splice(1).map(ln => {
-                                            var ret={};
-                                        ln.split(",").forEach((it,idx) => ret[cols[idx]] = isNaN(it)?it:parseFloat(it));
-                                        return ret;
-                                        }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
-                    }]
-                })
-            }).catch(err =>{
-                if (retryCount++ < 3){
-                    this.buildRenderers(retryCount++);
+            .then(content => resolve(this.setState({
+                renderers: [{
+                    name: "trip",
+                    points: content.split("\n")
+                        .filter(ln => ln.match(/[ID] \([0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}\).* Location:.*/))
+                        .map(ln => ln.match(/[ID] \((?<timestamp>.*)\).*Location:\s*(?<latitude>[0-9.-]+),\s*(?<longitude>[0-9.-]+).*speed:\s*(?<speed>[0-9.]+).*altitude:\s*(?<altitude>[0-9.]+).*course:\s*(?<course>[0-9.]+).*bat:\s*(?<Battery>[0-9.]+)/i)?.groups)
+                        .filter(point => point)
+                        .map(point => {
+                            Object.keys(point).forEach(fld => point[fld] = isNaN(point[fld]) ? point[fld] : parseFloat(point[fld]));
+                            point.timestamp = `1970-01-01 ${point.timestamp}`;
+                            point.altitude *= 100;
+                            point.speed *= 100;
+                            return point;
+                        })
+                }]
+            }))
+            ).catch(err => {
+                if (retryCount++ < 3) {
+                    this.buildRenderers(retryCount);
+                } else {
+                    reject(err);
                 }
             });
-        }
-        if (this.props.name.endsWith(".log") && !this.state?.renderes?.some("trip")){
-            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
-                .then(resp => resp.text())
-                .then(content =>this.setState({
-                            renderes:[{
-                                name:"trip", 
-                                points: content.split("\n")
-                                               .filter(ln => ln.match(/[ID] \([0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}\).* Location:.*/))
-                                               .map(ln => ln.match(/[ID] \((?<timestamp>.*)\).*Location:\s*(?<latitude>[0-9.-]+),\s*(?<longitude>[0-9.-]+).*speed:\s*(?<speed>[0-9.]+).*altitude:\s*(?<altitude>[0-9.]+).*course:\s*(?<course>[0-9.]+).*bat:\s*(?<Battery>[0-9.]+)/i)?.groups)
-                                               .filter(point => point)
-                                               .map(point => {
-                                                   Object.keys(point).forEach(fld => point[fld] = isNaN(point[fld]) ? point[fld] : parseFloat(point[fld]));
-                                                   point.timestamp = `1970-01-01 ${point.timestamp}`;
-                                                   point.altitude*=100;
-                                                   point.speed*=100;
-                                                   return point;
-                                                })
-                            }]
-                        })
-                    ).catch(err =>{
-                        if (retryCount++ < 3){
-                            this.buildRenderers(retryCount++);
-                        }
-                    });
+    }
+
+    parseCsv(resolve, retryCount, reject) {
+        wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+            .then(resp => resp.text())
+            .then(content => {
+                var cols = content.split(/\n|\r\n/)[0].split(",");
+                resolve(this.setState({
+                    renderers: [{
+                        name: "trip",
+                        points: content.split(/\n|\r\n/)
+                            .splice(1).map(ln => {
+                                var ret = {};
+                                ln.split(",").forEach((it, idx) => ret[cols[idx]] = isNaN(it) ? it : parseFloat(it));
+                                return ret;
+                            }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
+                    }]
+                }));
+            }).catch(err => {
+                if (retryCount++ < 3) {
+                    this.buildRenderers(retryCount);
+                } else {
+                    reject(err);
                 }
+            });
     }
 
     getRenderers() {
-        if (!this.state?.renderes || !this.state.renderes.length) {
+        if (!this.state?.renderers || !this.state.renderers.length) {
             return null;
         }
-        return this.state.renderes.map(renderer => {
+        return this.state.renderers.map(renderer => {
             switch (renderer.name) {
                 case "trip":
-                    return renderer.points.length?e(TripWithin,{key:genUUID(),points:renderer.points,cache:this.props.cache}):null;
-            
+                    return renderer.points.length?e(TripWithin,{key:"tripwithin",points:renderer.points,cache:this.props.cache}):null;
+
+                case "loading":
+                    return e('i',{className: "rendered reportbtn fa fa-spinner", key: "graphbtn", })
+    
                 default:
                     return null;
             }
@@ -96,21 +123,21 @@ class FileViewer extends React.Component {
     }
 
     render() {
-        return [e("a", { key:genUUID(), href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]),this.getRenderers()];
+        return [e("a", { key:"filelink", href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]),this.getRenderers()];
     }
 }
 
 class SFile extends React.Component {
     render() {
-        return  e("tr", { key: genUUID(), className: this.props.file.ftype }, [
-            e("td", { key: genUUID() }, this.getLink(this.props.file)),
-            e("td", { key: genUUID() }, this.props.file.ftype != "file" ? "" : this.props.file.size),
-            e("td", { key: genUUID() }, this.getDeleteLink())]);
+        return  e("tr", { key: "tr", className: this.props.file.ftype }, [
+            e("td", { key: "link" }, this.getLink(this.props.file)),
+            e("td", { key: "size" }, this.props.file.ftype != "file" ? "" : this.props.file.size),
+            e("td", { key: "delete" }, this.getDeleteLink())]);
     }
 
     getDeleteLink() {
         return this.props.path == "/" || this.props.file.name == ".." ? null : e("a", {
-            key: genUUID(),
+            key: "delete",
             href: "#",
             onClick: () => {
                 wfetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
@@ -130,12 +157,12 @@ class SFile extends React.Component {
     getLink(file) {
         if (file.ftype == "folder") {
             return e("a", {
-                key: genUUID(),
+                key: file.name,
                 href: "#",
                 onClick: () => this.props.onChangeFolder ? this.props.onChangeFolder(`${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/")):null
             }, file.name);
         } else {
-            return e(FileViewer,{cache:this.props.cache,key:genUUID(),...file});
+            return e(FileViewer,{key:file.name,cache:this.props.cache,registerFileWork:this.props.registerFileWork,...file});
         }
     }
 }
@@ -146,9 +173,10 @@ class StorageViewer extends React.Component {
         this.state = { 
             loaded: false, 
             path: "/", 
+            files: null,
             cache:{images:{}},
-            files: null };
-        this.id = this.props.id || genUUID();
+            fileWork: [] 
+        };
     }
 
     getSystemFolders() {
@@ -163,36 +191,32 @@ class StorageViewer extends React.Component {
     }
 
     GetFileStat(fileStatsToFetch) {
-        if (fileStatsToFetch.length) {
-            var fileToFetch = fileStatsToFetch.pop()
-            var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
-            wfetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
-                method: 'post',
-                signal: this.props.pageControler.signal
-            }).then(data => {
-                clearTimeout(quitItNow);
-                data.json().then(jdata => {
-                    fileToFetch.size = jdata.size;
-                    if (this.mounted)
-                        this.setState({ loaded: true, files: this.state.files, total: this.state?.total + jdata.size });
-                });
-                if (fileStatsToFetch.length && !this.props.pageControler.signal.aborted) {
-                    if (this.mounted)
-                        this.GetFileStat(fileStatsToFetch);
-                }        
-            }).catch(ex => {
-                clearTimeout(quitItNow);
-                console.err(ex);
+        if (this.mounted){
+            fileStatsToFetch.forEach(fileToFetch => {
+                this.registerFileWork(new Promise((resolve, reject) => {
+                    wfetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
+                        method: 'post'
+                    }).then(data => {
+                        data.json().then(jdata => {
+                            fileToFetch.size = jdata.size;
+                            resolve(this.setState({ loaded: true, files: this.state.files, total: this.state?.total + jdata.size }));
+                        });
+                    }).catch(ex => {
+                        reject(ex);
+                    });
+                }));
             });
         }
     }
 
     fetchFiles() {
         if (window.location.host || httpPrefix){
-            var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
+            var abort = new AbortController();
+        
+            var quitItNow = setTimeout(() => abort.abort(), 3000);
             wfetch(`${httpPrefix}/files` + this.state.path, {
                 method: 'post',
-                signal: this.props.pageControler.signal
+                signal: abort.signal
             }).then(data => {
                 clearInterval(quitItNow);
                 data.json()
@@ -245,32 +269,37 @@ class StorageViewer extends React.Component {
                 }
 
     getTableHeader() {
-        return e("thead", { key: genUUID() }, e("tr", { key: genUUID() }, ["Name", "Size"].map(col => e("th", { key: genUUID(), onClick: this.SortTable.bind(this) }, col)).concat(e("th", { key: genUUID() }, "Op"))));
+        return e("thead", { key: "head" }, e("tr", { key: "row" }, ["Name", "Size"].map(col => e("th", { key: col, onClick: this.SortTable.bind(this) }, col)).concat(e("th", { key: "op" }, "Op"))));
+    }
+
+    registerFileWork(fn) {
+        this.setState({ fileWork: [...this.state.fileWork,fn] });
     }
 
     render() {
         if (!this.state?.files) {
-            return e("div", { key: genUUID() }, "Loading......");
+            return e("div", { key: "Loading" }, "Loading......");
         } else {
-            return e("div", { key: genUUID(), 
-                id: this.id, 
+            return e("div", { key: "Files", 
                 className: `file-table ${this.state.loaded?"":"loading"}` }, 
-                    e("table", { key: genUUID(), className: "greyGridTable" }, [
-                        e("caption", { key: genUUID() }, this.state.path),
+                    e("table", { key: "table", className: "greyGridTable" }, [
+                        e("caption", { key: "caption" }, this.state.path),
                         this.getTableHeader(),
-                        e("tbody", { key: genUUID() }, 
-                            this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ 
-                                key: genUUID(), 
-                                file:file, 
-                                path:this.state.path,
-                                cache:this.state.cache,
-                                onChangeFolder: (folder) => this.setState({path:folder}),
-                                OnDelete: ()=>this.fetchFiles()
-                            }))
+                        e("tbody", { key: "body" }, 
+                            this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => 
+                                e(SFile,{ 
+                                    key: file.name, 
+                                    file:file, 
+                                    cache: this.state.cache,
+                                    path:this.state.path,
+                                    registerFileWork: this.registerFileWork.bind(this),
+                                    onChangeFolder: (folder) => this.setState({path:folder, files:[]}),
+                                    OnDelete: ()=>this.fetchFiles()
+                                }))
                             ),
-                        e("tfoot", { key: genUUID() }, e("tr", { key: genUUID() }, [
-                            e("td", { key: genUUID() }, "Total"), 
-                            e("td", { key: genUUID() }, this.state.total)
+                        e("tfoot", { key: "tfoot" }, e("tr", { key: "trow" }, [
+                            e("td", { key: "totallbl" }, "Total"), 
+                            e("td", { key: "total" }, this.state.total)
                         ]))
                     ]));
         }

@@ -270,7 +270,7 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
                         }
                     }
                 } else {
-                    ESP_LOGD(__FUNCTION__,"Cannot find %s in %s", termName, tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
+                    ESP_LOGI(__FUNCTION__,"Cannot find %s in %s", termName, tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
                 }
             }
             break;

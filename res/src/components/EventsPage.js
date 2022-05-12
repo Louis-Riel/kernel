@@ -56,17 +56,18 @@ class LiveEventPannel extends React.Component {
     }
 
     ProcessEvent(evt) {
-        if (this.mounted){
-            var lastEvents = this.state?.lastEvents||[];
+        if (this.mounted && this.isEventVisible(evt)) {
+            var lastEvents = (this.state?.lastEvents||[]).concat(evt);
             while (lastEvents.length > 100) {
                 lastEvents.shift();
             }
-            var curFilters = Object.entries(lastEvents.filter(evt=>evt.eventBase && evt.eventId)
+            var curFilters = Object.entries(lastEvents
+                                   .filter(evt=>evt.eventBase && evt.eventId)
                                    .reduce((ret,evt)=>{
                                        if (!ret[evt.eventBase]) {
-                                          ret[evt.eventBase] = {filtered: false, eventIds:[{filtered: false, eventId: evt.eventId}]};
+                                          ret[evt.eventBase] = {visible: true, eventIds:[{visible: true, eventId: evt.eventId}]};
                                        } else if (!ret[evt.eventBase].eventIds.find(vevt=>vevt.eventId === evt.eventId)) {
-                                        ret[evt.eventBase].eventIds.push({filtered:false, eventId: evt.eventId});
+                                        ret[evt.eventBase].eventIds.push({visible:true, eventId: evt.eventId});
                                        }
                                        return ret;
                                     },{}))
@@ -83,13 +84,14 @@ class LiveEventPannel extends React.Component {
 
             if (hasUpdates) {
                 this.setState({
-                    filters: this.state.filters
+                    filters: this.state.filters,
+                    lastEvents: lastEvents
+                });
+            } else {
+                this.setState({
+                    lastEvents:lastEvents
                 });
             }
-
-            this.setState({
-                lastEvents:lastEvents.concat(evt)
-            });
         }
     }
 
@@ -141,12 +143,12 @@ class LiveEventPannel extends React.Component {
     }
 
     updateEventIdFilter(eventId, enabled) {
-        eventId.filtered = enabled;
+        eventId.visible = enabled;
         this.setState({filters: this.state.filters});
     }
 
     updateEventBaseFilter(eventBase, enabled) {
-        eventBase.filtered = enabled;
+        eventBase.visible = enabled;
         this.setState({filters: this.state.filters});
     }
 
@@ -167,12 +169,12 @@ class LiveEventPannel extends React.Component {
         return e('div', { key: filter[0], className: `filter ${filter[0]}` },
             e("div",{key:"evbfiltered",className:"evbfiltered"},
                 e(MaterialUI.FormControlLabel,{
-                    key:"filtered",
+                    key:"visible",
                     className:"ebfiltered",
                     label: filter[0],
                     control:e(MaterialUI.Checkbox, {
                         key: "ctrl",
-                        checked: filter[1].filtered,
+                        checked: filter[1].visible,
                         onChange: event => this.updateEventIdFilter(filter[1], event.target.checked)
                     })})
             ),
@@ -184,7 +186,7 @@ class LiveEventPannel extends React.Component {
                         label: eventId.eventId,
                         control:e(MaterialUI.Checkbox, {
                             key: "ctrl",
-                            checked: eventId.filtered,
+                            checked: eventId.visible,
                             onChange: event => this.updateEventIdFilter(eventId, event.target.checked),
                         })}
                     )
@@ -193,11 +195,10 @@ class LiveEventPannel extends React.Component {
     }
 
     isEventVisible(event) {
-        return !Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].filtered) &&
-               !Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
-                                                                  !this.state.filters[eventBase].filtered &&
+        return (Object.keys(this.state.filters).length === 0) || (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
+               Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
                                                                   this.state.filters[eventBase].eventIds
-                                                                    .some(eventId=> eventId.eventId === event.eventId && eventId.filtered));
+                                                                    .some(eventId=> eventId.eventId === event.eventId && eventId.visible)));
     }
 
     getFilteredEvents() {

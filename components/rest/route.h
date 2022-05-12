@@ -50,11 +50,14 @@ protected:
   EventHandlerDescriptor *BuildHandlerDescriptors();
 
 private:
+  ws_msg_t* getNewMessage();
   uint32_t logPos;
   QueueHandle_t msgQueue;
-  char *logBuffer;
   uint8_t emptyString;
   cJSON* jClients;
+  ws_msg_t* msgQueueBuf;
+  uint8_t msgQueueBufLen;
+  uint8_t msgQueueBufPos;
 };
 
 class TheRest : ManagedDevice
