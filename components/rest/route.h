@@ -76,6 +76,7 @@ public:
   static esp_err_t SendConfig(char *addr, cJSON *cfg);
   static esp_err_t HandleWifiCommand(httpd_req_t *req);
   static cJSON* status_json();
+  cJSON* bake_status_json();
 
 protected:
   const char* hcUrl;
@@ -127,6 +128,7 @@ private:
   cJSON* jBytesIn;
   cJSON* jBytesOut;
   cJSON* jNumHc;
+  cJSON* status;
 
   httpd_uri_t const restUris[11] =
       {

@@ -31,6 +31,20 @@ Pin::Pin(AppConfig* config)
     pinStatus(NULL),
     buf((char*)dmalloc(1024))
 {
+    InitDevice();
+}
+
+EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
+  ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
+  EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
+  handler->AddEventDescriptor(eventIds::OFF,"OFF",event_data_type_tp::JSON);
+  handler->AddEventDescriptor(eventIds::ON,"ON",event_data_type_tp::JSON);
+  handler->AddEventDescriptor(eventIds::TRIGGER,"TRIGGER");
+  handler->AddEventDescriptor(eventIds::STATUS,"STATUS",event_data_type_tp::JSON);
+  return handler;
+}
+
+void Pin::InitDevice(){
     const char* pname = config->GetStringProperty("pinName");
     ldfree(name);
     uint32_t sz = strlen(pname)+1;
@@ -52,49 +66,7 @@ Pin::Pin(AppConfig* config)
     }
     ESP_LOGV(__FUNCTION__,"Pin(%d):%s at idx:%d",pinNo,name,numPins);
     pins[numPins++]=this;
-    InitDevice();
-    cJSON* jcfg;
-    AppConfig* apin = new AppConfig((jcfg=BuildStatus(this)),AppConfig::GetAppStatus());
-    apin->SetPinNoProperty("pinNo",pinNo);
-    apin->SetStringProperty("name",name);
-    apin->SetIntProperty("state",-1);
-    pinStatus = apin->GetPropertyHolder("state");
-    if (flags&gpio_driver_t::driver_type_t::digital_out){
-        cJSON* methods = cJSON_AddArrayToObject(jcfg,"commands");
-        cJSON* flush = cJSON_CreateObject();
-        cJSON_AddItemToArray(methods,flush);
-        cJSON_AddStringToObject(flush,"command","trigger");
-        cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
-        cJSON_AddStringToObject(flush,"param1","ON");
-        cJSON_AddStringToObject(flush,"caption","On");
-        flush = cJSON_CreateObject();
-        cJSON_AddItemToArray(methods,flush);
-        cJSON_AddStringToObject(flush,"command","trigger");
-        cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
-        cJSON_AddStringToObject(flush,"param1","OFF");
-        cJSON_AddStringToObject(flush,"caption","Off");
-        flush = cJSON_CreateObject();
-        cJSON_AddItemToArray(methods,flush);
-        cJSON_AddStringToObject(flush,"command","trigger");
-        cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
-        cJSON_AddStringToObject(flush,"param1","TRIGGER");
-        cJSON_AddStringToObject(flush,"caption","Trigger");
-    }
 
-    delete apin;
-}
-
-EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
-  ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
-  EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
-  handler->AddEventDescriptor(eventIds::OFF,"OFF",event_data_type_tp::JSON);
-  handler->AddEventDescriptor(eventIds::ON,"ON",event_data_type_tp::JSON);
-  handler->AddEventDescriptor(eventIds::TRIGGER,"TRIGGER");
-  handler->AddEventDescriptor(eventIds::STATUS,"STATUS",event_data_type_tp::JSON);
-  return handler;
-}
-
-void Pin::InitDevice(){
     ESP_LOGI(__FUNCTION__,"Initializing pin %d as %s(%d)",pinNo,name,numPins);
     gpio_config_t io_conf;
     io_conf.intr_type = GPIO_INTR_ANYEDGE;
@@ -136,6 +108,36 @@ void Pin::InitDevice(){
     ESP_LOGV(__FUNCTION__, "Numpins %d", numPins);
     if (isRtcGpio)
         ESP_ERROR_CHECK(gpio_isr_handler_add(pinNo, pinHandler, this));
+
+    cJSON* jcfg;
+    AppConfig* apin = new AppConfig((jcfg=BuildStatus(this)),AppConfig::GetAppStatus());
+    apin->SetPinNoProperty("pinNo",pinNo);
+    apin->SetStringProperty("name",name);
+    apin->SetIntProperty("state",-1);
+    pinStatus = apin->GetPropertyHolder("state");
+    if (flags&gpio_driver_t::driver_type_t::digital_out){
+        cJSON* methods = cJSON_AddArrayToObject(jcfg,"commands");
+        cJSON* flush = cJSON_CreateObject();
+        cJSON_AddItemToArray(methods,flush);
+        cJSON_AddStringToObject(flush,"command","trigger");
+        cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+        cJSON_AddStringToObject(flush,"param1","ON");
+        cJSON_AddStringToObject(flush,"caption","On");
+        flush = cJSON_CreateObject();
+        cJSON_AddItemToArray(methods,flush);
+        cJSON_AddStringToObject(flush,"command","trigger");
+        cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+        cJSON_AddStringToObject(flush,"param1","OFF");
+        cJSON_AddStringToObject(flush,"caption","Off");
+        flush = cJSON_CreateObject();
+        cJSON_AddItemToArray(methods,flush);
+        cJSON_AddStringToObject(flush,"command","trigger");
+        cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+        cJSON_AddStringToObject(flush,"param1","TRIGGER");
+        cJSON_AddStringToObject(flush,"caption","Trigger");
+    }
+
+    delete apin;
 }
 
 void Pin::RefrestState(){

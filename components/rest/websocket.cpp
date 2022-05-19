@@ -110,7 +110,7 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
         if (wsMsg->bufLen < strlen((const char*)msg)) {
           ldfree(wsMsg->buf);
           wsMsg->bufLen = strlen((const char*)msg)+1;
-          wsMsg->buf = dmalloc(strlen((char*)msg)+1);
+          wsMsg->buf = dmalloc(wsMsg->bufLen);
         }
         strcpy((char*)wsMsg->buf,(const char*)msg);
       }
@@ -138,7 +138,7 @@ void WebsocketManager::QueueHandler(void* param){
   uint8_t* buf = (uint8_t*)dmalloc(JSON_BUFFER_SIZE);
   while(stateHandler && stateHandler->msgQueue && stateHandler->isLive){
     memset(buf,0,JSON_BUFFER_SIZE);
-    if (xQueueReceive(stateHandler->msgQueue,buf,3000/portTICK_PERIOD_MS)) {
+    if (xQueueReceive(stateHandler->msgQueue,buf,2800/portTICK_PERIOD_MS)) {
       stateHandler->ProcessMessage(buf);
     } else {
       stateHandler->ProcessMessage(NULL);
@@ -224,25 +224,24 @@ void WebsocketManager::StatePoller(void* instance){
   EventGroupHandle_t stateEg = AppConfig::GetStateGroupHandle();
   ESP_LOGI(__FUNCTION__,"State poller started");
   EventBits_t bits = 0;
-  cJSON* gpsState = NULL;
   cJSON* mainState = AppConfig::GetAppStatus()->GetJSONConfig(NULL);
+  cJSON* gpsState = AppConfig::GetAppStatus()->GetJSONConfig("gps");;
+  cJSON* wifiState = AppConfig::GetAppStatus()->GetJSONConfig("wifi");
+  cJSON* item;
+
   char* stateBuffer = (char*)dmalloc(JSON_BUFFER_SIZE);
   while (stateHandler && stateHandler->isLive) {
     bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,portMAX_DELAY);
     if (stateHandler && stateHandler->isLive){
-      cJSON* state = TheRest::status_json();
+      cJSON* state = cJSON_Duplicate(TheRest::status_json(),true);
       if (bits&state_change_t::GPS) {
         ESP_LOGV(__FUNCTION__,"gState Changed %d", bits);
-        if (gpsState == NULL) {
-          gpsState = AppConfig::GetAppStatus()->GetJSONConfig("gps");
-        }
         cJSON_AddItemReferenceToObject(state,"gps",gpsState);
       } else if (bits&state_change_t::THREADS) {
         cJSON_AddItemToObject(state,"tasks",tasks_json());
       } else if (bits&state_change_t::WIFI) {
-        cJSON_AddItemReferenceToObject(state,"wifi",AppConfig::GetAppStatus()->GetJSONConfig("wifi"));
+        cJSON_AddItemReferenceToObject(state,"wifi",wifiState);
       } else {
-        cJSON* item;
         cJSON_ArrayForEach(item,mainState) {
             cJSON_AddItemReferenceToObject(state,item->string,item);//AppConfig::GetAppStatus()->GetJSONConfig(item->string));
         }

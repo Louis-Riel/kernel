@@ -648,7 +648,6 @@ double EventCondition::GetDoubleValue(bool isSrc, compare_origin_t origin, void 
         {
             json = TheRest::status_json();
             retVal = cJSON_GetNumberValue(cJSON_GetObjectItem(json, isSrc ? valJsonPropName : compJsonPropName));
-            cJSON_Delete(json);
         }
         else
         {
@@ -686,7 +685,6 @@ int EventCondition::GetIntValue(bool isSrc, compare_origin_t origin, void *event
         {
             json = TheRest::status_json();
             retVal = cJSON_GetNumberValue(cJSON_GetObjectItem(json, isSrc ? valJsonPropName : compJsonPropName));
-            cJSON_Delete(json);
         }
         else
         {

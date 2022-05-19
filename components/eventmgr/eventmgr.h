@@ -49,7 +49,6 @@ public:
     bool AddEventDescriptor(int32_t id, const char *name, event_data_type_tp dtp);
     static EventDescriptor_t *GetEventDescriptor(esp_event_base_t base,const char *eventName);
     static EventDescriptor_t *GetEventDescriptor(esp_event_base_t base, uint32_t id);
-    static cJSON *GetEventBaseEvents(esp_event_base_t base, const char *filter);
     static char *GetParsedValue(const char *value);
     char *GetName();
     const char *GetEventName(int32_t id);

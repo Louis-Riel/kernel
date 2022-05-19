@@ -45,6 +45,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         jNumHc = apin->GetPropertyHolder("numHealthChecks");
         delete apin;
     }
+    status = bake_status_json();
     if (xEventGroupGetBits(eventGroup) & HTTP_SERVING)
     {
         ESP_LOGV(__FUNCTION__, "Not starting httpd, already serving");
@@ -431,7 +432,6 @@ void TheRest::SendStatus(void *param)
 
     char *sjson = cJSON_PrintUnformatted(astats);
     cJSON_Delete(jstats);
-    cJSON_Delete(cstats);
 
     if (sjson){
         if ((ret = esp_http_client_open(client, strlen(sjson))) == ESP_OK)

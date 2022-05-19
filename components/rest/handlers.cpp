@@ -67,9 +67,53 @@ cJSON *tasks_json()
     return tasks;
 }
 
-cJSON* TheRest::status_json()
-{
+cJSON* TheRest::status_json() {
+    TheRest* rest = GetServer();
     ESP_LOGV(__FUNCTION__, "Status Handler");
+    deviceId ? deviceId : deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
+
+    struct timeval tv_now;
+    gettimeofday(&tv_now, NULL);
+    int64_t time_us = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
+
+    if (!rest->status) {
+        ESP_LOGW(__FUNCTION__, "Status JSON was NULL");
+        rest->status = rest->bake_status_json();
+    }
+
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "deviceid"), deviceId);
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "uptime_sec"), getUpTime());
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "sleeptime_us"), getSleepTime());
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "freeram"), esp_get_free_heap_size());
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "totalram"), heap_caps_get_total_size(MALLOC_CAP_DEFAULT));
+
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_EXEC"), heap_caps_get_free_size(MALLOC_CAP_EXEC));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_32BIT"), heap_caps_get_free_size(MALLOC_CAP_32BIT));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_8BIT"), heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_DMA"), heap_caps_get_free_size(MALLOC_CAP_32BIT));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_PID2"), heap_caps_get_free_size(MALLOC_CAP_PID2));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_PID3"), heap_caps_get_free_size(MALLOC_CAP_PID3));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_PID4"), heap_caps_get_free_size(MALLOC_CAP_PID4));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_PID5"), heap_caps_get_free_size(MALLOC_CAP_PID5));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_PID6"), heap_caps_get_free_size(MALLOC_CAP_PID6));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_PID7"), heap_caps_get_free_size(MALLOC_CAP_PID7));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_SPIRAM"), heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_INTERNAL"), heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "MALLOC_CAP_IRAM_8BIT"), heap_caps_get_free_size(MALLOC_CAP_IRAM_8BIT));
+
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "battery"), getBatteryVoltage());
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "temperature"), temperatureReadFixed());
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "hallsensor"), hall_sensor_read());
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "openfiles"), GetNumOpenFiles());
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "runtime_us"), esp_timer_get_time());
+    cJSON_SetNumberValue(cJSON_GetObjectItem(rest->status, "systemtime_us"), time_us);
+
+    return rest->status;
+}
+
+cJSON* TheRest::bake_status_json()
+{
+    ESP_LOGV(__FUNCTION__, "Bake Status Handler");
     deviceId ? deviceId : deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
 
     struct timeval tv_now;
@@ -1011,19 +1055,17 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
     deviceId ? deviceId : deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
 
     char *path = (char *)req->uri + 8;
-    ESP_LOGI(__FUNCTION__, "uri:%s method: %s path:%s", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path);
+    ESP_LOGV(__FUNCTION__, "uri:%s method: %s path:%s", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path);
 
     if (req->method == http_method::HTTP_POST)
     {
         httpd_resp_set_type(req, "application/json");
         cJSON *status = NULL;
         char *sjson = NULL;
-        if (strlen(path) == 0)
+        if (strlen(path) == 0 || (strlen(path) == 1 && path[0] == '/'))
         {
             ESP_LOGV(__FUNCTION__, "Getting root");
-            status = status_json();
-            sjson = cJSON_PrintUnformatted(status);
-            cJSON_Delete(status);
+            sjson = cJSON_PrintUnformatted(status_json());
         }
 #ifdef DEBUG_MALLOC
         else if (strcmp(path, "mallocs") == 0)
@@ -1043,8 +1085,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         }
         else if (strcmp(path, "app") == 0)
         {
-            ESP_LOGI(__FUNCTION__, "Getting app");
-            ManagedDevice::UpdateStatuses();
+            ESP_LOGV(__FUNCTION__, "Getting app");
             sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(NULL));
         }
         else if (AppConfig::GetAppStatus()->HasProperty(path))
@@ -1055,14 +1096,14 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         if ((sjson != NULL) && (strlen(sjson) > 0))
         {
             ret = httpd_resp_send(req, sjson, strlen(sjson));
-            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(sjson);
+            TheRest::GetServer()->jBytesOut->valuedouble += strlen(sjson);
+            ldfree(sjson);
         }
         else
         {
-            ESP_LOGE(__FUNCTION__, "Invalid uri:(%s) method: %s path:(%s)", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path);
+            ESP_LOGE(__FUNCTION__, "Invalid uri:(%s) method: %s path:(%s) json:%s", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path, sjson ? sjson : "null");
             ret = httpd_resp_send_404(req);
         }
-        ldfree(sjson);
     }
     if (req->method == HTTP_PUT)
     {

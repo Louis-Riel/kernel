@@ -7,6 +7,7 @@
 #include <limits.h>
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
+#include "driver/adc.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_event.h"
@@ -15,6 +16,7 @@
 #include "../../main/utils.h"
 #include "cJSON.h"
 #include "eventmgr.h"
+
 class Pin:ManagedDevice {
 public:
     Pin(AppConfig* config);
@@ -43,6 +45,36 @@ private:
     AppConfig* config;
     cJSON* pinStatus;
     char* buf;
+};
+
+class AnalogPin:ManagedDevice {
+public:
+    AnalogPin(AppConfig* config);
+    ~AnalogPin();
+    static void PollPins(void* instance);
+
+protected:
+    static const char* PIN_BASE;
+    AppConfig* config;
+    char* name;
+    gpio_num_t pinNo;
+    adc1_channel_t channel;
+    adc_bits_width_t  channel_width;
+    adc_atten_t  channel_atten;
+    uint32_t waitTime;
+    cJSON* currentMinValue;
+    cJSON* currentMaxValue;
+    cJSON* currentPercentage;
+    cJSON* configuredMinValue;
+    cJSON* configuredMaxValue;
+    cJSON* value;
+    bool isRunning;
+
+    void InitDevice();
+    static adc1_channel_t PinNoToChannel(gpio_num_t pinNo);
+    static adc_bits_width_t GetChannelWidth(uint8_t value);
+    static adc_atten_t GetChannelAtten(double value);
+    static char* getName(AppConfig* config);
 };
 
 #endif

@@ -86,34 +86,24 @@ ManagedDevice* ManagedDevice::GetByName(const char* name){
 void ManagedDevice::UpdateStatuses(){
   for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
     if (runningInstances[idx] && runningInstances[idx]->statusFnc){
-      ESP_LOGV(__FUNCTION__,"Refreshing %s",runningInstances[idx]->GetName());
-      size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
       runningInstances[idx]->status = runningInstances[idx]->statusFnc(runningInstances[idx]);
-      size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
-      if (diff > 0) {
-          ESP_LOGW(__FUNCTION__,"%s %d bytes memleak",runningInstances[idx]->GetName(),diff);
-      }
       ESP_LOGV(__FUNCTION__,"Refreshed %s",runningInstances[idx]->GetName());
     }
   }
 }
 
 cJSON* ManagedDevice::BuildStatus(void* instance){
-  if (instance == NULL) {
-    ESP_LOGE(__FUNCTION__,"Missing instance");
-  }
   ManagedDevice* md = (ManagedDevice*) instance;
-  if (md && (md->status == NULL)) {
-    md->status = AppConfig::GetAppStatus()->GetJSONConfig(md->GetName());
-    if (md->status && md->GetName()){
+  if (md) {
+    if (md->status == NULL) {
+      md->status = AppConfig::GetAppStatus()->GetJSONConfig(md->GetName());
       cJSON_AddStringToObject(md->status,"name",md->GetName());
       cJSON_AddStringToObject(md->status,"class",md->eventBase);
-      return md->status;
-    } else{
-      ESP_LOGE(__FUNCTION__,"Missing name");
     }
+    return md->status;
   }
-  return md->status;
+  ESP_LOGE(__FUNCTION__,"Missing instance");
+  return NULL;
 }
 
 bool ManagedDevice::ValidateDevices(){

@@ -6,7 +6,7 @@
 #include <string.h>
 #include "cJSON.h"
 
-#define DEBUG_MALLOC
+//#define DEBUG_MALLOC
 
 #ifdef DEBUG_MALLOC
 cJSON* getMemoryStats();

@@ -378,7 +378,7 @@ void configureMotionDetector()
   io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
   gpio_config(&io_conf);
   ESP_LOGV(__FUNCTION__, "Pins configured");
-  xTaskCreate(pollWakePins, "pollWakePins", 2048, NULL, tskIDLE_PRIORITY, NULL);
+  //xTaskCreate(pollWakePins, "pollWakePins", 2048, NULL, tskIDLE_PRIORITY, NULL);
   ESP_LOGV(__FUNCTION__, "ISR Service Started");
 
   for (int idx = 0; idx < numWakePins; idx++)
@@ -518,6 +518,17 @@ void ConfigurePins(AppConfig *cfg)
       ESP_LOGV(__FUNCTION__, "Configuring pin %d", pinNo);
       new Pin(cpin);
       numPins++;
+    }
+    ldfree(cpin);
+  }
+  cJSON_ArrayForEach(pin, cfg->GetJSONConfig("AnalogPins"))
+  {
+    AppConfig *cpin = new AppConfig(pin, cfg);
+    gpio_num_t pinNo = cpin->GetPinNoProperty("pinNo");
+    if (pinNo > 0)
+    {
+      ESP_LOGV(__FUNCTION__, "Configuring pin %d", pinNo);
+      new AnalogPin(cpin);
     }
     ldfree(cpin);
   }
@@ -718,12 +729,12 @@ bool CleanupEmptyDirs(char* path) {
 
 void* jmalloc(size_t size)
 {
-  return dbgmalloc("json", size);
+  return malloc(size);
 }
 
 void jfree(void* ptr)
 {
-  dbgfree("json",ptr);
+  free(ptr);
 }
 
 void app_main(void)

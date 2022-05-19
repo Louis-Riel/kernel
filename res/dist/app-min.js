@@ -1273,7 +1273,7 @@ class StatusPage extends React.Component {
     }
 
     updateAppStatus() {
-        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }, { url: "/status/mallocs", path: 'mallocs' }], {});
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/tasks", path: "tasks" }], {});
     }
 
     refreshStatus(stat) {

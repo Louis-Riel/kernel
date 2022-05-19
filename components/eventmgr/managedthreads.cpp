@@ -296,7 +296,8 @@ uint8_t ManagedThreads::NumAllocatedThreads()
                 ESP_LOGV(__FUNCTION__, "Done initializing the %s service", thread->pcName);
                 if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
                 {
-                    char *tmp = cJSON_Print(thread->parent->GetStatus());
+                    cJSON* jtmp = thread->parent->GetStatus();
+                    char *tmp = cJSON_Print(jtmp);
                     ESP_LOGV(__FUNCTION__, "%s", tmp);
                     ldfree(tmp);
                 }
@@ -349,7 +350,8 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         ESP_LOGV(__FUNCTION__, "Done running the %s thread", thread->pcName);
         if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
         {
-            char *tmp = cJSON_Print(thread->parent->GetStatus());
+            cJSON* jtmp = thread->parent->GetStatus();
+            char *tmp = cJSON_Print(jtmp);
             ESP_LOGV(__FUNCTION__, "%s", tmp);
         }
 
