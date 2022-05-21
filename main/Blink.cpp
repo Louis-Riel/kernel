@@ -729,12 +729,12 @@ bool CleanupEmptyDirs(char* path) {
 
 void* jmalloc(size_t size)
 {
-  return malloc(size);
+  return dmalloc(size);
 }
 
 void jfree(void* ptr)
 {
-  free(ptr);
+  ldfree(ptr);
 }
 
 void app_main(void)

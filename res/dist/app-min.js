@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "http://192.168.0.107";
+var httpPrefix = "";//"http://192.168.0.107";
 
 //#region SHA-1
 /*
@@ -1273,7 +1273,7 @@ class StatusPage extends React.Component {
     }
 
     updateAppStatus() {
-        this.updateStatuses([{ url: "/status/" }, { url: "/status/tasks", path: "tasks" }], {});
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
     }
 
     refreshStatus(stat) {
