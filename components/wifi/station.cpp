@@ -232,7 +232,13 @@ void TheWifi::InferPassword(const char *sid, char *pwd)
                 strcmp(cJSON_GetObjectItem(jsid, "value")->valuestring, sid) == 0)
             {
                 cJSON *jpwd = cJSON_GetObjectItem(ap, "password");
-                strcpy(pwd, cJSON_GetObjectItem(jpwd, "value")->valuestring);
+                cJSON* jipwd = cJSON_GetObjectItem(jpwd, "value");
+                if (jipwd && cJSON_IsString(jipwd)){
+                    strcpy(pwd, jipwd->valuestring);
+                } else {
+                    char ctmp[64];
+                    sprintf(pwd, "%d",jipwd->valueint);
+                }
                 return;
             }
         }

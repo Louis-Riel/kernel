@@ -1,7 +1,7 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "";//"http://192.168.0.107";
+var httpPrefix = "";//"http://localhost:81";
 
 //#region SHA-1
 /*
@@ -264,17 +264,55 @@ class BoolInput extends React.Component {
     }
 }
 class CmdButton extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            param1: this.props.param1,
+            param2: this.props.param2
+        };
+    }
     runIt() {
         wfetch(`${httpPrefix}/status/cmd`, {
             method: this.props.HTTP_METHOD,
-            body: JSON.stringify({command: this.props.command,name: this.props.name, param1: this.props.param1, param2: this.props.param2})
+            body: JSON.stringify({command: this.props.command, className: this.props.className ,name: this.props.name, param1: this.state.param1, param2: this.state.param2})
         }).then(data => data.text())
           .then(this.props.onSuccess ? this.props.onSuccess : console.log)
           .catch(this.props.onError ? this.props.onError : console.error);
     }
 
+    simpleCommand() {
+        return e("button", { key: "simpleCommand", onClick: this.runIt.bind(this) }, this.props.caption)
+    }
+
+    GetPropertyEditor(param) {
+        return e( MaterialUI.FormControl,{key: param},[
+                e(MaterialUI.InputLabel,{
+                    key: "label",
+                    className: "label",
+                    id: `${param}-label`
+                },this.state[`${param}_caption`]||param),
+                e(MaterialUI.Input,{
+                    key:"input",
+                    id: `${param}-input`,
+                    label: param,
+                    value: this.state[param],
+                    onChange: elem => {this.state[param] = elem.target.value; this.setState(this.state)}
+                })]);
+    }
+
+    complexCommand() {
+        return e("div",{key: "complexCommand", className: "complex-command"},[Object.keys(this.props)
+                                                                                   .filter(k => k.startsWith("param") && this.props[k+"_editable"])
+                                                                                   .map(k => this.GetPropertyEditor(k)),
+               e("button", { key: genUUID(), onClick: this.runIt.bind(this) }, this.props.caption)]);
+    }
+
+    hasComplexCommand() {
+        return Object.keys(this.props).filter(k => k.endsWith("_editable") && this.props[k]).length > 0
+    }
+
     render() {
-        return e("button", { key: genUUID(), onClick: this.runIt.bind(this) }, this.props.caption)
+        return this.hasComplexCommand() ? this.complexCommand() : this.simpleCommand()
     }
 }
 class DeviceList extends React.Component {
@@ -330,15 +368,11 @@ class IntInput extends React.Component {
 class StateCommands extends React.Component {
     render() {
         return e("div",{key:'commands',name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
-            key:genUUID(),
-            caption:cmd.caption || cmd.command,
-            command:cmd.command,
+            key: `${cmd.command}-${cmd.param1}`,
             name:this.props.name,
             onSuccess:this.props.onSuccess,
             onError:this.props.onError,
-            param1:cmd.param1,
-            param2:cmd.param2,
-            HTTP_METHOD:cmd.HTTP_METHOD
+            ...cmd
         })));
     }
 }
@@ -528,7 +562,7 @@ class LocalJSONEditor extends React.Component {
     }
 
     renderCommands(fld, json) {
-        return { fld: fld, element: e(StateCommands, { key: `jofieldcmds`, name: json["name"], commands: json[fld], onSuccess: this.props.updateAppStatus }) };
+        return { fld: fld, element: e(StateCommands, { key: `${fld}cmds`, name: json["name"], commands: json[fld], onSuccess: this.props.updateAppStatus }) };
     }
 
     renderVersioned(json) {
@@ -1007,7 +1041,75 @@ class Table extends React.Component {
             );
     }
 }
-class IRReceiver extends React.Component {
+class AnalogPinConfig extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {};
+    }
+    render() {
+        return e( MaterialUI.Card, { key: this.props.item.name }, 
+            e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"},[
+                e( MaterialUI.ListItem, { key: "pin" }, e( MaterialUI.ListItem, { key: "pincfg" }, e( MaterialUI.TextField, { value: this.props.pinNo, label: "Pin", type: "number" }))),
+            ])));
+    }
+}class ConfigGroup extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {};
+        this.supportedTypes = {analogPins:{
+            isArray: true,
+            component: AnalogPinConfig
+        }};
+    }
+
+    render() {
+        var tabs = Object.keys(this.props.config).filter(this.isSupported.bind(this));
+        return [
+            e( MaterialUI.Tabs, { 
+                value: tabs, 
+                onChange: (e,v)=>{this.setValue(v)},
+                key: "ConfigTypes" 
+            }, tabs.map(this.renderTypeTab.bind(this))),
+            e(MaterialUI.Switch,{key:"router"},
+            tabs.map(key => e(MaterialUI.Route,{
+                                    key:key, 
+                                    role:"tabpanel", 
+                                    value: key
+                                },this.renderConfigType(key))))
+        ];
+    }
+
+    renderTypeTab(key) {
+        return e( MaterialUI.Tab, { key: key, label: key, value: key });
+    }
+
+    renderConfigType(key) {
+        if (this.isArray(key)) {
+            e( MaterialUI.Tabs, { 
+                key: key, 
+                value: Object.keys(this.props.config[key]) 
+            }, this.props.config[key].map(this.renderConfigItemTab.bind(this, key)));
+        }
+        return null;
+    }
+
+    renderConfigItemTab(key, item, idx) {
+        return e( MaterialUI.Tab, { key: item, label: item.name, value: idx });
+    }
+
+    renderEditor(key, item) {
+        return item.name;
+        return e( this.supportedTypes[key].component, { key: item.name, ...item });
+    }
+
+    isArray(key) {
+        return this.isSupported(key) && this.supportedTypes[key].isArray;
+    }
+
+    isSupported(key) {
+        return Object.keys(this.supportedTypes).indexOf(key)>-1;
+    }
+}class IRReceiver extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
@@ -1471,10 +1573,7 @@ class ConfigPage extends React.Component {
     render() {
         if (this.isConnected()) {
             return [e("button", { key: "refresh", onClick: elem => this.componentDidMount() }, "Refresh"), 
-                    this.getEditor(),
-                    e(MaterialUI.Card,{key:"IRTracker", className:"components-config",variant:"outlined"},[
-                        this.state?.config?.IR ? e(IRReceiver, { key: "tracer",config:this.state.config.IR,saveChanges:this.saveChanges.bind(this)}) : null
-                    ])
+                    this.getEditor()
                    ];
         } else {
             return e("div", { key: genUUID() }, "Loading....");
@@ -3081,7 +3180,7 @@ class MainApp extends React.Component {
   }
 
   startWs() {
-    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
+    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
     var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
     ws.onmessage = (event) => {
       stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);

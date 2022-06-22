@@ -60,10 +60,7 @@ class ConfigPage extends React.Component {
     render() {
         if (this.isConnected()) {
             return [e("button", { key: "refresh", onClick: elem => this.componentDidMount() }, "Refresh"), 
-                    this.getEditor(),
-                    e(MaterialUI.Card,{key:"IRTracker", className:"components-config",variant:"outlined"},[
-                        this.state?.config?.IR ? e(IRReceiver, { key: "tracer",config:this.state.config.IR,saveChanges:this.saveChanges.bind(this)}) : null
-                    ])
+                    this.getEditor()
                    ];
         } else {
             return e("div", { key: genUUID() }, "Loading....");

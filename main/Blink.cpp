@@ -36,6 +36,7 @@
 #include "mfile.h"
 #include "../components/IR/ir.h"
 #include "../components/bluetooth/bt.h"
+#include "../components/servo/servo.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -532,6 +533,17 @@ void ConfigurePins(AppConfig *cfg)
     }
     ldfree(cpin);
   }
+  cJSON_ArrayForEach(pin, cfg->GetJSONConfig("Servos"))
+  {
+    AppConfig *cpin = new AppConfig(pin, cfg);
+    gpio_num_t pinNo = cpin->GetPinNoProperty("pinNo");
+    if (pinNo > 0)
+    {
+      ESP_LOGV(__FUNCTION__, "Configuring pin %d", pinNo);
+      new Servo(cpin);
+    }
+    ldfree(cpin);
+  }
 }
 
 static void check_efuse()
@@ -787,11 +799,6 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     nvs_flash_init();
 
-    initSDCard();
-    CleanupEmptyDirs("/lfs");
-    CleanupEmptyDirs("/sdcard");
-    deinitSDCard();
-
     bool firstRun = false;
 
     if (appcfg->GetIntProperty("deviceid") <= 0)
@@ -866,5 +873,9 @@ void app_main(void)
   }
   ESP_LOGI(__FUNCTION__, "Battery: %f", getBatteryVoltage());
 
+  initSDCard();
+  CleanupEmptyDirs("/lfs");
+  CleanupEmptyDirs("/sdcard");
+  deinitSDCard();
   //new Bt();
 }

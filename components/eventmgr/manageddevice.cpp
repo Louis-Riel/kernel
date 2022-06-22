@@ -22,10 +22,17 @@ ManagedDevice::ManagedDevice(const char *type,const char* name,cJSON* (*statusFn
 }
 
 ManagedDevice::ManagedDevice(const char *type,const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void*))
+:ManagedDevice(type, name, statusFnc, hcFnc, NULL)
+{
+
+}
+
+ManagedDevice::ManagedDevice(const char *type,const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void*),bool (*commandFnc)(ManagedDevice* instance, cJSON *))
 :eventBase((esp_event_base_t)dmalloc(strlen(type)+1))
 ,handlerDescriptors(NULL)
 ,statusFnc(statusFnc)
 ,hcFnc(hcFnc)
+,commandFnc(commandFnc)
 ,status(NULL)
 {
   strcpy((char*)eventBase, type);
@@ -60,6 +67,13 @@ ManagedDevice::~ManagedDevice() {
   ldfree((void*)eventBase);
 }
 
+bool ManagedDevice::ProcessCommand(cJSON *command){
+  if (commandFnc != NULL)
+    return commandFnc(this,command);
+  return false;
+}
+
+
 EventHandlerDescriptor* ManagedDevice::BuildHandlerDescriptors(){
   return new EventHandlerDescriptor(eventBase,(char*)ManagedDevice::eventBase);
 }
@@ -80,6 +94,14 @@ ManagedDevice* ManagedDevice::GetByName(const char* name){
     }
   }
   return NULL;
+}
+
+ManagedDevice** ManagedDevice::GetRunningInstanes(){
+  return runningInstances;
+}
+
+uint32_t ManagedDevice::GetNumRunningInstances(){
+  return numDevices;
 }
 
 

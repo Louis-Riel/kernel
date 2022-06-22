@@ -79,6 +79,18 @@ adc_atten_t AnalogPin::GetChannelAtten(double value) {
 }
 
 void AnalogPin::InitDevice(){
+    if (channel == ADC1_CHANNEL_MAX) {
+        ESP_LOGE(PIN_BASE, "Invalid channel");
+        return;
+    }
+    if (channel_width == ADC_WIDTH_MAX) {
+        ESP_LOGE(PIN_BASE, "Invalid channel width");
+        return;
+    }
+    if (channel_atten == ADC_ATTEN_MAX) {
+        ESP_LOGE(PIN_BASE, "Invalid channel atten");
+        return;
+    }
     ESP_LOGI(__FUNCTION__,"Initialising analog pin %d",this->pinNo);
     ESP_ERROR_CHECK(adc1_config_width(this->channel_width));   
     ESP_ERROR_CHECK(adc1_config_channel_atten(this->channel, this->channel_atten)); //ADC_ATTEN_DB_11 = 0-3,6V
@@ -104,7 +116,7 @@ void AnalogPin::InitDevice(){
 
     ESP_LOGI(__FUNCTION__,"Analog pin %d initialised",this->pinNo);
 
-    CreateBackgroundTask(PollPins,"PollAnalogPins", 4096, this, tskIDLE_PRIORITY, NULL);
+    CreateBackgroundTask(PollPins,name, 4096, this, tskIDLE_PRIORITY, NULL);
     delete appstate;
 }
 

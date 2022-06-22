@@ -710,7 +710,7 @@ div.designer>details[open]>summary {
     left: 0;
     right: 0;
     overflow: auto;
-    height: 94%;
+    height: -webkit-fill-available;
     width: -webkit-fill-available;
     display: flex;
     flex-direction: column;
@@ -718,6 +718,7 @@ div.designer>details[open]>summary {
     border-radius: 10px;
     border: solid;
     border-color: silver;
+    margin-bottom: 50px;
 }
 
 div.mainApp>details>summary::marker {

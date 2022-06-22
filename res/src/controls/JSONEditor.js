@@ -1,15 +1,11 @@
 class StateCommands extends React.Component {
     render() {
         return e("div",{key:'commands',name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
-            key:genUUID(),
-            caption:cmd.caption || cmd.command,
-            command:cmd.command,
+            key: `${cmd.command}-${cmd.param1}`,
             name:this.props.name,
             onSuccess:this.props.onSuccess,
             onError:this.props.onError,
-            param1:cmd.param1,
-            param2:cmd.param2,
-            HTTP_METHOD:cmd.HTTP_METHOD
+            ...cmd
         })));
     }
 }
@@ -199,7 +195,7 @@ class LocalJSONEditor extends React.Component {
     }
 
     renderCommands(fld, json) {
-        return { fld: fld, element: e(StateCommands, { key: `jofieldcmds`, name: json["name"], commands: json[fld], onSuccess: this.props.updateAppStatus }) };
+        return { fld: fld, element: e(StateCommands, { key: `${fld}cmds`, name: json["name"], commands: json[fld], onSuccess: this.props.updateAppStatus }) };
     }
 
     renderVersioned(json) {

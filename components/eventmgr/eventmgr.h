@@ -209,6 +209,7 @@ public:
     ManagedDevice(const char *type);
     ManagedDevice(const char *type, const char *name, cJSON *(*statusFnc)(void *));
     ManagedDevice(const char *type, const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void *));
+    ManagedDevice(const char *type, const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void *),bool (*commandFnc)(ManagedDevice* instance, cJSON *));
     ~ManagedDevice();
     static void UpdateStatuses();
     const char *GetName();
@@ -218,12 +219,17 @@ public:
     static void RunHealthCheck(void* param);
     static ManagedDevice* GetByName(const char* name);
 
+    static ManagedDevice** GetRunningInstanes();
+    static uint32_t GetNumRunningInstances();
+    bool ProcessCommand(cJSON *command);
+
 protected:
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     EventHandlerDescriptor *BuildHandlerDescriptors();
     static cJSON *BuildStatus(void *instance);
     cJSON *(*statusFnc)(void *);
     bool (*hcFnc)(void *);
+    bool (*commandFnc)(ManagedDevice*, cJSON *);
     cJSON *status;
     char *name;
     static bool HealthCheck(void *instance);

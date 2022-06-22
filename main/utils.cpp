@@ -311,6 +311,7 @@ void CleanupLFS(void* param) {
 
 esp_err_t setupLittlefs()
 {
+  ESP_LOGI(__FUNCTION__,"Setting up storage");
   const esp_vfs_littlefs_conf_t conf = {
       .base_path = "/lfs",
       .partition_label = "storage",
@@ -319,7 +320,7 @@ esp_err_t setupLittlefs()
 
   esp_err_t ret = esp_vfs_littlefs_register(&conf);
   AppConfig *appState = AppConfig::GetAppStatus();
-  ESP_LOGV(__FUNCTION__, "lfs mounted %d", ret);
+  ESP_LOGI(__FUNCTION__, "lfs mounted %d", ret);
   AppConfig *spiffState = appState->GetConfig("/lfs");
   if (ret != ESP_OK)
   {
@@ -350,7 +351,7 @@ esp_err_t setupLittlefs()
   }
   ldfree(spiffState);
 
-  ESP_LOGV(__FUNCTION__, "Space: %zu/%zu", used_bytes, total_bytes);
+  ESP_LOGI(__FUNCTION__, "Space: %zu/%zu", used_bytes, total_bytes);
   struct dirent *de;
   bool hasLogs = false;
   bool hasFw = false;
@@ -418,6 +419,8 @@ esp_err_t setupLittlefs()
     }
     ESP_LOGI(__FUNCTION__, "config folder created");
   }
+
+  ESP_LOGI(__FUNCTION__,"Done setting up storage");
 
   return ESP_OK;
 }

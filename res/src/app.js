@@ -241,7 +241,7 @@ class MainApp extends React.Component {
   }
 
   startWs() {
-    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
+    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
     var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
     ws.onmessage = (event) => {
       stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);

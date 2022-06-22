@@ -562,132 +562,155 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
         cJSON *jresponse = cJSON_ParseWithLength(postData, rlen);
         if (jresponse != NULL)
         {
-            cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
-            if (jitem && (strcmp(jitem->valuestring, "reboot") == 0))
-            {
-                ret = httpd_resp_send(req, "Rebooting", 9);
-                dumpTheLogs((void *)true);
-                esp_system_abort("Rebooting");
-                esp_restart();
-            }
-            else if (jitem && (strcmp(jitem->valuestring, "parseFiles") == 0))
-            {
-                cJSON *fileName = cJSON_GetObjectItemCaseSensitive(jresponse, "filename");
-                char* fname = fileName == NULL ? NULL : (char*)dmalloc(strlen(fileName->string)+1);
-                if (fname) {
-                    strcpy(fname,fileName->valuestring);
-                } 
-                CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, fname, tskIDLE_PRIORITY, NULL);
-                ret = httpd_resp_send(req, "parsing", 7);
-                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 7;
-            }
-            else if (jitem && (strcmp(jitem->valuestring, "factoryReset") == 0))
-            {
-                AppConfig::ResetAppConfig(true);
-                ret = httpd_resp_send(req, "OK", 2);
-                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
-            }
-            else if (jitem && (strcmp(jitem->valuestring, "flush") == 0))
-            {
-                cJSON *fileName = cJSON_GetObjectItemCaseSensitive(jresponse, "name");
-                uint32_t slen = 0;
-                if (fileName && fileName->valuestring && (slen=strlen(fileName->valuestring))) {
-                    if ((slen == 1) && (fileName->valuestring[0] == '*')) {
-                        BufferedFile::FlushAll();
+            cJSON *jClass = cJSON_GetObjectItem(jresponse, "className");
+            if ((jClass != NULL) && (ManagedDevice::GetNumRunningInstances() > 0)) {
+                ManagedDevice **dev = ManagedDevice::GetRunningInstanes();
+                bool processed = false;
+                for (uint32_t idx = 0; idx < ManagedDevice::GetNumRunningInstances(); idx++) {
+                    if (dev[idx] && strcmp(jClass->valuestring, dev[idx]->eventBase) == 0) {
+                        processed |= dev[idx]->ProcessCommand(jresponse);
+                    }
+                }
+                if (!processed) {
+                    ESP_LOGE(__FUNCTION__, "Cannot find class %s", jClass->valuestring);
+                    ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_404_NOT_FOUND, jClass->valuestring);
+                } else {
+                    ret = httpd_resp_send(req, "OK", 2);
+                }
+            } else {
+                cJSON *jcommand = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
+                if (jcommand && (strcmp(jcommand->valuestring, "reboot") == 0))
+                {
+                    ret = httpd_resp_send(req, "Rebooting", 9);
+                    dumpTheLogs((void *)true);
+                    esp_system_abort("Rebooting");
+                    esp_restart();
+                }
+                else if (jcommand && (strcmp(jcommand->valuestring, "parseFiles") == 0))
+                {
+                    cJSON *fileName = cJSON_GetObjectItemCaseSensitive(jresponse, "filename");
+                    char* fname = fileName == NULL ? NULL : (char*)dmalloc(strlen(fileName->string)+1);
+                    if (fname) {
+                        strcpy(fname,fileName->valuestring);
+                    } 
+                    CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, fname, tskIDLE_PRIORITY, NULL);
+                    ret = httpd_resp_send(req, "parsing", 7);
+                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 7;
+                }
+                else if (jcommand && (strcmp(jcommand->valuestring, "factoryReset") == 0))
+                {
+                    AppConfig::ResetAppConfig(true);
+                    ret = httpd_resp_send(req, "OK", 2);
+                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                }
+                else if (jcommand && (strcmp(jcommand->valuestring, "flush") == 0))
+                {
+                    cJSON *fileName = cJSON_GetObjectItemCaseSensitive(jresponse, "name");
+                    uint32_t slen = 0;
+                    if (fileName && fileName->valuestring && (slen=strlen(fileName->valuestring))) {
+                        if ((slen == 1) && (fileName->valuestring[0] == '*')) {
+                            BufferedFile::FlushAll();
+                            ret = httpd_resp_send(req, "OK", 2);
+                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                        } else {
+                            BufferedFile* bfile = (BufferedFile*)ManagedDevice::GetByName(fileName->valuestring);
+                            if (bfile) {
+                                bfile->Flush();
+                                ret = httpd_resp_send(req, "OK", 2);
+                                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                                AppConfig::SignalStateChange(state_change_t::MAIN);
+                            } else {
+                                ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"File not found");
+                                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 14;
+                            }
+                        }
                         ret = httpd_resp_send(req, "OK", 2);
                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                     } else {
-                        BufferedFile* bfile = (BufferedFile*)ManagedDevice::GetByName(fileName->valuestring);
-                        if (bfile) {
-                            bfile->Flush();
-                            ret = httpd_resp_send(req, "OK", 2);
-                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
-                            AppConfig::SignalStateChange(state_change_t::MAIN);
+                        ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,"Not Implemented");
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
+                    }
+                }
+                else if (jcommand && (strcmp(jcommand->valuestring, "scanaps") == 0))
+                {
+                    if (TheWifi::GetInstance()->wifiScan()) {
+                        ret = httpd_resp_send(req, "OK", 2);
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                    } else {
+                        ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot Scan Wifi");
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 16;
+                    }
+                } 
+                else if (jcommand && (strcmp(jcommand->valuestring, "trigger") == 0))
+                {
+                    cJSON *pinName = cJSON_GetObjectItemCaseSensitive(jresponse, "name");
+                    cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
+                    cJSON *state = cJSON_GetObjectItemCaseSensitive(jresponse, "param2");
+                    uint32_t slen = 0;
+                    if (pinName && pinName->valuestring && (slen=strlen(pinName->valuestring))) {
+                        Pin* pin = (Pin*)ManagedDevice::GetByName(pinName->valuestring);
+                        if (pin) {
+                            if (pin->ProcessEvent(strcmp(event->valuestring,"TRIGGER") == 0 ? Pin::eventIds::TRIGGER : strcmp(event->valuestring,"ON") == 0 ? Pin::eventIds::ON : Pin::eventIds::OFF,state ? state->valueint : 2)) {
+                                ret = httpd_resp_send(req, "OK", 2);
+                                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                                //AppConfig::SignalStateChange(state_change_t::MAIN);
+                            } else {
+                                ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,"Pin not triggered");
+                                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 17;
+                            }
                         } else {
-                            ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"File not found");
+                            ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"Pin not found");
                             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 14;
                         }
-                    }
-                    ret = httpd_resp_send(req, "OK", 2);
-                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
-                } else {
-                    ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,"Not Implemented");
-                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
-                }
-            }
-            else if (jitem && (strcmp(jitem->valuestring, "scanaps") == 0))
-            {
-                TheWifi::GetInstance()->wifiScan();
-            } 
-            else if (jitem && (strcmp(jitem->valuestring, "trigger") == 0))
-            {
-                cJSON *pinName = cJSON_GetObjectItemCaseSensitive(jresponse, "name");
-                cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
-                cJSON *state = cJSON_GetObjectItemCaseSensitive(jresponse, "param2");
-                uint32_t slen = 0;
-                if (pinName && pinName->valuestring && (slen=strlen(pinName->valuestring))) {
-                    Pin* pin = (Pin*)ManagedDevice::GetByName(pinName->valuestring);
-                    if (pin) {
-                        if (pin->ProcessEvent(strcmp(event->valuestring,"TRIGGER") == 0 ? Pin::eventIds::TRIGGER : strcmp(event->valuestring,"ON") == 0 ? Pin::eventIds::ON : Pin::eventIds::OFF,state ? state->valueint : 2)) {
-                            ret = httpd_resp_send(req, "OK", 2);
-                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
-                            //AppConfig::SignalStateChange(state_change_t::MAIN);
-                        } else {
-                            ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,"Pin not triggered");
-                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 17;
-                        }
                     } else {
-                        ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"Pin not found");
-                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 14;
+                        ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,"Not Implemented");
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
                     }
-                } else {
-                    ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,"Not Implemented");
+                }
+                else if (jcommand && (strcmp(jcommand->valuestring, "gpsstate") == 0))
+                {
+                    cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
+                    uint32_t slen = 0;
+                    TinyGPSPlus* gps = TinyGPSPlus::runningInstance();
+                    if (gps) {
+                        if (strcmp(event->valuestring, "pause") == 0) {
+                            gps->gpsPause();
+                        }
+                        if (strcmp(event->valuestring, "resume") == 0) {
+                            gps->gpsResume();
+                        }
+                        if (strcmp(event->valuestring, "on") == 0) {
+                            gps->gpsStart();
+                        }
+                        if (strcmp(event->valuestring, "off") == 0) {
+                            gps->gpsStop();
+                        }
+                        ret = httpd_resp_send(req, "OK", 2);
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                    } else {
+                        ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"GPS not running");
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
+                    }
+                }
+                else if (jcommand && (strcmp(jcommand->valuestring, "refreshRate") == 0))
+                {
+                    cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
+                    uint32_t slen = 0;
+                    TinyGPSPlus* gps = TinyGPSPlus::runningInstance();
+                    if (gps && event->valuedouble) {
+                        gps->setRefreshRate(event->valuedouble);
+                        ret = httpd_resp_send(req, "OK", 2);
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
+                    } else {
+                        ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"GPS not running");
+                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
+                    }
+                }
+                else
+                {
+                    ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_400_BAD_REQUEST, "Invalid command");
                     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
                 }
-            }
-            else if (jitem && (strcmp(jitem->valuestring, "gpsstate") == 0))
-            {
-                cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
-                uint32_t slen = 0;
-                TinyGPSPlus* gps = TinyGPSPlus::runningInstance();
-                if (gps) {
-                    if (strcmp(event->valuestring, "pause") == 0) {
-                        gps->gpsPause();
-                    }
-                    if (strcmp(event->valuestring, "resume") == 0) {
-                        gps->gpsResume();
-                    }
-                    if (strcmp(event->valuestring, "on") == 0) {
-                        gps->gpsStart();
-                    }
-                    if (strcmp(event->valuestring, "off") == 0) {
-                        gps->gpsStop();
-                    }
-                    ret = httpd_resp_send(req, "OK", 2);
-                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
-                } else {
-                    ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"GPS not running");
-                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
-                }
-            }
-            else if (jitem && (strcmp(jitem->valuestring, "refreshRate") == 0))
-            {
-                cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
-                uint32_t slen = 0;
-                TinyGPSPlus* gps = TinyGPSPlus::runningInstance();
-                if (gps && event->valuedouble) {
-                    gps->setRefreshRate(event->valuedouble);
-                    ret = httpd_resp_send(req, "OK", 2);
-                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
-                } else {
-                    ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"GPS not running");
-                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
-                }
-            }
-            else
-            {
-                ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_400_BAD_REQUEST, "Invalid command");
-                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
             }
             cJSON_Delete(jresponse);
         }

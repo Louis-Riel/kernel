@@ -9,4 +9,6 @@ services:
       - 1234:80
     volumes:
       - ./logs:/var/log/nginx
+      - ./res/web:/etc/nginx
       - ./res:/usr/share/nginx/html
+      - ./res/node_modules:/usr/share/nginx/html/sdcard/web/js
