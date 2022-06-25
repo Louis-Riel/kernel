@@ -27,23 +27,24 @@ class TripWithin extends React.Component {
 class FileViewer extends React.Component {
     constructor(props) {
         super(props);
-        if (props.registerFileWork) {
-            props.registerFileWork(this.buildRenderers(0));
-        }
         this.state = {
-            renderers: [
-                {
-                    name: "loading"
-                }
-            ]
+            renderers: []
+        }
+    }
+
+    componentDidMount() {
+        if (this.props.registerFileWork) {
+            this.props.registerFileWork(this.buildRenderers(0));
         }
     }
 
     buildRenderers(retryCount) {
         return new Promise((resolve, reject) => {
             if (this.props.name.endsWith(".csv") && !this.state?.renderers?.some("trip")){
+                this.setState({renderers:[{name:"loading"}]});
                 this.parseCsv(resolve, retryCount, reject);
             } else if (this.props.name.endsWith(".log") && !this.state?.renderers?.some("trip")){
+                this.setState({renderers:[{name:"loading"}]});
                 this.parseLog(resolve, retryCount, reject);
             } else {
                 resolve();

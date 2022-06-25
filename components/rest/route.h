@@ -14,16 +14,8 @@ class WebsocketManager : ManagedDevice
 public:
   WebsocketManager();
   ~WebsocketManager();
-  bool RegisterClient(httpd_handle_t hd, int fd);
-  void ProcessMessage(uint8_t *msg);
-  static void QueueHandler(void *instance);
-  static void StatePoller(void *instance);
-  static bool EventCallback(char *event);
-  static bool LogCallback(void *instance, char *logData);
-  static bool HasOpenedWs();
 
-  TaskHandle_t queueTask;
-  bool isLive;
+  struct ws_msg_t;
   struct ws_client_t
   {
     httpd_handle_t hd;
@@ -35,15 +27,27 @@ public:
     cJSON* jIsLive;
     cJSON* jAddr;
     cJSON* jErrCount;
+    ws_msg_t* pingMsg;
   } clients[5];
 
-protected:
   struct ws_msg_t {
     void* buf;
     ws_client_t* client;
     uint32_t bufLen;
   };
 
+  bool RegisterClient(httpd_handle_t hd, int fd);
+  void ProcessMessage(uint8_t *msg);
+  static void QueueHandler(void *instance);
+  static void StatePoller(void *instance);
+  static bool EventCallback(char *event);
+  static bool LogCallback(void *instance, char *logData);
+  static bool HasOpenedWs();
+
+  TaskHandle_t queueTask;
+  bool isLive;
+
+protected:
   static bool HealthCheck(void *instance);
   static void PostToClient(void* msg);
 

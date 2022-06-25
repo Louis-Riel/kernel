@@ -3,7 +3,59 @@
 const e = React.createElement;
 var httpPrefix = "";//"http://localhost:81";
 
-//#region SHA-1
+function wfetch(requestInfo, params) {
+    return new Promise((resolve,reject) => {
+      var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "browser");
+      var inSpot = getInSpot(anims, "browser");
+      var reqAnim = inSpot;
+  
+      if (inSpot) {
+        inSpot.weight++;
+      } else {
+        app.anims.push((reqAnim={
+            type:"post",
+            from: "browser",
+            weight: 1,
+            lineColor: '#00ffff',
+            shadowColor: '#00ffff',
+            startY: 5,
+            renderer: app.drawSprite
+        }));
+      }
+  
+      try{
+        fetch(requestInfo,params).then(resp => {
+          var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
+          var inSpot = getInSpot(anims, "chip");
+    
+          if (inSpot) {
+            inSpot.weight++;
+          } else {
+            app.anims.push({
+                type:"post",
+                from: "chip",
+                weight: 1,
+                lineColor: '#00ffff',
+                shadowColor: '#00ffff',
+                startY: 25,
+                renderer: app.drawSprite
+            });
+          }
+          resolve(resp);
+        })
+        .catch(err => {
+          reqAnim.color="red";
+          reqAnim.lineColor="red";
+          reject(err);
+        });
+      } catch(e) {
+        reqAnim.color="red";
+        reqAnim.lineColor="red";
+        reject(err);
+      }
+    })
+  }
+  //#region SHA-1
 /*
  * A JavaScript implementation of the Secure Hash Algorithm, SHA-1, as defined
  * in FIPS 180-1
@@ -492,7 +544,7 @@ class LocalJSONEditor extends React.Component {
                         }
                     }
                     return pv;
-                },[]).map((item,idx) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
+                },[]).map((item) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
             } else {
                 return this.renderVersioned(json);
             }
@@ -683,6 +735,11 @@ class LocalJSONEditor extends React.Component {
             (this.props.name === "lng");
     }
 
+    componentDidMount() {
+        if (IsDatetimeValue(this.props.name)) {
+            this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
+        }
+    }
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (IsDatetimeValue(this.props.name)) {
             this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
@@ -1667,34 +1724,34 @@ class Event extends React.Component {
         if (this.props?.event?.dataType) {
             return this.renderComponent(this.props.event);
         } else {
-            return e("summary",{key: genUUID() ,className: "liveEvent"},
-                    e("div",{key: genUUID() ,className: "description"},[
-                        e("div",{key: genUUID() ,className: "eventBase"},"Loading"),
-                        e("div",{key: genUUID() ,className: "eventId"},"...")
+            return e("summary",{key: "summary" ,className: "liveEvent"},
+                    e("div",{key: "description" ,className: "description"},[
+                        e("div",{key: "base" ,className: "eventBase"},"Loading"),
+                        e("div",{key: "id" ,className: "eventId"},"...")
                     ]));
         }
     }
 
     renderComponent(event) {
-        return e("summary",{key: genUUID() ,className: "liveEvent"},[
-            e("div",{key: genUUID() ,className: "description"},[
-                e("div",{key: genUUID() ,className: "eventBase"},event.eventBase),
-                e("div",{key: genUUID() ,className: "eventId"},event.eventId)
-            ]), event.data ? e("details",{key: genUUID() ,className: "data"},this.parseData(event)): null
+        return e("summary",{key: "event" ,className: "liveEvent"},[
+            e("div",{key: "description" ,className: "description"},[
+                e("div",{key: "base" ,className: "eventBase"},event.eventBase),
+                e("div",{key: "id" ,className: "eventId"},event.eventId)
+            ]), event.data ? e("details",{key: "details" ,className: "data"},this.parseData(event)): null
         ]);
     }
 
     parseData(props) {
         if (props.dataType == "Number") {
-            return e("div", { key: genUUID(), className: "description" }, 
-                        e("div", { key: genUUID(), className: "propNumber" }, props.data)
+            return e("div", { key: props.data.name, className: "description" }, 
+                        e("div", { key: "data", className: "propNumber" }, props.data)
                     );
         }
         return Object.keys(props.data)
             .filter(prop => typeof props.data[prop] != 'object' && !Array.isArray(props.data[prop]))
-            .map(prop => e("div", { key: genUUID(), className: "description" }, [
-                e("div", { key: genUUID(), className: "propName" }, prop),
-                e("div", { key: genUUID(), className: prop }, props.data[prop])
+            .map(prop => e("div", { key: prop, className: "description" }, [
+                e("div", { key: "name", className: "propName" }, prop),
+                e("div", { key: "data", className: prop }, props.data[prop])
             ]));
     }
 }
@@ -1725,38 +1782,32 @@ class LiveEventPannel extends React.Component {
             while (lastEvents.length > 100) {
                 lastEvents.shift();
             }
-            var curFilters = Object.entries(lastEvents
-                                   .filter(evt=>evt.eventBase && evt.eventId)
-                                   .reduce((ret,evt)=>{
-                                       if (!ret[evt.eventBase]) {
-                                          ret[evt.eventBase] = {visible: true, eventIds:[{visible: true, eventId: evt.eventId}]};
-                                       } else if (!ret[evt.eventBase].eventIds.find(vevt=>vevt.eventId === evt.eventId)) {
-                                        ret[evt.eventBase].eventIds.push({visible:true, eventId: evt.eventId});
-                                       }
-                                       return ret;
-                                    },{}))
-            var hasUpdates = false;
-            Object.values(curFilters).forEach(filter => {
-                if (!this.state.filters[filter[0]]) {
-                    this.state.filters[filter[0]] = filter[1];
-                    hasUpdates = true;
-                } else if (filter[1].eventIds.find(newEvt => !this.state.filters[filter[0]].eventIds.find(eventId => eventId.eventId === newEvt.eventId))) {
-                    this.state.filters[filter[0]].eventIds = this.state.filters[filter[0]].eventIds.concat(filter[1].eventIds.filter(eventId=> !this.state.filters[filter[0]].eventIds.find(eventId2=> eventId.eventId === eventId2.eventId) ))
-                    hasUpdates = true;
-                }
+            this.setState({
+                filters: this.updateFilters(lastEvents),
+                lastEvents: lastEvents
             });
-
-            if (hasUpdates) {
-                this.setState({
-                    filters: this.state.filters,
-                    lastEvents: lastEvents
-                });
-            } else {
-                this.setState({
-                    lastEvents:lastEvents
-                });
-            }
         }
+    }
+
+    updateFilters(lastEvents) {
+        var curFilters = Object.entries(lastEvents
+            .filter(evt => evt.eventBase && evt.eventId)
+            .reduce((ret, evt) => {
+                if (!ret[evt.eventBase]) {
+                    ret[evt.eventBase] = { visible: true, eventIds: [{ visible: true, eventId: evt.eventId }] };
+                } else if (!ret[evt.eventBase].eventIds.find(vevt => vevt.eventId === evt.eventId)) {
+                    ret[evt.eventBase].eventIds.push({ visible: true, eventId: evt.eventId });
+                }
+                return ret;
+            }, {}));
+        Object.values(curFilters).forEach(filter => {
+            if (!this.state.filters[filter[0]]) {
+                this.state.filters[filter[0]] = filter[1];
+            } else if (filter[1].eventIds.find(newEvt => !this.state.filters[filter[0]].eventIds.find(eventId => eventId.eventId === newEvt.eventId))) {
+                this.state.filters[filter[0]].eventIds = this.state.filters[filter[0]].eventIds.concat(filter[1].eventIds.filter(eventId => !this.state.filters[filter[0]].eventIds.find(eventId2 => eventId.eventId === eventId2.eventId)));
+            }
+        });
+        return this.state.filters;
     }
 
     parseEvent(event) {
@@ -1859,7 +1910,8 @@ class LiveEventPannel extends React.Component {
     }
 
     isEventVisible(event) {
-        return (Object.keys(this.state.filters).length === 0) || (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
+        return ((Object.keys(this.state.filters).length === 0) || !this.state.filters[event.eventBase]?.eventIds?.some(eventId=> eventId.eventId === event.eventId)) || 
+               (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
                Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
                                                                   this.state.filters[eventBase].eventIds
                                                                     .some(eventId=> eventId.eventId === event.eventId && eventId.visible)));
@@ -2066,23 +2118,24 @@ class Program extends React.Component {
 class FileViewer extends React.Component {
     constructor(props) {
         super(props);
-        if (props.registerFileWork) {
-            props.registerFileWork(this.buildRenderers(0));
-        }
         this.state = {
-            renderers: [
-                {
-                    name: "loading"
-                }
-            ]
+            renderers: []
+        }
+    }
+
+    componentDidMount() {
+        if (this.props.registerFileWork) {
+            this.props.registerFileWork(this.buildRenderers(0));
         }
     }
 
     buildRenderers(retryCount) {
         return new Promise((resolve, reject) => {
             if (this.props.name.endsWith(".csv") && !this.state?.renderers?.some("trip")){
+                this.setState({renderers:[{name:"loading"}]});
                 this.parseCsv(resolve, retryCount, reject);
             } else if (this.props.name.endsWith(".log") && !this.state?.renderers?.some("trip")){
+                this.setState({renderers:[{name:"loading"}]});
                 this.parseLog(resolve, retryCount, reject);
             } else {
                 resolve();
@@ -2514,7 +2567,6 @@ class SystemPage extends React.Component {
                 e("button", { key: "factoryReset", onClick: elem => this.SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
                 e(FirmwareUpdater, { key: "firmwareUpdater" })
             ]),
-            e(LogLines, { key: "logLines", registerLogCallback:this.props.registerLogCallback })
         ];
     }
 }
@@ -2939,59 +2991,6 @@ class TripViewer extends React.Component {
 }
 var app=null;
 
-function wfetch(requestInfo, params) {
-  return new Promise((resolve,reject) => {
-    var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "browser");
-    var inSpot = getInSpot(anims, "browser");
-    var reqAnim = inSpot;
-
-    if (inSpot) {
-      inSpot.weight++;
-    } else {
-      app.anims.push((reqAnim={
-          type:"post",
-          from: "browser",
-          weight: 1,
-          lineColor: '#00ffff',
-          shadowColor: '#00ffff',
-          startY: 5,
-          renderer: app.drawSprite
-      }));
-    }
-
-    try{
-      fetch(requestInfo,params).then(resp => {
-        var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
-        var inSpot = getInSpot(anims, "chip");
-  
-        if (inSpot) {
-          inSpot.weight++;
-        } else {
-          app.anims.push({
-              type:"post",
-              from: "chip",
-              weight: 1,
-              lineColor: '#00ffff',
-              shadowColor: '#00ffff',
-              startY: 25,
-              renderer: app.drawSprite
-          });
-        }
-        resolve(resp);
-      })
-      .catch(err => {
-        reqAnim.color="red";
-        reqAnim.lineColor="red";
-        reject(err);
-      });
-    } catch(e) {
-      reqAnim.color="red";
-      reqAnim.lineColor="red";
-      reject(err);
-    }
-  })
-}
-
 class MainApp extends React.Component {
   constructor(props) {
     super(props);
@@ -3005,6 +3004,7 @@ class MainApp extends React.Component {
         Storage: {active: true}, 
         Status:  {active: false}, 
         Config:  {active: false}, 
+        System:  {active: false},
         Logs:    {active: false},
         Events:  {active: false}
         },
@@ -3245,7 +3245,7 @@ class MainApp extends React.Component {
         this.AddLogLine(event.data);
       }
     }
-    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 3500);
+    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 4000);
     return stopItWithThatShit;
   }
 
@@ -3477,13 +3477,6 @@ class MainApp extends React.Component {
         link.classList.add("active")
         if (section)
           section.classList.add("active")
-        if ((ttab == "Config") || (ttab == "Status") || (ttab == "Events")){
-          document.getElementById("controls").classList.remove("hidden");
-          document.querySelector("div.slides").classList.remove("expanded");
-        } else {
-          document.getElementById("controls").classList.add("hidden");
-          document.querySelector("div.slides").classList.add("expanded");
-        }
       } else{
         link.classList.remove("active")
         section.classList.remove("active")
@@ -3528,8 +3521,11 @@ class MainApp extends React.Component {
     if (name == "Config") {
       return e(ConfigPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Config"].active });
     }
+    if (name == "System") {
+      return e(SystemPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["System"].active });
+    }
     if (name == "Logs") {
-      return e(SystemPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Logs"].active, registerLogCallback:this.registerLogCallback.bind(this) });
+      return e(LogLines, { key: "logLines", registerLogCallback:this.registerLogCallback.bind(this), active: this.state.tabs["System"].active })
     }
     if (name == "Events") {
       return e(EventsPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Events"].active, registerEventCallback:this.registerEventCallback.bind(this) });

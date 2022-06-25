@@ -41,6 +41,11 @@ class ROProp extends React.Component {
             (this.props.name === "lng");
     }
 
+    componentDidMount() {
+        if (IsDatetimeValue(this.props.name)) {
+            this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
+        }
+    }
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (IsDatetimeValue(this.props.name)) {
             this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));

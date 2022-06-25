@@ -3,34 +3,34 @@ class LiveEvent extends React.Component {
         if (this.props?.event?.dataType) {
             return this.renderComponent(this.props.event);
         } else {
-            return e("summary",{key: genUUID() ,className: "liveEvent"},
-                    e("div",{key: genUUID() ,className: "description"},[
-                        e("div",{key: genUUID() ,className: "eventBase"},"Loading"),
-                        e("div",{key: genUUID() ,className: "eventId"},"...")
+            return e("summary",{key: "summary" ,className: "liveEvent"},
+                    e("div",{key: "description" ,className: "description"},[
+                        e("div",{key: "base" ,className: "eventBase"},"Loading"),
+                        e("div",{key: "id" ,className: "eventId"},"...")
                     ]));
         }
     }
 
     renderComponent(event) {
-        return e("summary",{key: genUUID() ,className: "liveEvent"},[
-            e("div",{key: genUUID() ,className: "description"},[
-                e("div",{key: genUUID() ,className: "eventBase"},event.eventBase),
-                e("div",{key: genUUID() ,className: "eventId"},event.eventId)
-            ]), event.data ? e("details",{key: genUUID() ,className: "data"},this.parseData(event)): null
+        return e("summary",{key: "event" ,className: "liveEvent"},[
+            e("div",{key: "description" ,className: "description"},[
+                e("div",{key: "base" ,className: "eventBase"},event.eventBase),
+                e("div",{key: "id" ,className: "eventId"},event.eventId)
+            ]), event.data ? e("details",{key: "details" ,className: "data"},this.parseData(event)): null
         ]);
     }
 
     parseData(props) {
         if (props.dataType == "Number") {
-            return e("div", { key: genUUID(), className: "description" }, 
-                        e("div", { key: genUUID(), className: "propNumber" }, props.data)
+            return e("div", { key: props.data.name, className: "description" }, 
+                        e("div", { key: "data", className: "propNumber" }, props.data)
                     );
         }
         return Object.keys(props.data)
             .filter(prop => typeof props.data[prop] != 'object' && !Array.isArray(props.data[prop]))
-            .map(prop => e("div", { key: genUUID(), className: "description" }, [
-                e("div", { key: genUUID(), className: "propName" }, prop),
-                e("div", { key: genUUID(), className: prop }, props.data[prop])
+            .map(prop => e("div", { key: prop, className: "description" }, [
+                e("div", { key: "name", className: "propName" }, prop),
+                e("div", { key: "data", className: prop }, props.data[prop])
             ]));
     }
 }
@@ -61,38 +61,32 @@ class LiveEventPannel extends React.Component {
             while (lastEvents.length > 100) {
                 lastEvents.shift();
             }
-            var curFilters = Object.entries(lastEvents
-                                   .filter(evt=>evt.eventBase && evt.eventId)
-                                   .reduce((ret,evt)=>{
-                                       if (!ret[evt.eventBase]) {
-                                          ret[evt.eventBase] = {visible: true, eventIds:[{visible: true, eventId: evt.eventId}]};
-                                       } else if (!ret[evt.eventBase].eventIds.find(vevt=>vevt.eventId === evt.eventId)) {
-                                        ret[evt.eventBase].eventIds.push({visible:true, eventId: evt.eventId});
-                                       }
-                                       return ret;
-                                    },{}))
-            var hasUpdates = false;
-            Object.values(curFilters).forEach(filter => {
-                if (!this.state.filters[filter[0]]) {
-                    this.state.filters[filter[0]] = filter[1];
-                    hasUpdates = true;
-                } else if (filter[1].eventIds.find(newEvt => !this.state.filters[filter[0]].eventIds.find(eventId => eventId.eventId === newEvt.eventId))) {
-                    this.state.filters[filter[0]].eventIds = this.state.filters[filter[0]].eventIds.concat(filter[1].eventIds.filter(eventId=> !this.state.filters[filter[0]].eventIds.find(eventId2=> eventId.eventId === eventId2.eventId) ))
-                    hasUpdates = true;
-                }
+            this.setState({
+                filters: this.updateFilters(lastEvents),
+                lastEvents: lastEvents
             });
-
-            if (hasUpdates) {
-                this.setState({
-                    filters: this.state.filters,
-                    lastEvents: lastEvents
-                });
-            } else {
-                this.setState({
-                    lastEvents:lastEvents
-                });
-            }
         }
+    }
+
+    updateFilters(lastEvents) {
+        var curFilters = Object.entries(lastEvents
+            .filter(evt => evt.eventBase && evt.eventId)
+            .reduce((ret, evt) => {
+                if (!ret[evt.eventBase]) {
+                    ret[evt.eventBase] = { visible: true, eventIds: [{ visible: true, eventId: evt.eventId }] };
+                } else if (!ret[evt.eventBase].eventIds.find(vevt => vevt.eventId === evt.eventId)) {
+                    ret[evt.eventBase].eventIds.push({ visible: true, eventId: evt.eventId });
+                }
+                return ret;
+            }, {}));
+        Object.values(curFilters).forEach(filter => {
+            if (!this.state.filters[filter[0]]) {
+                this.state.filters[filter[0]] = filter[1];
+            } else if (filter[1].eventIds.find(newEvt => !this.state.filters[filter[0]].eventIds.find(eventId => eventId.eventId === newEvt.eventId))) {
+                this.state.filters[filter[0]].eventIds = this.state.filters[filter[0]].eventIds.concat(filter[1].eventIds.filter(eventId => !this.state.filters[filter[0]].eventIds.find(eventId2 => eventId.eventId === eventId2.eventId)));
+            }
+        });
+        return this.state.filters;
     }
 
     parseEvent(event) {
@@ -195,7 +189,8 @@ class LiveEventPannel extends React.Component {
     }
 
     isEventVisible(event) {
-        return (Object.keys(this.state.filters).length === 0) || (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
+        return ((Object.keys(this.state.filters).length === 0) || !this.state.filters[event.eventBase]?.eventIds?.some(eventId=> eventId.eventId === event.eventId)) || 
+               (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
                Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
                                                                   this.state.filters[eventBase].eventIds
                                                                     .some(eventId=> eventId.eventId === event.eventId && eventId.visible)));

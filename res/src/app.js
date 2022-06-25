@@ -1,58 +1,5 @@
 var app=null;
 
-function wfetch(requestInfo, params) {
-  return new Promise((resolve,reject) => {
-    var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "browser");
-    var inSpot = getInSpot(anims, "browser");
-    var reqAnim = inSpot;
-
-    if (inSpot) {
-      inSpot.weight++;
-    } else {
-      app.anims.push((reqAnim={
-          type:"post",
-          from: "browser",
-          weight: 1,
-          lineColor: '#00ffff',
-          shadowColor: '#00ffff',
-          startY: 5,
-          renderer: app.drawSprite
-      }));
-    }
-
-    try{
-      fetch(requestInfo,params).then(resp => {
-        var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
-        var inSpot = getInSpot(anims, "chip");
-  
-        if (inSpot) {
-          inSpot.weight++;
-        } else {
-          app.anims.push({
-              type:"post",
-              from: "chip",
-              weight: 1,
-              lineColor: '#00ffff',
-              shadowColor: '#00ffff',
-              startY: 25,
-              renderer: app.drawSprite
-          });
-        }
-        resolve(resp);
-      })
-      .catch(err => {
-        reqAnim.color="red";
-        reqAnim.lineColor="red";
-        reject(err);
-      });
-    } catch(e) {
-      reqAnim.color="red";
-      reqAnim.lineColor="red";
-      reject(err);
-    }
-  })
-}
-
 class MainApp extends React.Component {
   constructor(props) {
     super(props);
@@ -66,6 +13,7 @@ class MainApp extends React.Component {
         Storage: {active: true}, 
         Status:  {active: false}, 
         Config:  {active: false}, 
+        System:  {active: false},
         Logs:    {active: false},
         Events:  {active: false}
         },
@@ -306,7 +254,7 @@ class MainApp extends React.Component {
         this.AddLogLine(event.data);
       }
     }
-    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 3500);
+    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 4000);
     return stopItWithThatShit;
   }
 
@@ -538,13 +486,6 @@ class MainApp extends React.Component {
         link.classList.add("active")
         if (section)
           section.classList.add("active")
-        if ((ttab == "Config") || (ttab == "Status") || (ttab == "Events")){
-          document.getElementById("controls").classList.remove("hidden");
-          document.querySelector("div.slides").classList.remove("expanded");
-        } else {
-          document.getElementById("controls").classList.add("hidden");
-          document.querySelector("div.slides").classList.add("expanded");
-        }
       } else{
         link.classList.remove("active")
         section.classList.remove("active")
@@ -589,8 +530,11 @@ class MainApp extends React.Component {
     if (name == "Config") {
       return e(ConfigPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Config"].active });
     }
+    if (name == "System") {
+      return e(SystemPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["System"].active });
+    }
     if (name == "Logs") {
-      return e(SystemPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Logs"].active, registerLogCallback:this.registerLogCallback.bind(this) });
+      return e(LogLines, { key: "logLines", registerLogCallback:this.registerLogCallback.bind(this), active: this.state.tabs["System"].active })
     }
     if (name == "Events") {
       return e(EventsPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Events"].active, registerEventCallback:this.registerEventCallback.bind(this) });

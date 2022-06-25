@@ -105,7 +105,7 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
   
   for (uint8_t idx = 0; idx < 5; idx++){
     if (stateHandler && clients[idx].jIsLive && clients[idx].jIsLive->valueint){
-      ws_msg_t* wsMsg = getNewMessage();
+      ws_msg_t* wsMsg = msg ? getNewMessage() : clients[idx].pingMsg;
       if (msg) {
         if (wsMsg->bufLen < strlen((const char*)msg)) {
           ldfree(wsMsg->buf);
@@ -113,8 +113,8 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
           wsMsg->buf = dmalloc(wsMsg->bufLen);
         }
         strcpy((char*)wsMsg->buf,(const char*)msg);
+        wsMsg->client=&clients[idx];
       }
-      wsMsg->client=&clients[idx];
       if ((ret = httpd_queue_work(clients[idx].hd,PostToClient,wsMsg)) != ESP_OK) {
         cJSON_SetIntValue(clients[idx].jIsLive,false);
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
@@ -168,8 +168,14 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
     if (!clients[idx].jIsLive || !clients[idx].jIsLive->valueint){
       clients[idx].hd = hd;
       clients[idx].fd = fd;
+      if (!clients[idx].pingMsg) {
+        clients[idx].pingMsg = (ws_msg_t*)dmalloc(sizeof(ws_msg_t));
+        clients[idx].pingMsg->buf=NULL;
+        clients[idx].pingMsg->bufLen=0;
+      }
+      clients[idx].pingMsg->client=&clients[idx];
 
-      if (!clients[idx].jIsLive) {
+      if (clients[idx].jErrCount == NULL) {
         ESP_LOGI(__FUNCTION__,"Client is inserted at position %d",idx);
         cJSON* client = cJSON_CreateObject();
         cJSON_AddItemToArray(jClients,client);
@@ -179,12 +185,13 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
         clients[idx].jIsLive = cJSON_AddNumberToObject(client,"IsLive",true);
         clients[idx].jAddr = cJSON_AddStringToObject(client,"Address",emptySpace);
         clients[idx].jLastTs = cJSON_AddStringToObject(client,"LastTs",emptySpace);
+      } else {
+        ESP_LOGI(__FUNCTION__,"Client took position %d",idx);
+        cJSON_SetNumberValue(clients[idx].jErrCount,0);
+        cJSON_SetNumberValue(clients[idx].jBytesIn, 0);
+        cJSON_SetNumberValue(clients[idx].jBytesOut, 0);
+        cJSON_SetNumberValue(clients[idx].jIsLive, true);
       }
-      cJSON_SetIntValue(clients[idx].jBytesIn,0);
-      cJSON_SetIntValue(clients[idx].jBytesOut,0);
-      cJSON_SetIntValue(clients[idx].jErrCount,0);
-      cJSON_SetValuestring(clients[idx].jLastTs,emptySpace);
-      cJSON_SetIntValue(clients[idx].jIsLive,true);
 
       sockaddr_in6 addr;
       socklen_t addr_size = sizeof(addr);

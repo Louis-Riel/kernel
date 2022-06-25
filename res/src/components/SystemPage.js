@@ -168,7 +168,6 @@ class SystemPage extends React.Component {
                 e("button", { key: "factoryReset", onClick: elem => this.SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
                 e(FirmwareUpdater, { key: "firmwareUpdater" })
             ]),
-            e(LogLines, { key: "logLines", registerLogCallback:this.props.registerLogCallback })
         ];
     }
 }

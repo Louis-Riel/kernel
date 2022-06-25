@@ -125,7 +125,7 @@ class LocalJSONEditor extends React.Component {
                         }
                     }
                     return pv;
-                },[]).map((item,idx) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
+                },[]).map((item) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
             } else {
                 return this.renderVersioned(json);
             }
