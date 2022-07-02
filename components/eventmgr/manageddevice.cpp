@@ -28,13 +28,34 @@ ManagedDevice::ManagedDevice(const char *type,const char *name, cJSON *(*statusF
 }
 
 ManagedDevice::ManagedDevice(const char *type,const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void*),bool (*commandFnc)(ManagedDevice* instance, cJSON *))
+:ManagedDevice(type, name, statusFnc, hcFnc, commandFnc, NULL)
+{
+
+}
+
+ManagedDevice::ManagedDevice(const char *type,const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void*),bool (*commandFnc)(ManagedDevice* instance, cJSON *),cJSON* (*configFnc)(ManagedDevice* instance))
 :eventBase((esp_event_base_t)dmalloc(strlen(type)+1))
 ,handlerDescriptors(NULL)
-,statusFnc(statusFnc)
-,hcFnc(hcFnc)
+,statusFnc(statusFnc == NULL ? &BuildStatus : statusFnc)
+,hcFnc(hcFnc == NULL ? &HealthCheck : hcFnc)
 ,commandFnc(commandFnc)
-,status(NULL)
+,configFnc(configFnc == NULL ? &buildConfigTemplate : configFnc)
+,status(statusFnc(this))
+,configTemplate(configFnc(this))
 {
+  if(!ValidateDevices())
+  {
+      ESP_LOGE(__FUNCTION__,"Too many devices");
+      return;
+  }
+  if(!name)
+  {
+      name=type;
+  }
+  this->name=strdup(name);
+  runningInstanes[numDevices++]=this;
+  ESP_LOGI(__FUNCTION__,"Created device %s",name);
+
   strcpy((char*)eventBase, type);
   if (numDevices == 0) {
     memset(runningInstances,0,sizeof(void*)*MAX_NUM_DEVICES);
@@ -56,6 +77,11 @@ ManagedDevice::ManagedDevice(const char *type,const char *name, cJSON *(*statusF
 const char* ManagedDevice::GetName() {
   return name;
 }
+
+cJSON* ManagedDevice::getConfigTemplate(){
+  return configTemplate;
+}
+
 
 ManagedDevice::~ManagedDevice() {
   for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
@@ -182,4 +208,15 @@ bool ManagedDevice::HealthCheck(void* instance){
 
   ESP_LOGV(dev->name,"All good");
   return true;
+}
+
+cJSON* ManagedDevice::buildConfigTemplate(ManagedDevice* instance){
+  if (instance == NULL) {
+    ESP_LOGE(__FUNCTION__,"Missing instance to validate");
+    return NULL;
+  }
+  cJSON* cfg = cJSON_CreateObject();
+  cJSON_AddStringToObject(cfg,"name",instance->GetName());
+  cJSON_AddStringToObject(cfg,"class",instance->eventBase);
+  return cfg;
 }

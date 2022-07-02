@@ -210,6 +210,7 @@ public:
     ManagedDevice(const char *type, const char *name, cJSON *(*statusFnc)(void *));
     ManagedDevice(const char *type, const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void *));
     ManagedDevice(const char *type, const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void *),bool (*commandFnc)(ManagedDevice* instance, cJSON *));
+    ManagedDevice(const char *type, const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void *),bool (*commandFnc)(ManagedDevice* instance, cJSON *),cJSON * (*configFnc)(ManagedDevice* instance));
     ~ManagedDevice();
     static void UpdateStatuses();
     const char *GetName();
@@ -222,6 +223,7 @@ public:
     static ManagedDevice** GetRunningInstanes();
     static uint32_t GetNumRunningInstances();
     bool ProcessCommand(cJSON *command);
+    cJSON* getConfigTemplate();
 
 protected:
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
@@ -230,9 +232,11 @@ protected:
     cJSON *(*statusFnc)(void *);
     bool (*hcFnc)(void *);
     bool (*commandFnc)(ManagedDevice*, cJSON *);
+    cJSON* (*configFnc)(ManagedDevice*);
     cJSON *status;
     char *name;
     static bool HealthCheck(void *instance);
+    static cJSON* buildCommandTemplate(ManagedDevice* instance);
 
 private:
     static bool ValidateDevices();
@@ -240,6 +244,7 @@ private:
     static uint8_t numDevices;
     static uint32_t numErrors;
     static uint64_t lastErrorTs;
+    cJSON* configTemplate;
 };
 
 class ManagedThreads
