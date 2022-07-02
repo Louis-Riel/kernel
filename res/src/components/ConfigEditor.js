@@ -11,12 +11,13 @@ class ConfigPage extends React.Component {
                     clearTimeout(timer);
                     this.setState({
                         config: fromVersionedToPlain(config),
+                        newconfig: fromVersionedToPlain(config),
                         original: config
                     });
                     try {
                         if (!this.jsoneditor) {
                             this.jsoneditor = new JSONEditor(this.container, {
-                                onChangeJSON: json => this.setState({ newconfig: json })
+                                onChangeJSON: json => this.state.newconfig=json 
                             }, this.state.config);
                         } else {
                             this.jsoneditor.set(this.state.config);
@@ -37,9 +38,12 @@ class ConfigPage extends React.Component {
     getEditor() {
         return [
             e("div", { key: 'fancy-editor', ref: (elem) => this.container = elem, id: `${this.props.id || genUUID()}`, "data-theme": "spectre" }),
-            this.nativejsoneditor,
-            this.state?.newconfig ? e("button", { key: "save", onClick: this.saveChanges.bind(this) }, "Save") : null
+            this.nativejsoneditor
         ]
+    }
+
+    getEditorGroups() {
+        return e(ConfigGroup, { key: "configGroups", config: this.state?.newconfig, onChange: (_) => {this.jsoneditor.set(this.state.newconfig); this.setState(this.state) } });
     }
 
     saveChanges() {
@@ -58,8 +62,12 @@ class ConfigPage extends React.Component {
     }
 
     render() {
-        if (this.isConnected()) {
-            return [e("button", { key: "refresh", onClick: elem => this.componentDidMount() }, "Refresh"), 
+        if (this.isConnected() && this.state?.config) {
+            return [e("div", { key: 'button-bar', className: "button-bar" }, [
+                        e("button", { key: "refresh", onClick: elem => this.componentDidMount() }, "Refresh"),
+                        e("button", { key: "save", onClick: this.saveChanges.bind(this) }, "Save"),
+                    ]),
+                    this.getEditorGroups(),
                     this.getEditor()
                    ];
         } else {

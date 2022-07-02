@@ -1101,62 +1101,165 @@ class Table extends React.Component {
 class AnalogPinConfig extends React.Component {
     constructor(props) {
         super(props);
-        this.state = {};
+        this.state = {pin: props.item,errors:[]};
+        this.state.pin.channel = this.state.pin.channel ? this.state.pin.channel : this.pinNoToChannel(this.state.pin.pinNo);
+        this.state.pin.channel_width = this.state.pin.channel_width ? this.state.pin.channel_width : 9;
+        this.state.pin.channel_atten = this.state.pin.channel_atten ? this.state.pin.channel_atten : 0.0;
+        this.state.pin.waitTime = this.state.pin.waitTime ? this.state.pin.waitTime : 10000;
+        this.state.pin.minValue = this.state.pin.minValue ? this.state.pin.minValue : 0;
+        this.state.pin.maxValue = this.state.pin.maxValue ? this.state.pin.maxValue : 4096;
     }
+
+    componentDidUpdate(prevProps, prevState) {
+        if ((this.state != prevState) && this.props.onChange) {
+            this.props.onChange(this.state);
+        }
+        
+        if (prevProps?.item != this.props?.item) {
+            this.setState({pin: this.props.item});
+        }
+    }
+
+    getErrors() {
+        return this.state.errors.map((val,idx) => e(MaterialUI.Snackbar,{
+            key:`error${idx}`, 
+            className:"popuperror", 
+            anchorOrigin: {vertical: "top", horizontal: "right"}, 
+            autoHideDuration: 3000,
+            onClose: (event, reason) => {val.visible=false; this.setState(this.state);},
+            open: val.visible},e(MaterialUI.Alert,{key:`error${idx}`, severity: "error"}, val.error)));
+    }
+
+    onChange(name, value) {
+        this.state.pin[name] = name == "name" ? value : name == "channel_atten" ? parseFloat(value) : parseInt(value); 
+        if (name == "pinNo") {
+            this.state.pin.channel = this.pinNoToChannel(this.state.pin.pinNo);
+        }
+        this.setState(this.state);
+        if ((this.state.pin.channel_width < 9) || (this.state.pin.channel_width > 12)) {
+            setTimeout(() => {this.state.errors.push({visible:true, error:`Invalid channel width for ${this.state.pin.name}, needs to bebetween 9 and 12`});this.setState(this.state)}, 300);
+        }
+    }
+
+    pinNoToChannel(pinNo) {
+        switch(pinNo) {
+            case 32:
+                return 4;
+            case 33:
+                return 5;
+            case 34:
+                return 6;
+            case 35:
+                return 7;
+            case 36:
+                return 0;
+            case 37:
+                return 1;
+            case 38:
+                return 2;
+            case 39:
+                return 3;
+            default:
+                this.state.errors.push({visible:true, error:`Invalid pin number, ${pinNo} cannot be an analog pin`});
+                setTimeout(() => {this.state.errors.push({visible:true, error:`Invalid pin number, ${pinNo} cannot be an analog pin`});this.setState(this.state)}, 300);
+                return -1;
+        }
+    }
+
     render() {
-        return e( MaterialUI.Card, { key: this.props.item.name }, 
-            e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"},[
-                e( MaterialUI.ListItem, { key: "pin" }, e( MaterialUI.ListItem, { key: "pincfg" }, e( MaterialUI.TextField, { value: this.props.pinNo, label: "Pin", type: "number" }))),
-            ])));
+        return e( MaterialUI.Card, { key: this.state.pin.pinName, className: "pin-config" },[
+            e( MaterialUI.CardHeader, {key:"header", title: this.state.pin.name }),
+            e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"},
+                [
+                    e( MaterialUI.ListItem, { key: "pinName" },  
+                        e( MaterialUI.TextField, { key: "pinName", autoFocus:true, value: this.state.pin.name, label: "Name", type: "text", onChange: event => this.onChange("name", event.target.value)})),
+                    e( MaterialUI.ListItem, { key: "pinNo" },  
+                        e( MaterialUI.TextField, { key:"pinNo", value: this.state.pin.pinNo, label: "PinNo", type: "number", onChange: event => this.onChange("pinNo", parseInt(event.target.value) )})),
+                    e( MaterialUI.ListItem, { key: "channel" },  
+                        e( MaterialUI.TextField, { key:"channel", inputProps:{ readOnly: true },value: this.state.pin.channel, label: "Channel", type: "number", onChange: event => this.onChange("channel", parseInt(event.target.value)) })),
+                    e( MaterialUI.ListItem, { key: "channel_width" },  
+                        e( MaterialUI.TextField, { key:"channel_width", value: this.state.pin.channel_width, label: "Channel Width", type: "number", min:9, max:12, onChange: event => this.onChange("channel_width", parseInt(event.target.value)) })),
+                    e( MaterialUI.ListItem, { key: "channel_atten" },
+                        [
+                            e(MaterialUI.InputLabel,{key:"attenLabel", id:"channel_atten_label"}, "Channel Attennuation"),
+                            e(MaterialUI.Select,{key:"attenSelect", value: this.state.pin.channel_atten, label: "Channel Attennuation", onChange: event => this.onChange("channel_atten", parseFloat(event.target.value))},[
+                                e(MaterialUI.MenuItem,{key:"atten0", value: 0.0}, "0 dB - 100 mV ~ 950 mV"),
+                                e(MaterialUI.MenuItem,{key:"atten1", value: 2.5}, "2.5 dB - 100 mV ~ 1250 mV"),
+                                e(MaterialUI.MenuItem,{key:"atten2", value: 6.0}, "6.0 dB - 100 mV ~ 1750 mV"),
+                                e(MaterialUI.MenuItem,{key:"atten3", value: 11.0}, "11.0 dB - 100 mV ~ 2450 mV"),
+                            ])
+                        ]),
+                    e( MaterialUI.ListItem, { key: "waitTime" },  
+                        e( MaterialUI.TextField, { key:"waitTime", value: this.state.pin.waitTime , label: "Wait Time", type: "number", onChange: event => this.onChange("waitTime", parseInt(event.target.value) )})),
+                    e( MaterialUI.ListItem, { key: "min" },  
+                        e( MaterialUI.TextField, { key:"min", value: this.state.pin.minValue , label: "Minimum", type: "number", onChange: event => this.onChange("minValue", parseInt(event.target.value) )})),
+                    e( MaterialUI.ListItem, { key: "max" },  
+                        e( MaterialUI.TextField, { key:"max", value: this.state.pin.maxValue , label: "Maximum", type: "number", onChange: event => this.onChange("maxValue", parseInt(event.target.value) )})),
+                ]
+            )),
+            this.getErrors()
+        ]);
     }
 }class ConfigGroup extends React.Component {
     constructor(props) {
         super(props);
-        this.state = {};
-        this.supportedTypes = {analogPins:{
-            isArray: true,
-            component: AnalogPinConfig
-        }};
+        this.supportedTypes = {
+            analogPins:{
+                caption:"Analog Pins",
+                isArray: true,
+                component: AnalogPinConfig
+            },pins:{
+                caption:"Digital Pins",
+                isArray: true,
+                component: DigitalPinConfig
+            }
+        };
+        this.state = {
+            currentTab: props.config ? Object.keys(props.config).filter(this.isSupported.bind(this))[0] : undefined
+        };
     }
 
     render() {
-        var tabs = Object.keys(this.props.config).filter(this.isSupported.bind(this));
-        return [
-            e( MaterialUI.Tabs, { 
-                value: tabs, 
-                onChange: (e,v)=>{this.setValue(v)},
-                key: "ConfigTypes" 
-            }, tabs.map(this.renderTypeTab.bind(this))),
-            e(MaterialUI.Switch,{key:"router"},
-            tabs.map(key => e(MaterialUI.Route,{
-                                    key:key, 
-                                    role:"tabpanel", 
-                                    value: key
-                                },this.renderConfigType(key))))
-        ];
+        if (this.props.config) {
+            var tabs = Object.keys(this.props.config).filter(this.isSupported.bind(this));
+            return [
+                e( MaterialUI.Tabs, { 
+                    value: this.state.currentTab ? this.state.currentTab : tabs[0], 
+                    onChange: (e,v)=>{this.setState({currentTab:v})},
+                    key: "ConfigTypes" 
+                }, [...tabs.map(this.renderTypeTab.bind(this)),e( MaterialUI.Tab, { key: "full-config", label: "Configuration", value: "Configuration" })]),
+                tabs.map((key,idx) => this.renderConfigType(key))
+            ];
+        } else {
+            return e("div", {key: "loading"}, "Loading...");
+        }
     }
 
     renderTypeTab(key) {
-        return e( MaterialUI.Tab, { key: key, label: key, value: key });
+        return e( MaterialUI.Tab, { key: key, label: this.supportedTypes[key].caption, value: key });
     }
 
     renderConfigType(key) {
         if (this.isArray(key)) {
-            e( MaterialUI.Tabs, { 
-                key: key, 
-                value: Object.keys(this.props.config[key]) 
-            }, this.props.config[key].map(this.renderConfigItemTab.bind(this, key)));
+            return e("div",{key:`${key}-control-panel`,className:`edior-pannel ${this.state.currentTab === key ? "":"hidden"}`},[
+                e("button", { key: "add", onClick: evt=> {this.props.config[key].push({}); this.props.onChange()} }, "+"),
+                e("div",{key:"items", className:`config-cards`}, Object.keys(this.props.config[key]).map(idx =>
+                    this.renderEditor(key,this.props.config[key],idx)))
+            ]);
         }
         return null;
     }
 
     renderConfigItemTab(key, item, idx) {
-        return e( MaterialUI.Tab, { key: item, label: item.name, value: idx });
+        return e( MaterialUI.Tab, { key: item, label: idx+1, value: key });
     }
 
-    renderEditor(key, item) {
-        return item.name;
-        return e( this.supportedTypes[key].component, { key: item.name, ...item });
+    renderEditor(key, item, idx) {
+        return  e("div",{key:`${key}-${idx}-control-editor`,className:`control-editor`},[
+                    e( this.supportedTypes[key].component, { key: key + idx, value: key, role: "tabpanel", item: item[idx], onChange: this.props.onChange, ...this.supportedTypes[key].properties}),
+                    e("button", { key: "dup", onClick: evt=> {this.props.config[key].push(JSON.parse(JSON.stringify(this.props.config[key][idx]))); this.props.onChange()} }, "C"),
+                    e("button", { key: "delete", onClick: evt=> {this.props.config[key].splice(idx,1); this.props.onChange()} }, "X"),
+                ]);
     }
 
     isArray(key) {
@@ -1165,6 +1268,141 @@ class AnalogPinConfig extends React.Component {
 
     isSupported(key) {
         return Object.keys(this.supportedTypes).indexOf(key)>-1;
+    }
+}class ConfigItem extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {pin: props.item};
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if ((this.state != prevState) && this.props.onChange) {
+            this.props.onChange(this.state);
+        }
+        
+        if (prevProps?.item != this.props?.item) {
+            this.setState({pin: this.props.item});
+        }
+    }
+
+    getFieldType(name,value) {
+        if (this.state.pin[name] !== undefined) {
+            if (isNaN(this.state.pin[name])) {
+                return "text";
+            }
+            return "number";
+        }
+        return "text";
+    }
+
+    getFieldValue(name,value) {
+        if (this.state.pin[name] !== undefined) {
+            if (isNaN(this.state.pin[name])) {
+                return value;
+            }
+            if (typeof value == "string") {
+                if (value.indexOf(".") != -1) {
+                    return parseFloat(value);
+                }
+                return parseInt(value);
+            }
+        }
+        return value;
+    }
+
+    onChange(name, value) {
+        this.state.pin[name] = this.getFieldValue(name,value); 
+        this.setState(this.state);
+    }
+
+    getFieldWeight(field) {
+        if (field == this.props.nameField) {
+            return 100;
+        }
+
+        switch(this.getFieldType(field, this.state.pin[field])) {
+            case "text":
+                return 75;
+            case "number":
+                return 50;
+            default:
+                return 25;
+        }
+    }
+
+    render() {
+        return e( MaterialUI.Card, { key: this.state.pin[this.props.nameField], className: "config-item" },[
+            e( MaterialUI.CardHeader, {key:"header", title: this.state.pin[this.props.nameField] }),
+            e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"},
+                Object.keys(this.state.pin)
+                      .sort((a,b) => {
+                        var wa = this.getFieldWeight(a);
+                        var wb = this.getFieldWeight(b);
+                        if (wa == wb) {
+                            return a.localeCompare(b);
+                        }
+                        return wb - wa;
+                    }).map(this.getEditor.bind(this))
+            ))
+        ]);
+    }
+
+    getEditor(key) {
+        if (this.props.editors && this.props.editors[key]) {
+            return e(this.props.editors[key].editor, {
+                key: key,
+                autoFocus: true,
+                value: this.getFieldValue(key, this.state.pin[key]),
+                label: key,
+                type: this.getFieldType(key, this.state.pin[key]),
+                onChange: value => this.onChange(key, value)
+            })
+        }
+        return e(MaterialUI.ListItem, { key: key },
+            e(MaterialUI.TextField, {
+                key: key,
+                autoFocus: this.getFieldType(key, this.state.pin[key]) == "text",
+                value: this.getFieldValue(key, this.state.pin[key]),
+                label: key,
+                type: this.getFieldType(key, this.state.pin[key]),
+                onChange: event => this.onChange(key, event.target.value)
+            })
+        );
+    }
+}class DigitalPinConfig extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {pin: props.item};
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if ((this.state != prevState) && this.props.onChange) {
+            this.props.onChange(this.state);
+        }
+        
+        if (prevProps?.item != this.props?.item) {
+            this.setState({pin: this.props.item});
+        }
+    }
+
+    onChange(name, value) {
+        this.state.pin[name] = name == "pinName" ? value : parseInt(value); 
+        this.setState(this.state);
+    }
+
+    render() {
+        return e( MaterialUI.Card, { key: this.state.pin.pinName, className: "pin-config" },[
+            e( MaterialUI.CardHeader, {key:"header", title: this.state.pin.pinName }),
+            e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"},
+                [
+                    e( MaterialUI.ListItem, { key: "pinName" },  
+                        e( MaterialUI.TextField, { key: "pinName", autoFocus:true, value: this.state.pin.pinName, label: "Name", type: "text", onChange: event => this.onChange("pinName", event.target.value)})),
+                    e( MaterialUI.ListItem, { key: "pinNo" },  
+                        e( MaterialUI.TextField, { key:"pinNo", value: this.state.pin.pinNo, label: "PinNo", type: "number", onChange: event => this.onChange("pinNo", event.target.value) })),
+                    e( PinDriverFlags, { key: "driverFlags", autoFocus:true, value: this.state.pin.driverFlags, onChange: val => this.onChange("driverFlags", val) }),
+                ]
+            ))
+        ]);
     }
 }class IRReceiver extends React.Component {
   constructor(props) {
@@ -1391,7 +1629,120 @@ class AnalogPinConfig extends React.Component {
     );
   }
 }
-class StatusPage extends React.Component {
+class PinDriverFlags extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            digital_in: { value: props.value &  0b00000001 ? true : false, errors:[] },
+            digital_out: { value: props.value & 0b00000010 ? true : false, errors:[] },
+            pullup: { value: props.value &      0b00000100 ? true : false, errors:[] },
+            pulldown: { value: props.value &    0b00001000 ? true : false, errors:[] },
+            touch: { value: props.value &       0b00010000 ? true : false, errors:[] },
+            wakeonhigh: { value: props.value &  0b00100000 ? true : false, errors:[] },
+            wakeonlow: { value: props.value &   0b01000000 ? true : false, errors:[] }
+        };
+    }
+
+    getValue(state) {
+        return state.digital_in.value | 
+               state.digital_out.value << 1 | 
+               state.pullup.value << 2 | 
+               state.pulldown.value << 3 | 
+               state.touch.value << 4 | 
+               state.wakeonhigh.value << 5 | 
+               state.wakeonlow.value << 6;
+    }
+
+    getFlagNames(value) {
+        return [
+            value &  0b00000001 ? "digital_in" : "",
+            value & 0b00000010 ? "digital_out" : "",
+            value &      0b00000100 ? "pullup" : "",
+            value &    0b00001000 ? "pulldown" : "",
+            value &       0b00010000 ? "touch" : "",
+            value &  0b00100000 ? "wakeonhigh" : "",
+            value &   0b01000000 ? "wakeonlow" : ""
+        ].filter(x => x.length > 0).join(", ");
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if (this.props.value != this.getValue(this.state)) {
+            this.props.onChange(this.getValue(this.state));
+        }
+    }
+
+    isValidChange(name, value) {
+        var newState =  JSON.parse(JSON.stringify(this.state));
+        newState[name].value = value;
+        if ((name == "digital_in" || name == "digital_out") && value) {
+            if ((name == "digital_in") && newState.digital_out.value) {
+                this.state.digital_out.value = false;
+            }
+            if ((name == "digital_out") && newState.digital_in.value) {
+                this.state.digital_in.value = false;
+                this.state.pullup.value = false;
+                this.state.pulldown.value = false;
+                this.state.touch.value = false;
+                this.state.wakeonhigh.value = false;
+                this.state.wakeonlow.value = false;
+            }
+        }
+        if (newState.digital_out.value && this.getValue(newState) & 0b01111100) {
+            this.state[name].errors.push({visible: true, error: "Can't set " + this.getFlagNames(this.getValue(newState) & 0b01111100) + " option for output pins"});
+            new Promise((resolve,reject) => resolve(this.setState(this.state)));
+            return false;
+        }
+
+        if (newState.touch.value && (this.getValue(newState) & 0b00001100)) {
+            this.state[name].errors.push({visible: true, error: "Can't set " + this.getFlagNames(this.getValue(newState) & 0b00001100) + " option for touch pins"});
+            new Promise((resolve,reject) => resolve(this.setState(this.state)));
+            return false;
+        }
+        return true;
+    }
+
+    onChange(name, value) {
+        if (this.isValidChange(name, value)) {
+            this.state[name].value = value;
+            this.props.onChange(this.getValue(this.state));
+            return true;
+        }
+        return false;
+    }
+
+    getErrors(value) {
+        return value.errors.map((val,idx) => e(MaterialUI.Snackbar,{
+            key:`error${idx}`, 
+            className:"popuperror", 
+            anchorOrigin: {vertical: "top", horizontal: "right"}, 
+            autoHideDuration: 3000,
+            onClose: (event, reason) => {val.visible=false; this.setState(this.state);},
+            open: val.visible},e(MaterialUI.Alert,{key:`error${idx}`, severity: "error"}, val.error)));
+    }
+
+    renderOption(name, value) {    
+        return [
+            e(MaterialUI.FormControlLabel,{
+                key:name,
+                className:"driverflag",
+                label: name,
+                control:e(MaterialUI.Checkbox, {
+                    key: "ctrl",
+                    checked: value.value,
+                    onChange: event => this.onChange(name, event.target.checked)
+                })
+            }),
+            ...this.getErrors(value)
+        ];
+    }
+
+    render() {
+        return e( MaterialUI.Card, { key: "driver-flags", className: "driver-flags" },[
+            e( MaterialUI.CardHeader, {key:"header", subheader: "Flags" }),
+            e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"}, Object.keys(this.state).map(name => this.renderOption(name, this.state[name]))))
+        ]);
+    }
+}class StatusPage extends React.Component {
     constructor(props) {
         super(props);
         this.mounted=false;
@@ -1581,12 +1932,13 @@ class ConfigPage extends React.Component {
                     clearTimeout(timer);
                     this.setState({
                         config: fromVersionedToPlain(config),
+                        newconfig: fromVersionedToPlain(config),
                         original: config
                     });
                     try {
                         if (!this.jsoneditor) {
                             this.jsoneditor = new JSONEditor(this.container, {
-                                onChangeJSON: json => this.setState({ newconfig: json })
+                                onChangeJSON: json => this.state.newconfig=json 
                             }, this.state.config);
                         } else {
                             this.jsoneditor.set(this.state.config);
@@ -1607,9 +1959,12 @@ class ConfigPage extends React.Component {
     getEditor() {
         return [
             e("div", { key: 'fancy-editor', ref: (elem) => this.container = elem, id: `${this.props.id || genUUID()}`, "data-theme": "spectre" }),
-            this.nativejsoneditor,
-            this.state?.newconfig ? e("button", { key: "save", onClick: this.saveChanges.bind(this) }, "Save") : null
+            this.nativejsoneditor
         ]
+    }
+
+    getEditorGroups() {
+        return e(ConfigGroup, { key: "configGroups", config: this.state?.newconfig, onChange: (_) => {this.jsoneditor.set(this.state.newconfig); this.setState(this.state) } });
     }
 
     saveChanges() {
@@ -1628,8 +1983,12 @@ class ConfigPage extends React.Component {
     }
 
     render() {
-        if (this.isConnected()) {
-            return [e("button", { key: "refresh", onClick: elem => this.componentDidMount() }, "Refresh"), 
+        if (this.isConnected() && this.state?.config) {
+            return [e("div", { key: 'button-bar', className: "button-bar" }, [
+                        e("button", { key: "refresh", onClick: elem => this.componentDidMount() }, "Refresh"),
+                        e("button", { key: "save", onClick: this.saveChanges.bind(this) }, "Save"),
+                    ]),
+                    this.getEditorGroups(),
                     this.getEditor()
                    ];
         } else {

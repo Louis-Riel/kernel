@@ -134,7 +134,7 @@ void AnalogPin::PollPins(void* instance) {
         if (pin->configuredMinValue && pin->configuredMaxValue && pin->currentPercentage) {
             cJSON_SetNumberValue(pin->currentPercentage,
                 ((cJSON_GetNumberValue(pin->value) - cJSON_GetNumberValue(pin->configuredMinValue)) / 
-                 (cJSON_GetNumberValue(pin->currentMaxValue) - cJSON_GetNumberValue(pin->configuredMinValue))) * 100.0
+                 (cJSON_GetNumberValue(pin->configuredMaxValue) - cJSON_GetNumberValue(pin->configuredMinValue))) * 100.0
             );
         }
     }

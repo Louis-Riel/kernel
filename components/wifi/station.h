@@ -85,7 +85,8 @@ private:
     void generateSidConfig(wifi_config_t *wc, bool hasGps);
     void ProcessScannedAPs();
     bool isSidManaged(const char *sid, bool isTracker);
-    Aper *GetAper(uint8_t *mac);
+    Aper *GetAperByMac(uint8_t *mac);
+    Aper *GetAperByIp(esp_ip4_addr_t ip);
     
     EventGroupHandle_t              s_app_eg;
     esp_event_handler_instance_t wifiEvtHandler;

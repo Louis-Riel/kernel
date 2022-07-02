@@ -550,7 +550,18 @@ void TheWifi::ProcessScannedAPs()
     }
 }
 
-Aper *TheWifi::GetAper(uint8_t *mac)
+Aper *TheWifi::GetAperByIp(esp_ip4_addr_t ip) {
+    for (int idx = 0; idx < MAX_NUM_CLIENTS; idx++)
+    {
+        if (clients[idx] && (ip.addr == clients[idx]->ip.addr))
+        {
+            return clients[idx];
+        }
+    }
+    return NULL;
+}
+
+Aper *TheWifi::GetAperByMac(uint8_t *mac)
 {
     uint8_t freeSlot = 254;
     uint8_t emptySlot = 254;
@@ -725,51 +736,39 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             theWifi->ParseStateBits(theWifi->stationStat);
             break;
         case IP_EVENT_AP_STAIPASSIGNED:
-            if (station != NULL)
-            {
+            if (event_data) {
                 evt = (system_event_info_t *)event_data;
-                client = theWifi->GetAper(station->mac);
-                if (evt != NULL)
+                wifi_sta_list_t wifi_sta_list;
+                tcpip_adapter_sta_list_t tcp_sta_list;
+                esp_wifi_ap_get_sta_list(&wifi_sta_list);
+
+                if (tcpip_adapter_get_sta_list(&wifi_sta_list, &tcp_sta_list) == ESP_OK)
                 {
-                    if (client != NULL)
+                    for (uint8_t i = 0; i < wifi_sta_list.num; i++)
                     {
-                        client->Update((ip4_addr_t *)&evt->ap_staipassigned.ip);
+                        if ((evt->ap_staipassigned.ip.addr != 0) && 
+                            (evt->ap_staipassigned.ip.addr == tcp_sta_list.sta[i].ip.addr)) {
+                            client = theWifi->GetAperByMac(tcp_sta_list.sta[i].mac);
+                            if (client && (theWifi->GetAperByIp(tcp_sta_list.sta[i].ip) != client)) {
+                                client->Update((ip4_addr_t *)&tcp_sta_list.sta[i].ip);
+                                theWifi->RefreshApMembers(theWifi->apStat);
+                            } else {
+                                if (client) {
+                                    ESP_LOGI(__FUNCTION__,"Client reconnected with ip %d.%d.%d.%d",IP2STR(&tcp_sta_list.sta[i].ip));
+                                }
+                            }
+                            break;
+                        }
                     }
-                    else
-                    {
-                        ESP_LOGE(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x count not be created, AID=%d",
-                                 MAC2STR(station->mac), station->aid);
-                    }
-                    ESP_LOGI(__FUNCTION__, "Served ip::" IPSTR, IP2STR(&client->ip));
                 }
                 else
                 {
-                    ESP_LOGI(__FUNCTION__, "No ip, reconnected, re-trigger on all");
-                    if ((client == NULL) || (((uint32_t)client->ip.addr) == 0))
-                    {
-                        wifi_sta_list_t wifi_sta_list;
-                        tcpip_adapter_sta_list_t tcp_sta_list;
-                        esp_wifi_ap_get_sta_list(&wifi_sta_list);
-
-                        if (tcpip_adapter_get_sta_list(&wifi_sta_list, &tcp_sta_list) == ESP_OK)
-                        {
-                            for (uint8_t i = 0; i < wifi_sta_list.num; i++)
-                            {
-                                ESP_LOGI(__FUNCTION__, "Mac : %d , STA IP : %d\n", tcp_sta_list.sta[i].mac[0], tcp_sta_list.sta[i].ip.addr);
-                                ESP_LOGI(__FUNCTION__, "Num: %d , Mac : %d\n", wifi_sta_list.num, wifi_sta_list.sta[i].mac[0]);
-                            }
-                        }
-                        else
-                        {
-                            ESP_LOGE(__FUNCTION__, "Cant get sta list");
-                        }
-                    }
+                    ESP_LOGE(__FUNCTION__, "Cant get sta list");
                 }
-                theWifi->RefreshApMembers(theWifi->apStat);
             }
             else
             {
-                ESP_LOGE(__FUNCTION__, "No Station to pull on");
+                ESP_LOGE(__FUNCTION__, "No event data");
             }
             break;
         default:
@@ -818,7 +817,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             xEventGroupSetBits(evtGrp, WIFI_CONNECTED_BIT);
             xEventGroupClearBits(evtGrp, WIFI_DISCONNECTED_BIT);
             memcpy((void *)station, (void *)event_data, sizeof(wifi_event_ap_staconnected_t));
-            client = theWifi->GetAper(station->mac);
+            client = theWifi->GetAperByMac(station->mac);
             if (client != NULL)
             {
                 //restSallyForth(evtGrp);
@@ -834,11 +833,9 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
                          MAC2STR(station->mac), station->aid);
             }
             theWifi->RefreshApMembers(theWifi->apStat);
-            ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x joined, AID=%d",
-                     MAC2STR(station->mac), station->aid);
             break;
         case WIFI_EVENT_AP_STADISCONNECTED:
-            client = theWifi->GetAper(station->mac);
+            client = theWifi->GetAperByMac(station->mac);
             if (client != NULL)
             {
                 client->Dissassociate();
@@ -918,6 +915,7 @@ Aper::~Aper()
 void Aper::Update(uint8_t station[6])
 {
     assert(station);
+    ESP_LOGI(__FUNCTION__, "New station %02x:%02x:%02x:%02x:%02x:%02x", MAC2STR(mac));
     memcpy(mac, station, sizeof(uint8_t) * 6);
     connectionTime = 0;
     connectTime = 0;
@@ -929,10 +927,12 @@ void Aper::Update(ip4_addr_t *station)
     if (station == NULL)
     {
         memset(&ip, 0, sizeof(esp_ip4_addr_t));
+        ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x Lost it's IP", MAC2STR(mac));
     }
     else
     {
         memcpy(&ip, station, sizeof(esp_ip4_addr_t));
+        ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x Connected with IP %d.%d.%d.%d", MAC2STR(mac), IP2STR(station));
     }
 }
 

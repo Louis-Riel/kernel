@@ -1880,7 +1880,7 @@ div.jsoneditor-value.jsoneditor-number {
     color: aquamarine;
 }
 
-.MuiFormControl-root {
+.MuiOutlinedInput-root {
     background: linear-gradient(to bottom, #cec9c961, #3a4a38) !important;
 }
 
@@ -2238,4 +2238,63 @@ div.jsoneditor-value.jsoneditor-string {
 
 div.jsoneditor-value.jsoneditor-number {
     color: lightseagreen !important ;
+}
+
+.MuiPaper-root {
+    overflow: visible !important;
+}
+
+.config-cards {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+.MuiCardHeader-content {
+    background: linear-gradient(to bottom, #040404, #3a4a38);
+    color: aquamarine;
+}
+
+
+.MuiCardHeader-subheader {
+    color: cyan !important;
+}
+
+.popuperror>.MuiPaper-root {
+    background: linear-gradient(to bottom, #cac8c8, #aaa7a7) !important;
+}
+
+button.MuiButtonBase-root.MuiTab-root.MuiTab-textColorPrimary {
+    color: aqua;
+}
+
+.control-editor>button {
+    position: relative;
+    right: 51px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.control-editor {
+    display: flex;
+    flex-direction: row;
+}
+
+.button-bar {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-content: flex-start;
+    align-items: flex-start;
+}
+
+.MuiListItem-root>label {
+    position: absolute;
+    top: -2px;
+    font-size: small;
+    left: 28px;
+    z-index: 2;
 }

@@ -59,6 +59,8 @@ MFile::MFile(const char* fileName):MFile()
     cJSON_AddItemToArray(methods,flush);
     cJSON_AddStringToObject(flush,"command","flush");
     cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
+    cJSON_AddStringToObject(flush,"caption","flush");
+
     status = apin->GetPropertyHolder("status");
     hasContent = apin->GetPropertyHolder("hasContent");
     bytesWritten = apin->GetPropertyHolder("bytesWritten");
