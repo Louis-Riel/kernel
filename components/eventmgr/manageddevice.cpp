@@ -11,77 +11,59 @@ uint64_t ManagedDevice::lastErrorTs=0;
 ManagedDevice* ManagedDevice::runningInstances[MAX_NUM_DEVICES];
 
 ManagedDevice::ManagedDevice(const char* type)
-:ManagedDevice(type,type,&BuildStatus)
+:ManagedDevice(type,NULL,NULL,NULL)
 {
 }
 
-ManagedDevice::ManagedDevice(const char *type,const char* name,cJSON* (*statusFnc)(void*))
-:ManagedDevice(type, name, statusFnc, &HealthCheck)
-{
-
-}
-
-ManagedDevice::ManagedDevice(const char *type,const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void*))
-:ManagedDevice(type, name, statusFnc, hcFnc, NULL)
+ManagedDevice::ManagedDevice(const char *type,const char* name)
+:ManagedDevice(type, name,NULL,NULL)
 {
 
 }
 
-ManagedDevice::ManagedDevice(const char *type,const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void*),bool (*commandFnc)(ManagedDevice* instance, cJSON *))
-:ManagedDevice(type, name, statusFnc, hcFnc, commandFnc, NULL)
-{
-
-}
-
-ManagedDevice::ManagedDevice(const char *type,const char *name, cJSON *(*statusFnc)(void *),bool (hcFnc)(void*),bool (*commandFnc)(ManagedDevice* instance, cJSON *),cJSON* (*configFnc)(ManagedDevice* instance))
-:eventBase((esp_event_base_t)dmalloc(strlen(type)+1))
+ManagedDevice::ManagedDevice(const char *type,const char *name, bool (*hcFnc)(void*),bool (*commandFnc)(ManagedDevice* instance, cJSON *))
+:eventBase((esp_event_base_t)type)
 ,handlerDescriptors(NULL)
-,statusFnc(statusFnc == NULL ? &BuildStatus : statusFnc)
+,status(NULL)
 ,hcFnc(hcFnc == NULL ? &HealthCheck : hcFnc)
 ,commandFnc(commandFnc)
-,configFnc(configFnc == NULL ? &buildConfigTemplate : configFnc)
-,status(statusFnc(this))
-,configTemplate(configFnc(this))
+,name((char*)dmalloc(strlen(name == NULL ? type : name)+1))
 {
   if(!ValidateDevices())
   {
       ESP_LOGE(__FUNCTION__,"Too many devices");
       return;
   }
-  if(!name)
-  {
-      name=type;
-  }
-  this->name=strdup(name);
-  runningInstanes[numDevices++]=this;
-  ESP_LOGI(__FUNCTION__,"Created device %s",name);
+  strcpy(this->name,name == NULL ? type : name);
+  status=BuildStatus(this);
 
-  strcpy((char*)eventBase, type);
   if (numDevices == 0) {
     memset(runningInstances,0,sizeof(void*)*MAX_NUM_DEVICES);
-  }
-  bool foundEmptySpot=false;
-  for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
-    if (runningInstances[idx] == NULL){
-      runningInstances[idx] = this;
-      foundEmptySpot=true;
-      break;
+    runningInstances[numDevices++]=this;
+  } else {
+    bool foundEmptySpot=false;
+    for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
+      if (runningInstances[idx] == NULL){
+        runningInstances[idx] = this;
+        foundEmptySpot=true;
+        break;
+      }
+    }
+    if (!foundEmptySpot){
+      runningInstances[numDevices++]=this;
     }
   }
-  if (!foundEmptySpot)
-    runningInstances[numDevices++]=this;
-  this->name = (char*)dmalloc(strlen(name)+1);
-  strcpy(this->name,name);
+
+  if (this->name == NULL) {
+    ESP_LOGE(__FUNCTION__,"Device name is null for %s", type);
+  } else {
+    ESP_LOGI(__FUNCTION__,"Created device %s/%s",type,this->name);
+  }
 }
 
 const char* ManagedDevice::GetName() {
   return name;
 }
-
-cJSON* ManagedDevice::getConfigTemplate(){
-  return configTemplate;
-}
-
 
 ManagedDevice::~ManagedDevice() {
   for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
@@ -130,16 +112,6 @@ uint32_t ManagedDevice::GetNumRunningInstances(){
   return numDevices;
 }
 
-
-void ManagedDevice::UpdateStatuses(){
-  for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
-    if (runningInstances[idx] && runningInstances[idx]->statusFnc){
-      runningInstances[idx]->status = runningInstances[idx]->statusFnc(runningInstances[idx]);
-      ESP_LOGV(__FUNCTION__,"Refreshed %s",runningInstances[idx]->GetName());
-    }
-  }
-}
-
 cJSON* ManagedDevice::BuildStatus(void* instance){
   ManagedDevice* md = (ManagedDevice*) instance;
   if (md) {
@@ -159,7 +131,7 @@ bool ManagedDevice::ValidateDevices(){
   for (uint32_t idx = 0; idx < MAX_NUM_DEVICES; idx++) {
     if (runningInstances[idx]) {
       size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
-      if (!runningInstances[idx]->hcFnc(runningInstances[idx])){
+      if (runningInstances[idx]->hcFnc && !runningInstances[idx]->hcFnc(runningInstances[idx])){
         ESP_LOGW(__FUNCTION__,"HC Failed for %s",runningInstances[idx]->GetName());
         hasIssues = true;
         numErrors++;
@@ -175,10 +147,15 @@ bool ManagedDevice::ValidateDevices(){
 }
 
 void ManagedDevice::RunHealthCheck(void* param) {
-  if (!ValidateDevices()){
-    dumpLogs();
-    if (numErrors > 5)
+  if (!heap_caps_check_integrity_all(true)) {
+      ESP_LOGE(__FUNCTION__,"bcaps integrity error");
       esp_restart();
+  }
+
+  if (!ValidateDevices()){
+    if (numErrors > 5){
+      esp_restart();
+    }
   } else if (lastErrorTs) {
     if ((esp_timer_get_time() - lastErrorTs) > ERROR_MIN_TIME) {
       numErrors = 0;
@@ -189,18 +166,9 @@ void ManagedDevice::RunHealthCheck(void* param) {
 bool ManagedDevice::HealthCheck(void* instance){
   if (instance == NULL) {
     ESP_LOGE(__FUNCTION__,"Missing instance to validate");
-  }
-  ManagedDevice* dev = (ManagedDevice*)instance;
-  if (!heap_caps_check_integrity_all(true)) {
-      ESP_LOGE(dev->name,"bcaps integrity error");
-      return false;
-  }
-  uint32_t freeMem = esp_get_free_heap_size();
-  if (freeMem < 800000) {
-    ESP_LOGE(__FUNCTION__,"Running low on mem: %d",freeMem);
     return false;
   }
-
+  ManagedDevice* dev = (ManagedDevice*)instance;
   if (cJSON_IsInvalid(dev->status)){
     ESP_LOGE(__FUNCTION__,"Invalid status for %s",dev->name);
     return false;
@@ -210,13 +178,9 @@ bool ManagedDevice::HealthCheck(void* instance){
   return true;
 }
 
-cJSON* ManagedDevice::buildConfigTemplate(ManagedDevice* instance){
-  if (instance == NULL) {
-    ESP_LOGE(__FUNCTION__,"Missing instance to validate");
-    return NULL;
-  }
+cJSON* ManagedDevice::BuildConfigTemplate(){
   cJSON* cfg = cJSON_CreateObject();
-  cJSON_AddStringToObject(cfg,"name",instance->GetName());
-  cJSON_AddStringToObject(cfg,"class",instance->eventBase);
+  cJSON_AddStringToObject(cfg,"name","");
+  cJSON_AddStringToObject(cfg,"class","");
   return cfg;
 }

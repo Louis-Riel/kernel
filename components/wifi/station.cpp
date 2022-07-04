@@ -26,6 +26,7 @@
 #include <sys/time.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+const char* TheWifi::WIFI_BASE="TheWifi";
 
 uint8_t s_retry_num = 0;
 esp_netif_t *sta_netif = NULL;
@@ -83,7 +84,10 @@ TheWifi::~TheWifi()
 }
 
 TheWifi::TheWifi(AppConfig *appcfg)
-    : ManagedDevice("TheWifi", "TheWifi", BuildStatus), eventGroup(xEventGroupCreate()), cfg(appcfg), s_app_eg(getAppEG()), healthCheckCount(0)
+    : ManagedDevice(WIFI_BASE)
+    , eventGroup(xEventGroupCreate())
+    , cfg(appcfg)
+    , s_app_eg(getAppEG())
 {
     theInstance = this;
     stationStat = AppConfig::GetAppStatus()->GetConfig("/wifi/station");
@@ -143,7 +147,7 @@ TheWifi::TheWifi(AppConfig *appcfg)
             wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
             ESP_ERROR_CHECK(esp_wifi_set_config(wifi_interface_t::WIFI_IF_STA, &wifi_config));
         }
-        cJSON* methods = cJSON_AddArrayToObject(BuildStatus(this),"commands");
+        cJSON* methods = cJSON_AddArrayToObject(status,"commands");
         cJSON* flush = cJSON_CreateObject();
         cJSON_AddItemToArray(methods,flush);
         cJSON_AddStringToObject(flush,"command","scanaps");

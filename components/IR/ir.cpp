@@ -11,6 +11,7 @@
 #define RMT_IDLE_TIMEOUT 8000 // ticks
 
 const char* emptySpaces = "                                       ";
+const char* IRDecoder::IRDECODER_BASE="IRDecoder";
 
 static bool isRunning=false;
 
@@ -47,7 +48,7 @@ IRDecoder::~IRDecoder(){
 }
 
 IRDecoder::IRDecoder(AppConfig* config)
-    :ManagedDevice("IRDecoder","IRDecoder",BuildStatus,HealthCheck),
+    :ManagedDevice(IRDECODER_BASE),
     pinNo(config->GetPinNoProperty("pinNo")),
     channelNo((rmt_channel_t)config->GetIntProperty("channelNo")),
     config(config),
@@ -56,7 +57,7 @@ IRDecoder::IRDecoder(AppConfig* config)
     buf((char*)dmalloc(1024))
 {
     isRunning=true;
-    AppConfig* apin = new AppConfig(ManagedDevice::BuildStatus(this),AppConfig::GetAppStatus());
+    AppConfig* apin = new AppConfig(status,AppConfig::GetAppStatus());
     if (!pinNo || (channelNo > RMT_CHANNEL_MAX)) {
         apin->SetStringProperty("error","Invalid IRDecoder Configuration Pin");
         ESP_LOGW(__FUNCTION__,"Invalid IRDecoder Configuration Pin:%d Channel:%d",pinNo,channelNo);
@@ -106,7 +107,7 @@ void IRDecoder::IRPoller(void *arg){
         while ((items=(rmt_item32_t *) xRingbufferReceive(ir->rb, &length, portMAX_DELAY))) {
             if ((code=ir->read(items,length))){
                 length /= 4;
-                if (cJSON_PrintPreallocated(ManagedDevice::BuildStatus(ir),ir->buf,1024,false)){
+                if (cJSON_PrintPreallocated(ir->status,ir->buf,1024,false)){
                     //AppConfig::SignalStateChange(state_change_t::MAIN);
                     esp_event_post(ir->eventBase,eventIds::CODE,ir->buf,strlen(ir->buf),portMAX_DELAY);
                 } else {

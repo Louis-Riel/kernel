@@ -25,10 +25,11 @@ MFile::~MFile(){
 }
 
 MFile::MFile()
-    :ManagedDevice(MFILE_BASE,"MFile",BuildStatus)
+    :ManagedDevice(MFILE_BASE)
     ,file(NULL)
 {
     ESP_LOGV(__FUNCTION__,"Building MFile");
+    status = BuildStatus(this);
     if (numOpenFiles == 0) {
         memset(openFiles,0,sizeof(void*)*MAX_OPEN_FILES);
     }
@@ -50,7 +51,7 @@ MFile::MFile(const char* fileName):MFile()
         ESP_LOGV(__FUNCTION__,"file %s(%d)...",name, sz);
     } 
     cJSON* jcfg;
-    AppConfig* apin = new AppConfig((jcfg=ManagedDevice::BuildStatus(this)),AppConfig::GetAppStatus());
+    AppConfig* apin = new AppConfig((jcfg=ManagedDevice::status),AppConfig::GetAppStatus());
     apin->SetIntProperty("status",mfile_state_t::MFILE_INIT);
     apin->SetBoolProperty("hasContent",0);
     apin->SetIntProperty("bytesWritten",0);
@@ -243,10 +244,6 @@ esp_event_base_t MFile::GetEventBase(){
     return MFILE_BASE;    
 }
 
-cJSON* MFile::BuildStatus(void *instance){
-    return ManagedDevice::BuildStatus(instance);
-}
-
 const char* MFile::GetFilename(){
     return fileName;
 }
@@ -274,7 +271,7 @@ BufferedFile::BufferedFile(const char* fileName)
     } else {
         ESP_LOGV(__FUNCTION__,"Creating file %s is new or empty:%d",fileName, isNewOrEmpty);
     }
-    AppConfig* apin = new AppConfig(MFile::BuildStatus(this),AppConfig::GetAppStatus());
+    AppConfig* apin = new AppConfig(((MFile*)this)->status,AppConfig::GetAppStatus());
     apin->SetIntProperty("bytesCached",0);
     bytesCached = apin->GetPropertyHolder("bytesCached");
     delete apin;

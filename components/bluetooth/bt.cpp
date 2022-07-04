@@ -20,7 +20,7 @@ const char* Bt::BT_BASE="Bt";
 static Bt* instance = NULL;
 
 Bt::Bt()
-    :ManagedDevice(BT_BASE,BT_BASE,BuildStatus)
+    :ManagedDevice(BT_BASE)
 {
     ESP_LOGV(__FUNCTION__,"Bt start");
     
@@ -30,7 +30,7 @@ Bt::Bt()
 
     InitDevice();
     cJSON* jcfg;
-    AppConfig* apin = new AppConfig((jcfg=BuildStatus(this)),AppConfig::GetAppStatus());
+    AppConfig* apin = new AppConfig((jcfg=status),AppConfig::GetAppStatus());
     apin->SetStringProperty("name",name);
     apin->SetStringProperty("state","Off");
     btStatus = apin->GetPropertyHolder("state");

@@ -30,6 +30,7 @@ protected:
     gpio_num_t pinNo;
     rmt_channel_t channelNo;
     EventHandlerDescriptor* BuildHandlerDescriptors();
+    static const char* IRDECODER_BASE;
 
     int8_t available();
     uint32_t read(rmt_item32_t* item, size_t length);

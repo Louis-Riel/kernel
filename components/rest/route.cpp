@@ -6,6 +6,8 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
+const char* TheRest::REST_BASE="Rest";
+
 static TheRest *restInstance = NULL;
 
 void restSallyForth(void *pvParameter) {
@@ -16,7 +18,7 @@ void restSallyForth(void *pvParameter) {
 }
 
 TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
-    : ManagedDevice("TheRest","TheRest",BuildStatus,HealthCheck),
+    :ManagedDevice(REST_BASE),
       eventGroup(xEventGroupCreate()),
       wifiEventGroup(evtGrp),
       restConfig(HTTPD_DEFAULT_CONFIG()),
@@ -30,9 +32,8 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
         ESP_LOGI(__FUNCTION__, "First Rest for %d", deviceId);
         restInstance = this;
-        AppConfig* apin = new AppConfig((status = ManagedDevice::BuildStatus(this)),AppConfig::GetAppStatus());
+        AppConfig* apin = new AppConfig((status = status),AppConfig::GetAppStatus());
         apin->SetIntProperty("numRequests",0);
-        apin->SetIntProperty("numHealthChecks",0);
         apin->SetIntProperty("processingTime_us",0);
         apin->SetIntProperty("BytesIn",0);
         apin->SetIntProperty("BytesOut",0);
@@ -42,7 +43,6 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         jBytesIn = apin->GetPropertyHolder("BytesIn");
         jBytesOut = apin->GetPropertyHolder("BytesOut");
         jnumErrors = apin->GetPropertyHolder("Failures");
-        jNumHc = apin->GetPropertyHolder("numHealthChecks");
         delete apin;
     }
     status = bake_status_json();
@@ -70,7 +70,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     }
 
     hcUrl = (char*)dmalloc(30);
-    sprintf((char*)hcUrl,"http://192.168.4.1/status/");
+    sprintf((char*)hcUrl,"http://%s/status/",ipAddr);
     restConfig.uri_match_fn = this->routeHttpTraffic;
     restConfig.lru_purge_enable = true;
 
@@ -225,7 +225,6 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
 
 char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, size_t *len, char *charBuf)
 {
-    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
     esp_http_client_handle_t client = NULL;
     esp_http_client_config_t *config = NULL;
     bool isPreAllocated = charBuf != NULL;
@@ -239,10 +238,11 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
     config->max_redirection_count = 0;
     config->port = 80;
     ESP_LOGI(__FUNCTION__, "Getting %s", config->url);
-    esp_err_t err = ESP_ERR_HW_CRYPTO_BASE;
+    esp_err_t err = ESP_OK;
     int hlen = 0;
     int retCode = -1;
     size_t totLen = isPreAllocated ? *len : 0;
+    char *retVal = NULL;
     
     if ((client = esp_http_client_init(config)) &&
         ((err = esp_http_client_open(client, 0)) == ESP_OK) &&
@@ -250,7 +250,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         ((retCode = esp_http_client_get_status_code(client)) == 200))
     {
         int bufLen = isPreAllocated ? *len : hlen > 0 ? hlen + 1 : JSON_BUFFER_SIZE;
-        char *retVal = isPreAllocated ? charBuf : (char *)dmalloc(bufLen);
+        retVal = isPreAllocated ? charBuf : (char *)dmalloc(bufLen);
 
         int chunckLen = isPreAllocated ? min(JSON_BUFFER_SIZE, *len) : hlen ? hlen
                                                                             : JSON_BUFFER_SIZE;
@@ -265,15 +265,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
                 memset(retVal + *len, 0, 1);
         }
         ESP_LOGV(__FUNCTION__, "Downloaded %d bytes of data from %s", *len, url);
-        esp_http_client_close(client);
-        esp_http_client_cleanup(client);
-        ldfree((void *)config);
         jBytesIn->valuedouble = jBytesIn->valueint+=*len;
-        size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
-        if (diff > 0) {
-            ESP_LOGW(__FUNCTION__,"%s %d bytes memleak1",url,diff);
-        }
-        return retVal;
     }
     else
     {
@@ -286,11 +278,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
         esp_http_client_cleanup(client);
     }
     ldfree((void *)config);
-    size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
-    if (diff > 0) {
-        ESP_LOGW(__FUNCTION__,"%s %d bytes memleak2",url,diff);
-    }
-    return NULL;
+    return retVal;
 }
 
 cJSON *TheRest::PostJSonRequest(const char *url)
@@ -506,37 +494,14 @@ EventGroupHandle_t TheRest::GetEventGroup()
 }
 
 bool TheRest::HealthCheck(void* instance){
-    TheRest* theRest = (TheRest*)instance;
-    theRest->jNumHc->valueint = theRest->jNumHc->valuedouble++;
-    if (theRest->jnumErrors->valueint > 5) {
-        ESP_LOGW(__FUNCTION__,"Gettin' outa dodge after %d errors",theRest->jnumErrors->valueint);
-        return false;
-    }
-    return true;
-
-    if (xEventGroupGetBits(theRest->app_eg) & app_bits_t::TRIPS_SYNCING) {
-        ESP_LOGI(__FUNCTION__,"Skipping healthcheck whilst synching");
-        return true;
-    }
-
-    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
-    size_t len=0;
-    char* resp = theRest->SendRequest(theRest->hcUrl,HTTP_METHOD_POST,&len);
-    if (len > 0){
-        ldfree(resp);
-        size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
-        if (diff > 0) {
-            ESP_LOGW(__FUNCTION__,"TheRest::HealthCheck %d bytes memleak",diff);
+    if (ManagedDevice::HealthCheck(instance)) {
+        TheRest* theRest = (TheRest*)instance;
+        size_t len=0;
+        char* resp = theRest->SendRequest(theRest->hcUrl,HTTP_METHOD_POST,&len);
+        if (resp != NULL){
+            ldfree(resp);
+            return true;
         }
-        return true;
-    }
-    if (WebsocketManager::HasOpenedWs()) {
-        ESP_LOGW(__FUNCTION__,"Ignoring error since we have web sockets");
-        return true;
-    }
-    if (xEventGroupGetBits(theRest->app_eg) & app_bits_t::TRIPS_SYNCING) {
-        ESP_LOGW(__FUNCTION__,"Ignoring error since we are synching");
-        return true;
     }
     return false;
 }

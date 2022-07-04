@@ -34,7 +34,6 @@ protected:
     bool isRunning;
 
     void InitDevice();
-    static char* getName(AppConfig* config);
     static bool isPwmInitialized;
     static void servoThread(void* instance);
     uint32_t servo_angle_to_duty_us(int angle);

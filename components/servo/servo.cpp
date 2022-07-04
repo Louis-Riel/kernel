@@ -21,9 +21,8 @@ static const double time_distribution[NUM_TIME_SLICES] = {
 bool Servo::isPwmInitialized = false;
 
 Servo::Servo(AppConfig* config)
-    :ManagedDevice(SERVO_BASE,getName(config),BuildStatus,HealthCheck,ProcessCommand),
+    :ManagedDevice(SERVO_BASE,config->GetStringProperty("name"),NULL,&ProcessCommand),
     config(config),
-    name(getName(config)),
     pinNo(config->GetPinNoProperty("pinNo")),
     SERVO_MIN_PULSEWIDTH_US(config->GetIntProperty("SERVO_MIN_PULSEWIDTH_US")),
     SERVO_MAX_PULSEWIDTH_US(config->GetIntProperty("SERVO_MAX_PULSEWIDTH_US")),
@@ -31,7 +30,7 @@ Servo::Servo(AppConfig* config)
     SERVO_PWM_FREQUENCY(config->GetIntProperty("SERVO_PWM_FREQUENCY")),
     isRunning(false)
 {
-    AppConfig* appstate = new AppConfig(BuildStatus(this),AppConfig::GetAppStatus());
+    AppConfig* appstate = new AppConfig(status,AppConfig::GetAppStatus());
     appstate->SetStringProperty("name",name);
     appstate->SetIntProperty("pinNo",pinNo);
     if ((SERVO_MIN_PULSEWIDTH_US != -1) &&
@@ -77,13 +76,6 @@ EventHandlerDescriptor* Servo::BuildHandlerDescriptors(){
   return handler;
 }
 
-
-char* Servo::getName(AppConfig* config) {
-    const char* jname = config->GetStringProperty("name");
-    char* name = (char*)dmalloc(strlen(jname));
-    strcpy(name,jname);
-    return name;
-}
 
 uint32_t Servo::servo_angle_to_duty_us(int angle)
 {

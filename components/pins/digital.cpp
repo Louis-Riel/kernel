@@ -24,7 +24,7 @@ Pin::~Pin(){
 }
 
 Pin::Pin(AppConfig* config)
-    :ManagedDevice(PIN_BASE,"DigitalPin",BuildStatus),
+    :ManagedDevice(PIN_BASE,config->GetStringProperty("pinName"),NULL,&ProcessCommand),
     pinNo(config->GetPinNoProperty("pinNo")),
     flags(config->GetIntProperty("driverFlags")),
     config(config),
@@ -32,6 +32,13 @@ Pin::Pin(AppConfig* config)
     buf((char*)dmalloc(1024))
 {
     InitDevice();
+}
+
+cJSON* Pin::BuildConfigTemplate() {
+    cJSON* commandTemplate = ManagedDevice::BuildConfigTemplate();
+    cJSON_AddNumberToObject(commandTemplate,"pinNo",1);
+    cJSON_AddNumberToObject(commandTemplate,"driverFlags",1);
+    return commandTemplate;
 }
 
 EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
@@ -45,15 +52,6 @@ EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
 }
 
 void Pin::InitDevice(){
-    const char* pname = config->GetStringProperty("pinName");
-    ldfree(name);
-    uint32_t sz = strlen(pname)+1;
-    name = (char*)dmalloc(200);
-    if (sz > 0){
-        strcpy(name,pname);
-    } else {
-        sprintf(name,"DigitalPin pin(%d)",pinNo);
-    }
     if (pins == NULL){
         EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
         if (handlerInstance == NULL)
@@ -109,29 +107,34 @@ void Pin::InitDevice(){
     if (isRtcGpio)
         ESP_ERROR_CHECK(gpio_isr_handler_add(pinNo, pinHandler, this));
 
-    cJSON* jcfg;
-    AppConfig* apin = new AppConfig((jcfg=BuildStatus(this)),AppConfig::GetAppStatus());
+    if (status == NULL) {
+        ESP_LOGE(__FUNCTION__,"No status object for %s",name);
+    }
+    AppConfig* apin = new AppConfig(status,AppConfig::GetAppStatus());
     apin->SetPinNoProperty("pinNo",pinNo);
     apin->SetStringProperty("name",name);
     apin->SetIntProperty("state",-1);
     pinStatus = apin->GetPropertyHolder("state");
     if (flags&gpio_driver_t::driver_type_t::digital_out){
-        cJSON* methods = cJSON_AddArrayToObject(jcfg,"commands");
+        cJSON* methods = cJSON_AddArrayToObject(status,"commands");
         cJSON* flush = cJSON_CreateObject();
         cJSON_AddItemToArray(methods,flush);
         cJSON_AddStringToObject(flush,"command","trigger");
+        cJSON_AddStringToObject(flush,"className",PIN_BASE);
         cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
         cJSON_AddStringToObject(flush,"param1","ON");
         cJSON_AddStringToObject(flush,"caption","On");
         flush = cJSON_CreateObject();
         cJSON_AddItemToArray(methods,flush);
         cJSON_AddStringToObject(flush,"command","trigger");
+        cJSON_AddStringToObject(flush,"className",PIN_BASE);
         cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
         cJSON_AddStringToObject(flush,"param1","OFF");
         cJSON_AddStringToObject(flush,"caption","Off");
         flush = cJSON_CreateObject();
         cJSON_AddItemToArray(methods,flush);
         cJSON_AddStringToObject(flush,"command","trigger");
+        cJSON_AddStringToObject(flush,"className",PIN_BASE);
         cJSON_AddStringToObject(flush,"HTTP_METHOD","PUT");
         cJSON_AddStringToObject(flush,"param1","TRIGGER");
         cJSON_AddStringToObject(flush,"caption","Trigger");
@@ -147,7 +150,7 @@ void Pin::RefrestState(){
         ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, eventBase,pinStatus->valueint?"On":"Off");
         //AppConfig::SignalStateChange(state_change_t::EVENT);
         memset(buf,0,1024);
-        if (cJSON_PrintPreallocated(ManagedDevice::BuildStatus(this),this->buf,1024,false)){
+        if (cJSON_PrintPreallocated(status,this->buf,1024,false)){
             //AppConfig::SignalStateChange(state_change_t::MAIN);
             esp_event_post(eventBase,pinStatus->valueint ? eventIds::ON : eventIds::OFF,buf,strlen(buf)+1,portMAX_DELAY);
         } else {
@@ -284,7 +287,7 @@ bool Pin::ProcessEvent(Pin::eventIds event,uint8_t state){
         ESP_LOGV(__FUNCTION__,"Pin %s from %d to %d",name,pinStatus->valueint,state);
         if (!isRtcGpio || flags&gpio_driver_t::driver_type_t::digital_out) {
             cJSON_SetIntValue(pinStatus,state);
-            if (cJSON_PrintPreallocated(ManagedDevice::BuildStatus(this),this->buf,1024,false)){
+            if (cJSON_PrintPreallocated(status,this->buf,1024,false)){
                 //AppConfig::SignalStateChange(state_change_t::MAIN);
                 esp_event_post(eventBase,pinStatus->valueint ? eventIds::ON : eventIds::OFF,buf,strlen(buf)+1,portMAX_DELAY);
                 return true;
@@ -297,14 +300,28 @@ bool Pin::ProcessEvent(Pin::eventIds event,uint8_t state){
 }
 
 bool Pin::HealthCheck(void* instance){
-    Pin* thePin = (Pin*)instance;
-    int curState = gpio_get_level(thePin->pinNo);
-    if (thePin->pinStatus && thePin->pinStatus->valueint != curState) {
+    if (ManagedDevice::HealthCheck(instance)){
+        Pin* thePin = (Pin*)instance;
+        int curState = gpio_get_level(thePin->pinNo);
+        if (thePin->pinStatus && thePin->pinStatus->valueint == curState) {
+            return true;
+        }
         ESP_LOGW(__FUNCTION__,"State discrepancy on pin %s, expected %d got %d",thePin->GetName(), thePin->pinStatus->valueint, curState);
         cJSON_SetIntValue(thePin->pinStatus,curState);
         ESP_LOGW(__FUNCTION__,"State discrepancy fixed on pin %s, %d == %d",thePin->GetName(), thePin->pinStatus->valueint, curState);
         thePin->PostEvent((void*)&thePin->pinNo,sizeof(thePin->pinNo),thePin->pinStatus->valueint ? eventIds::ON : eventIds::OFF);
-        return false;
     }
-    return true;
+    return false;
+}
+
+bool Pin::ProcessCommand(ManagedDevice* dev, cJSON * parms) {
+    Pin* pin = (Pin*)dev;
+    if (strcmp(pin->GetName(),cJSON_GetObjectItem(parms,"name")->valuestring)==0) {
+        cJSON *event = cJSON_GetObjectItemCaseSensitive(parms, "param1");
+        cJSON *state = cJSON_GetObjectItemCaseSensitive(parms, "param2");
+        if (pin->ProcessEvent(strcmp(event->valuestring,"TRIGGER") == 0 ? Pin::eventIds::TRIGGER : strcmp(event->valuestring,"ON") == 0 ? Pin::eventIds::ON : Pin::eventIds::OFF,state ? state->valueint : 2)) {
+           return true;
+        }
+    }
+    return false;
 }

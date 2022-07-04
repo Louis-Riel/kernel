@@ -67,6 +67,7 @@ public:
     tcpip_adapter_ip_info_t staIp;
 
 protected:
+    static const char* WIFI_BASE;
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     EventHandlerDescriptor* BuildHandlerDescriptors();
 
@@ -77,7 +78,6 @@ protected:
     Aper *clients[MAX_NUM_CLIENTS];
     wifi_config_t wifi_config;
     char* name;
-    cJSON* status;
 private:
     int RefreshApMembers(AppConfig* state);
     void InferPassword(const char *sid, char *pwd);
@@ -91,7 +91,6 @@ private:
     EventGroupHandle_t              s_app_eg;
     esp_event_handler_instance_t wifiEvtHandler;
     esp_event_handler_instance_t ipEvtHandler;
-    uint32_t healthCheckCount;
 };
 
 #endif

@@ -28,6 +28,8 @@ public:
         OFF,ON,TRIGGER,STATUS
     };
     bool ProcessEvent(Pin::eventIds event,uint8_t param);
+    static cJSON* BuildConfigTemplate();
+    static bool ProcessCommand(ManagedDevice* pin, cJSON * parms);
 protected:
     static uint8_t numPins;
     static void queuePoller(void *arg);
@@ -52,11 +54,11 @@ public:
     AnalogPin(AppConfig* config);
     ~AnalogPin();
     static void PollPins(void* instance);
+    static cJSON* BuildConfigTemplate();
 
 protected:
     static const char* PIN_BASE;
     AppConfig* config;
-    char* name;
     gpio_num_t pinNo;
     adc1_channel_t channel;
     adc_bits_width_t  channel_width;
@@ -74,7 +76,6 @@ protected:
     static adc1_channel_t PinNoToChannel(gpio_num_t pinNo);
     static adc_bits_width_t GetChannelWidth(uint8_t value);
     static adc_atten_t GetChannelAtten(double value);
-    static char* getName(AppConfig* config);
 };
 
 #endif

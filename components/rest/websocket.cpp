@@ -15,9 +15,10 @@
 
 static WebsocketManager* stateHandler = NULL;
 const char* emptySpace = "                              ";
+const char* WebsocketManager::WEBSOCKET_BASE="WebsocketManager";
 
 WebsocketManager::WebsocketManager():
-    ManagedDevice("WebsocketManager","WebsocketManager",BuildStatus,ManagedDevice::HealthCheck),
+    ManagedDevice(WEBSOCKET_BASE),
     isLive(true),
     logPos(0),
     msgQueue(xQueueCreate(25,JSON_BUFFER_SIZE)),
@@ -36,11 +37,8 @@ WebsocketManager::WebsocketManager():
   ESP_LOGI(__FUNCTION__,"Created StatePoller");
   registerLogCallback(LogCallback,stateHandler);
   ESP_LOGI(__FUNCTION__,"Log callback registered");
-  BuildStatus(this);
-  ESP_LOGI(__FUNCTION__,"Built Status");
-  cJSON* jState = ManagedDevice::BuildStatus(this);
-  jClients = cJSON_HasObjectItem(jState,"Clients")?cJSON_GetObjectItem(jState,"Clients"):cJSON_AddArrayToObject(jState,"Clients");
-  cJSON_AddNumberToObject(jState,"IsLive",true);
+  jClients = cJSON_HasObjectItem(status,"Clients")?cJSON_GetObjectItem(status,"Clients"):cJSON_AddArrayToObject(status,"Clients");
+  cJSON_AddNumberToObject(status,"IsLive",true);
 };
 
 WebsocketManager::~WebsocketManager(){
@@ -49,9 +47,9 @@ WebsocketManager::~WebsocketManager(){
   ESP_LOGI(__FUNCTION__,"Unregistered log callback");
   vQueueDelete(msgQueue);
   ldfree(msgQueueBuf);
-  cJSON* jState = ManagedDevice::BuildStatus(this);
-  cJSON_SetIntValue(cJSON_GetObjectItem(jState,"IsLive"),false);
-  cJSON_DeleteItemFromObject(jState,"Clients");
+
+  cJSON_SetIntValue(cJSON_GetObjectItem(status,"IsLive"),false);
+  cJSON_DeleteItemFromObject(status,"Clients");
   stateHandler=NULL;
 }
 
@@ -225,7 +223,6 @@ bool WebsocketManager::EventCallback(char *event){
   }
   return false;
 }
-
 
 void WebsocketManager::StatePoller(void* instance){
   EventGroupHandle_t stateEg = AppConfig::GetStateGroupHandle();

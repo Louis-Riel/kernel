@@ -48,8 +48,8 @@ public:
   bool isLive;
 
 protected:
-  static bool HealthCheck(void *instance);
   static void PostToClient(void* msg);
+  static const char* WEBSOCKET_BASE;
 
   EventHandlerDescriptor *BuildHandlerDescriptors();
 
@@ -81,6 +81,8 @@ public:
   static esp_err_t HandleWifiCommand(httpd_req_t *req);
   static cJSON* status_json();
   cJSON* bake_status_json();
+  static const char* REST_BASE;
+
 
 protected:
   const char* hcUrl;
@@ -107,9 +109,9 @@ protected:
   static esp_err_t eventDescriptor_handler(httpd_req_t *req);
   static esp_err_t ota_handler(httpd_req_t *req);
   static esp_err_t app_handler(httpd_req_t *req);
-  static esp_err_t list_entity_handler(httpd_req_t *req);
   static esp_err_t stat_handler(httpd_req_t *req);
   static esp_err_t config_handler(httpd_req_t *req);
+  static esp_err_t config_template_handler(httpd_req_t *req);
   static esp_err_t ws_handler(httpd_req_t *req);
   static esp_err_t sendFile(httpd_req_t *req, const char *path);
 
@@ -131,11 +133,16 @@ private:
   cJSON* jprocessingTime_us;
   cJSON* jBytesIn;
   cJSON* jBytesOut;
-  cJSON* jNumHc;
-  cJSON* status;
 
-  httpd_uri_t const restUris[11] =
+  httpd_uri_t const restUris[12] =
       {
+          {.uri = "/configTemplates*",
+           .method = HTTP_POST,
+           .handler = config_template_handler,
+           .user_ctx = NULL,
+           .is_websocket = false,
+           .handle_ws_control_frames = false,
+           .supported_subprotocol = NULL},
           {.uri = "/config*",
            .method = HTTP_POST,
            .handler = config_handler,

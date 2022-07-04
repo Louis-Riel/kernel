@@ -330,54 +330,6 @@ esp_err_t TheRest::eventDescriptor_handler(httpd_req_t *req){
     }
 }
 
-esp_err_t TheRest::list_entity_handler(httpd_req_t *req)
-{
-    char *jsonbuf = (char *)dmalloc(JSON_BUFFER_SIZE);
-    memset(jsonbuf, 0, JSON_BUFFER_SIZE);
-    *jsonbuf = '[';
-    ESP_LOGI(__FUNCTION__, "Getting %s url:%s", req->uri + 11, req->uri);
-    if (endsWith(req->uri, "kml"))
-    {
-        if (findFiles(req, "/kml", "kml", true, jsonbuf, JSON_BUFFER_SIZE - 1) != ESP_OK)
-        {
-            ESP_LOGE(__FUNCTION__, "Error wilst sending kml list");
-            ldfree(jsonbuf);
-            return httpd_resp_send_500(req);
-        }
-    }
-    else if (endsWith(req->uri, "csv"))
-    {
-        ESP_LOGI(__FUNCTION__, "Getting csv url:%s", req->uri);
-        if (findFiles(req, "/lfs/csv", "csv", false, jsonbuf, JSON_BUFFER_SIZE) != ESP_OK)
-        {
-            ESP_LOGE(__FUNCTION__, "Error wilst sending csv list");
-            ldfree(jsonbuf);
-            return httpd_resp_send_500(req);
-        }
-    }
-    else if (endsWith(req->uri, "log"))
-    {
-        if (findFiles(req, "/sdcard/logs", "log", false, jsonbuf, JSON_BUFFER_SIZE) != ESP_OK)
-        {
-            ESP_LOGE(__FUNCTION__, "Error wilst sending log list");
-            ldfree(jsonbuf);
-            return httpd_resp_send_500(req);
-        }
-    }
-    if (strlen(jsonbuf) > 1)
-        *(jsonbuf + strlen(jsonbuf) - 1) = ']';
-    else
-    {
-        sprintf(jsonbuf, "%s", "[]");
-    }
-
-    esp_err_t ret = httpd_resp_send(req, jsonbuf, strlen(jsonbuf));
-    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(jsonbuf);
-    ESP_LOGV(__FUNCTION__, "Sent final chunck of %d", strlen(jsonbuf));
-    ldfree(jsonbuf);
-    return ret;
-}
-
 void UpdateGpioProp(cfg_gpio_t *cfg, gpio_num_t val)
 {
     if (cfg->value != val)
@@ -518,7 +470,7 @@ esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
                     if (ed){
                         EventInterpretor::RunMethod(NULL,"Post",(void*)&stat,false);
                         ESP_LOGV(__FUNCTION__,"Posted %s to %s",postData, name);
-                        char* nstat = cJSON_Print(ManagedDevice::BuildStatus(dev));
+                        char* nstat = cJSON_Print(dev->status);
                         ret=httpd_resp_send(req,nstat,strlen(nstat));
                         ldfree(nstat);
                     } else {
@@ -641,32 +593,6 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 16;
                     }
                 } 
-                else if (jcommand && (strcmp(jcommand->valuestring, "trigger") == 0))
-                {
-                    cJSON *pinName = cJSON_GetObjectItemCaseSensitive(jresponse, "name");
-                    cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
-                    cJSON *state = cJSON_GetObjectItemCaseSensitive(jresponse, "param2");
-                    uint32_t slen = 0;
-                    if (pinName && pinName->valuestring && (slen=strlen(pinName->valuestring))) {
-                        Pin* pin = (Pin*)ManagedDevice::GetByName(pinName->valuestring);
-                        if (pin) {
-                            if (pin->ProcessEvent(strcmp(event->valuestring,"TRIGGER") == 0 ? Pin::eventIds::TRIGGER : strcmp(event->valuestring,"ON") == 0 ? Pin::eventIds::ON : Pin::eventIds::OFF,state ? state->valueint : 2)) {
-                                ret = httpd_resp_send(req, "OK", 2);
-                                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
-                                //AppConfig::SignalStateChange(state_change_t::MAIN);
-                            } else {
-                                ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,"Pin not triggered");
-                                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 17;
-                            }
-                        } else {
-                            ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"Pin not found");
-                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 14;
-                        }
-                    } else {
-                        ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,"Not Implemented");
-                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 15;
-                    }
-                }
                 else if (jcommand && (strcmp(jcommand->valuestring, "gpsstate") == 0))
                 {
                     cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
@@ -932,6 +858,40 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
             return ret;
         }
         return httpd_resp_send_500(req);
+    }
+    else
+    {
+        return httpd_resp_send_408(req);
+    }
+}
+
+esp_err_t TheRest::config_template_handler(httpd_req_t *req)
+{
+    ESP_LOGV(__FUNCTION__, "Config Handler.");
+    if (req->method == HTTP_GET)
+    {
+        char *path = (char *)req->uri + 8;
+        
+        if (endsWith(path,"configTemplates") || endsWith(path,"configTemplates/")) {
+            cJSON* jret = cJSON_CreateArray();
+            cJSON* jitem = cJSON_CreateObject();
+            cJSON_AddStringToObject(jitem, "name", "Pin");
+            cJSON_AddStringToObject(jitem, "label", "Digital Pin");
+            cJSON_AddItemToObject(jret, "config_template", Pin::BuildConfigTemplate());
+            cJSON_AddItemToArray(jret, jitem);
+            jitem = cJSON_CreateObject();
+            cJSON_AddStringToObject(jitem, "name", "AnalogPin");
+            cJSON_AddStringToObject(jitem, "label", "Analog Pin");
+            cJSON_AddItemToObject(jret, "config_template", AnalogPin::BuildConfigTemplate());
+            cJSON_AddItemToArray(jret, jitem);
+            char* json = cJSON_Print(jret);
+            esp_err_t ret = httpd_resp_send(req, json, strlen(json));
+            cJSON_Delete(jret);
+            ldfree(json);
+            return ret;
+        } else {
+            return httpd_resp_send_404(req);
+        }
     }
     else
     {

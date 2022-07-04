@@ -6,9 +6,8 @@
 const char* AnalogPin::PIN_BASE="AnalogPin";
 
 AnalogPin::AnalogPin(AppConfig* config)
-    :ManagedDevice(PIN_BASE,getName(config),BuildStatus),
+    :ManagedDevice(PIN_BASE,config->GetStringProperty("name")),
     config(config),
-    name(getName(config)),
     pinNo(config->GetPinNoProperty("pinNo")),
     channel(PinNoToChannel(config->GetPinNoProperty("pinNo"))),
     channel_width(GetChannelWidth(config->GetIntProperty("channel_width"))),
@@ -21,12 +20,17 @@ AnalogPin::AnalogPin(AppConfig* config)
     this->InitDevice();
 }
 
-char* AnalogPin::getName(AppConfig* config) {
-    const char* jname = config->GetStringProperty("name");
-    char* name = (char*)dmalloc(strlen(jname));
-    strcpy(name,jname);
-    return name;
+cJSON* AnalogPin::BuildConfigTemplate() {
+    cJSON* commandTemplate = ManagedDevice::BuildConfigTemplate();
+    cJSON_AddNumberToObject(commandTemplate,"pinNo",1);
+    cJSON_AddNumberToObject(commandTemplate,"channel_width",1);
+    cJSON_AddNumberToObject(commandTemplate,"channel_atten",1.1);
+    cJSON_AddNumberToObject(commandTemplate,"waitTime",0);
+    cJSON_AddNumberToObject(commandTemplate,"minValue",0);
+    cJSON_AddNumberToObject(commandTemplate,"minValue",0);
+    return commandTemplate;
 }
+
 
 adc1_channel_t AnalogPin::PinNoToChannel(gpio_num_t pinNo) {
     switch(pinNo) {
@@ -91,11 +95,11 @@ void AnalogPin::InitDevice(){
         ESP_LOGE(PIN_BASE, "Invalid channel atten");
         return;
     }
-    ESP_LOGI(__FUNCTION__,"Initialising analog pin %d",this->pinNo);
+    ESP_LOGI(__FUNCTION__,"Initialising analog %s pin %d status null:%d invalid: %d",this->name,this->pinNo, status == NULL, status == NULL ? -1 : cJSON_IsInvalid(status));
     ESP_ERROR_CHECK(adc1_config_width(this->channel_width));   
-    ESP_ERROR_CHECK(adc1_config_channel_atten(this->channel, this->channel_atten)); //ADC_ATTEN_DB_11 = 0-3,6V
+    ESP_ERROR_CHECK(adc1_config_channel_atten(this->channel, this->channel_atten));
 
-    AppConfig* appstate = new AppConfig(BuildStatus(this),AppConfig::GetAppStatus());
+    AppConfig* appstate = new AppConfig(status,AppConfig::GetAppStatus());
 
     appstate->SetStringProperty("name",name);
     appstate->SetIntProperty("pinNo",pinNo);

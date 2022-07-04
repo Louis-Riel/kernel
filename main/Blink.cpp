@@ -873,9 +873,5 @@ void app_main(void)
   }
   ESP_LOGI(__FUNCTION__, "Battery: %f", getBatteryVoltage());
 
-  initSDCard();
-  CleanupEmptyDirs("/lfs");
-  CleanupEmptyDirs("/sdcard");
-  deinitSDCard();
   //new Bt();
 }
