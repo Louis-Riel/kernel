@@ -724,12 +724,11 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             //xEventGroupSetBits(s_app_eg, REST);
             xEventGroupClearBits(evtGrp, WIFI_DISCONNECTED_BIT);
             theWifi->ParseStateBits(theWifi->stationStat);
-            //initSDCard();
 
             if (!theWifi->isSidPuller((const char *)theWifi->wifi_config.sta.ssid, true))
                 CreateBackgroundTask(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, &timeHandle);
 
-            CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
+            //CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
 
             //restSallyForth(evtGrp);
             break;
@@ -754,11 +753,17 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
                             (evt->ap_staipassigned.ip.addr == tcp_sta_list.sta[i].ip.addr)) {
                             client = theWifi->GetAperByMac(tcp_sta_list.sta[i].mac);
                             if (client && (theWifi->GetAperByIp(tcp_sta_list.sta[i].ip) != client)) {
+                                Aper* prevOwner = theWifi->GetAperByIp(tcp_sta_list.sta[i].ip);
+                                if (prevOwner) {
+                                    ESP_LOGI(__FUNCTION__,"Client released ip %d.%d.%d.%d",IP2STR(&tcp_sta_list.sta[i].ip));
+                                    prevOwner->ip.addr=0;
+                                }
+                                ESP_LOGI(__FUNCTION__,"Client reconnected with ip %d.%d.%d.%d",IP2STR(&tcp_sta_list.sta[i].ip));
                                 client->Update((ip4_addr_t *)&tcp_sta_list.sta[i].ip);
                                 theWifi->RefreshApMembers(theWifi->apStat);
                             } else {
                                 if (client) {
-                                    ESP_LOGI(__FUNCTION__,"Client reconnected with ip %d.%d.%d.%d",IP2STR(&tcp_sta_list.sta[i].ip));
+                                    ESP_LOGV(__FUNCTION__,"Client reconnected with ip %d.%d.%d.%d",IP2STR(&tcp_sta_list.sta[i].ip));
                                 }
                             }
                             break;
@@ -808,7 +813,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             char ipaddt[16];
             sprintf(ipaddt, IPSTR, IP2STR(&theWifi->staIp.ip));
             ESP_LOGI(__FUNCTION__, "AP ip::%s", ipaddt);
-            xEventGroupSetBits(s_app_eg, REST);
+            //xEventGroupSetBits(s_app_eg, REST);
             theWifi->ParseStateBits(theWifi->apStat);
             theWifi->apStat->SetStringProperty("Ip", ipaddt);
             break;
@@ -824,8 +829,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             client = theWifi->GetAperByMac(station->mac);
             if (client != NULL)
             {
-                //restSallyForth(evtGrp);
-                CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
+                //CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
                 xEventGroupSetBits(s_app_eg, app_bits_t::REST);
                 client->Associate();
                 ESP_LOGI(__FUNCTION__, "station %02x:%02x:%02x:%02x:%02x:%02x join, AID=%d",
@@ -854,8 +858,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
 
             if ((theWifi->RefreshApMembers(theWifi->apStat) == 0) && !(xEventGroupGetBits(evtGrp) & WIFI_AP_UP_BIT))
             {
-                xEventGroupClearBits(evtGrp, WIFI_CONNECTED_BIT);
-                xEventGroupSetBits(evtGrp, WIFI_DISCONNECTED_BIT);
+                xEventGroupSetBits(evtGrp, REST_OFF);
             }
 
             break;

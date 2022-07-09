@@ -24,14 +24,15 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       restConfig(HTTPD_DEFAULT_CONFIG()),
       gwAddr(NULL),
       ipAddr(NULL),
-      app_eg(getAppEG())
+      app_eg(getAppEG()),
+      storageFlags(initStorage())
 {
     if (restInstance == NULL)
     {
-        initSDCard();
         deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
         ESP_LOGI(__FUNCTION__, "First Rest for %d", deviceId);
         restInstance = this;
+        ESP_LOGI(__FUNCTION__, "Getting Config for %d", deviceId);
         AppConfig* apin = new AppConfig((status = status),AppConfig::GetAppStatus());
         apin->SetIntProperty("numRequests",0);
         apin->SetIntProperty("processingTime_us",0);
@@ -45,13 +46,13 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         jnumErrors = apin->GetPropertyHolder("Failures");
         delete apin;
     }
-    status = bake_status_json();
     if (xEventGroupGetBits(eventGroup) & HTTP_SERVING)
     {
-        ESP_LOGV(__FUNCTION__, "Not starting httpd, already serving");
+        ESP_LOGI(__FUNCTION__, "Not starting httpd, already serving");
+        deinitStorage(storageFlags);
         return;
     }
-    ESP_LOGV(__FUNCTION__, "Waiting for wifi");
+    ESP_LOGI(__FUNCTION__, "Waiting for wifi");
     xEventGroupWaitBits(wifiEventGroup, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
     ESP_LOGV(__FUNCTION__, "Registering RegisterEventHandler");
     if (handlerDescriptors == NULL)
@@ -85,6 +86,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &appUri));
         xEventGroupSetBits(eventGroup, HTTP_SERVING);
         xEventGroupSetBits(app_eg,app_bits_t::REST);
+        xEventGroupClearBits(app_eg,app_bits_t::REST_OFF);
         PostEvent(NULL,0,HTTP_SERVING);
     }
     else
@@ -96,13 +98,14 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
 TheRest::~TheRest()
 {
     ESP_LOGI(__FUNCTION__,"Rest resting");
-    deinitSDCard();
+    deinitStorage(storageFlags);
     vEventGroupDelete(eventGroup);
     if (handlerDescriptors != NULL)
         EventManager::UnRegisterEventHandler((handlerDescriptors = BuildHandlerDescriptors()));
 
     httpd_stop(server);
     xEventGroupClearBits(getAppEG(), app_bits_t::REST);
+    xEventGroupSetBits(getAppEG(), app_bits_t::REST_OFF);
     ldfree(ipAddr);
     ldfree(gwAddr);
     restInstance=NULL;

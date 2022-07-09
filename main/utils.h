@@ -40,6 +40,8 @@
 #define HTTP_MAX_NUM_BUFFER_CHUNCK HTTP_MAX_RECEIVE_BUFFER_SIZE/HTTP_RECEIVE_BUFFER_SIZE
 #define JSON_BUFFER_SIZE 8192
 #define KML_BUFFER_SIZE 204600
+#define SPIFF_FLAG 1
+#define SDCARD_FLAG 2
 
 extern const unsigned char favicon_ico_start[] asm("_binary_favicon_ico_start");
 extern const unsigned char favicon_ico_end[]   asm("_binary_favicon_ico_end");
@@ -145,8 +147,6 @@ public:
   static EventGroupHandle_t GetStateGroupHandle();
   static void ResetAppConfig(bool save);
   void SaveAppConfig();
-  static const char* GetActiveStorage();
-  static bool HasActiveStorage();
   static bool HasSDCard();
 
   bool isValid();
@@ -180,8 +180,6 @@ public:
   bool IsSta();
   cJSON* GetPropertyHolder(cJSON* prop);
 protected:
-  static const char *SDPATH;
-  static const char *SPIFFPATH;
 
   cJSON* GetJSONProperty(cJSON* json,const char* path, bool createWhenMissing);
   cJSON* GetJSONProperty(const char* path);
@@ -194,7 +192,6 @@ protected:
   EventGroupHandle_t eg;
   const char* filePath;
   AppConfig* root = NULL;
-  const char* activeStorage;
   SemaphoreHandle_t sema;
 };
 
@@ -204,10 +201,13 @@ bool startsWith(const char* str,const char* key);
 void sampleBatteryVoltage();
 float getBatteryVoltage();
 bool moveFile(const char* src, const char* dest);
-bool initSDCard();
-bool initSDCard(bool);
-bool deinitSDCard();
-bool deinitSDCard(bool);
+uint8_t initStorage();
+uint8_t initStorage(bool);
+bool deinitStorage(uint8_t);
+bool deinitSpiff(bool);
+bool initSpiff(bool);
+bool initSPISDCard(bool);
+bool deinitSPISDCard(bool);
 bool initSDMMCSDCard();
 char* indexOf(const char* str, const char* key);
 char* lastIndexOf(const char* str, const char* key);

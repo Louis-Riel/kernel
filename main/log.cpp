@@ -14,6 +14,8 @@ static char* logBuf = NULL;
 static TaskHandle_t dltask = NULL;
 static EventGroupHandle_t app_eg = xEventGroupCreate();
 const char* EMPTY_STRING = "";
+static bool logInitializing = false;
+static bool logInitialized = false;
 
 const char* getLogFName(){
     if (logFile) {
@@ -64,7 +66,8 @@ void unregisterLogCallback( LogFunction_t callback) {
 }
 
 int loggit(const char *fmt, va_list args) {
-    if (*fmt != 'V'){
+    if (*fmt != 'V' && (((logFile == NULL) && !logInitializing) ||
+                        ((logFile != NULL) && logInitialized))) {
         xSemaphoreTake(logMutex,portMAX_DELAY);
         if (!logBuf) {
             logBuf = (char*)dmalloc(LOG_LN_SIZE);
@@ -74,24 +77,25 @@ int loggit(const char *fmt, va_list args) {
 
         if ((*fmt == 'E') || (*fmt == 'W') || AppConfig::HasSDCard()) {
             if (!logFile) {
+                logInitializing = true;
                 struct tm timeinfo = { 0 };
                 time_t now;
                 time(&now);
                 localtime_r(&now, &timeinfo);
 
-                if (AppConfig::HasActiveStorage()) {
-                    char* lpath=(char*)dmalloc(255);
-                    char* logfname=(char*)dmalloc(355);
-                    sprintf(lpath,"%s/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetActiveStorage(),AppConfig::GetAppConfig()->GetStringProperty("devName"));
-                    localtime_r(&now, &timeinfo);
-                    strftime(logfname, 254, lpath, &timeinfo);
-                    logFile = new BufferedFile(logfname);
-                    ldfree(lpath);
-                    ldfree(logfname);
-                }
+                char* lpath=(char*)dmalloc(255);
+                char* logfname=(char*)dmalloc(355);
+                sprintf(lpath,"/sdcard/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetAppConfig()->GetStringProperty("devName"));
+                localtime_r(&now, &timeinfo);
+                strftime(logfname, 254, lpath, &timeinfo);
+                logFile = new BufferedFile(logfname);
+                ldfree(lpath);
+                ldfree(logfname);
+                logInitializing = false;
+                logInitialized = true;
             }
         }
-        if (logFile) {
+        if (logFile && logInitializing) {
             logFile->Write((uint8_t*)logBuf,lineLen);
         }
         for (int idx=0; idx < 5; idx++){

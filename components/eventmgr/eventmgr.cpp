@@ -83,6 +83,7 @@ void EventManager::EventPoller(void* param){
     memset(postedEvent,0,sizeof(postedEvent_t));
     EventManager* mgr = (EventManager*)param;
     EventGroupHandle_t appEg = getAppEG();
+    ESP_LOGI(__FUNCTION__,"Event Poller Running");
     while(!(xEventGroupGetBits(appEg) & app_bits_t::HIBERNATE) && xQueueReceive(mgr->eventQueue,postedEvent,portMAX_DELAY)){
         ESP_LOGV(__FUNCTION__,"Processing Event %s %d",postedEvent->base, postedEvent->id);
         ProcessEvent(postedEvent);
@@ -190,7 +191,6 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
             break;
         case event_data_type_tp::Number:
             postedEvent->event_data=(void*)*(int*)event_data;
-            //printf("\nevtproc %s(%d):%d\n",postedEvent->base,postedEvent->id, (int)postedEvent->event_data);
             break;
         default:
             break;

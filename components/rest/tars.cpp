@@ -36,11 +36,12 @@ esp_err_t tarString(mtar_t *tar, const char *path, const char *data)
 
 esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursive, const char *excludeList, uint32_t maxSize, bool removeSrc, char* filesToDelete)
 {
+    uint8_t storage = 0;
     if ((path == NULL) || (strlen(path) == 0))
     {
         return ESP_FAIL;
     }
-    if (!initSDCard())
+    if ((storage = initStorage()) == 0)
     {
         return ESP_FAIL;
     }
@@ -228,7 +229,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     ldfree(theFolders);
     ldfree(buf);
     ldfree(kmlFileName);
-    deinitSDCard();
+    deinitStorage(storage);
     ESP_LOGV(__FUNCTION__,"Done reading %s",path);
     return ret;
 }

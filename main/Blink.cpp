@@ -599,7 +599,7 @@ static void serviceLoop(void *param)
   ESP_LOGV(__FUNCTION__, "wait:%s", bits);
   EventGroupHandle_t app_eg = getAppEG();
   AppConfig *appCfg = AppConfig::GetAppConfig();
-  ESP_LOGV(__FUNCTION__, "ServiceLoop started");
+  ESP_LOGI(__FUNCTION__, "ServiceLoop started");
   TaskHandle_t gpsTask = NULL;
   while (true)
   {
@@ -628,12 +628,12 @@ static void serviceLoop(void *param)
       }
     }
     ESP_LOGV(__FUNCTION__,"app_bits_t::REST:%d app_bits_t::WIFI_ON %d",serviceBits & app_bits_t::REST, serviceBits & app_bits_t::WIFI_ON);
-    if (((serviceBits & (app_bits_t::REST | app_bits_t::WIFI_ON)) == (app_bits_t::REST | app_bits_t::WIFI_ON)) && !TheRest::GetServer())
+    if ((serviceBits & app_bits_t::REST) && !TheRest::GetServer())
     {
       ESP_LOGI(__FUNCTION__,"Turning Rest On");
       CreateBackgroundTask(restSallyForth, "restSallyForth", 8192, TheWifi::GetEventGroup(),tskIDLE_PRIORITY,NULL);
     }
-    else if (((serviceBits & (app_bits_t::REST | app_bits_t::WIFI_OFF)) == (app_bits_t::REST | app_bits_t::WIFI_OFF)) && TheRest::GetServer())
+    if ((serviceBits & (app_bits_t::REST_OFF)) && TheRest::GetServer())
     {
       ESP_LOGI(__FUNCTION__,"Turning Rest Off if on %d",TheRest::GetServer()!=NULL);
       if (TheRest *theRest = TheRest::GetServer())
@@ -776,6 +776,13 @@ void app_main(void)
     AppConfig *appcfg = new AppConfig(CFG_PATH);
     AppConfig *appstat = AppConfig::GetAppStatus();
 
+    if (initSPISDCard(true)) {
+      ESP_LOGI(__FUNCTION__, "SPI SD card initialized");
+      deinitSPISDCard(true);
+    } else {
+      ESP_LOGI(__FUNCTION__, "No SPI SD present");
+    }
+
     if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
       char* ctmp = cJSON_Print(appcfg->GetJSONConfig(NULL));
       ESP_LOGV(__FUNCTION__,"cfg:%s",ctmp);
@@ -811,21 +818,12 @@ void app_main(void)
       ESP_LOGI(__FUNCTION__, "Seeding device id to %d/%d %s",did,appcfg->GetIntProperty("deviceid"),ctmp);
       ldfree(ctmp);
     }
+
+    sampleBatteryVoltage();
     if (appcfg->GetIntProperty("deviceid") > 0)
     {
       ESP_LOGI(__FUNCTION__, "Device Id %d", appcfg->GetIntProperty("deviceid"));
     }
-    //Register event managers
-    new BufferedFile();
-
-    initLog();
-    sampleBatteryVoltage();
-    //UpgradeFirmware();
-    //initSDCard();
-
-    gpio_reset_pin(BLINK_GPIO);
-    gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_level(BLINK_GPIO, 1);
 
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED)
     {
@@ -848,12 +846,13 @@ void app_main(void)
     bool isTracker = appcfg->HasProperty("clienttype") && strcasecmp(appcfg->GetStringProperty("clienttype"),"tracker")==0;
     ConfigurePins(appcfg);
     EventGroupHandle_t app_eg = getAppEG();
-    ESP_LOGV(__FUNCTION__,"gps rx pin:%d",appcfg->GetIntProperty("/gps/rxPin"));
+    ESP_LOGI(__FUNCTION__,"gps rx pin:%d",appcfg->GetIntProperty("/gps/rxPin"));
     if (appcfg->GetIntProperty("/gps/rxPin")){
       xEventGroupSetBits(app_eg, app_bits_t::GPS_ON);
     }
     if (appcfg->IsAp() || firstRun || !isTracker)
     {
+      ESP_LOGI(__FUNCTION__,"Turning wifi on");
       xEventGroupSetBits(app_eg, app_bits_t::WIFI_ON);
       xEventGroupClearBits(app_eg, app_bits_t::WIFI_OFF);
     }
@@ -865,6 +864,7 @@ void app_main(void)
       ESP_LOGV(__FUNCTION__,"No IR");
     }
 
+    ESP_LOGI(__FUNCTION__,"Starting service loop");
     CreateBackgroundTask(serviceLoop, "ServiceLoop", 8192, NULL, tskIDLE_PRIORITY, NULL);
   }
   if (!heap_caps_check_integrity_all(true))
@@ -872,6 +872,11 @@ void app_main(void)
     ESP_LOGE(__FUNCTION__, "caps integrity error");
   }
   ESP_LOGI(__FUNCTION__, "Battery: %f", getBatteryVoltage());
+
+  initLog();
+
+  //Register event managers
+  //new BufferedFile();
 
   //new Bt();
 }

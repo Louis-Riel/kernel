@@ -127,6 +127,7 @@ private:
   char *gwAddr;
   char *ipAddr;
   EventGroupHandle_t app_eg;
+  uint8_t storageFlags;
   
   cJSON* jnumErrors;
   cJSON* jnumRequests;

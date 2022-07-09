@@ -1,7 +1,7 @@
 #include "mfile.h"
 #include "math.h"
 
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+//#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
@@ -112,7 +112,11 @@ void MFile::Open(const char* mode){
         return;
     }
 
-    initSDCard();
+    if (startsWith(name, "/sdcard")) {
+        initSPISDCard(false);
+    } else {
+        initSpiff(false);
+    }
 
     file = fOpenCd(name, mode,true);
     if (file == NULL)
@@ -151,7 +155,11 @@ void MFile::Close(){
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_CLOSED_PENDING_WRITE);
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_INIT);
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_FAILED);
-        deinitSDCard();
+        if (startsWith(name, "/sdcard")) {
+            deinitSPISDCard(false);
+        } else {
+            deinitSpiff(false);
+        }
     }
 }
 
@@ -319,7 +327,7 @@ BufferedFile* BufferedFile::GetOpenedFile(const char* fileName){
         ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
         for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
             if (openFiles[idx])
-                ESP_LOGI(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+                ESP_LOGV(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
         }
         return NULL;
     }
@@ -349,7 +357,7 @@ BufferedFile* BufferedFile::GetFile(const char* fileName){
         ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
         for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
             if (openFiles[idx])
-                ESP_LOGI(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+                ESP_LOGV(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
         }
 
         return NULL;
@@ -365,7 +373,6 @@ void BufferedFile::WriteLine(uint8_t* data, uint32_t len) {
 }
 
 void BufferedFile::waitingWrites(void* params){
-    printf("\nTimeout for buffered files, flushing\n");
     BufferedFile::FlushAll();
 }
 

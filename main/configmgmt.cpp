@@ -5,6 +5,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "esp_ota_ops.h"
+#include "logs.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -14,8 +15,6 @@
 
 extern const uint8_t defaultconfig_json_start[] asm("_binary_defaultconfig_json_start");
 extern const uint8_t defaultconfig_json_end[] asm("_binary_defaultconfig_json_end");
-const char* AppConfig::SDPATH = "/sdcard";
-const char* AppConfig::SPIFFPATH = "/lfs";
 
 const char* emptyString="";
 
@@ -34,8 +33,6 @@ AppConfig::AppConfig(const char *filePath)
     , root(this)
     , sema(xSemaphoreCreateRecursiveMutex())
 {
-  activeStorage=NULL;
-
   if ((configInstance == NULL) && (filePath != NULL))
   {
     ESP_LOGV(__FUNCTION__, "Setting global config instance");
@@ -81,7 +78,6 @@ AppConfig::AppConfig(cJSON *json, AppConfig *root)
     , json(json)
     , filePath(root == NULL ? NULL : root->filePath)
     , root(root == NULL ? this : root)
-    , activeStorage(NULL)
     , sema(root == NULL ? xSemaphoreCreateRecursiveMutex() : root->sema)
 {
 }
@@ -112,25 +108,9 @@ AppConfig *AppConfig::GetAppStatus()
   return statusInstance;
 }
 
-bool AppConfig::HasActiveStorage()
-{
-  AppConfig* stat = GetAppStatus();
-  return stat->activeStorage != NULL;
-}
-
 bool AppConfig::HasSDCard()
 {
-  return HasActiveStorage() && (GetActiveStorage()==SDPATH);
-}
-
-const char *AppConfig::GetActiveStorage()
-{
-  AppConfig* stat = GetAppStatus();
-  if ((stat->activeStorage == NULL) && 
-       stat->HasProperty("/sdcard/state")) {  
-    stat->activeStorage = stat->GetStateProperty("/sdcard/state") == item_state_t::ACTIVE?stat->SDPATH:stat->SPIFFPATH;
-  }
-  return stat->activeStorage == NULL ? stat->SPIFFPATH:stat->activeStorage;
+  return xEventGroupGetBits(getAppEG()) & SDCARD_WORKING;
 }
 
 bool AppConfig::isValid()
@@ -322,7 +302,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   version++;
   if (!skipMount)
   {
-    initSDCard();
+    initSpiff(false);
   }
   FILE *currentCfg = fOpen(config->filePath, "w");
   if (currentCfg != NULL)
@@ -350,7 +330,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   }
   if (!skipMount)
   {
-    deinitSDCard();
+    deinitSpiff(false);
   }
   //xSemaphoreGiveRecursive(sema);
 }
@@ -903,12 +883,6 @@ void AppConfig::SetPinNoProperty(const char *path, gpio_num_t value)
 
 void AppConfig::SetStateProperty(const char *path, item_state_t value)
 {
-  if ((strcmp("/sdcard/state",path)==0) && (value == item_state_t::ACTIVE)){
-    if (value == item_state_t::ACTIVE){
-      activeStorage = SDPATH;
-      ESP_LOGV(__FUNCTION__,"Defined storage as %s", activeStorage);
-    }
-  }
   SetIntProperty(path, (int)value);
 }
 
