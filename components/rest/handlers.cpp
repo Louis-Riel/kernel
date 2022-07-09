@@ -864,22 +864,20 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
 
 esp_err_t TheRest::config_template_handler(httpd_req_t *req)
 {
-    ESP_LOGV(__FUNCTION__, "Config Handler.");
-    if (req->method == HTTP_GET)
+    ESP_LOGV(__FUNCTION__, "Config template Handler:%s", req->uri);
+    if (req->method == HTTP_POST)
     {
-        char *path = (char *)req->uri + 8;
-        
-        if (endsWith(path,"configTemplates") || endsWith(path,"configTemplates/")) {
+        if (indexOf(req->uri,"templates/config")) {
             cJSON* jret = cJSON_CreateArray();
             cJSON* jitem = cJSON_CreateObject();
             cJSON_AddStringToObject(jitem, "name", "Pin");
             cJSON_AddStringToObject(jitem, "label", "Digital Pin");
-            cJSON_AddItemToObject(jret, "config_template", Pin::BuildConfigTemplate());
+            cJSON_AddItemToObject(jitem, "config_template", Pin::BuildConfigTemplate());
             cJSON_AddItemToArray(jret, jitem);
             jitem = cJSON_CreateObject();
             cJSON_AddStringToObject(jitem, "name", "AnalogPin");
             cJSON_AddStringToObject(jitem, "label", "Analog Pin");
-            cJSON_AddItemToObject(jret, "config_template", AnalogPin::BuildConfigTemplate());
+            cJSON_AddItemToObject(jitem, "config_template", AnalogPin::BuildConfigTemplate());
             cJSON_AddItemToArray(jret, jitem);
             char* json = cJSON_Print(jret);
             esp_err_t ret = httpd_resp_send(req, json, strlen(json));

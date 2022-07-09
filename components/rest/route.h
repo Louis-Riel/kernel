@@ -137,7 +137,7 @@ private:
 
   httpd_uri_t const restUris[12] =
       {
-          {.uri = "/configTemplates*",
+          {.uri = "/templates/config*",
            .method = HTTP_POST,
            .handler = config_template_handler,
            .user_ctx = NULL,
