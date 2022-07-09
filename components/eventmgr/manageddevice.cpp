@@ -27,14 +27,13 @@ ManagedDevice::ManagedDevice(const char *type,const char *name, bool (*hcFnc)(vo
 ,status(NULL)
 ,hcFnc(hcFnc == NULL ? &HealthCheck : hcFnc)
 ,commandFnc(commandFnc)
-,name((char*)dmalloc(strlen(name == NULL ? type : name)+1))
+,name(strdup(name == NULL ? type : name))
 {
   if(!ValidateDevices())
   {
       ESP_LOGE(__FUNCTION__,"Too many devices");
       return;
   }
-  strcpy(this->name,name == NULL ? type : name);
   status=BuildStatus(this);
 
   if (numDevices == 0) {

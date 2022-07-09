@@ -65,7 +65,6 @@ protected:
     static QueueHandle_t eventQueue;
     static MFile* openFiles[MAX_OPEN_FILES];
     static uint8_t numOpenFiles;
-    const char* fileName;
 private:
     FILE *file;
 };

@@ -778,7 +778,6 @@ void app_main(void)
 
     if (initSPISDCard(true)) {
       ESP_LOGI(__FUNCTION__, "SPI SD card initialized");
-      deinitSPISDCard(true);
     } else {
       ESP_LOGI(__FUNCTION__, "No SPI SD present");
     }
@@ -805,6 +804,7 @@ void app_main(void)
     print_char_val_type(val_type);
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     nvs_flash_init();
+    initLog();
 
     bool firstRun = false;
 
@@ -872,8 +872,6 @@ void app_main(void)
     ESP_LOGE(__FUNCTION__, "caps integrity error");
   }
   ESP_LOGI(__FUNCTION__, "Battery: %f", getBatteryVoltage());
-
-  initLog();
 
   //Register event managers
   //new BufferedFile();

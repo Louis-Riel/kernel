@@ -76,7 +76,7 @@ int loggit(const char *fmt, va_list args) {
         uint32_t lineLen=vsprintf(logBuf,fmt,args);
 
         if ((*fmt == 'E') || (*fmt == 'W') || AppConfig::HasSDCard()) {
-            if (!logFile) {
+            if ((logFile==NULL) && !logInitializing) {
                 logInitializing = true;
                 struct tm timeinfo = { 0 };
                 time_t now;
@@ -88,6 +88,7 @@ int loggit(const char *fmt, va_list args) {
                 sprintf(lpath,"/sdcard/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetAppConfig()->GetStringProperty("devName"));
                 localtime_r(&now, &timeinfo);
                 strftime(logfname, 254, lpath, &timeinfo);
+                printf("\nlogfname:%s\n",logfname);
                 logFile = new BufferedFile(logfname);
                 ldfree(lpath);
                 ldfree(logfname);
@@ -95,7 +96,7 @@ int loggit(const char *fmt, va_list args) {
                 logInitialized = true;
             }
         }
-        if (logFile && logInitializing) {
+        if (logFile && logInitialized) {
             logFile->Write((uint8_t*)logBuf,lineLen);
         }
         for (int idx=0; idx < 5; idx++){
