@@ -758,7 +758,7 @@ void app_main(void)
   startTs = esp_timer_get_time();
 
   esp_pm_config_esp32_t pm_config;
-  pm_config.max_freq_mhz = 80;
+  pm_config.max_freq_mhz = 240;
   pm_config.min_freq_mhz = 80;
   pm_config.light_sleep_enable = false;
 

@@ -156,11 +156,9 @@ private:
     typedef struct
     {
         EventInterpretor* interpretor;
-        cJSON* program;
+        const char* program;
     } LoopyArgs;
     
-    static void RunLooper(void* param);
-
     cJSON *programs;
     cJSON *config;
     const char *programName;
@@ -172,6 +170,7 @@ private:
     cJSON *params;
     int32_t id;
     EventGroupHandle_t app_eg;
+    static void _RunProgram(void* arg);
 };
 
 class EventManager
@@ -264,6 +263,8 @@ public:
 
     void WaitForThreads(uint32_t bitsToWaitFor);
 
+    static cJSON* GetRepeatingTaskStatus();
+
     uint8_t CreateBackgroundManagedTask(
         TaskFunction_t pvTaskCode,
         const char *const pcName,
@@ -345,5 +346,11 @@ uint8_t CreateWokeBackgroundTask(
     void *const pvParameters,
     UBaseType_t uxPriority,
     TaskHandle_t *const pvCreatedTask);
+
+uint8_t CreateRepeatingTask(
+    TaskFunction_t pvTaskCode,
+    const char *const pcName,
+    void *const pvParameters,
+    const uint32_t repeatPeriod);
 
 #endif

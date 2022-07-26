@@ -727,6 +727,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
 
             if (!theWifi->isSidPuller((const char *)theWifi->wifi_config.sta.ssid, true))
                 CreateBackgroundTask(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, &timeHandle);
+            xEventGroupSetBits(s_app_eg, app_bits_t::REST);
 
             //CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
 

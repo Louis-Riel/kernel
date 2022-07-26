@@ -53,7 +53,7 @@ class AnalogPin:ManagedDevice {
 public:
     AnalogPin(AppConfig* config);
     ~AnalogPin();
-    static void PollPins(void* instance);
+    static void PollPin(void* instance);
     static cJSON* BuildConfigTemplate();
 
 protected:

@@ -7,8 +7,6 @@
 #include "rest.h"
 #include "../wifi/station.h"
 
-static uint32_t deviceId = 0;
-
 class WebsocketManager : ManagedDevice
 {
 public:
@@ -45,7 +43,7 @@ public:
   static bool HasOpenedWs();
 
   TaskHandle_t queueTask;
-  bool isLive;
+  cJSON* jIsLive;
 
 protected:
   static void PostToClient(void* msg);
@@ -82,7 +80,6 @@ public:
   static cJSON* status_json();
   cJSON* bake_status_json();
   static const char* REST_BASE;
-
 
 protected:
   const char* hcUrl;
@@ -128,6 +125,7 @@ private:
   char *ipAddr;
   EventGroupHandle_t app_eg;
   uint8_t storageFlags;
+  cJSON* system_status;
   
   cJSON* jnumErrors;
   cJSON* jnumRequests;

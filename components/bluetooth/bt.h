@@ -19,9 +19,7 @@ typedef enum {
 class Bt:ManagedDevice {
 public:
     Bt();
-    static void PollPins();
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
-    bool isRtcGpio;
     enum eventIds {
         OFF,ON,SCANED
     };

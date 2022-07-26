@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_system.h"

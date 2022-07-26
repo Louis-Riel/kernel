@@ -1,4 +1,3 @@
-#include "utils.h"
 #include "esp_sleep.h"
 #include "driver/periph_ctrl.h"
 #include "../components/esp_littlefs/include/esp_littlefs.h"
@@ -16,6 +15,7 @@
 #include "eventmgr.h"
 #include "/home/riell/esp-4.3/esp-idf/components/pthread/include/esp_pthread.h"
 #include "mbedtls/md.h"
+#include "utils.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -153,7 +153,6 @@ bool initSDMMCSDCard(bool log)
     const char mount_point[] = "/sdcard";
 
     AppConfig *appState = AppConfig::GetAppStatus();
-    AppConfig *spiffState = appState->GetConfig("lfs");
     AppConfig *sdcState = appState->GetConfig("sdcard");
 
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
@@ -297,7 +296,6 @@ bool deinitSPISDCard(bool log)
     ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   if (numSdCallers == 0)
   {
-    esp_err_t ret = ESP_OK;
     AppConfig *appState = AppConfig::GetAppStatus();
     EventGroupHandle_t app_eg = getAppEG();
     if (xEventGroupGetBits(app_eg) & SDCARD_MOUNTED)
@@ -346,7 +344,6 @@ void CleanupLFS(void* param) {
   ESP_LOGI(__FUNCTION__,"Looking for files to cleanup in %s, free:%d",files->curDir,*files->bytesFree);
 
   DIR *theFolder;
-  FILE *theFile;
   struct dirent *fi;
   struct stat fileStat;
   char* cpath = (char*)dmalloc(300);

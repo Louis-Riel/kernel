@@ -130,6 +130,12 @@ void EventInterpretor::RunProgram(const char *programName)
     RunProgram(NULL, programName);
 }
 
+void EventInterpretor::_RunProgram(void* arg)
+{
+    LoopyArgs *args = (LoopyArgs *)arg;
+    args->interpretor->RunProgram(NULL, args->program);
+}
+
 void EventInterpretor::RunProgram(void *event_data, const char *programName)
 {
     AppConfig *program = NULL;
@@ -263,8 +269,8 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
         {
             LoopyArgs *args = (LoopyArgs *)dmalloc(sizeof(LoopyArgs));
             args->interpretor = this;
-            args->program = program->GetJSONConfig(NULL);
-            xTaskCreate(RunLooper, program->GetStringProperty("program"), 4096, (void *)args, tskIDLE_PRIORITY, NULL);
+            args->program = program->GetStringProperty("program");
+            CreateRepeatingTask(_RunProgram, args->program, args, program->GetIntProperty("period"));
         }
         else
         {
@@ -275,32 +281,6 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
     {
         ESP_LOGE(__FUNCTION__, "Missing the thing to run in program %s", programName);
     }
-}
-
-void EventInterpretor::RunLooper(void *param)
-{
-    if (param == NULL)
-    {
-        ESP_LOGE(__FUNCTION__, "Missing Looper Params");
-        vTaskDelete(NULL);
-    }
-    LoopyArgs *la = (LoopyArgs *)param;
-    EventInterpretor *interpretor = la->interpretor;
-    AppConfig *program = new AppConfig(la->program, NULL);
-    ldfree(la);
-    uint32_t period = program->GetIntProperty("period");
-    TickType_t ticks;
-    bool done = false;
-    const char *progName = program->GetStringProperty("program");
-    ESP_LOGV(__FUNCTION__, "Looping %s every %dms", progName, period);
-    while (!done)
-    {
-        interpretor->RunProgram(progName);
-        vTaskDelayUntil(&ticks, pdMS_TO_TICKS(period));
-    }
-    ldfree(program);
-    ldfree(la);
-    vTaskDelete(NULL);
 }
 
 uint8_t EventInterpretor::RunMethod(void *event_data)
@@ -638,7 +618,6 @@ EventCondition::EventCondition(cJSON *json)
 
 double EventCondition::GetDoubleValue(bool isSrc, compare_origin_t origin, void *event_data)
 {
-    cJSON *json = NULL;
     double retVal = 0.0;
     switch (origin)
     {
@@ -646,16 +625,15 @@ double EventCondition::GetDoubleValue(bool isSrc, compare_origin_t origin, void 
     case compare_origin_t::State:
         if ((origin == compare_origin_t::State) && (srcJson == NULL))
         {
-            json = TheRest::status_json();
-            retVal = cJSON_GetNumberValue(cJSON_GetObjectItem(json, isSrc ? valJsonPropName : compJsonPropName));
+            retVal = cJSON_GetNumberValue(cJSON_GetObjectItem(TheRest::status_json(), isSrc ? valJsonPropName : compJsonPropName));
         }
         else
         {
             retVal = cJSON_GetNumberValue(isSrc ? srcJson : compJson);
         }
-        ESP_LOGV(__FUNCTION__, "Getting double %s value from json %s (%d):%f", isSrc ? "src" : "dest", isSrc ? valJsonPropName == NULL ? "null" : valJsonPropName : compJsonPropName == NULL ? "null"
+        ESP_LOGV(__FUNCTION__, "Getting double %s value from json %s:%f", isSrc ? "src" : "dest", isSrc ? valJsonPropName == NULL ? "null" : valJsonPropName : compJsonPropName == NULL ? "null"
                                                                                                                                                                                              : compJsonPropName,
-                 json == NULL, retVal);
+                 retVal);
         return retVal;
         break;
     case compare_origin_t::Event:
@@ -675,7 +653,6 @@ double EventCondition::GetDoubleValue(bool isSrc, compare_origin_t origin, void 
 
 int EventCondition::GetIntValue(bool isSrc, compare_origin_t origin, void *event_data)
 {
-    cJSON *json = NULL;
     int retVal = 0;
     switch (origin)
     {
@@ -683,16 +660,15 @@ int EventCondition::GetIntValue(bool isSrc, compare_origin_t origin, void *event
     case compare_origin_t::State:
         if ((origin == compare_origin_t::State) && (srcJson == NULL))
         {
-            json = TheRest::status_json();
-            retVal = cJSON_GetNumberValue(cJSON_GetObjectItem(json, isSrc ? valJsonPropName : compJsonPropName));
+            retVal = cJSON_GetNumberValue(cJSON_GetObjectItem(TheRest::status_json(), isSrc ? valJsonPropName : compJsonPropName));
         }
         else
         {
             retVal = cJSON_GetNumberValue(isSrc ? srcJson : compJson);
         }
-        ESP_LOGV(__FUNCTION__, "Getting double %s value from json %s (%d):%d", isSrc ? "src" : "dest", isSrc ? valJsonPropName == NULL ? "null" : valJsonPropName : compJsonPropName == NULL ? "null"
+        ESP_LOGV(__FUNCTION__, "Getting double %s value from json %s:%d", isSrc ? "src" : "dest", isSrc ? valJsonPropName == NULL ? "null" : valJsonPropName : compJsonPropName == NULL ? "null"
                                                                                                                                                                                              : compJsonPropName,
-                 json == NULL, retVal);
+                 retVal);
         return retVal;
         break;
     case compare_origin_t::Event:

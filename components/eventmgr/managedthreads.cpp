@@ -13,6 +13,10 @@
 // #include "cJSON.h"
 // #include <regex>
 
+#define MAX_REPEATING_TASKS 12
+static bool isRepeatingLooping = false;
+static struct repeating_task_t* repeating_tasks = NULL;
+static cJSON* repeatingTasks = NULL;
 
 ManagedThreads::ManagedThreads()
         :managedThreadBits(xEventGroupCreate()) 
@@ -471,3 +475,134 @@ uint8_t CreateWokeBackgroundTask(
 {
     return ManagedThreads::GetInstance()->CreateBackgroundManagedTask(pvTaskCode, pcName, usStackDepth, pvParameters, uxPriority, pvCreatedTask, false, true);
 };
+
+struct repeating_task_t {
+    TaskFunction_t pvTaskCode;
+    char * pcName;
+    void * pvParameters;
+    uint32_t period;
+    TickType_t last_run;
+    TickType_t next_run;
+    uint64_t last_run_delta;
+    cJSON* jName;
+    cJSON* jPeriod;
+    cJSON* jLastRun;
+    cJSON* jNextRun;
+    cJSON* jLastRunDelta;
+    cJSON* jNumRuns;
+};
+
+bool RTDue(repeating_task_t* task, TickType_t now) {
+    return ((task->next_run == 0) || (now >= task->next_run));
+}
+
+cJSON* ManagedThreads::GetRepeatingTaskStatus() {
+    return repeatingTasks;
+}
+
+void TheRepeatingLoop(void* param) {
+    TickType_t now = 0;
+    TickType_t next_run = 0;
+    ESP_LOGI(__FUNCTION__, "Starting repeating task loop");
+    repeatingTasks = cJSON_CreateArray();
+    while (isRepeatingLooping) {
+        now = xTaskGetTickCount();
+        next_run = 0;
+        for (uint8_t idx=0; idx < MAX_REPEATING_TASKS; idx++) {
+            repeating_task_t* task = &repeating_tasks[idx];
+            if (task->pvTaskCode && RTDue(task, now)) {
+                task->last_run = now;
+                task->next_run = now + pdMS_TO_TICKS(task->period);
+                task->last_run_delta = esp_timer_get_time();
+                task->pvTaskCode(task->pvParameters);
+                task->last_run_delta = esp_timer_get_time() - task->last_run_delta;
+
+                if (task->jName == NULL) {
+                    cJSON* js = cJSON_CreateObject();
+                    cJSON_AddItemToArray(repeatingTasks, js);
+                    task->jName = cJSON_AddStringToObject(js, "name", task->pcName);
+                    task->jPeriod = cJSON_AddNumberToObject(js, "period", task->period);
+                    task->jLastRun = cJSON_AddNumberToObject(js, "last_run", task->last_run);
+                    task->jNextRun = cJSON_AddNumberToObject(js, "next_run", task->next_run);
+                    task->jLastRunDelta = cJSON_AddNumberToObject(js, "last_run_delta", task->last_run_delta);
+                    task->jNumRuns = cJSON_AddNumberToObject(js, "executions", 1);
+                } else {
+                    cJSON_SetNumberValue(task->jLastRun, task->last_run);
+                    cJSON_SetNumberValue(task->jNextRun, task->next_run);
+                    cJSON_SetNumberValue(task->jLastRunDelta, task->last_run_delta);
+                    cJSON_SetNumberValue(task->jNumRuns, task->jNumRuns->valueint + 1);
+                }
+            }
+
+            if (task->pvTaskCode && ((next_run == 0) || (next_run > task->next_run))) {
+                next_run = task->next_run;
+            }
+        }
+
+        if ((next_run != 0) && (next_run > now)) {
+            vTaskDelayUntil(&now, next_run - now);
+        } else {
+            if (next_run != 0) {
+                ESP_LOGW(__FUNCTION__,"Repeating task overrun");
+            } else {
+                ESP_LOGW(__FUNCTION__,"No repeating tasks found");
+                isRepeatingLooping = false;
+            }
+        }
+    }
+    for (uint8_t idx=0; idx < MAX_REPEATING_TASKS; idx++) {
+        repeating_task_t* task = &repeating_tasks[idx];
+        if (task->pcName) {
+            ldfree((void*)task->pcName);
+        }
+    }
+    ESP_LOGI(__FUNCTION__, "Stopped repeating task loop");
+    cJSON_free(repeatingTasks);
+    ldfree(repeating_tasks);
+    repeating_tasks=NULL;
+}
+
+void RunRepeatingLoop() {
+    if (!isRepeatingLooping) {
+        isRepeatingLooping = true;
+        CreateBackgroundTask(TheRepeatingLoop, "RepeatingLoop", 8192, NULL, tskIDLE_PRIORITY, NULL);
+    }
+}
+
+uint8_t GetRepeatingIndex() {
+    if (repeating_tasks == NULL) {
+        repeating_tasks = (struct repeating_task_t*)dmalloc(sizeof(struct repeating_task_t)*MAX_REPEATING_TASKS);
+        memset(repeating_tasks,0,sizeof(struct repeating_task_t)*MAX_REPEATING_TASKS);
+    } 
+    for (uint8_t idx = 0; idx < MAX_REPEATING_TASKS; idx++) {
+        if (repeating_tasks[idx].pvTaskCode == NULL) {
+            return idx;
+        }
+    }
+    return UINT8_MAX;
+}
+
+uint8_t CreateRepeatingTask(
+    TaskFunction_t pvTaskCode,
+    const char *const pcName,
+    void *const pvParameters,
+    const uint32_t repeatPeriod) {
+
+    uint8_t idx = GetRepeatingIndex();
+
+    if (idx == UINT8_MAX) {
+        ESP_LOGE(__FUNCTION__,"No more repeating tasks");
+        return UINT8_MAX;
+    }
+
+    repeating_task_t* task = &repeating_tasks[idx];
+    task->pvTaskCode = pvTaskCode;
+    task->pcName = strdup(pcName);
+    task->pvParameters = pvParameters;
+    task->period = repeatPeriod;
+
+    if (!isRepeatingLooping) {
+        RunRepeatingLoop();
+    }
+    return idx;
+}

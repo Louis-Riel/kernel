@@ -19,17 +19,19 @@ const char* WebsocketManager::WEBSOCKET_BASE="WebsocketManager";
 
 WebsocketManager::WebsocketManager():
     ManagedDevice(WEBSOCKET_BASE),
-    isLive(true),
     logPos(0),
     msgQueue(xQueueCreate(25,JSON_BUFFER_SIZE)),
     emptyString(0),
     msgQueueBuf((ws_msg_t*)dmalloc(sizeof(ws_msg_t)*25)),
     msgQueueBufLen(25),
-    msgQueueBufPos(254)
+    msgQueueBufPos(0)
 {
   memset(msgQueueBuf,0,sizeof(ws_msg_t)*25);
   stateHandler=this;
   memset(&clients,0,sizeof(clients));
+  jClients = cJSON_HasObjectItem(status,"Clients")?cJSON_GetObjectItem(status,"Clients"):cJSON_AddArrayToObject(status,"Clients");
+  jIsLive = cJSON_HasObjectItem(status,"IsLive") ? cJSON_GetObjectItem(status,"IsLive") : cJSON_AddNumberToObject(status,"IsLive",true);
+  cJSON_SetNumberValue(jIsLive,true);
   ESP_LOGI(__FUNCTION__,"Created Websocket");
   CreateBackgroundTask(QueueHandler,"WebsocketQH",4096, NULL, tskIDLE_PRIORITY, NULL);
   ESP_LOGI(__FUNCTION__,"Created WebsocketQH");
@@ -37,8 +39,6 @@ WebsocketManager::WebsocketManager():
   ESP_LOGI(__FUNCTION__,"Created StatePoller");
   registerLogCallback(LogCallback,stateHandler);
   ESP_LOGI(__FUNCTION__,"Log callback registered");
-  jClients = cJSON_HasObjectItem(status,"Clients")?cJSON_GetObjectItem(status,"Clients"):cJSON_AddArrayToObject(status,"Clients");
-  cJSON_AddNumberToObject(status,"IsLive",true);
 };
 
 WebsocketManager::~WebsocketManager(){
@@ -61,18 +61,14 @@ void WebsocketManager::PostToClient(void* msg) {
   esp_err_t ret;
   struct tm timeinfo;
 
-  httpd_ws_frame_t ws_pkt;
-  ws_pkt.final = true;
   ws_msg_t* wsMsg = (ws_msg_t*)msg;
-  if (wsMsg->buf != NULL) {
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    ws_pkt.len = strlen((const char*)wsMsg->buf);
-    ws_pkt.payload  = (uint8_t*)wsMsg->buf;
-  } else {
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    ws_pkt.len=0;
-    ws_pkt.payload=(uint8_t*)&stateHandler->emptyString;
-  }
+  httpd_ws_frame_t ws_pkt = {
+            .final = true,
+            .fragmented = false,
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t *)wsMsg->buf,
+            .len = msg == wsMsg->client->pingMsg ? 0 : strlen((char*)wsMsg->buf)
+        };
 
   if ((ret = httpd_ws_send_frame_async(wsMsg->client->hd,wsMsg->client->fd, &ws_pkt)) != ESP_OK) {
     cJSON_SetIntValue(wsMsg->client->jErrCount,wsMsg->client->jErrCount->valueint+1);
@@ -81,7 +77,13 @@ void WebsocketManager::PostToClient(void* msg) {
       httpd_sess_trigger_close(wsMsg->client->hd, wsMsg->client->fd);
       wsMsg->client->fd=0;
       wsMsg->client->hd=NULL;
-      ESP_LOGI(__FUNCTION__,"Client disconnected: %s",esp_err_to_name(ret));
+      stateHandler->jIsLive->valueint = false;
+      for (int idx = 0; idx < 5; idx++){
+        if (stateHandler->clients[idx].jIsLive != NULL) {
+          stateHandler->jIsLive->valueint |= stateHandler->clients[idx].jIsLive->valueint;
+        }
+      }
+      ESP_LOGW(__FUNCTION__,"Client disconnected: %s",esp_err_to_name(ret));
       AppConfig::SignalStateChange(state_change_t::MAIN);
     }
   } else {
@@ -94,31 +96,36 @@ void WebsocketManager::PostToClient(void* msg) {
 }
 
 WebsocketManager::ws_msg_t* WebsocketManager::getNewMessage(){
-  return &msgQueueBuf[msgQueueBufPos >= msgQueueBufLen ? 0 : ++msgQueueBufPos];
+  return &msgQueueBuf[msgQueueBufPos >= (msgQueueBufLen-1) ? (msgQueueBufPos=0) : msgQueueBufPos++];
 }
 
 void WebsocketManager::ProcessMessage(uint8_t* msg){
-  bool stateChange=false;
   esp_err_t ret;
   
   for (uint8_t idx = 0; idx < 5; idx++){
     if (stateHandler && clients[idx].jIsLive && clients[idx].jIsLive->valueint){
       ws_msg_t* wsMsg = msg ? getNewMessage() : clients[idx].pingMsg;
-      if (msg) {
+      if (wsMsg != clients[idx].pingMsg) {
         if (wsMsg->bufLen < strlen((const char*)msg)) {
-          ldfree(wsMsg->buf);
+          if (wsMsg->buf) {
+            ldfree(wsMsg->buf);
+          }
           wsMsg->bufLen = strlen((const char*)msg)+1;
           wsMsg->buf = dmalloc(wsMsg->bufLen);
         }
+        memset(wsMsg->buf,0,wsMsg->bufLen);
         strcpy((char*)wsMsg->buf,(const char*)msg);
         wsMsg->client=&clients[idx];
       }
       if ((ret = httpd_queue_work(clients[idx].hd,PostToClient,wsMsg)) != ESP_OK) {
         cJSON_SetIntValue(clients[idx].jIsLive,false);
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
-        stateChange=true;
         clients[idx].fd=0;
         clients[idx].hd=NULL;
+        for (int idx = 0; idx < 5; idx++){
+          stateHandler->jIsLive->valueint |= clients[idx].jIsLive->valueint;
+        }
+        AppConfig::SignalStateChange(state_change_t::MAIN);
         ESP_LOGW(__FUNCTION__,"Client %d disconnected: %s",idx, esp_err_to_name(ret));
       } else {
         if (msg)
@@ -126,15 +133,12 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
       }
     }
   }
-  if (stateChange){
-    AppConfig::SignalStateChange(state_change_t::MAIN);
-  }
 }
 
 void WebsocketManager::QueueHandler(void* param){
   ESP_LOGI(__FUNCTION__,"QueueHandler Starting");
   uint8_t* buf = (uint8_t*)dmalloc(JSON_BUFFER_SIZE);
-  while(stateHandler && stateHandler->msgQueue && stateHandler->isLive){
+  while(stateHandler && stateHandler->msgQueue && stateHandler->jIsLive->valueint){
     memset(buf,0,JSON_BUFFER_SIZE);
     if (xQueueReceive(stateHandler->msgQueue,buf,2800/portTICK_PERIOD_MS)) {
       stateHandler->ProcessMessage(buf);
@@ -147,15 +151,14 @@ void WebsocketManager::QueueHandler(void* param){
 }
 
 bool WebsocketManager::HasOpenedWs(){
-  return stateHandler ? stateHandler->isLive : false;
+  return stateHandler ? stateHandler->jIsLive->valueint : false;
 }
 
 bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
-  isLive=true;
+  cJSON_SetNumberValue(stateHandler->jIsLive, true);
   for (uint8_t idx = 0; idx < 5; idx++){
     if ((clients[idx].hd == hd) && (clients[idx].fd == fd)){
       ESP_LOGV(__FUNCTION__,"Client was at position %d",idx);
-      isLive=true;
       cJSON_SetIntValue(clients[idx].jIsLive, true);
       cJSON_SetIntValue(clients[idx].jErrCount, 0);
       //AppConfig::SignalStateChange(state_change_t::MAIN);
@@ -211,14 +214,14 @@ time_t GetTime() {
 }
 
 bool WebsocketManager::LogCallback(void* instance, char* logData){
-  if (stateHandler && stateHandler->isLive && logData) {
+  if (stateHandler && stateHandler->jIsLive && stateHandler->jIsLive->valueint && logData) {
     return xQueueSend(stateHandler->msgQueue,logData,portMAX_DELAY);
   }
   return true;
 };
 
 bool WebsocketManager::EventCallback(char *event){
-  if (stateHandler && stateHandler->isLive && event) {
+  if (stateHandler && stateHandler->jIsLive->valueint && event) {
     return xQueueSend(stateHandler->msgQueue,event,portMAX_DELAY);
   }
   return false;
@@ -234,9 +237,9 @@ void WebsocketManager::StatePoller(void* instance){
   cJSON* item;
 
   char* stateBuffer = (char*)dmalloc(JSON_BUFFER_SIZE);
-  while (stateHandler && stateHandler->isLive) {
+  while (stateHandler && stateHandler->jIsLive->valueint) {
     bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,portMAX_DELAY);
-    if (stateHandler && stateHandler->isLive){
+    if (stateHandler && stateHandler->jIsLive->valueint){
       cJSON* state = cJSON_Duplicate(TheRest::status_json(),true);
       if (bits&state_change_t::GPS) {
         ESP_LOGV(__FUNCTION__,"gState Changed %d", bits);
@@ -277,7 +280,7 @@ esp_err_t TheRest::ws_handler(httpd_req_t *req) {
   }
 
   if (req->method == HTTP_GET) {
-        ESP_LOGI(__FUNCTION__, "Handshake done, the new connection was opened");
+        ESP_LOGV(__FUNCTION__, "Websocket get request");
         return ESP_OK;
   }
 

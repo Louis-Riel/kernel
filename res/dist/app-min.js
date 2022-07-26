@@ -1783,7 +1783,7 @@ class PinDriverFlags extends React.Component {
     }
 
     updateAppStatus() {
-        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }, { url: "/status/repeating_tasks", path: "repeating_tasks" }], {});
     }
 
     refreshStatus(stat) {
@@ -1814,22 +1814,25 @@ class PinDriverFlags extends React.Component {
             var abort = new AbortController()
             var timer = setTimeout(() => abort.abort(), 4000);
             if (this.props.selectedDeviceId == "current") {
-                Promise.all(requests.map(request => this.updateStatus(request, abort, newState)))
-                       .then(results => {
+                this.updateStatus(requests.pop(), abort, newState).then(res => {
                     clearTimeout(timer);
                     document.getElementById("Status").style.opacity = 1;
                     if (this.mounted){
-                        this.setState({
-                            error: null,
-                            status: this.orderResults(newState)
-                        });
-                    }
+                        if (requests.length > 0) {
+                            this.updateStatuses(requests, newState);
+                        } else {
+                            this.setState({
+                                error: null,
+                                status: this.orderResults(newState)
+                            });                        }
+                        }
                 }).catch(err => {
+                    document.getElementById("Status").style.opacity = 0.5
                     clearTimeout(timer);
                     if (err.code != 20) {
                         var errors = requests.filter(req => req.error);
                         document.getElementById("Status").style.opacity = 0.5
-                        if (errors[0].waitFor) {
+                        if (errors[0]?.waitFor) {
                             setTimeout(() => {
                                 if (err.message != "Failed to wfetch")
                                     console.error(err);
@@ -2770,7 +2773,7 @@ class LogLine extends React.Component {
         var msg = this.props.logln.match(/^[^IDVEW]*(.+)/)[1];
         var lvl = msg.substr(0, 1);
         var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
-        var logLn = this.props.logln.substr(this.props.logln.indexOf(func) + func.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/.\[..\n$/g, "");
+        var logLn = this.props.logln.substr(this.props.logln.indexOf(func) + func.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/[^0-9a-zA-Z ]\[..\n.*/g, "");
 
         return e("div", { key: "logLine" , className: `log LOG${lvl}` }, [
             e("div", { key: "level", ref: ref => this.logdiv = ref, className: "LOGLEVEL" }, lvl),

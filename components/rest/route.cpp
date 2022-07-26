@@ -9,6 +9,7 @@
 const char* TheRest::REST_BASE="Rest";
 
 static TheRest *restInstance = NULL;
+static uint32_t deviceId = 0;
 
 void restSallyForth(void *pvParameter) {
     if (TheRest::GetServer() == NULL) {
@@ -25,7 +26,8 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       gwAddr(NULL),
       ipAddr(NULL),
       app_eg(getAppEG()),
-      storageFlags(initStorage())
+      storageFlags(initStorage()),
+      system_status(NULL)
 {
     if (restInstance == NULL)
     {
@@ -33,7 +35,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         ESP_LOGI(__FUNCTION__, "First Rest for %d", deviceId);
         restInstance = this;
         ESP_LOGI(__FUNCTION__, "Getting Config for %d", deviceId);
-        AppConfig* apin = new AppConfig((status = status),AppConfig::GetAppStatus());
+        AppConfig* apin = new AppConfig(status,AppConfig::GetAppStatus());
         apin->SetIntProperty("numRequests",0);
         apin->SetIntProperty("processingTime_us",0);
         apin->SetIntProperty("BytesIn",0);

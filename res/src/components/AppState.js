@@ -39,7 +39,7 @@ class StatusPage extends React.Component {
     }
 
     updateAppStatus() {
-        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }, { url: "/status/repeating_tasks", path: "repeating_tasks" }], {});
     }
 
     refreshStatus(stat) {
@@ -70,22 +70,25 @@ class StatusPage extends React.Component {
             var abort = new AbortController()
             var timer = setTimeout(() => abort.abort(), 4000);
             if (this.props.selectedDeviceId == "current") {
-                Promise.all(requests.map(request => this.updateStatus(request, abort, newState)))
-                       .then(results => {
+                this.updateStatus(requests.pop(), abort, newState).then(res => {
                     clearTimeout(timer);
                     document.getElementById("Status").style.opacity = 1;
                     if (this.mounted){
-                        this.setState({
-                            error: null,
-                            status: this.orderResults(newState)
-                        });
-                    }
+                        if (requests.length > 0) {
+                            this.updateStatuses(requests, newState);
+                        } else {
+                            this.setState({
+                                error: null,
+                                status: this.orderResults(newState)
+                            });                        }
+                        }
                 }).catch(err => {
+                    document.getElementById("Status").style.opacity = 0.5
                     clearTimeout(timer);
                     if (err.code != 20) {
                         var errors = requests.filter(req => req.error);
                         document.getElementById("Status").style.opacity = 0.5
-                        if (errors[0].waitFor) {
+                        if (errors[0]?.waitFor) {
                             setTimeout(() => {
                                 if (err.message != "Failed to wfetch")
                                     console.error(err);

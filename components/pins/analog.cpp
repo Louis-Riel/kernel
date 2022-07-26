@@ -1,7 +1,7 @@
 #include "pins.h"
 #include "esp_sleep.h"
 
-#define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+#define LOG_LOCAL_LEVEL ESP_LOG_INFO
 
 const char* AnalogPin::PIN_BASE="AnalogPin";
 
@@ -120,26 +120,26 @@ void AnalogPin::InitDevice(){
 
     ESP_LOGI(__FUNCTION__,"Analog pin %d initialised",this->pinNo);
 
-    CreateBackgroundTask(PollPins,name, 4096, this, tskIDLE_PRIORITY, NULL);
+    CreateRepeatingTask(PollPin,this->GetName(),this,this->waitTime);
     delete appstate;
 }
 
-void AnalogPin::PollPins(void* instance) {
+void AnalogPin::PollPin(void* instance) {
     AnalogPin* pin = (AnalogPin*)instance;
-    ESP_LOGI(__FUNCTION__,"Polling analog pin %d every %d milliseconds",pin->pinNo, pin->waitTime);
-    TickType_t xLastWakeTime = xTaskGetTickCount();
-    pin->value->valueint = adc1_get_raw(pin->channel);
     pin->isRunning = true;
-    while (pin->isRunning) {
-        vTaskDelayUntil(&xLastWakeTime, pin->waitTime / portTICK_PERIOD_MS);
-        cJSON_SetIntValue(pin->value, adc1_get_raw(pin->channel));
-        cJSON_SetIntValue(pin->currentMinValue,pin->currentMinValue->valueint < pin->value->valueint ? pin->currentMinValue->valueint : pin->value->valueint);
-        cJSON_SetIntValue(pin->currentMaxValue,pin->currentMaxValue->valueint > pin->value->valueint ? pin->currentMaxValue->valueint : pin->value->valueint);
-        if (pin->configuredMinValue && pin->configuredMaxValue && pin->currentPercentage) {
-            cJSON_SetNumberValue(pin->currentPercentage,
-                ((cJSON_GetNumberValue(pin->value) - cJSON_GetNumberValue(pin->configuredMinValue)) / 
-                 (cJSON_GetNumberValue(pin->configuredMaxValue) - cJSON_GetNumberValue(pin->configuredMinValue))) * 100.0
-            );
-        }
+    ESP_LOGD(__FUNCTION__,"Polling analog pin %d",pin->pinNo);
+    pin->value->valueint = 0;
+    for (int idx = 0; idx < 10; idx++) {
+        pin->value->valueint += adc1_get_raw(pin->channel);
+        //vTaskDelay(1);
+    }
+    cJSON_SetIntValue(pin->value, pin->value->valueint / 10);
+    cJSON_SetIntValue(pin->currentMinValue,pin->currentMinValue->valueint < pin->value->valueint ? pin->currentMinValue->valueint : pin->value->valueint);
+    cJSON_SetIntValue(pin->currentMaxValue,pin->currentMaxValue->valueint > pin->value->valueint ? pin->currentMaxValue->valueint : pin->value->valueint);
+    if (pin->configuredMinValue && pin->configuredMaxValue && pin->currentPercentage) {
+        cJSON_SetNumberValue(pin->currentPercentage,
+            ((cJSON_GetNumberValue(pin->value) - cJSON_GetNumberValue(pin->configuredMinValue)) / 
+                (cJSON_GetNumberValue(pin->configuredMaxValue) - cJSON_GetNumberValue(pin->configuredMinValue))) * 100.0
+        );
     }
 }

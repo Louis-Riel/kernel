@@ -71,7 +71,7 @@ ManagedDevice::~ManagedDevice() {
       runningInstances[idx]=NULL;
     }
   }
-  ldfree((void*)eventBase);
+  ldfree((void*)name);
 }
 
 bool ManagedDevice::ProcessCommand(cJSON *command){

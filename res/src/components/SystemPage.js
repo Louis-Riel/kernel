@@ -12,7 +12,7 @@ class LogLine extends React.Component {
         var msg = this.props.logln.match(/^[^IDVEW]*(.+)/)[1];
         var lvl = msg.substr(0, 1);
         var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
-        var logLn = this.props.logln.substr(this.props.logln.indexOf(func) + func.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/.\[..\n$/g, "");
+        var logLn = this.props.logln.substr(this.props.logln.indexOf(func) + func.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/[^0-9a-zA-Z ]\[..\n.*/g, "");
 
         return e("div", { key: "logLine" , className: `log LOG${lvl}` }, [
             e("div", { key: "level", ref: ref => this.logdiv = ref, className: "LOGLEVEL" }, lvl),
