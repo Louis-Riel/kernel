@@ -2,6 +2,9 @@
 #include "esp_sleep.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
+#define UPPER_DIVIDER 442
+#define LOWER_DIVIDER 160
+#define DEFAULT_VREF  1100
 
 const char* AnalogPin::PIN_BASE="AnalogPin";
 
@@ -98,6 +101,7 @@ void AnalogPin::InitDevice(){
     ESP_LOGI(__FUNCTION__,"Initialising analog %s pin %d status null:%d invalid: %d",this->name,this->pinNo, status == NULL, status == NULL ? -1 : cJSON_IsInvalid(status));
     ESP_ERROR_CHECK(adc1_config_width(this->channel_width));   
     ESP_ERROR_CHECK(adc1_config_channel_atten(this->channel, this->channel_atten));
+    esp_adc_cal_characterize(ADC_UNIT_1,this->channel_atten ,this->channel_width,DEFAULT_VREF,&chars);
 
     AppConfig* appstate = new AppConfig(status,AppConfig::GetAppStatus());
 
@@ -106,6 +110,8 @@ void AnalogPin::InitDevice(){
     appstate->SetIntProperty("value",0);
     appstate->SetIntProperty("minValue",4096);
     appstate->SetIntProperty("maxValue",0);
+    appstate->SetIntProperty("voltage",0);
+    voltage = appstate->GetPropertyHolder("voltage");
     value = appstate->GetPropertyHolder("value");
     currentMinValue = appstate->GetPropertyHolder("minValue");
     currentMaxValue = appstate->GetPropertyHolder("maxValue");
@@ -142,4 +148,5 @@ void AnalogPin::PollPin(void* instance) {
                 (cJSON_GetNumberValue(pin->configuredMaxValue) - cJSON_GetNumberValue(pin->configuredMinValue))) * 100.0
         );
     }
+    cJSON_SetIntValue(pin->voltage, ((float)esp_adc_cal_raw_to_voltage(pin->value->valueint, &pin->chars) * (LOWER_DIVIDER+UPPER_DIVIDER) / LOWER_DIVIDER)/1000.0);
 }

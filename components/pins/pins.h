@@ -16,6 +16,7 @@
 #include "../../main/utils.h"
 #include "cJSON.h"
 #include "eventmgr.h"
+#include "esp_adc_cal.h"
 
 class Pin:ManagedDevice {
 public:
@@ -70,7 +71,9 @@ protected:
     cJSON* configuredMinValue;
     cJSON* configuredMaxValue;
     cJSON* value;
+    cJSON* voltage;
     bool isRunning;
+    esp_adc_cal_characteristics_t chars;
 
     void InitDevice();
     static adc1_channel_t PinNoToChannel(gpio_num_t pinNo);

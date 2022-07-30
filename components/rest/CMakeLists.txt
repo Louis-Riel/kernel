@@ -1,5 +1,5 @@
 idf_component_register(
-    REQUIRES nvs_flash esp_http_server esp_http_client esp_websocket_client app_update fatfs json wpa_supplicant
+    REQUIRES nvs_flash esp_http_server esp_http_client esp_websocket_client app_update fatfs json wpa_supplicant esp_adc_cal
     INCLUDE_DIRS "."
     PRIV_REQUIRES "microtar esp_littlefs mfile TinyGPS eventmgr pins eventmgr"
     EMBED_FILES "../../res/favicon.ico"
