@@ -1783,7 +1783,7 @@ class PinDriverFlags extends React.Component {
     }
 
     updateAppStatus() {
-        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }, { url: "/status/repeating_tasks", path: "repeating_tasks" }], {});
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }, { url: "/status/mallocs", path: "mallocs" }, { url: "/status/repeating_tasks", path: "repeating_tasks" }], {});
     }
 
     refreshStatus(stat) {
