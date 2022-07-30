@@ -14,24 +14,33 @@ class ConfigPage extends React.Component {
                         newconfig: fromVersionedToPlain(config),
                         original: config
                     });
-                    try {
-                        if (!this.jsoneditor) {
-                            this.jsoneditor = new JSONEditor(this.container, {
-                                onChangeJSON: json => this.state.newconfig=json 
-                            }, this.state.config);
-                        } else {
-                            this.jsoneditor.set(this.state.config);
-                        }
-                    } catch (err) {
-                        this.nativejsoneditor = e(LocalJSONEditor, {
-                            key: 'ConfigEditor',
-                            path: '/',
-                            json: this.state.config,
-                            selectedDeviceId: this.props.selectedDeviceId,
-                            editable: true
-                        });
-                    }
                 });
+        }
+    }
+
+    buildEditor() {
+        try {
+            if (!this.jsoneditor) {
+                this.jsoneditor = new JSONEditor(this.container, {
+                    onChangeJSON: json => this.state.newconfig = json
+                }, this.state.config);
+            } else {
+                this.jsoneditor.set(this.state.config);
+            }
+        } catch (err) {
+            this.nativejsoneditor = e(LocalJSONEditor, {
+                key: 'ConfigEditor',
+                path: '/',
+                json: this.state.config,
+                selectedDeviceId: this.props.selectedDeviceId,
+                editable: true
+            });
+        }
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.state?.config && !this.nativejsoneditor && !this.jsoneditor) {
+            this.buildEditor();
         }
     }
 

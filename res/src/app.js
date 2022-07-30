@@ -591,13 +591,18 @@ class MainApp extends React.Component {
   }
 }
 
-ReactDOM.render(
-  e(MainApp, {
-    key: genUUID(),
-    className: "slider"
-  }),
-  document.querySelector(".slider")
-);
+// ReactDOM.render(
+//   e(MainApp, {
+//     key: genUUID(),
+//     className: "slider"
+//   }),
+//   document.querySelector(".slider")
+// );
+
+ReactDOM.createRoot(document.querySelector(".slider")).render(e(MainApp, {
+  key: genUUID(),
+  className: "slider"
+}));
 function getInSpot(anims, origin) {
   return anims
         .filter(anim => anim.from == origin)

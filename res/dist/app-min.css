@@ -124,7 +124,7 @@ label {
 }
 
 div.slider {
-    padding-top: 5px;
+    /* padding-top: 5px; */
 }
 
 div.slides {
@@ -373,7 +373,7 @@ caption div.controls button {
 summary {
     clear: both;
     font-size: large;
-    color: aqua;
+    /* color: aqua; */
 }
 
 details>details {
@@ -727,19 +727,19 @@ div.mainApp>details>summary::marker {
 }
 
 div.mainApp>details>summary {
-    border-top-left-radius: 25%;
-    border-top-right-radius: 25%;
-    padding-right: 10px;
+    /* border-top-left-radius: 25%; */
+    /* border-top-right-radius: 25%; */
+    /* padding-right: 10px; */
     color: aquamarine;
-    background-color: #242d23;
+    /* background-color: #242d23; */
 }
 
 div.mainApp>details[open]>summary {
-    background-color: #3d4d3b;
-    padding-left: 20px;
-    padding-right: 20px;
-    font-family: system-ui;
-}
+    /* background-color: #3d4d3b; */
+    /* padding-left: 20px; */
+    /* padding-right: 20px; */
+    /* font-family: system-ui; */
+color: aqua;/* border-bottom: solid; *//* padding-bottom: 5px; */border-bottom: solid #1976d2;margin-bottom: 5px;}
 
 select.landevices {
     margin-right: 10px;

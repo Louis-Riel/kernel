@@ -19,14 +19,15 @@ class ConfigGroup extends React.Component {
 
     render() {
         if (this.props.config) {
-            var tabs = Object.keys(this.props.config).filter(this.isSupported.bind(this));
+            var tabs = ["pins","analogPins"];
             return [
                 e( MaterialUI.Tabs, { 
                     value: this.state.currentTab ? this.state.currentTab : tabs[0], 
                     onChange: (e,v)=>{this.setState({currentTab:v})},
                     key: "ConfigTypes" 
-                }, [...tabs.map(this.renderTypeTab.bind(this)),e( MaterialUI.Tab, { key: "full-config", label: "Configuration", value: "Configuration" })]),
-                tabs.map((key,idx) => this.renderConfigType(key))
+                }, [...tabs.map(this.renderTypeTab.bind(this)),
+                       e( MaterialUI.Tab, { key: "full-config", label: "Configuration", value: "Configuration" })]),
+                tabs.map(this.renderConfigType.bind(this))
             ];
         } else {
             return e("div", {key: "loading"}, "Loading...");
@@ -38,14 +39,11 @@ class ConfigGroup extends React.Component {
     }
 
     renderConfigType(key) {
-        if (this.isArray(key)) {
-            return e("div",{key:`${key}-control-panel`,className:`edior-pannel ${this.state.currentTab === key ? "":"hidden"}`},[
-                e("button", { key: "add", onClick: evt=> {this.props.config[key].push({}); this.props.onChange()} }, "+"),
-                e("div",{key:"items", className:`config-cards`}, Object.keys(this.props.config[key]).map(idx =>
-                    this.renderEditor(key,this.props.config[key],idx)))
-            ]);
-        }
-        return null;
+        return e("div",{key:`${key}-control-panel`,className:`edior-pannel ${this.state.currentTab === key ? "":"hidden"}`},[
+            e("button", { key: "add", onClick: evt=> {this.props.config[key] ? this.props.config[key].push({}) : this.props.config[key] = [{}]; this.props.onChange()} }, e("i",{key:"add", className:"fa fa-plus-square"})),
+            e("div",{key:"items", className:`config-cards`}, this.props.config[key] ? Object.keys(this.props.config[key]).map(idx =>
+                this.renderEditor(key,this.props.config[key],idx)) : null)
+        ]);
     }
 
     renderConfigItemTab(key, item, idx) {
@@ -55,8 +53,8 @@ class ConfigGroup extends React.Component {
     renderEditor(key, item, idx) {
         return  e("div",{key:`${key}-${idx}-control-editor`,className:`control-editor`},[
                     e( this.supportedTypes[key].component, { key: key + idx, value: key, role: "tabpanel", item: item[idx], onChange: this.props.onChange, ...this.supportedTypes[key].properties}),
-                    e("button", { key: "dup", onClick: evt=> {this.props.config[key].push(JSON.parse(JSON.stringify(this.props.config[key][idx]))); this.props.onChange()} }, "C"),
-                    e("button", { key: "delete", onClick: evt=> {this.props.config[key].splice(idx,1); this.props.onChange()} }, "X"),
+                    e("button", { key: "dup", onClick: evt=> {this.props.config[key].push(JSON.parse(JSON.stringify(this.props.config[key][idx]))); this.props.onChange()} }, e("i",{key:"copy", className:"fa fa-clone"})),
+                    e("button", { key: "delete", onClick: evt=> {this.props.config[key].splice(idx,1); this.props.onChange()} }, e("i",{key:"copy", className:"fa fa-trash-o"})),
                 ]);
     }
 
