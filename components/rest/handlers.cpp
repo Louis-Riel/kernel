@@ -1221,17 +1221,22 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                     ESP_LOGI(__FUNCTION__,"remote md5:%s len:%d", md5, totLen);
                     if (initSpiff(false))
                     {
+                        struct stat st;
+                        bool hasmd5 = stat("/lfs/firmware/current.bin.md5", &st) == 0;
+
                         FILE *fw = NULL;
-                        if ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
+                        if (!hasmd5 || ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL))
                         {
                             char ccmd5[70];
                             memset(ccmd5, 0, 70);
                             uint32_t len = 0;
-                            if ((len = fRead((void *)ccmd5, 1, 70, fw)) > 0)
+                            if (!hasmd5 || ((len = fRead((void *)ccmd5, 1, 70, fw)) > 0))
                             {
-                                fClose(fw);
-                                ESP_LOGI(__FUNCTION__, "Local MD5:%s remote md5:%s", ccmd5, md5);
-                                if (strcmp(ccmd5, md5) == 0)
+                                if (hasmd5) {
+                                    fClose(fw);
+                                    ESP_LOGI(__FUNCTION__, "Local MD5:%s remote md5:%s", ccmd5, md5);
+                                }
+                                if (hasmd5 && (strcmp(ccmd5, md5) == 0))
                                 {
                                     ESP_LOGI(__FUNCTION__, "Firmware is not updated RAM:%d", esp_get_free_heap_size());
                                     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 7;
