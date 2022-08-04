@@ -216,11 +216,12 @@ public:
     static void RunHealthCheck(void* param);
     static ManagedDevice* GetByName(const char* name);
 
-    static ManagedDevice** GetRunningInstanes();
+    static ManagedDevice** GetRunningInstances();
     static uint32_t GetNumRunningInstances();
     bool ProcessCommand(cJSON *command);
     static cJSON* BuildConfigTemplate();
     static cJSON *BuildStatus(void *instance);
+    static cJSON* GetConfigTemplates();
     cJSON *status;
 
 protected:
@@ -233,6 +234,7 @@ protected:
 
 private:
     static bool ValidateDevices();
+    static cJSON* configTemplates;
     static ManagedDevice *runningInstances[MAX_NUM_DEVICES];
     static uint8_t numDevices;
     static uint32_t numErrors;

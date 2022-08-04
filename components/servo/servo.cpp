@@ -69,6 +69,20 @@ Servo::Servo(AppConfig* config)
     delete appstate;
 }
 
+cJSON* Servo::BuildConfigTemplate() {
+    cJSON* commandTemplate = ManagedDevice::BuildConfigTemplate();
+    cJSON_SetValuestring(cJSON_GetObjectItem(commandTemplate,"class"),"Servo");
+    cJSON_AddTrueToObject(commandTemplate, "isArray");
+    cJSON_AddStringToObject(commandTemplate,"collectionName","Servos");
+    cJSON_AddStringToObject(commandTemplate,"name","New Servo");
+    cJSON_AddNumberToObject(commandTemplate,"pinNo",1);
+    cJSON_AddNumberToObject(commandTemplate,"SERVO_MIN_PULSEWIDTH_US",1);
+    cJSON_AddNumberToObject(commandTemplate,"SERVO_MAX_PULSEWIDTH_US",1);
+    cJSON_AddNumberToObject(commandTemplate,"SERVO_MAX_DEGREE",1);
+    cJSON_AddNumberToObject(commandTemplate,"SERVO_PWM_FREQUENCY",1);
+    return commandTemplate;
+}
+
 EventHandlerDescriptor* Servo::BuildHandlerDescriptors(){
   ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
   EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();

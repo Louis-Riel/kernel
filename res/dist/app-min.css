@@ -9,7 +9,7 @@ table.greyGridTable td:nth-child(even) {
 }
 
 table.greyGridTable td:nth-child(le) {
-    background: #EBEBEB;
+    background: #ebebeb;
 }
 
 table.greyGridTable tfoot {
@@ -99,14 +99,14 @@ table.greyGridTable tfoot td {
 .system-config fieldset.inactive {
     background-color: #dedbdb4d;
     user-select: none;
-    opacity: .5;
+    opacity: 0.5;
 }
 
 .loading {
     background-color: #dedbdb4d;
     user-select: none;
-    opacity: .5;
-    transition-delay: .5s;
+    opacity: 0.5;
+    transition-delay: 0.5s;
 }
 
 textarea {
@@ -121,10 +121,6 @@ label {
     flex-direction: column;
     align-items: stretch;
     justify-content: flex-start;
-}
-
-div.slider {
-    /* padding-top: 5px; */
 }
 
 div.slides {
@@ -238,7 +234,6 @@ option {
 }
 
 .fieldgroup>fieldset {
-    /* border-style:none; */
     background: linear-gradient(to bottom, #151a15, #273426);
     padding-right: 0;
     height: fit-content;
@@ -373,7 +368,6 @@ caption div.controls button {
 summary {
     clear: both;
     font-size: large;
-    /* color: aqua; */
 }
 
 details>details {
@@ -727,19 +721,13 @@ div.mainApp>details>summary::marker {
 }
 
 div.mainApp>details>summary {
-    /* border-top-left-radius: 25%; */
-    /* border-top-right-radius: 25%; */
-    /* padding-right: 10px; */
     color: aquamarine;
-    /* background-color: #242d23; */
 }
 
 div.mainApp>details[open]>summary {
-    /* background-color: #3d4d3b; */
-    /* padding-left: 20px; */
-    /* padding-right: 20px; */
-    /* font-family: system-ui; */
-color: aqua;/* border-bottom: solid; *//* padding-bottom: 5px; */border-bottom: solid #1976d2;margin-bottom: 5px;}
+    color: aqua;
+    border-bottom: solid #1976d2;margin-bottom: 5px;
+}
 
 select.landevices {
     margin-right: 10px;
@@ -813,9 +801,7 @@ a {
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
-    /* width:fit-content; */
     height: fit-content;
-    /* min-width:-webkit-fill-available; */
 }
 
 .jsonNodes input {
@@ -2129,7 +2115,8 @@ div.jsoneditor-value.jsoneditor-string {
 
 div.jsoneditor-value.jsoneditor-number {
     color: lightseagreen !important;
-}/* dark styling of the editor */
+}
+
 div.jsoneditor,
 div.jsoneditor-menu {
   border-color: #4b4b4b;
@@ -2175,7 +2162,6 @@ div.jsoneditor-tree button:focus {
   background-color: #868686;
 }
 
-/* coloring of JSON in tree mode */
 div.jsoneditor-readonly {
   color: #acacac;
 }
@@ -2250,7 +2236,7 @@ div.jsoneditor-value.jsoneditor-number {
     flex-wrap: wrap;
     align-content: flex-start;
     justify-content: flex-start;
-    align-items: center;
+    align-items: flex-start;
 }
 
 .MuiCardHeader-content {
@@ -2291,7 +2277,7 @@ button.MuiButtonBase-root.MuiTab-root.MuiTab-textColorPrimary {
     align-items: flex-start;
 }
 
-.MuiListItem-root>label {
+.MuiListItem-root>label.ctrllabel {
     position: absolute;
     top: -2px;
     font-size: small;

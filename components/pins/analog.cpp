@@ -25,6 +25,10 @@ AnalogPin::AnalogPin(AppConfig* config)
 
 cJSON* AnalogPin::BuildConfigTemplate() {
     cJSON* commandTemplate = ManagedDevice::BuildConfigTemplate();
+    cJSON_SetValuestring(cJSON_GetObjectItem(commandTemplate,"class"),"AnalogPin");
+    cJSON_AddTrueToObject(commandTemplate, "isArray");
+    cJSON_AddStringToObject(commandTemplate,"collectionName","analogPins");
+    cJSON_AddStringToObject(commandTemplate,"name","New Analog Pin");
     cJSON_AddNumberToObject(commandTemplate,"pinNo",1);
     cJSON_AddNumberToObject(commandTemplate,"channel_width",1);
     cJSON_AddNumberToObject(commandTemplate,"channel_atten",1.1);

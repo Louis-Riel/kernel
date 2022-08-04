@@ -56,7 +56,7 @@ class LiveEventPannel extends React.Component {
     }
 
     ProcessEvent(evt) {
-        if (this.mounted && this.isEventVisible(evt)) {
+        if (evt && this.mounted && this.isEventVisible(evt)) {
             var lastEvents = (this.state?.lastEvents||[]).concat(evt);
             while (lastEvents.length > 100) {
                 lastEvents.shift();
@@ -70,7 +70,7 @@ class LiveEventPannel extends React.Component {
 
     updateFilters(lastEvents) {
         var curFilters = Object.entries(lastEvents
-            .filter(evt => evt.eventBase && evt.eventId)
+            .filter(evt => evt && evt.eventBase && evt.eventId)
             .reduce((ret, evt) => {
                 if (!ret[evt.eventBase]) {
                     ret[evt.eventBase] = { visible: true, eventIds: [{ visible: true, eventId: evt.eventId }] };
@@ -189,7 +189,7 @@ class LiveEventPannel extends React.Component {
     }
 
     isEventVisible(event) {
-        return ((Object.keys(this.state.filters).length === 0) || !this.state.filters[event.eventBase]?.eventIds?.some(eventId=> eventId.eventId === event.eventId)) || 
+        return event && ((Object.keys(this.state.filters).length === 0) || !this.state.filters[event.eventBase]?.eventIds?.some(eventId=> eventId.eventId === event.eventId)) || 
                (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
                Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
                                                                   this.state.filters[eventBase].eventIds

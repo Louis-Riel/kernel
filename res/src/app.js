@@ -123,7 +123,9 @@ class MainApp extends React.Component {
                     from: "chip",
                     weight: 1,
                     lineColor: '#00ffff',
-                    shadowColor: '#00ffff',
+                    shadowColor: '#000000',
+                    fillColor: '#000000',
+                    textColor: '#00ffff',
                     startY: 30,
                     renderer: this.drawSprite
                 })
@@ -253,6 +255,8 @@ class MainApp extends React.Component {
       } else if (event.data.match(/.*\) ([^:]*)/g)) {
         this.AddLogLine(event.data);
       }
+    } else {
+      this.ProcessEvent(undefined);
     }
     stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 4000);
     return stopItWithThatShit;
@@ -274,7 +278,6 @@ class MainApp extends React.Component {
             return pv
         },{});
         for (var agn in animGroups) {
-            canvas.beginPath();
             animGroups[agn].forEach(anim => {
                 this.drawSprite(anim, canvas);
             });
@@ -302,33 +305,25 @@ class MainApp extends React.Component {
     if ((anim.y-(width/2)) <= 0) {
       anim.y = width;
     }
+    canvas.beginPath();
+    canvas.lineWidth = 2;
+    canvas.shadowBlur = 2;
     canvas.strokeStyle = anim.lineColor;
-    canvas.lineWidth = 1;
-    canvas.shadowBlur = 1;
-    canvas.shadowColor = anim.shadowColor;
-    canvas.fillStyle = anim.color;
+    canvas.shadowColor = anim.fillColor;
+    canvas.fillStyle = anim.fillColor;
     canvas.moveTo(anim.x+width, anim.y);
     canvas.arc(anim.x, anim.y, width, 0, 2 * Math.PI);
-
-    if ((anim.from == "browser") || (anim.type == "log"))
-      canvas.fill();
+    canvas.fill();
+    canvas.stroke();
 
     if (anim.weight > 1) {
       var today = ""+anim.weight
       canvas.font = Math.min(20,8+anim.weight)+"px Helvetica";
       var txtbx = canvas.measureText(today);
-      if ((anim.from == "browser") || (anim.type == "log")){
-        canvas.strokeStyle = "black";
-        canvas.fillStyle = "black"
-      }
+      canvas.fillStyle=anim.textColor;
+      canvas.strokeStyle = anim.textColor;
       canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
-      if ((anim.from == "browser") || (anim.type == "log")){
-        canvas.strokeStyle=anim.lineColor;
-        canvas.fillStyle=anim.color;
-      }
     }    
-
-    canvas.stroke();
     
     if (anim.direction==1?(anim.x > anim.endX):(anim.x < anim.endX)) {
         anim.state = 2;
@@ -342,7 +337,7 @@ class MainApp extends React.Component {
     canvas.strokeStyle = '#00ffff';
     canvas.lineWidth = 2;
     canvas.shadowBlur = 2;
-    canvas.shadowColor = '#00ffff';
+    canvas.shadowColor = '#002222';
     canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#0396966b") : "#000000"
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
     canvas.fill();
@@ -363,7 +358,7 @@ class MainApp extends React.Component {
     canvas.strokeStyle = '#00ffff';
     canvas.lineWidth = 2;
     canvas.shadowBlur = 2;
-    canvas.shadowColor = '#00ffff';
+    canvas.shadowColor = '#000000';
     canvas.fillStyle = "#00ffff";
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
 
@@ -405,10 +400,11 @@ class MainApp extends React.Component {
             type:"log",
             from: "chip",
             level:lvl,
-            color:lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
             weight: 1,
-            lineColor: '#00ffff',
-            shadowColor: '#00ffff',
+            lineColor: lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+            shadowColor: '#000000',
+            fillColor: '#000000',
+            textColor: lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
             startY: 25,
             renderer: this.drawSprite
         })
@@ -426,10 +422,11 @@ class MainApp extends React.Component {
       this.anims.push({
         type:"state",
         from: "chip",
-        color:"#00ffff",
         weight: 1,
         lineColor: '#00ffff',
-        shadowColor: '#00ffff',
+        shadowColor: '#000000',
+        fillColor: '#000000',
+        textColor: '#00ffff',
         startY: 5,
         renderer: this.drawSprite
       });
@@ -447,11 +444,12 @@ class MainApp extends React.Component {
       this.anims.push({
           type:"event",
           from: "chip",
-          eventBase: event.eventBase,
-          color:"#7fffd4",
+          eventBase: event ? event.eventBase : undefined,
           weight: 1,
           lineColor: '#00ffff',
-          shadowColor: '#00ffff',
+          shadowColor: '#000000',
+          fillColor: '#000000',
+          textColor: '#7fffd4',
           startY: 15,
           renderer: this.drawSprite
       });

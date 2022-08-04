@@ -81,7 +81,7 @@ class AnalogPinConfig extends React.Component {
                         e( MaterialUI.TextField, { key:"channel_width", value: this.state.pin.channel_width, label: "Channel Width", type: "number", min:9, max:12, onChange: event => this.onChange("channel_width", parseInt(event.target.value)) })),
                     e( MaterialUI.ListItem, { key: "channel_atten" },
                         [
-                            e(MaterialUI.InputLabel,{key:"attenLabel", id:"channel_atten_label"}, "Channel Attennuation"),
+                            e(MaterialUI.InputLabel,{key:"attenLabel", id:"channel_atten_label", className: "ctrllabel"}, "Channel Attennuation"),
                             e(MaterialUI.Select,{key:"attenSelect", value: this.state.pin.channel_atten, label: "Channel Attennuation", onChange: event => this.onChange("channel_atten", parseFloat(event.target.value))},[
                                 e(MaterialUI.MenuItem,{key:"atten0", value: 0.0}, "0 dB - 100 mV ~ 950 mV"),
                                 e(MaterialUI.MenuItem,{key:"atten1", value: 2.5}, "2.5 dB - 100 mV ~ 1250 mV"),

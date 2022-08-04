@@ -17,7 +17,9 @@ function wfetch(requestInfo, params) {
             from: "browser",
             weight: 1,
             lineColor: '#00ffff',
-            shadowColor: '#00ffff',
+            textColor: '#00ffff',
+            shadowColor: '#000000',
+            fillColor: '#004444',
             startY: 5,
             renderer: app.drawSprite
         }));
@@ -36,7 +38,9 @@ function wfetch(requestInfo, params) {
                 from: "chip",
                 weight: 1,
                 lineColor: '#00ffff',
-                shadowColor: '#00ffff',
+                textColor: '#00ffff',
+                shadowColor: '#000000',
+                fillColor: '#004444',
                 startY: 25,
                 renderer: app.drawSprite
             });

@@ -300,10 +300,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   ESP_LOGV(__FUNCTION__, "Saving config %s",config->filePath);
   version++;
-  if (!skipMount)
-  {
-    initSpiff(false);
-  }
+  uint8_t storage = skipMount ? 0 : initStorage();
   FILE *currentCfg = fOpen(config->filePath, "w");
   if (currentCfg != NULL)
   {
@@ -328,9 +325,9 @@ void AppConfig::SaveAppConfig(bool skipMount)
   {
     ESP_LOGE(__FUNCTION__, "Cannot save config at %s", config->filePath);
   }
-  if (!skipMount)
+  if (storage)
   {
-    deinitSpiff(false);
+    deinitStorage(storage);
   }
   //xSemaphoreGiveRecursive(sema);
 }
@@ -511,13 +508,7 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
     }
     else
     {
-      char* ctmp = cJSON_Print(json);
-      if (ctmp){
-        ESP_LOGV(__FUNCTION__, "Cannot get property holder for %s in %s", propPath, ctmp);
-      } else {
-        ESP_LOGV(__FUNCTION__, "Cannot get property holder for %s unparsable json", propPath);
-      }
-      ldfree(ctmp);
+      ESP_LOGV(__FUNCTION__, "Cannot get property holder for %s", propPath);
     }
   }
   else

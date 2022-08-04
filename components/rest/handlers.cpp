@@ -510,7 +510,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
         {
             cJSON *jClass = cJSON_GetObjectItem(jresponse, "className");
             if ((jClass != NULL) && (ManagedDevice::GetNumRunningInstances() > 0)) {
-                ManagedDevice **dev = ManagedDevice::GetRunningInstanes();
+                ManagedDevice **dev = ManagedDevice::GetRunningInstances();
                 bool processed = false;
                 for (uint32_t idx = 0; idx < ManagedDevice::GetNumRunningInstances(); idx++) {
                     if (dev[idx] && strcmp(jClass->valuestring, dev[idx]->eventBase) == 0) {
@@ -863,20 +863,9 @@ esp_err_t TheRest::config_template_handler(httpd_req_t *req)
     if (req->method == HTTP_POST)
     {
         if (indexOf(req->uri,"templates/config")) {
-            cJSON* jret = cJSON_CreateArray();
-            cJSON* jitem = cJSON_CreateObject();
-            cJSON_AddStringToObject(jitem, "name", "Pin");
-            cJSON_AddStringToObject(jitem, "label", "Digital Pin");
-            cJSON_AddItemToObject(jitem, "config_template", Pin::BuildConfigTemplate());
-            cJSON_AddItemToArray(jret, jitem);
-            jitem = cJSON_CreateObject();
-            cJSON_AddStringToObject(jitem, "name", "AnalogPin");
-            cJSON_AddStringToObject(jitem, "label", "Analog Pin");
-            cJSON_AddItemToObject(jitem, "config_template", AnalogPin::BuildConfigTemplate());
-            cJSON_AddItemToArray(jret, jitem);
+            cJSON* jret = ManagedDevice::GetConfigTemplates();
             char* json = cJSON_Print(jret);
             esp_err_t ret = httpd_resp_send(req, json, strlen(json));
-            cJSON_Delete(jret);
             ldfree(json);
             return ret;
         } else {
@@ -963,21 +952,26 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
     {
         if (true)
         {
-            cJSON *jcfg = NULL;
-            char *sjson = cJSON_PrintUnformatted((jcfg = appcfg->GetJSONConfig(NULL)));
+            cJSON *jcfg = appcfg->GetJSONConfig(NULL);
+            char *sjson = cJSON_PrintUnformatted(jcfg);
             if (sjson)
             {
                 ret = httpd_resp_send(req, sjson, strlen(sjson));
                 TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(sjson);
+                ldfree(sjson);
             }
             else
             {
-                if (jcfg)
-                    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot printf the json");
-                else
+                if (jcfg) {
+                    if (cJSON_IsInvalid(jcfg)){
+                        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot printf the json as it's invalid.");
+                    } else {
+                        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot printf the json and I don't know why.");
+                    }
+                } else {
                     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot printf the json as it is somehow null");
+                }
             }
-            ldfree(sjson);
         }
         else
         {

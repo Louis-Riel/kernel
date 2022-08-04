@@ -1,5 +1,8 @@
 #include "eventmgr.h"
 #include "../../main/utils.h"
+#include "../../components/pins/pins.h"
+#include "../../components/servo/servo.h"
+#include "../../components/apa102/apa102.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -9,6 +12,8 @@ uint8_t ManagedDevice::numDevices=0;
 uint32_t ManagedDevice::numErrors=0;
 uint64_t ManagedDevice::lastErrorTs=0;
 ManagedDevice* ManagedDevice::runningInstances[MAX_NUM_DEVICES];
+cJSON* ManagedDevice::configTemplates=NULL;
+
 
 ManagedDevice::ManagedDevice(const char* type)
 :ManagedDevice(type,NULL,NULL,NULL)
@@ -29,6 +34,7 @@ ManagedDevice::ManagedDevice(const char *type,const char *name, bool (*hcFnc)(vo
 ,commandFnc(commandFnc)
 ,name(strdup(name == NULL ? type : name))
 {
+  GetConfigTemplates();
   if(!ValidateDevices())
   {
       ESP_LOGE(__FUNCTION__,"Too many devices");
@@ -58,6 +64,17 @@ ManagedDevice::ManagedDevice(const char *type,const char *name, bool (*hcFnc)(vo
   } else {
     ESP_LOGI(__FUNCTION__,"Created device %s/%s",type,this->name);
   }
+}
+
+cJSON* ManagedDevice::GetConfigTemplates(){
+  if (!configTemplates) {
+    configTemplates = cJSON_CreateArray();
+    cJSON_AddItemToArray(configTemplates, AnalogPin::BuildConfigTemplate());
+    cJSON_AddItemToArray(configTemplates, Pin::BuildConfigTemplate());
+    cJSON_AddItemToArray(configTemplates, Servo::BuildConfigTemplate());
+    cJSON_AddItemToArray(configTemplates, Apa102::BuildConfigTemplate());
+  }
+  return configTemplates;
 }
 
 const char* ManagedDevice::GetName() {
@@ -103,7 +120,7 @@ ManagedDevice* ManagedDevice::GetByName(const char* name){
   return NULL;
 }
 
-ManagedDevice** ManagedDevice::GetRunningInstanes(){
+ManagedDevice** ManagedDevice::GetRunningInstances(){
   return runningInstances;
 }
 
@@ -179,7 +196,6 @@ bool ManagedDevice::HealthCheck(void* instance){
 
 cJSON* ManagedDevice::BuildConfigTemplate(){
   cJSON* cfg = cJSON_CreateObject();
-  cJSON_AddStringToObject(cfg,"name","");
   cJSON_AddStringToObject(cfg,"class","");
   return cfg;
 }

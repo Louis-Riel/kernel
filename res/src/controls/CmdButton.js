@@ -3,13 +3,17 @@ class CmdButton extends React.Component {
         super(props);
         this.state = {
             param1: this.props.param1,
-            param2: this.props.param2
+            param2: this.props.param2,
+            param3: this.props.param3,
+            param4: this.props.param4,
+            param5: this.props.param5,
+            param6: this.props.param6
         };
     }
     runIt() {
         wfetch(`${httpPrefix}/status/cmd`, {
             method: this.props.HTTP_METHOD,
-            body: JSON.stringify({command: this.props.command, className: this.props.className ,name: this.props.name, param1: this.state.param1, param2: this.state.param2})
+            body: JSON.stringify({command: this.props.command, className: this.props.className ,name: this.props.name, ...this.state})
         }).then(data => data.text())
           .then(this.props.onSuccess ? this.props.onSuccess : console.log)
           .catch(this.props.onError ? this.props.onError : console.error);
@@ -25,13 +29,14 @@ class CmdButton extends React.Component {
                     key: "label",
                     className: "label",
                     id: `${param}-label`
-                },this.state[`${param}_caption`]||param),
+                },this.props[`${param}_label`]||param),
                 e(MaterialUI.Input,{
                     key:"input",
                     id: `${param}-input`,
+                    type: typeof this.state[param] === "number" || !isNaN(this.state[param]) ? 'number' : 'text',
                     label: param,
                     value: this.state[param],
-                    onChange: elem => {this.state[param] = elem.target.value; this.setState(this.state)}
+                    onChange: elem => {this.state[param] = elem.target.type === 'number' ? parseInt(elem.target.value) : elem.target.value; this.setState(this.state)}
                 })]);
     }
 

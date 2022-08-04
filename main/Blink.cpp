@@ -37,6 +37,7 @@
 #include "../components/IR/ir.h"
 #include "../components/bluetooth/bt.h"
 #include "../components/servo/servo.h"
+#include "../components/apa102/apa102.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -541,6 +542,18 @@ void ConfigurePins(AppConfig *cfg)
     {
       ESP_LOGV(__FUNCTION__, "Configuring pin %d", pinNo);
       new Servo(cpin);
+    }
+    ldfree(cpin);
+  }
+
+  cJSON_ArrayForEach(pin, cfg->GetJSONConfig("dotstars"))
+  {
+    AppConfig *cpin = new AppConfig(pin, cfg);
+    gpio_num_t pinNo = cpin->GetPinNoProperty("pwrPin");
+    if (pinNo > 0)
+    {
+      ESP_LOGV(__FUNCTION__, "Configuring pin %d", pinNo);
+      new Apa102(cpin);
     }
     ldfree(cpin);
   }

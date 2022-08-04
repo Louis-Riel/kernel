@@ -18,11 +18,11 @@ class Servo:ManagedDevice {
 public:
     Servo(AppConfig* config);
     ~Servo();
+    static cJSON* BuildConfigTemplate();
 
 protected:
     static const char* SERVO_BASE;
     AppConfig* config;
-    char* name;
     gpio_num_t pinNo;
     uint32_t SERVO_MIN_PULSEWIDTH_US;   // Minimum pulse width in microsecond
     uint32_t SERVO_MAX_PULSEWIDTH_US;   // Maximum pulse width in microsecond

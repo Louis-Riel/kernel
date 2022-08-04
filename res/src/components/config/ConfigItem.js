@@ -1,22 +1,27 @@
 class ConfigItem extends React.Component {
     constructor(props) {
         super(props);
-        this.state = {pin: props.item};
+        if (JSON.stringify(props.item) === "{}") {
+            Object.keys(props.value)
+                  .filter(fld => !['collectionName','class','isArray'].find(val=>val===fld))
+                  .forEach(fld => props.item[fld] = props.value[fld]);
+        }
+        this.state = { instance: props.item };
     }
 
     componentDidUpdate(prevProps, prevState) {
         if ((this.state != prevState) && this.props.onChange) {
-            this.props.onChange(this.state);
-        }
-        
-        if (prevProps?.item != this.props?.item) {
-            this.setState({pin: this.props.item});
+            this.props.onChange(this.state.instance);
         }
     }
 
-    getFieldType(name,value) {
-        if (this.state.pin[name] !== undefined) {
-            if (isNaN(this.state.pin[name])) {
+    getFieldType(name) {
+        var obj = this.props.item[name];
+        if (obj !== undefined) {
+            if (typeof(obj) === 'boolean') {
+                return "boolean";
+            }
+            if (isNaN(obj)) {
                 return "text";
             }
             return "number";
@@ -24,12 +29,12 @@ class ConfigItem extends React.Component {
         return "text";
     }
 
-    getFieldValue(name,value) {
-        if (this.state.pin[name] !== undefined) {
-            if (isNaN(this.state.pin[name])) {
+    parseFieldValue(value) {
+        if (value !== undefined) {
+            if (isNaN(value)) {
                 return value;
             }
-            if (typeof value == "string") {
+            if (typeof value === "string") {
                 if (value.indexOf(".") != -1) {
                     return parseFloat(value);
                 }
@@ -40,7 +45,7 @@ class ConfigItem extends React.Component {
     }
 
     onChange(name, value) {
-        this.state.pin[name] = this.getFieldValue(name,value); 
+        this.props.item[name] = this.parseFieldValue(value); 
         this.setState(this.state);
     }
 
@@ -49,7 +54,7 @@ class ConfigItem extends React.Component {
             return 100;
         }
 
-        switch(this.getFieldType(field, this.state.pin[field])) {
+        switch(this.getFieldType(field, this.props.item[field])) {
             case "text":
                 return 75;
             case "number":
@@ -60,10 +65,11 @@ class ConfigItem extends React.Component {
     }
 
     render() {
-        return e( MaterialUI.Card, { key: this.state.pin[this.props.nameField], className: "config-item" },[
-            e( MaterialUI.CardHeader, {key:"header", title: this.state.pin[this.props.nameField] }),
+        return e( MaterialUI.Card, { key: this.props.item[this.props.nameField], className: "config-item" },[
+            e( MaterialUI.CardHeader, {key:"header", title: this.props.item[this.props.nameField] }),
             e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"},
-                Object.keys(this.state.pin)
+                Object.keys(JSON.stringify(this.props.item) === "{}" ? this.props.value : this.props.item)
+                      .filter(fld => !['collectionName','class','isArray'].find(val=>val===fld))
                       .sort((a,b) => {
                         var wa = this.getFieldWeight(a);
                         var wb = this.getFieldWeight(b);
@@ -77,23 +83,24 @@ class ConfigItem extends React.Component {
     }
 
     getEditor(key) {
-        if (this.props.editors && this.props.editors[key]) {
-            return e(this.props.editors[key].editor, {
-                key: key,
-                autoFocus: true,
-                value: this.getFieldValue(key, this.state.pin[key]),
-                label: key,
-                type: this.getFieldType(key, this.state.pin[key]),
-                onChange: value => this.onChange(key, value)
-            })
-        }
+        var tp = this.getFieldType(key);
         return e(MaterialUI.ListItem, { key: key },
+            tp === "boolean" ? 
+            e(MaterialUI.FormControlLabel,{
+                key:"label",
+                label: key,
+                control:e(MaterialUI.Checkbox, {
+                    key: "ctrl",
+                    checked: this.parseFieldValue(this.props.item[key]),
+                    onChange: event => this.onChange(key, event.target.checked)
+                })
+            }):
             e(MaterialUI.TextField, {
                 key: key,
-                autoFocus: this.getFieldType(key, this.state.pin[key]) == "text",
-                value: this.getFieldValue(key, this.state.pin[key]),
+                autoFocus: tp == "text",
+                value: this.parseFieldValue(this.props.item[key]),
                 label: key,
-                type: this.getFieldType(key, this.state.pin[key]),
+                type: tp,
                 onChange: event => this.onChange(key, event.target.value)
             })
         );

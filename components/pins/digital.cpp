@@ -36,6 +36,10 @@ Pin::Pin(AppConfig* config)
 
 cJSON* Pin::BuildConfigTemplate() {
     cJSON* commandTemplate = ManagedDevice::BuildConfigTemplate();
+    cJSON_SetValuestring(cJSON_GetObjectItem(commandTemplate,"class"),"Pin");
+    cJSON_AddStringToObject(commandTemplate,"name","New Analog Pin");
+    cJSON_AddTrueToObject(commandTemplate, "isArray");
+    cJSON_AddStringToObject(commandTemplate,"collectionName","pins");
     cJSON_AddNumberToObject(commandTemplate,"pinNo",1);
     cJSON_AddNumberToObject(commandTemplate,"driverFlags",1);
     return commandTemplate;

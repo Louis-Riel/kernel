@@ -17,7 +17,9 @@ function wfetch(requestInfo, params) {
             from: "browser",
             weight: 1,
             lineColor: '#00ffff',
-            shadowColor: '#00ffff',
+            textColor: '#00ffff',
+            shadowColor: '#000000',
+            fillColor: '#004444',
             startY: 5,
             renderer: app.drawSprite
         }));
@@ -36,7 +38,9 @@ function wfetch(requestInfo, params) {
                 from: "chip",
                 weight: 1,
                 lineColor: '#00ffff',
-                shadowColor: '#00ffff',
+                textColor: '#00ffff',
+                shadowColor: '#000000',
+                fillColor: '#004444',
                 startY: 25,
                 renderer: app.drawSprite
             });
@@ -320,13 +324,17 @@ class CmdButton extends React.Component {
         super(props);
         this.state = {
             param1: this.props.param1,
-            param2: this.props.param2
+            param2: this.props.param2,
+            param3: this.props.param3,
+            param4: this.props.param4,
+            param5: this.props.param5,
+            param6: this.props.param6
         };
     }
     runIt() {
         wfetch(`${httpPrefix}/status/cmd`, {
             method: this.props.HTTP_METHOD,
-            body: JSON.stringify({command: this.props.command, className: this.props.className ,name: this.props.name, param1: this.state.param1, param2: this.state.param2})
+            body: JSON.stringify({command: this.props.command, className: this.props.className ,name: this.props.name, ...this.state})
         }).then(data => data.text())
           .then(this.props.onSuccess ? this.props.onSuccess : console.log)
           .catch(this.props.onError ? this.props.onError : console.error);
@@ -342,13 +350,14 @@ class CmdButton extends React.Component {
                     key: "label",
                     className: "label",
                     id: `${param}-label`
-                },this.state[`${param}_caption`]||param),
+                },this.props[`${param}_label`]||param),
                 e(MaterialUI.Input,{
                     key:"input",
                     id: `${param}-input`,
+                    type: typeof this.state[param] === "number" || !isNaN(this.state[param]) ? 'number' : 'text',
                     label: param,
                     value: this.state[param],
-                    onChange: elem => {this.state[param] = elem.target.value; this.setState(this.state)}
+                    onChange: elem => {this.state[param] = elem.target.type === 'number' ? parseInt(elem.target.value) : elem.target.value; this.setState(this.state)}
                 })]);
     }
 
@@ -1181,7 +1190,7 @@ class AnalogPinConfig extends React.Component {
                         e( MaterialUI.TextField, { key:"channel_width", value: this.state.pin.channel_width, label: "Channel Width", type: "number", min:9, max:12, onChange: event => this.onChange("channel_width", parseInt(event.target.value)) })),
                     e( MaterialUI.ListItem, { key: "channel_atten" },
                         [
-                            e(MaterialUI.InputLabel,{key:"attenLabel", id:"channel_atten_label"}, "Channel Attennuation"),
+                            e(MaterialUI.InputLabel,{key:"attenLabel", id:"channel_atten_label", className: "ctrllabel"}, "Channel Attennuation"),
                             e(MaterialUI.Select,{key:"attenSelect", value: this.state.pin.channel_atten, label: "Channel Attennuation", onChange: event => this.onChange("channel_atten", parseFloat(event.target.value))},[
                                 e(MaterialUI.MenuItem,{key:"atten0", value: 0.0}, "0 dB - 100 mV ~ 950 mV"),
                                 e(MaterialUI.MenuItem,{key:"atten1", value: 2.5}, "2.5 dB - 100 mV ~ 1250 mV"),
@@ -1206,45 +1215,64 @@ class AnalogPinConfig extends React.Component {
         this.supportedTypes = {
             analogPins:{
                 caption:"Analog Pins",
-                isArray: true,
+                class: "AnalogPin",
                 component: AnalogPinConfig
             },pins:{
                 caption:"Digital Pins",
-                isArray: true,
+                class: "Pin",
                 component: DigitalPinConfig
             }
         };
         this.state = {
-            currentTab: props.config ? Object.keys(props.config).filter(this.isSupported.bind(this))[0] : undefined
+            currentTab: undefined
         };
+        wfetch(`${httpPrefix}/templates/config`,{
+            method: 'post'
+        }).then(data => data.json())
+          .then(this.updateConfigTemplates.bind(this))
+          .catch(console.error);
+    }
+
+    updateConfigTemplates(configTemplates) {
+        this.setState({ 
+            configTemplates: configTemplates,
+            currentTab: configTemplates[0].collectionName
+        });
     }
 
     render() {
-        if (this.props.config) {
-            var tabs = ["pins","analogPins"];
-            return [
-                e( MaterialUI.Tabs, { 
-                    value: this.state.currentTab ? this.state.currentTab : tabs[0], 
-                    onChange: (e,v)=>{this.setState({currentTab:v})},
-                    key: "ConfigTypes" 
-                }, [...tabs.map(this.renderTypeTab.bind(this)),
-                       e( MaterialUI.Tab, { key: "full-config", label: "Configuration", value: "Configuration" })]),
-                tabs.map(this.renderConfigType.bind(this))
-            ];
+        if (this.props.config && this.state.configTemplates) {
+            return this.renderArrayTypes();
         } else {
             return e("div", {key: "loading"}, "Loading...");
         }
     }
 
+    renderArrayTypes() {
+        var tabs = this.state.configTemplates
+            .filter(configTemplate => configTemplate.isArray);
+        return [
+            e(MaterialUI.Tabs, {
+                value: this.state.currentTab,
+                onChange: (_, v) => { this.setState({ currentTab: v }); },
+                key: "ConfigTypes"
+            }, [...tabs.map(this.renderTypeTab.bind(this)),
+            e(MaterialUI.Tab, { key: "full-config", label: "Configuration", value: "Configuration" })]),
+            tabs.map(this.renderConfigType.bind(this))
+        ];
+    }
+
     renderTypeTab(key) {
-        return e( MaterialUI.Tab, { key: key, label: this.supportedTypes[key].caption, value: key });
+        return key.isArray ? 
+                e( MaterialUI.Tab, { key: key.collectionName, label: this.supportedTypes[key.collectionName]?.caption || key.collectionName, value: key.collectionName }):
+                e( MaterialUI.Tab, { key: key.class, label: this.supportedTypes[key.class]?.caption || key.class, value: key.class });
     }
 
     renderConfigType(key) {
-        return e("div",{key:`${key}-control-panel`,className:`edior-pannel ${this.state.currentTab === key ? "":"hidden"}`},[
-            e("button", { key: "add", onClick: evt=> {this.props.config[key] ? this.props.config[key].push({}) : this.props.config[key] = [{}]; this.props.onChange()} }, e("i",{key:"add", className:"fa fa-plus-square"})),
-            e("div",{key:"items", className:`config-cards`}, this.props.config[key] ? Object.keys(this.props.config[key]).map(idx =>
-                this.renderEditor(key,this.props.config[key],idx)) : null)
+        return e("div",{key:`${key.class}-control-panel`,className:`edior-pannel ${this.state.currentTab === key.collectionName ? "":"hidden"}`},[
+            e("button", { key: "add", onClick: evt=> {this.props.config[key.collectionName] ? this.props.config[key.collectionName].push({}) : this.props.config[key.collectionName] = [{}]; this.props.onChange()} }, e("i",{key:"add", className:"fa fa-plus-square"})),
+            e("div",{key:"items", className:`config-cards`}, this.props.config[key.collectionName] ? Object.keys(this.props.config[key.collectionName]).map(idx =>
+                this.renderEditor(key,this.props.config[key.collectionName],idx)) : null)
         ]);
     }
 
@@ -1253,15 +1281,11 @@ class AnalogPinConfig extends React.Component {
     }
 
     renderEditor(key, item, idx) {
-        return  e("div",{key:`${key}-${idx}-control-editor`,className:`control-editor`},[
-                    e( this.supportedTypes[key].component, { key: key + idx, value: key, role: "tabpanel", item: item[idx], onChange: this.props.onChange, ...this.supportedTypes[key].properties}),
-                    e("button", { key: "dup", onClick: evt=> {this.props.config[key].push(JSON.parse(JSON.stringify(this.props.config[key][idx]))); this.props.onChange()} }, e("i",{key:"copy", className:"fa fa-clone"})),
-                    e("button", { key: "delete", onClick: evt=> {this.props.config[key].splice(idx,1); this.props.onChange()} }, e("i",{key:"copy", className:"fa fa-trash-o"})),
+        return  e("div",{key:`${key.collectionName}-${idx}-control-editor`,className:`control-editor`},[
+                    e( this.supportedTypes[key.collectionName]?.component || ConfigItem, { key: key.collectionName + idx, value: key, role: "tabpanel", item: item[idx], onChange: this.props.onChange}),
+                    e("button", { key: "dup", onClick: evt=> {this.props.config[key.collectionName].push(JSON.parse(JSON.stringify(this.props.config[key.collectionName][idx]))); this.props.onChange()} }, e("i",{key:"copy", className:"fa fa-clone"})),
+                    e("button", { key: "delete", onClick: evt=> {this.props.config[key.collectionName].splice(idx,1); this.props.onChange()} }, e("i",{key:"copy", className:"fa fa-trash-o"})),
                 ]);
-    }
-
-    isArray(key) {
-        return this.isSupported(key) && this.supportedTypes[key].isArray;
     }
 
     isSupported(key) {
@@ -1270,22 +1294,27 @@ class AnalogPinConfig extends React.Component {
 }class ConfigItem extends React.Component {
     constructor(props) {
         super(props);
-        this.state = {pin: props.item};
+        if (JSON.stringify(props.item) === "{}") {
+            Object.keys(props.value)
+                  .filter(fld => !['collectionName','class','isArray'].find(val=>val===fld))
+                  .forEach(fld => props.item[fld] = props.value[fld]);
+        }
+        this.state = { instance: props.item };
     }
 
     componentDidUpdate(prevProps, prevState) {
         if ((this.state != prevState) && this.props.onChange) {
-            this.props.onChange(this.state);
-        }
-        
-        if (prevProps?.item != this.props?.item) {
-            this.setState({pin: this.props.item});
+            this.props.onChange(this.state.instance);
         }
     }
 
-    getFieldType(name,value) {
-        if (this.state.pin[name] !== undefined) {
-            if (isNaN(this.state.pin[name])) {
+    getFieldType(name) {
+        var obj = this.props.item[name];
+        if (obj !== undefined) {
+            if (typeof(obj) === 'boolean') {
+                return "boolean";
+            }
+            if (isNaN(obj)) {
                 return "text";
             }
             return "number";
@@ -1293,12 +1322,12 @@ class AnalogPinConfig extends React.Component {
         return "text";
     }
 
-    getFieldValue(name,value) {
-        if (this.state.pin[name] !== undefined) {
-            if (isNaN(this.state.pin[name])) {
+    parseFieldValue(value) {
+        if (value !== undefined) {
+            if (isNaN(value)) {
                 return value;
             }
-            if (typeof value == "string") {
+            if (typeof value === "string") {
                 if (value.indexOf(".") != -1) {
                     return parseFloat(value);
                 }
@@ -1309,7 +1338,7 @@ class AnalogPinConfig extends React.Component {
     }
 
     onChange(name, value) {
-        this.state.pin[name] = this.getFieldValue(name,value); 
+        this.props.item[name] = this.parseFieldValue(value); 
         this.setState(this.state);
     }
 
@@ -1318,7 +1347,7 @@ class AnalogPinConfig extends React.Component {
             return 100;
         }
 
-        switch(this.getFieldType(field, this.state.pin[field])) {
+        switch(this.getFieldType(field, this.props.item[field])) {
             case "text":
                 return 75;
             case "number":
@@ -1329,10 +1358,11 @@ class AnalogPinConfig extends React.Component {
     }
 
     render() {
-        return e( MaterialUI.Card, { key: this.state.pin[this.props.nameField], className: "config-item" },[
-            e( MaterialUI.CardHeader, {key:"header", title: this.state.pin[this.props.nameField] }),
+        return e( MaterialUI.Card, { key: this.props.item[this.props.nameField], className: "config-item" },[
+            e( MaterialUI.CardHeader, {key:"header", title: this.props.item[this.props.nameField] }),
             e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"},
-                Object.keys(this.state.pin)
+                Object.keys(JSON.stringify(this.props.item) === "{}" ? this.props.value : this.props.item)
+                      .filter(fld => !['collectionName','class','isArray'].find(val=>val===fld))
                       .sort((a,b) => {
                         var wa = this.getFieldWeight(a);
                         var wb = this.getFieldWeight(b);
@@ -1346,23 +1376,24 @@ class AnalogPinConfig extends React.Component {
     }
 
     getEditor(key) {
-        if (this.props.editors && this.props.editors[key]) {
-            return e(this.props.editors[key].editor, {
-                key: key,
-                autoFocus: true,
-                value: this.getFieldValue(key, this.state.pin[key]),
-                label: key,
-                type: this.getFieldType(key, this.state.pin[key]),
-                onChange: value => this.onChange(key, value)
-            })
-        }
+        var tp = this.getFieldType(key);
         return e(MaterialUI.ListItem, { key: key },
+            tp === "boolean" ? 
+            e(MaterialUI.FormControlLabel,{
+                key:"label",
+                label: key,
+                control:e(MaterialUI.Checkbox, {
+                    key: "ctrl",
+                    checked: this.parseFieldValue(this.props.item[key]),
+                    onChange: event => this.onChange(key, event.target.checked)
+                })
+            }):
             e(MaterialUI.TextField, {
                 key: key,
-                autoFocus: this.getFieldType(key, this.state.pin[key]) == "text",
-                value: this.getFieldValue(key, this.state.pin[key]),
+                autoFocus: tp == "text",
+                value: this.parseFieldValue(this.props.item[key]),
                 label: key,
-                type: this.getFieldType(key, this.state.pin[key]),
+                type: tp,
                 onChange: event => this.onChange(key, event.target.value)
             })
         );
@@ -2146,7 +2177,7 @@ class LiveEventPannel extends React.Component {
     }
 
     ProcessEvent(evt) {
-        if (this.mounted && this.isEventVisible(evt)) {
+        if (evt && this.mounted && this.isEventVisible(evt)) {
             var lastEvents = (this.state?.lastEvents||[]).concat(evt);
             while (lastEvents.length > 100) {
                 lastEvents.shift();
@@ -2160,7 +2191,7 @@ class LiveEventPannel extends React.Component {
 
     updateFilters(lastEvents) {
         var curFilters = Object.entries(lastEvents
-            .filter(evt => evt.eventBase && evt.eventId)
+            .filter(evt => evt && evt.eventBase && evt.eventId)
             .reduce((ret, evt) => {
                 if (!ret[evt.eventBase]) {
                     ret[evt.eventBase] = { visible: true, eventIds: [{ visible: true, eventId: evt.eventId }] };
@@ -2279,7 +2310,7 @@ class LiveEventPannel extends React.Component {
     }
 
     isEventVisible(event) {
-        return ((Object.keys(this.state.filters).length === 0) || !this.state.filters[event.eventBase]?.eventIds?.some(eventId=> eventId.eventId === event.eventId)) || 
+        return event && ((Object.keys(this.state.filters).length === 0) || !this.state.filters[event.eventBase]?.eventIds?.some(eventId=> eventId.eventId === event.eventId)) || 
                (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
                Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
                                                                   this.state.filters[eventBase].eventIds
@@ -3483,7 +3514,9 @@ class MainApp extends React.Component {
                     from: "chip",
                     weight: 1,
                     lineColor: '#00ffff',
-                    shadowColor: '#00ffff',
+                    shadowColor: '#000000',
+                    fillColor: '#000000',
+                    textColor: '#00ffff',
                     startY: 30,
                     renderer: this.drawSprite
                 })
@@ -3613,6 +3646,8 @@ class MainApp extends React.Component {
       } else if (event.data.match(/.*\) ([^:]*)/g)) {
         this.AddLogLine(event.data);
       }
+    } else {
+      this.ProcessEvent(undefined);
     }
     stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 4000);
     return stopItWithThatShit;
@@ -3634,7 +3669,6 @@ class MainApp extends React.Component {
             return pv
         },{});
         for (var agn in animGroups) {
-            canvas.beginPath();
             animGroups[agn].forEach(anim => {
                 this.drawSprite(anim, canvas);
             });
@@ -3662,33 +3696,25 @@ class MainApp extends React.Component {
     if ((anim.y-(width/2)) <= 0) {
       anim.y = width;
     }
+    canvas.beginPath();
+    canvas.lineWidth = 2;
+    canvas.shadowBlur = 2;
     canvas.strokeStyle = anim.lineColor;
-    canvas.lineWidth = 1;
-    canvas.shadowBlur = 1;
-    canvas.shadowColor = anim.shadowColor;
-    canvas.fillStyle = anim.color;
+    canvas.shadowColor = anim.fillColor;
+    canvas.fillStyle = anim.fillColor;
     canvas.moveTo(anim.x+width, anim.y);
     canvas.arc(anim.x, anim.y, width, 0, 2 * Math.PI);
-
-    if ((anim.from == "browser") || (anim.type == "log"))
-      canvas.fill();
+    canvas.fill();
+    canvas.stroke();
 
     if (anim.weight > 1) {
       var today = ""+anim.weight
       canvas.font = Math.min(20,8+anim.weight)+"px Helvetica";
       var txtbx = canvas.measureText(today);
-      if ((anim.from == "browser") || (anim.type == "log")){
-        canvas.strokeStyle = "black";
-        canvas.fillStyle = "black"
-      }
+      canvas.fillStyle=anim.textColor;
+      canvas.strokeStyle = anim.textColor;
       canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
-      if ((anim.from == "browser") || (anim.type == "log")){
-        canvas.strokeStyle=anim.lineColor;
-        canvas.fillStyle=anim.color;
-      }
     }    
-
-    canvas.stroke();
     
     if (anim.direction==1?(anim.x > anim.endX):(anim.x < anim.endX)) {
         anim.state = 2;
@@ -3702,7 +3728,7 @@ class MainApp extends React.Component {
     canvas.strokeStyle = '#00ffff';
     canvas.lineWidth = 2;
     canvas.shadowBlur = 2;
-    canvas.shadowColor = '#00ffff';
+    canvas.shadowColor = '#002222';
     canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#0396966b") : "#000000"
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
     canvas.fill();
@@ -3723,7 +3749,7 @@ class MainApp extends React.Component {
     canvas.strokeStyle = '#00ffff';
     canvas.lineWidth = 2;
     canvas.shadowBlur = 2;
-    canvas.shadowColor = '#00ffff';
+    canvas.shadowColor = '#000000';
     canvas.fillStyle = "#00ffff";
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
 
@@ -3765,10 +3791,11 @@ class MainApp extends React.Component {
             type:"log",
             from: "chip",
             level:lvl,
-            color:lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
             weight: 1,
-            lineColor: '#00ffff',
-            shadowColor: '#00ffff',
+            lineColor: lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+            shadowColor: '#000000',
+            fillColor: '#000000',
+            textColor: lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
             startY: 25,
             renderer: this.drawSprite
         })
@@ -3786,10 +3813,11 @@ class MainApp extends React.Component {
       this.anims.push({
         type:"state",
         from: "chip",
-        color:"#00ffff",
         weight: 1,
         lineColor: '#00ffff',
-        shadowColor: '#00ffff',
+        shadowColor: '#000000',
+        fillColor: '#000000',
+        textColor: '#00ffff',
         startY: 5,
         renderer: this.drawSprite
       });
@@ -3807,11 +3835,12 @@ class MainApp extends React.Component {
       this.anims.push({
           type:"event",
           from: "chip",
-          eventBase: event.eventBase,
-          color:"#7fffd4",
+          eventBase: event ? event.eventBase : undefined,
           weight: 1,
           lineColor: '#00ffff',
-          shadowColor: '#00ffff',
+          shadowColor: '#000000',
+          fillColor: '#000000',
+          textColor: '#7fffd4',
           startY: 15,
           renderer: this.drawSprite
       });
