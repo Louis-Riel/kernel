@@ -36,34 +36,83 @@ float temperatureReadFixed()
     return temp_c;
 }
 
+static cJSON *tasks = NULL;
+
 cJSON *tasks_json()
 {
     volatile UBaseType_t numTasks = uxTaskGetNumberOfTasks();
     uint32_t totalRunTime;
     TaskStatus_t *statuses = (TaskStatus_t *)dmalloc(numTasks * sizeof(TaskStatus_t));
-    cJSON *tasks = NULL;
+    cJSON *task = NULL;
+    cJSON* toGo[32];
+    int numToGo=0;
+    bool firstPass = true;
     if (statuses != NULL)
     {
         numTasks = uxTaskGetSystemState(statuses, numTasks, &totalRunTime);
         if (totalRunTime > 0)
         {
-            tasks = cJSON_CreateArray();
+            if (tasks == NULL){
+                tasks = cJSON_CreateArray();
+            }
             for (uint32_t taskNo = 0; taskNo < numTasks; taskNo++)
             {
-                cJSON *task = cJSON_CreateObject();
-                cJSON_AddNumberToObject(task, "TaskNumber", statuses[taskNo].xTaskNumber);
-                cJSON_AddStringToObject(task, "Name", statuses[taskNo].pcTaskName);
-                cJSON_AddNumberToObject(task, "Priority", statuses[taskNo].uxCurrentPriority);
-                cJSON_AddNumberToObject(task, "Runtime", statuses[taskNo].ulRunTimeCounter);
-                cJSON_AddNumberToObject(task, "Core", statuses[taskNo].xCoreID > 100 ? -1 : statuses[taskNo].xCoreID);
-                cJSON_AddNumberToObject(task, "State", statuses[taskNo].eCurrentState);
-                cJSON_AddNumberToObject(task, "Stackfree", statuses[taskNo].usStackHighWaterMark * 4);
-                cJSON_AddNumberToObject(task, "Pct", ((double)statuses[taskNo].ulRunTimeCounter / totalRunTime) * 100.0);
-                cJSON_AddItemToArray(tasks, task);
+                bool found = false;
+                cJSON_ArrayForEach(task, tasks) {
+                    cJSON* taskName = task ? cJSON_GetObjectItem(task,"Name") : NULL;
+                    if (taskName && (strcmp(taskName->valuestring,statuses[taskNo].pcTaskName) == 0)) {
+                        found=true;
+                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "TaskNumber"), statuses[taskNo].xTaskNumber);
+                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Priority"), statuses[taskNo].uxCurrentPriority);
+                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Runtime"), statuses[taskNo].ulRunTimeCounter);
+                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Core"), statuses[taskNo].xCoreID > 100 ? -1 : statuses[taskNo].xCoreID);
+                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "State"), statuses[taskNo].eCurrentState);
+                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Stackfree"), statuses[taskNo].usStackHighWaterMark * 4);
+                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Pct"), ((double)statuses[taskNo].ulRunTimeCounter / totalRunTime) * 100.0);
+                        if (!firstPass) {
+                            break;
+                        }
+                    } else if (firstPass) {
+                        bool stillExists = false;
+                        for (uint32_t ttaskNo = 0; ttaskNo < numTasks; ttaskNo++) {
+                            stillExists = strcmp(statuses[ttaskNo].pcTaskName,taskName->valuestring)==0;
+                            if (stillExists) {
+                                break;
+                            }
+                        }
+                        if (!stillExists && (numToGo < 32)) {
+                            toGo[numToGo++]=task;
+                        }
+                    }
+                }
+
+                if (!found && cJSON_AddItemToArray(tasks,task=cJSON_CreateObject())) {
+                    cJSON_AddStringToObject(task, "Name", statuses[taskNo].pcTaskName);
+                    cJSON_AddNumberToObject(task, "TaskNumber", statuses[taskNo].xTaskNumber);
+                    cJSON_AddNumberToObject(task, "Priority", statuses[taskNo].uxCurrentPriority);
+                    cJSON_AddNumberToObject(task, "Runtime", statuses[taskNo].ulRunTimeCounter);
+                    cJSON_AddNumberToObject(task, "Core", statuses[taskNo].xCoreID > 100 ? -1 : statuses[taskNo].xCoreID);
+                    cJSON_AddNumberToObject(task, "State", statuses[taskNo].eCurrentState);
+                    cJSON_AddNumberToObject(task, "Stackfree", statuses[taskNo].usStackHighWaterMark * 4);
+                    cJSON_AddNumberToObject(task, "Pct", ((double)statuses[taskNo].ulRunTimeCounter / totalRunTime) * 100.0);
+                }
+                firstPass=false; 
             }
         }
         ldfree(statuses);
     }
+    while (tasks && (--numToGo>=0))
+    {
+        int taskIdx = -1;
+        cJSON_ArrayForEach(task,tasks) {
+            taskIdx++;
+            if (task == toGo[numToGo]) {
+                cJSON_DeleteItemFromArray(tasks,taskIdx);
+                break;
+            }
+        }
+    }
+
     return tasks;
 }
 
@@ -75,7 +124,7 @@ cJSON* TheRest::status_json() {
     gettimeofday(&tv_now, NULL);
     int64_t time_us = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
 
-    if (!rest->system_status || (cJSON_GetObjectItem(rest->system_status, "MALLOC_CAP_EXEC")==NULL)) {
+    if (!rest->system_status) {
         rest->system_status = rest->bake_status_json();
     }
 
@@ -1023,7 +1072,6 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
     if (req->method == http_method::HTTP_POST)
     {
         httpd_resp_set_type(req, "application/json");
-        cJSON *status = NULL;
         char *sjson = NULL;
         if (strlen(path) == 0 || (strlen(path) == 1 && path[0] == '/'))
         {
@@ -1033,23 +1081,19 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
 #ifdef DEBUG_MALLOC
         else if (strcmp(path, "mallocs") == 0)
         {
-            status = getMemoryStats();
             ESP_LOGV(__FUNCTION__, "Getting mallocs");
-            sjson = cJSON_PrintUnformatted(status);
-            cJSON_Delete(status);
+            sjson = cJSON_PrintUnformatted(getMemoryStats());
         }
 #endif
         else if (strcmp(path, "tasks") == 0)
         {
             ESP_LOGV(__FUNCTION__, "Getting tasks");
-            status = tasks_json();
-            sjson = cJSON_PrintUnformatted(status);
-            cJSON_Delete(status);
+            sjson = cJSON_PrintUnformatted(tasks_json());
         }
         else if (strcmp(path, "repeating_tasks") == 0)
         {
             ESP_LOGV(__FUNCTION__, "Getting tasks");
-            status = ManagedThreads::GetRepeatingTaskStatus();
+            cJSON *status = ManagedThreads::GetRepeatingTaskStatus();
             if (status){
                 sjson = cJSON_PrintUnformatted(status);
             } else {
@@ -1092,56 +1136,6 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         else if (endsWith(req->uri, "status/"))
         {
             ret = HandleStatusChange(req);
-        }
-        else
-        {
-            ret = ESP_FAIL;
-
-            int len = 0, curLen = -1;
-
-            char *postData = (char *)dmalloc(JSON_BUFFER_SIZE * 2);
-            while ((curLen = httpd_req_recv(req, postData + len, len - (JSON_BUFFER_SIZE * 2))) > 0)
-            {
-                len += curLen;
-            }
-            TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += len;
-
-            if (len)
-            {
-                postData[len] = 0;
-                ESP_LOGV(__FUNCTION__, "postData(%d):%s", len, postData);
-                cJSON *newState = cJSON_ParseWithLength(postData, len);
-
-                if (newState)
-                {
-                    char* fName = (char*)dmalloc(200);
-                    sprintf(fName, "/lfs/status/%s.json", indexOf(req->uri, "/status/") + 8);
-                    ESP_LOGI(__FUNCTION__, "Saving as %s", fName);
-                    FILE *sFile = fOpenCd(fName, "w", true);
-                    if (sFile)
-                    {
-                        fWrite(postData, sizeof(uint8_t), strlen(postData), sFile);
-                        fClose(sFile);
-                        ret = httpd_send(req, "Ok", 2);
-                        ESP_LOGI(__FUNCTION__, "Wrote %d status bytes", strlen(postData));
-                    }
-                    else
-                    {
-                        ESP_LOGE(__FUNCTION__, "Cannot open %s", fName);
-                    }
-                    cJSON_Delete(newState);
-                    ldfree(fName);
-                }
-                else
-                {
-                    ESP_LOGE(__FUNCTION__, "Cannot parse %s", postData);
-                }
-            }
-            else
-            {
-                ESP_LOGE(__FUNCTION__, "No status returned from %s", req->uri);
-            }
-            ldfree(postData);
         }
     }
 

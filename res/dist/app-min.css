@@ -2284,3 +2284,11 @@ button.MuiButtonBase-root.MuiTab-root.MuiTab-textColorPrimary {
     left: 28px;
     z-index: 2;
 }
+
+i.reportbtn.fa.fa-eraser {
+    position: relative;
+    width: 0;
+    height: 0;
+    top: -20px;
+    left: 20px;
+}

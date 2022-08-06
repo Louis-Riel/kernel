@@ -720,19 +720,19 @@ class LocalJSONEditor extends React.Component {
 
     getValue(fld,val) {
         if (val?.value !== undefined) {
-            return this.getValue(fld,val.value);
+            val = this.getValue(fld,val.value);
         }
-
+        
         if (IsNumberValue(val) && isFloat(val)) {
-            return parseFloat(val).toFixed(this.isGeoField() ? 8 : 2).replace(/0+$/,'');
+            val =  parseFloat(val).toFixed(this.isGeoField() ? 8 : 2).replace(/0+$/,'');
         }
         
         if (IsBooleanValue(val)) {
-            return ((val === "true") || (val === "yes") || (val === true)) ? "Y" : "N"
+            val = ((val === "true") || (val === "yes") || (val === true)) ? "Y" : "N"
         }
-
+        
         if ((this.props.name === "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-            return e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
+            val = e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
         }
         return val;
     }
@@ -772,27 +772,7 @@ class LocalJSONEditor extends React.Component {
         if (input == null) {
             return;
         }
-        var now = fld.endsWith("_us") ? new Date(val / 1000) : fld.endsWith("_sec") ? new Date(val*1000) : new Date(val);
-
-        if (now.getFullYear() <= 1970) 
-            now.setTime(now.getTime() + now.getTimezoneOffset() * 60 * 1000);
-            
-        var today = now.toLocaleDateString('en-US',{dateStyle:"short"});
-        var time = now.toLocaleTimeString('en-US',{hour12:false});
-        var hrs = now.getHours();
-        var min = now.getMinutes();
-        var sec = now.getSeconds();
-        var mil = now.getMilliseconds();
-        var smoothsec = sec + (mil / 1000);
-        var smoothmin = min + (smoothsec / 60);
-
-        if (now.getFullYear() <= 1970) {
-            today =  (now.getDate()-1) + ' Days';
-            if (hrs == 0)
-                time = (min ? min + ":" : "") + ('0'+sec).slice(-2) + "." + mil;
-            else
-                time = ('0'+hrs).slice(-2) + ":" + ('0'+min).slice(-2) + ":" + ('0'+sec).slice(-2);
-        }
+        var { hrs, smoothmin, today, time } = this.getTimeComponents(fld, val);
 
         var canvas = input.querySelector(`canvas`) || input.appendChild(document.createElement("canvas"));
         canvas.height = 100;
@@ -808,6 +788,32 @@ class LocalJSONEditor extends React.Component {
 
         this.drawBackground(ctx, rect, hrs, smoothmin);
         this.drawClock(ctx, today, rect, time);
+    }
+
+    getTimeComponents(fld, val) {
+        var now = fld.endsWith("_us") ? new Date(val / 1000) : fld.endsWith("_sec") ? new Date(val * 1000) : new Date(val);
+
+        if (now.getFullYear() <= 1970)
+            now.setTime(now.getTime() + now.getTimezoneOffset() * 60 * 1000);
+
+        var today = now.toLocaleDateString('en-US', { dateStyle: "short" });
+        var time = now.toLocaleTimeString('en-US', { hour12: false });
+        var hrs = now.getHours();
+        var min = now.getMinutes();
+        var sec = now.getSeconds();
+        var mil = now.getMilliseconds();
+        var smoothsec = sec + (mil / 1000);
+        var smoothmin = min + (smoothsec / 60);
+
+        if (now.getFullYear() <= 1970) {
+            today = (now.getDate() - 1) + ' Days';
+            if (hrs == 0)
+                time = (min ? min + ":" : "") + ('0' + sec).slice(-2) + "." + mil;
+
+            else
+                time = ('0' + hrs).slice(-2) + ":" + ('0' + min).slice(-2) + ":" + ('0' + sec).slice(-2);
+        }
+        return { hrs, smoothmin, today, time };
     }
 
     drawClock(ctx, today, rect, time) {
@@ -863,14 +869,14 @@ class LocalJSONEditor extends React.Component {
     }
 
     getReport(summary) {
-        return e(Recharts.ResponsiveContainer,{key:"chartcontainer", className: "chartcontainer"},
+        return [ !summary && this.state?.lastStates?.length ? e('i',{className: "reportbtn fa fa-eraser", key: "clear data", onClick: elem=>this.setState({"lastStates":[],"graph":false})}) : null,
+                e(Recharts.ResponsiveContainer,{key:"chartcontainer", className: "chartcontainer"},
                 e(Recharts.LineChart,{key:"chart", data: this.state.lastStates, className: "chart", margin: {left:20}},[
                     e(Recharts.Line, {key:"line", dot: !summary, type:"monotone", dataKey:"value", stroke:"#8884d8", isAnimationActive: false}),
                     summary?null:e(Recharts.CartesianGrid, {key:"grid", hide:summary, strokeDasharray:"5 5", stroke:"#ccc"}),
                     e(Recharts.XAxis, {key:"thexs", hide:summary, dataKey:"ts",type: 'number', domain: ['auto', 'auto'],name: 'Time', tickFormatter: (unixTime) => new Date(unixTime).toLocaleTimeString(), type: "number"}),
                     e(Recharts.YAxis, {key:"theys", hide:summary, dataKey:"value", domain: ['auto', 'auto']}),
-                    e(Recharts.Tooltip, {key:"tooltip", contentStyle: {backgroundColor: "black"}, labelStyle: {backgroundColor: "black"}, className:"tooltip", labelFormatter: t => new Date(t).toLocaleString()})
-        ]));
+                    e(Recharts.Tooltip, {key:"tooltip", contentStyle: {backgroundColor: "black"}, labelStyle: {backgroundColor: "black"}, className:"tooltip", labelFormatter: t => new Date(t).toLocaleString()})]))];
     }
 
     getLabeledField() {

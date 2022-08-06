@@ -176,27 +176,26 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
     if (!ed) {
         ESP_LOGV(__FUNCTION__,"No desciptor for %s %d", base, id);
     } else {
-        postedEvent_t* postedEvent = (postedEvent_t*)dmalloc(sizeof(postedEvent_t));
-        postedEvent->base=base;
-        postedEvent->id=id;
-        postedEvent->eventDataType=ed->dataType;
-        ESP_LOGV(__FUNCTION__,"type for %s %s(%d) is %d", postedEvent->base, ed->eventName, postedEvent->id, (int)ed->dataType);
+        postedEvent_t postedEvent;
+        postedEvent.base=base;
+        postedEvent.id=id;
+        postedEvent.eventDataType=ed->dataType;
+        ESP_LOGV(__FUNCTION__,"type for %s %s(%d) is %d", postedEvent.base, ed->eventName, postedEvent.id, (int)ed->dataType);
         switch (ed->dataType)
         {
         case event_data_type_tp::String:
         case event_data_type_tp::JSON:
-            postedEvent->event_data=dmalloc(strlen((char*)event_data)+1);
-            strcpy((char*)postedEvent->event_data,(char*)event_data);
-            ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent->event_data);
+            postedEvent.event_data=dmalloc(strlen((char*)event_data)+1);
+            strcpy((char*)postedEvent.event_data,(char*)event_data);
+            ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent.event_data);
             break;
         case event_data_type_tp::Number:
-            postedEvent->event_data=(void*)*(int*)event_data;
+            postedEvent.event_data=(void*)*(int*)event_data;
             break;
         default:
             break;
         }
-        xQueueSendFromISR(mgr->eventQueue, postedEvent, NULL);
-        ldfree(postedEvent);
+        xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
     }
 }
 

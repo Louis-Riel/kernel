@@ -1,18 +1,32 @@
 #include "mallocdbg.h"
 
 #ifdef DEBUG_MALLOC
+static cJSON* memstats = NULL;
+
 cJSON* getMemoryStats(){
-    cJSON* memstats = cJSON_CreateArray();
+    cJSON* memstat;
     for (mallocdbg &dmalloc : mallocs)
     {
         if (dmalloc.name != NULL) {
-            cJSON* memstat = cJSON_CreateObject();
-            if (cJSON_AddItemToArray(memstats,memstat)) {
+            if (memstats == NULL) {
+                memstats = cJSON_CreateArray();
+            }
+            bool found=false;
+            cJSON_ArrayForEach(memstat,memstats) {
+                cJSON* func = memstat ? cJSON_GetObjectItem(memstat,"function") : NULL;
+                if (func != NULL) {
+                    if (strcmp(dmalloc.name,func->valuestring)==0) {
+                        found=true;
+                        cJSON_SetIntValue(cJSON_GetObjectItem(memstat,"hitcount"),dmalloc.hitCount);
+                        cJSON_SetIntValue(cJSON_GetObjectItem(memstat,"bytes"),dmalloc.bytes);
+                    }
+                }
+            }
+            if (!found && cJSON_AddItemToArray(memstats,memstat=cJSON_CreateObject())) {
                 cJSON_AddStringToObject(memstat,"function",dmalloc.name);
                 cJSON_AddNumberToObject(memstat,"hitcount",dmalloc.hitCount);
                 cJSON_AddNumberToObject(memstat,"bytes",dmalloc.bytes);
             }
-
         }
     }
     return memstats;
