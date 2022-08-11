@@ -59,7 +59,7 @@ void Pin::InitDevice(){
     if (pins == NULL){
         EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
         if (handlerInstance == NULL)
-            ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, ProcessEvent, this, handlerInstance));
+            ESP_ERROR_CHECK(esp_event_handler_instance_register(PIN_BASE, ESP_EVENT_ANY_ID, ProcessEvent, this, handlerInstance));
 
         pins = (Pin**)dmalloc(sizeof(void*)*MAX_NUM_PINS);
         memset(pins,0,sizeof(void*)*MAX_NUM_PINS);
@@ -186,7 +186,7 @@ void Pin::PollPins(){
 }
 
 void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
-    if (strcmp(base,PIN_BASE)==0){
+    if (base == PIN_BASE){
         Pin* pin = NULL;
         ESP_LOGV(__FUNCTION__,"Event %s-%d - %" PRIXPTR " %" PRIXPTR, base,id,(uintptr_t)event_data,(uintptr_t)*(cJSON**)event_data);
         uint32_t pinNo=0;
@@ -206,30 +206,26 @@ void Pin::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, vo
             }
 
             if (jsonParams != NULL) {
-                if (cJSON_HasObjectItem(jsonParams,"pinNo")) {
-                    ESP_LOGV(__FUNCTION__,"Getting pinno");
-                    cJSON* item = cJSON_GetObjectItem(jsonParams,"pinNo");
-                    if (item) {
-                        if (cJSON_HasObjectItem(item,"value")) {
-                            ESP_LOGV(__FUNCTION__,"Getting pinno value");
-                            pinNo = cJSON_GetNumberValue(cJSON_GetObjectItem(item,"value"));
-                        } else {
-                            ESP_LOGV(__FUNCTION__,"Getting pinno raw value");
-                            pinNo = cJSON_GetNumberValue(item);
-                        }
+                ESP_LOGV(__FUNCTION__,"Getting pinno");
+                cJSON* item = cJSON_GetObjectItem(jsonParams,"pinNo");
+                if (item) {
+                    if (cJSON_HasObjectItem(item,"value")) {
+                        ESP_LOGV(__FUNCTION__,"Getting pinno value");
+                        pinNo = cJSON_GetNumberValue(cJSON_GetObjectItem(item,"value"));
+                    } else {
+                        ESP_LOGV(__FUNCTION__,"Getting pinno raw value");
+                        pinNo = cJSON_GetNumberValue(item);
                     }
                 }
-                if (cJSON_HasObjectItem(jsonParams,"name")) {
-                    ESP_LOGV(__FUNCTION__,"Getting pinname");
-                    cJSON* item = cJSON_GetObjectItem(jsonParams,"name");
-                    if (item) {
-                        if (cJSON_HasObjectItem(item,"value")) {
-                            ESP_LOGV(__FUNCTION__,"Getting pinname value");
-                            pinName = cJSON_GetStringValue(cJSON_GetObjectItem(item,"value"));
-                        } else {
-                            ESP_LOGV(__FUNCTION__,"Getting pinname raw value");
-                            pinName = cJSON_GetStringValue(item);
-                        }
+                ESP_LOGV(__FUNCTION__,"Getting pinname");
+                item = cJSON_GetObjectItem(jsonParams,"name");
+                if (item) {
+                    if (cJSON_HasObjectItem(item,"value")) {
+                        ESP_LOGV(__FUNCTION__,"Getting pinname value");
+                        pinName = cJSON_GetStringValue(cJSON_GetObjectItem(item,"value"));
+                    } else {
+                        ESP_LOGV(__FUNCTION__,"Getting pinname raw value");
+                        pinName = cJSON_GetStringValue(item);
                     }
                 }
             }

@@ -13,7 +13,6 @@
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "eventmgr.h"
-#include "/home/riell/esp-4.3/esp-idf/components/pthread/include/esp_pthread.h"
 #include "mbedtls/md.h"
 #include "utils.h"
 

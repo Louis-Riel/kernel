@@ -269,7 +269,7 @@ BufferedFile::BufferedFile()
     :MFile()
 {
     if (handlerInstance == NULL)
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, ProcessEvent, this, handlerInstance));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(MFILE_BASE, ESP_EVENT_ANY_ID, ProcessEvent, this, handlerInstance));
 }
 
 BufferedFile::BufferedFile(const char* fileName)
@@ -426,7 +426,7 @@ void BufferedFile::Write(uint8_t* data, uint32_t len) {
 }
 
 void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
-    if (strcmp(base,"MFile") == 0) {
+    if (strcmp(base,MFILE_BASE) == 0) {
         ESP_LOGV(__FUNCTION__,"Event %s-%d",base,id);
 
         if (event_data == NULL) {
