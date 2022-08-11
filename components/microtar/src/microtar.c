@@ -155,7 +155,7 @@ const char* mtar_strerror(int err) {
 
 
 static int file_write(mtar_t *tar, const void *data, unsigned size) {
-  unsigned res = fWrite(data, 1, size, tar->stream);
+  unsigned res = fwrite(data, 1, size, tar->stream);
   return (res == size) ? MTAR_ESUCCESS : MTAR_EWRITEFAIL;
 }
 
@@ -170,7 +170,7 @@ static int file_seek(mtar_t *tar, unsigned offset) {
 }
 
 static int file_close(mtar_t *tar) {
-  fClose(tar->stream);
+  fclose(tar->stream);
   return MTAR_ESUCCESS;
 }
 
@@ -191,7 +191,7 @@ int mtar_open(mtar_t *tar, const char *filename, const char *mode) {
   if ( strchr(mode, 'w') ) mode = "wb";
   if ( strchr(mode, 'a') ) mode = "ab";
   /* Open file */
-  tar->stream = fOpen(filename, mode);
+  tar->stream = fopen(filename, mode);
   if (!tar->stream) {
     return MTAR_EOPENFAIL;
   }

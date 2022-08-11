@@ -4,12 +4,15 @@
 #include "time.h"
 #include "../../main/logs.h"
 #include "../../main/utils.h"
-#include "../esp_littlefs/include/esp_littlefs.h"
+#include "esp_littlefs.h"
 #include "rom/ets_sys.h"
 #include "soc/rtc_cntl_reg.h"
 #include "soc/sens_reg.h"
 #include "driver/adc.h"
 #include "mfile.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -74,10 +77,10 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     struct timeval tv_start, tv_end, tv_open, tv_stat, tv_rstart, tv_rend, tv_wstart, tv_wend;
     bool folderAdded=false;
 
-    if ((theFolder = openDir(path)) != NULL)
+    if ((theFolder = opendir(path)) != NULL)
     {
         ESP_LOGV(__FUNCTION__, "Reading folder %s", path);
-        while (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (tarStat == MTAR_ESUCCESS) && ((fi = readDir(theFolder)) != NULL))
+        while (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (tarStat == MTAR_ESUCCESS) && ((fi = readdir(theFolder)) != NULL))
         {
             ESP_LOGV(__FUNCTION__, "At %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
             if (strlen(fi->d_name) == 0)
@@ -108,7 +111,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                         continue;
                     }
                     gettimeofday(&tv_start, NULL);
-                    if ((theFile = fOpen(theFName, "r")) &&
+                    if ((theFile = fopen(theFName, "r")) &&
                         (gettimeofday(&tv_open, NULL) == 0))
                     {
                         uint32_t startPos = tar->pos;
@@ -124,7 +127,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                         while (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (tarStat == MTAR_ESUCCESS) && !feof(theFile))
                         {
                             gettimeofday(&tv_rstart, NULL);
-                            if ((len = fRead(buf, 1, F_BUF_SIZE, theFile)) > 0)
+                            if ((len = fread(buf, 1, F_BUF_SIZE, theFile)) > 0)
                             {
                                 totlen+=len;
                                 gettimeofday(&tv_rend, NULL);
@@ -156,7 +159,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                                         (tar->pos - startPos) / ((end_time_ms - start_time_ms) / 1000.0),
                                         heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
                         }
-                        fClose(theFile);
+                        fclose(theFile);
                         ESP_LOGV(__FUNCTION__, "Closing %s", theFName);
                         if ((tarStat == MTAR_ESUCCESS) && 
                             !(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) &&
@@ -198,7 +201,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                 //break;
             }
         }
-        closeDir(theFolder);
+        closedir(theFolder);
         if (tarStat == MTAR_ESUCCESS)
         {
             ESP_LOGV(__FUNCTION__, "%s had %d files and %d folders subfolder len:%d", path, fcnt, dcnt, fpos);

@@ -123,7 +123,7 @@ void MFile::Open(const char* mode){
         initSpiff(false);
     }
 
-    file = fOpenCd(name, mode,true);
+    file = fopenCd(name, mode,true);
     if (file == NULL)
     {
         ESP_LOGE(__FUNCTION__, "Failed to open %s for %s", name, mode);
@@ -153,7 +153,7 @@ void MFile::Close(){
     if (file != NULL)
     {
         ESP_LOGV(__FUNCTION__, "Closed %s",name);
-        fClose(file);
+        fclose(file);
         file=NULL;
         fileStatus = (mfile_state_t)(fileStatus|mfile_state_t::MFILE_CLOSED);
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_OPENED);
@@ -180,7 +180,7 @@ void MFile::Write(uint8_t* data, uint32_t len) {
     if (file != NULL)
     {
         ESP_LOGV(__FUNCTION__,"Writing %d",len);
-        fWrite(data,sizeof(uint8_t),len,file);
+        fwrite(data,sizeof(uint8_t),len,file);
         bytesWritten->valuedouble = bytesWritten->valueint = bytesWritten->valueint + len;
     }
     if (!wasOpened){

@@ -7,10 +7,10 @@ bool TheRest::GetLocalMD5(char* ccmd5) {
     esp_err_t ret;
     bool retVal=false;
     ESP_LOGI(__FUNCTION__, "Reading MD5 RAM:%d...", esp_get_free_heap_size());
-    if ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
+    if ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
     {
         uint32_t len = 0;
-        if ((len = fRead((void *)ccmd5, 1, 33, fw)) > 0)
+        if ((len = fread((void *)ccmd5, 1, 33, fw)) > 0)
         {
             ccmd5[32] = 0;
             ESP_LOGI(__FUNCTION__, "Local MD5:%s", ccmd5);
@@ -20,7 +20,7 @@ bool TheRest::GetLocalMD5(char* ccmd5) {
         {
             ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d", len);
         }
-        fClose(fw);
+        fclose(fw);
     }
     else
     {
@@ -67,19 +67,19 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
             {
                 ESP_LOGI(__FUNCTION__, "MD5 matched, writing FW");
                 sprintf(url, "/lfs/firmware/current.bin");
-                FILE *newFWf = fOpen(url, "w");
+                FILE *newFWf = fopen(url, "w");
                 if (newFWf)
                 {
-                    if (fWrite(newFw, sizeof(uint8_t), plen, newFWf) == plen)
+                    if (fwrite(newFw, sizeof(uint8_t), plen, newFWf) == plen)
                     {
-                        fClose(newFWf);
+                        fclose(newFWf);
                         sprintf(url, "/lfs/firmware/tobe.bin.md5");
-                        FILE *toBeMd5 = fOpen(url, "w");
+                        FILE *toBeMd5 = fopen(url, "w");
                         if (toBeMd5)
                         {
-                            if (fWrite(srvMd5, sizeof(uint8_t), 32, toBeMd5) == 32)
+                            if (fwrite(srvMd5, sizeof(uint8_t), 32, toBeMd5) == 32)
                             {
-                                fClose(toBeMd5);
+                                fclose(toBeMd5);
                                 ESP_LOGI(__FUNCTION__, "Updated Firmware File");
                                 return true;
                             }
@@ -87,7 +87,7 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
                             {
                                 ESP_LOGE(__FUNCTION__, "Error openeing to be md5");
                             }
-                            fClose(toBeMd5);
+                            fclose(toBeMd5);
                         }
                         else
                         {
@@ -98,7 +98,7 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
                     {
                         ESP_LOGE(__FUNCTION__, "Failed to write firmware");
                     }
-                    fClose(newFWf);
+                    fclose(newFWf);
                 }
             }
             else

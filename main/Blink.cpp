@@ -27,7 +27,7 @@
 #include <esp_event.h>
 #include "mdctor/ulp.h"
 #include "../components/wifi/station.h"
-#include "../components/esp_littlefs/include/esp_littlefs.h"
+#include "esp_littlefs.h"
 #include "bootloader_random.h"
 #include "eventmgr.h"
 #include "rest.h"
@@ -38,6 +38,9 @@
 #include "../components/bluetooth/bt.h"
 #include "../components/servo/servo.h"
 #include "../components/apa102/apa102.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -723,8 +726,8 @@ bool CleanupEmptyDirs(char* path) {
   bool retVal = false;
   int retCode = 0;
 
-  if ((theFolder = openDir(path)) != NULL) {
-    while ((fi = readDir(theFolder)) != NULL) {
+  if ((theFolder = opendir(path)) != NULL) {
+    while ((fi = readdir(theFolder)) != NULL) {
       if (fi->d_type == DT_DIR) {
         sprintf(cpath,"%s/%s",path,fi->d_name);
         if (!CleanupEmptyDirs(cpath)) {
@@ -739,11 +742,11 @@ bool CleanupEmptyDirs(char* path) {
       } else {
         ESP_LOGV(__FUNCTION__,"%s has %s, not deleting",path,fi->d_name);
         ldfree(cpath);
-        closeDir(theFolder);
+        closedir(theFolder);
         return true;
       }
     }
-    closeDir(theFolder);
+    closedir(theFolder);
   } else {
     ESP_LOGI(__FUNCTION__,"Cannot open %s",path);
   }

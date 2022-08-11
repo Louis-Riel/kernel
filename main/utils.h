@@ -222,5 +222,5 @@ bool rmDashFR(const char* folderName);
 bool deleteFile(const char* fileName);
 void DisplayMemInfo();
 const char *getErrorMsg(int32_t errCode);
-
+FILE *	fopenCd (const char *__restrict _name, const char *__restrict _type, bool notSure);
 #endif

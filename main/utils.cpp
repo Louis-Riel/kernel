@@ -1,6 +1,6 @@
 #include "esp_sleep.h"
 #include "driver/periph_ctrl.h"
-#include "../components/esp_littlefs/include/esp_littlefs.h"
+#include "esp_littlefs.h"
 #include "esp_vfs_fat.h"
 #include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
@@ -15,6 +15,9 @@
 #include "eventmgr.h"
 #include "mbedtls/md.h"
 #include "utils.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
@@ -347,8 +350,8 @@ void CleanupLFS(void* param) {
   struct stat fileStat;
   char* cpath = (char*)dmalloc(300);
 
-  if ((theFolder = openDir(files->curDir)) != NULL) {
-    while (((fi = readDir(theFolder)) != NULL) && (*files->bytesFree < 1782579)) {
+  if ((theFolder = opendir(files->curDir)) != NULL) {
+    while (((fi = readdir(theFolder)) != NULL) && (*files->bytesFree < 1782579)) {
       if (fi->d_type == DT_DIR) {
         dirFiles_t* cfiles = (dirFiles_t *)dmalloc(sizeof(dirFiles_t));
         cfiles->curDir = (char*)dmalloc(300);
@@ -367,7 +370,7 @@ void CleanupLFS(void* param) {
         }  
       }
     }
-    closeDir(theFolder);
+    closedir(theFolder);
   }
 
   if (files->root == files) {
@@ -430,14 +433,14 @@ esp_err_t setupLittlefs()
   EventGroupHandle_t app_eg = getAppEG();
   xEventGroupSetBits(app_eg, SPIFF_MOUNTED);
 
-  DIR *root = openDir("/lfs");
+  DIR *root = opendir("/lfs");
   if (root == NULL)
   {
     ESP_LOGE(__FUNCTION__, "Cannot open lfs");
     return ESP_FAIL;
   }
 
-  while ((de = readDir(root)) != NULL)
+  while ((de = readdir(root)) != NULL)
   {
     ESP_LOGV(__FUNCTION__, "%d %s", de->d_type, de->d_name);
     if (strcmp(de->d_name, "logs") == 0)
@@ -453,7 +456,7 @@ esp_err_t setupLittlefs()
       hasCfg = true;
     }
   }
-  if ((ret = closeDir(root)) != ESP_OK)
+  if ((ret = closedir(root)) != ESP_OK)
   {
     ESP_LOGE(__FUNCTION__, "failed to close root %s", esp_err_to_name(ret));
     return ret;
@@ -694,9 +697,9 @@ bool rmDashFR(const char *folderName)
   char fileName[300];
   bool isABadDay = false;
 
-  if ((theFolder = openDir(folderName)) != NULL)
+  if ((theFolder = opendir(folderName)) != NULL)
   {
-    while (!isABadDay && ((fi = readDir(theFolder)) != NULL))
+    while (!isABadDay && ((fi = readdir(theFolder)) != NULL))
     {
       sprintf(fileName, "%s/%s", folderName, fi->d_name);
       if (fi->d_type == DT_DIR)
@@ -708,7 +711,7 @@ bool rmDashFR(const char *folderName)
         isABadDay |= !deleteFile(fileName);
       }
     }
-    closeDir(theFolder);
+    closedir(theFolder);
     if (!isABadDay)
     {
       ESP_LOGI(__FUNCTION__, "Deleting folder %s", folderName);
@@ -725,10 +728,10 @@ bool rmDashFR(const char *folderName)
 bool moveFile(const char *src, const char *dest)
 {
   int res;
-  FILE *srcF = fOpen(src, "r");
+  FILE *srcF = fopen(src, "r");
   if (srcF != 0)
   {
-    FILE *destF = fOpenCd(dest, "w", true);
+    FILE *destF = fopenCd(dest, "w", true);
     if (destF != NULL)
     {
       int ch = 0;
@@ -736,8 +739,8 @@ bool moveFile(const char *src, const char *dest)
       {
         fputc(ch, destF);
       }
-      fClose(destF);
-      fClose(srcF);
+      fclose(destF);
+      fclose(srcF);
       if ((res = unlink(src)) == 0)
       {
         ESP_LOGI(__FUNCTION__, "moved %s to %s", src, dest);
@@ -966,15 +969,15 @@ void UpgradeFirmware()
     char srvrmd5[70], localmd5[70];
     memset(srvrmd5,0,70);
     memset(localmd5,0,70);
-    FILE *fmd5 = fOpen(md5fName, "r");
+    FILE *fmd5 = fopen(md5fName, "r");
     FILE *ffw = NULL;
     size_t chunckLen = 0, fwlen = 0;
     if (fmd5)
     {
-      if (((md5len = fRead(srvrmd5, sizeof(uint8_t), 33, fmd5)) >= 32) && (md5len <=33))
+      if (((md5len = fread(srvrmd5, sizeof(uint8_t), 33, fmd5)) >= 32) && (md5len <=33))
       {
         ESP_LOGI(__FUNCTION__, "FW MD5 %zu bits read", md5len);
-        if ((ffw = fOpen(fwfName, "r")) != NULL)
+        if ((ffw = fopen(fwfName, "r")) != NULL)
         {
           ESP_LOGI(__FUNCTION__, "FW %d bits to read", (int)fwSt.st_size);
           if (fwSt.st_size)
@@ -988,7 +991,7 @@ void UpgradeFirmware()
             mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
             mbedtls_md_starts(&ctx);
 
-            while ((chunckLen = fRead(fwbits + fwlen, sizeof(uint8_t), fwSt.st_size - fwlen, ffw)) > 0)
+            while ((chunckLen = fread(fwbits + fwlen, sizeof(uint8_t), fwSt.st_size - fwlen, ffw)) > 0)
             {
               mbedtls_md_update(&ctx, fwbits + fwlen, chunckLen);
               fwlen += chunckLen;
@@ -1003,8 +1006,8 @@ void UpgradeFirmware()
               sprintf(&localmd5[i * 2], "%02x", (unsigned int)shaResult[i]);
             }
 
-            fClose(fmd5);
-            fClose(ffw);
+            fclose(fmd5);
+            fclose(ffw);
             if (strcmp(localmd5, srvrmd5) == 0)
             {
               flashTheThing(fwbits, fwlen);
@@ -1031,7 +1034,7 @@ void UpgradeFirmware()
       {
         ESP_LOGE(__FUNCTION__, "Bad md5 len:%zu.", md5len);
       }
-      fClose(fmd5);
+      fclose(fmd5);
     }
     else
     {
@@ -1076,4 +1079,8 @@ void DisplayMemInfo(){
       }
   }
   ldfree(statuses);
+}
+
+FILE *	fopenCd (const char *__restrict _name, const char *__restrict _type, bool notSure){
+  return fopen(_name, _type);
 }

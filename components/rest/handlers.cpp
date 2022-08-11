@@ -4,7 +4,7 @@
 #include "time.h"
 #include "../../main/logs.h"
 #include "../../main/utils.h"
-#include "../esp_littlefs/include/esp_littlefs.h"
+#include "esp_littlefs.h"
 #include "esp32/rom/ets_sys.h"
 #include "soc/rtc_cntl_reg.h"
 #include "soc/sens_reg.h"
@@ -16,6 +16,8 @@
 #include "mbedtls/md.h"
 #include <cstdio>
 #include <cstring>
+#include <sys/dirent.h>
+#include "../../main/utils.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -227,9 +229,9 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
 
     DIR *theFolder;
     struct dirent *fi;
-    if ((theFolder = openDir(path)) != NULL)
+    if ((theFolder = opendir(path)) != NULL)
     {
-        while ((fi = readDir(theFolder)) != NULL)
+        while ((fi = readdir(theFolder)) != NULL)
         {
             if (strlen(fi->d_name) == 0)
             {
@@ -297,7 +299,7 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
                                 (uint32_t)st.st_size);
             }
         }
-        closeDir(theFolder);
+        closedir(theFolder);
         ESP_LOGV(__FUNCTION__, "%s has %d files and %d folders subfolder len:%d", path, fcnt, dcnt, fpos);
         uint32_t ctpos = 0;
         while (dcnt-- > 0)
@@ -438,9 +440,9 @@ void parseFolderForTars(const char *folder)
     DIR *tarFolder;
     dirent *di;
     char *fileName = (char *)dmalloc(300);
-    if ((tarFolder = openDir(folder)))
+    if ((tarFolder = opendir(folder)))
     {
-        while ((di = readDir(tarFolder)) != NULL)
+        while ((di = readdir(tarFolder)) != NULL)
         {
             ESP_LOGV(__FUNCTION__, "tarlist:%s", di->d_name);
             if (di->d_type == DT_DIR)
@@ -463,7 +465,7 @@ void parseFolderForTars(const char *folder)
                 }
             }
         }
-        closeDir(tarFolder);
+        closedir(tarFolder);
     }
     else
     {
@@ -735,14 +737,14 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
     uint32_t len = 0;
     if (startsWith(path, "/sdcard") ? initSPISDCard(false) : initSpiff(false))
     {
-        if ((theFile = fOpen(path, "r")) != NULL)
+        if ((theFile = fopen(path, "r")) != NULL)
         {
             ESP_LOGV(__FUNCTION__, "%s opened", path);
             uint8_t *buf = (uint8_t *)dmalloc(F_BUF_SIZE);
             uint32_t chunckLen = 0;
             while (!feof(theFile))
             {
-                if ((chunckLen = fRead(buf, 1, F_BUF_SIZE, theFile)) > 0)
+                if ((chunckLen = fread(buf, 1, F_BUF_SIZE, theFile)) > 0)
                 {
                     len += chunckLen;
                     ESP_LOGV(__FUNCTION__, "%d read", chunckLen);
@@ -757,7 +759,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
             httpd_resp_send_chunk(req, NULL, 0);
             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += len;
             ldfree(buf);
-            fClose(theFile);
+            fclose(theFile);
             if (moveTheSucker)
             {
                 char *topath = (char *)dmalloc(530);
@@ -969,13 +971,13 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
                     // char *fname = (char *)dmalloc(255);
                     // sprintf(fname, "/lfs/config/%d.json", devId);
                     // ESP_LOGI(__FUNCTION__, "Updating %s config", fname);
-                    // FILE *cfg = fOpen(fname, "w");
+                    // FILE *cfg = fopen(fname, "w");
                     // if (cfg)
                     // {
-                    //     fWrite(postData, strlen(postData), sizeof(char), cfg);
+                    //     fwrite(postData, strlen(postData), sizeof(char), cfg);
                     //     ret = httpd_resp_send(req, postData, strlen(postData));
                     //     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(postData);
-                    //     fClose(cfg);
+                    //     fclose(cfg);
                     // }
                     // else
                     // {
@@ -1213,15 +1215,15 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                         bool hasmd5 = stat("/lfs/firmware/current.bin.md5", &st) == 0;
 
                         FILE *fw = NULL;
-                        if (!hasmd5 || ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL))
+                        if (!hasmd5 || ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL))
                         {
                             char ccmd5[70];
                             memset(ccmd5, 0, 70);
                             uint32_t len = 0;
-                            if (!hasmd5 || ((len = fRead((void *)ccmd5, 1, 70, fw)) > 0))
+                            if (!hasmd5 || ((len = fread((void *)ccmd5, 1, 70, fw)) > 0))
                             {
                                 if (hasmd5) {
-                                    fClose(fw);
+                                    fclose(fw);
                                     ESP_LOGI(__FUNCTION__, "Local MD5:%s remote md5:%s", ccmd5, md5);
                                 }
                                 if (hasmd5 && (strcmp(ccmd5, md5) == 0))
@@ -1302,17 +1304,17 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                             }
                                         }
 
-                                        if ((fw = fOpenCd("/lfs/firmware/current.bin", "w", true)) != NULL)
+                                        if ((fw = fopenCd("/lfs/firmware/current.bin", "w", true)) != NULL)
                                         {
                                             ESP_LOGI(__FUNCTION__, "Writing /lfs/firmware/current.bin");
-                                            if (fWrite((void *)img, 1, totLen, fw) == totLen)
+                                            if (fwrite((void *)img, 1, totLen, fw) == totLen)
                                             {
-                                                fClose(fw);
+                                                fclose(fw);
 
-                                                if ((fw = fOpenCd("/lfs/firmware/tobe.bin.md5", "w", true)) != NULL)
+                                                if ((fw = fopenCd("/lfs/firmware/tobe.bin.md5", "w", true)) != NULL)
                                                 {
-                                                    fWrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
-                                                    fClose(fw);
+                                                    fwrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
+                                                    fclose(fw);
                                                     ESP_LOGI(__FUNCTION__, "Firmware md5 written");
                                                     esp_partition_iterator_t pi;
                                                     const esp_partition_t *factory;
@@ -1358,7 +1360,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                             else
                                             {
                                                 ESP_LOGE(__FUNCTION__, "Firmware not backedup");
-                                                fClose(fw);
+                                                fclose(fw);
                                                 ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Firmware not backedup");
                                             }
                                         }
@@ -1383,7 +1385,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                             }
                             else
                             {
-                                fClose(fw);
+                                fclose(fw);
                                 ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d", len);
                                 deinitSpiff(false);
                                 return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Error with weird md5 len");
@@ -1422,11 +1424,11 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
         if (initSpiff(false))
         {
             FILE *fw = NULL;
-            if ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
+            if ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
             {
                 char ccmd5[70];
                 uint32_t len = 0;
-                if ((len = fRead((void *)ccmd5, 1, 70, fw)) > 0)
+                if ((len = fread((void *)ccmd5, 1, 70, fw)) > 0)
                 {
                     ccmd5[len] = 0;
                     esp_err_t ret;
@@ -1439,7 +1441,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += len;
                         ESP_LOGI(__FUNCTION__, "Sent MD5:%s", ccmd5);
                     }
-                    fClose(fw);
+                    fclose(fw);
                     deinitSpiff(false);
                     return ret;
                 }
@@ -1447,7 +1449,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                 {
                     ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d", len);
                 }
-                fClose(fw);
+                fclose(fw);
             }
             else
             {

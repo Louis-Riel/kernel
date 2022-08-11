@@ -3,6 +3,9 @@
 #include <cstdio>
 #include <cstring>
 #include "math.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -77,10 +80,10 @@ bool moveFolder(const char *folderName,const char *toFolderName)
     struct dirent *fi;
     bool retval = true;
 
-    if ((theFolder = openDir(folderName)) != NULL)
+    if ((theFolder = opendir(folderName)) != NULL)
     {
         ESP_LOGI(__FUNCTION__, "reading files in %s", folderName);
-        while ((fi = readDir(theFolder)) != NULL)
+        while ((fi = readdir(theFolder)) != NULL)
         {
             if (strlen(fi->d_name) == 0)
             {
@@ -109,7 +112,7 @@ bool moveFolder(const char *folderName,const char *toFolderName)
                 moveFolder(fName, "/sent");
             }
         }
-        closeDir(theFolder);
+        closedir(theFolder);
         if (f_unlink(folderName) != 0)
         {
             ESP_LOGE(__FUNCTION__, "Cannot delete folder %s", folderName);
@@ -175,12 +178,12 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                 }
             }
             FILE *fw = NULL;
-            if ((fw = fOpen("/lfs/firmware/current.bin.md5", "r")) != NULL)
+            if ((fw = fopen("/lfs/firmware/current.bin.md5", "r")) != NULL)
             {
                 char ccmd5[33];
-                if ((len = fRead((void *)ccmd5, 1, 32, fw)) >= 0)
+                if ((len = fread((void *)ccmd5, 1, 32, fw)) >= 0)
                 {
-                    fClose(fw);
+                    fclose(fw);
                     ccmd5[32] = 0;
                     dmd5[32] = 0;
                     if (isValid && strcmp(ccmd5, dmd5) == 0)
@@ -194,14 +197,14 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                         esp_http_client_cleanup(client);
                         ldfree((void*)config->url);
                         memset(config, 0, sizeof(esp_http_client_config_t));
-                        fClose(fw);
+                        fclose(fw);
                         FILE* fw;
 
                         struct stat st;
 
                         ldfree((void *)config->url);
 
-                        if ((fw = fOpenCd("/lfs/firmware/current.bin", "r", true)) != NULL)
+                        if ((fw = fopenCd("/lfs/firmware/current.bin", "r", true)) != NULL)
                         {
                             stat("/lfs/firmware/current.bin", &st);
                             memset(config, 0, sizeof(esp_http_client_config_t));
@@ -217,13 +220,13 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                             len=0;
                             while (!feof(fw))
                             {
-                                if (((len += fRead(img+len, 1, st.st_size, fw)) == 0) || (len >= st.st_size))
+                                if (((len += fread(img+len, 1, st.st_size, fw)) == 0) || (len >= st.st_size))
                                 {
                                     ESP_LOGI(__FUNCTION__,"Read %d bytes from current bin", len);
                                     break;
                                 }
                             }
-                            fClose(fw);
+                            fclose(fw);
 
                             sprintf((char *)config->url, "http://" IPSTR "/ota/flash?md5=%s&len=%d", IP2STR(ipInfo), ccmd5, (int)st.st_size);
                             if ((client = esp_http_client_init(config)) &&
@@ -273,7 +276,7 @@ bool CheckOTA(esp_ip4_addr_t *ipInfo)
                 }
                 else
                 {
-                    fClose(fw);
+                    fclose(fw);
                     ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d", len);
                 }
             }
@@ -334,11 +337,11 @@ cJSON *GetStatus(ip4_addr_t *ipInfo, uint32_t devId)
         char *fname = (char *)dmalloc(255);
         sprintf(fname, "/lfs/status/%d.json", devId);
         ESP_LOGV(__FUNCTION__, "Writing %s", fname);
-        FILE *destF = fOpenCd(fname, "w", true);
+        FILE *destF = fopenCd(fname, "w", true);
         if (destF != NULL)
         {
             fputs(kmlFiles, destF);
-            fClose(destF);
+            fclose(destF);
             ESP_LOGV(__FUNCTION__, "Wrote %s", fname);
         }
         else
@@ -449,7 +452,7 @@ bool extractClientTar(char *tarFName)
                 if (strlen(buf)==0){
                     ret = stat(fname, &st);
                     if (((ret == 0) && (st.st_size != header->size)) || (ret != 0)){
-                        fw = fOpenCd(fname, "w", true);
+                        fw = fopenCd(fname, "w", true);
                         if (fw != NULL)
                         {
                             len=0;
@@ -457,10 +460,10 @@ bool extractClientTar(char *tarFName)
                             {
                                 chunkLen = fmin(header->size - len, 8192);
                                 mtar_read_data(&tar, buf, chunkLen);
-                                fWrite(buf, 1, chunkLen, fw);
+                                fwrite(buf, 1, chunkLen, fw);
                                 len += chunkLen;
                             }
-                            fClose(fw);
+                            fclose(fw);
                             ESP_LOGI(__FUNCTION__, "Saved as %s (tar header %d bytes, file %d bytes, wrote %d bytes)\n", fname, header->size, (int)st.st_size, len);
                         }
                         else
@@ -703,7 +706,7 @@ esp_err_t http_tar_download_event_handler(esp_http_client_event_t *evt)
     case HTTP_EVENT_ON_DATA:
         if (*(FILE **)evt->user_data != NULL)
         {
-            fWrite(evt->data, 1, evt->data_len, (FILE *)evt->user_data);
+            fwrite(evt->data, 1, evt->data_len, (FILE *)evt->user_data);
         }
         else
         {
@@ -716,7 +719,7 @@ esp_err_t http_tar_download_event_handler(esp_http_client_event_t *evt)
         }
         break;
     case HTTP_EVENT_ON_FINISH:
-        fClose((FILE *)evt->user_data);
+        fclose((FILE *)evt->user_data);
         ESP_LOGI(__FUNCTION__, "HTTP_EVENT_ON_FINISH");
         break;
     case HTTP_EVENT_DISCONNECTED:

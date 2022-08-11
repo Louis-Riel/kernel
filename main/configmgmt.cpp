@@ -37,7 +37,7 @@ AppConfig::AppConfig(const char *filePath)
   {
     ESP_LOGV(__FUNCTION__, "Setting global config instance");
     configInstance = this;
-    FILE *currentCfg = fOpen(filePath, "r");
+    FILE *currentCfg = fopen(filePath, "r");
     if (currentCfg == NULL)
     {
       ESP_LOGV(__FUNCTION__, "Getting default config for %s", filePath);
@@ -50,8 +50,8 @@ AppConfig::AppConfig(const char *filePath)
       struct stat fileStat;
       fstat(fileno(currentCfg), &fileStat);
       char *sjson = (char *)dmalloc(fileStat.st_size);
-      fRead(sjson, 1, fileStat.st_size, currentCfg);
-      fClose(currentCfg);
+      fread(sjson, 1, fileStat.st_size, currentCfg);
+      fclose(currentCfg);
       if (sjson && (strlen(sjson) > 0))
       {
         cJSON *toBeCfg = cJSON_ParseWithLength(sjson, fileStat.st_size);
@@ -301,13 +301,13 @@ void AppConfig::SaveAppConfig(bool skipMount)
   ESP_LOGV(__FUNCTION__, "Saving config %s",config->filePath);
   version++;
   uint8_t storage = skipMount ? 0 : initStorage();
-  FILE *currentCfg = fOpen(config->filePath, "w");
+  FILE *currentCfg = fopen(config->filePath, "w");
   if (currentCfg != NULL)
   {
     char *sjson = cJSON_PrintUnformatted(config->json);
     ESP_LOGV(__FUNCTION__, "Config(%d):%s", strlen(sjson),sjson);
-    size_t wlen = fWrite(sjson, 1, strlen(sjson), currentCfg);
-    if (fClose(currentCfg) != 0)
+    size_t wlen = fwrite(sjson, 1, strlen(sjson), currentCfg);
+    if (fclose(currentCfg) != 0)
     {
       ESP_LOGE(__FUNCTION__, "Failed wo close config");
     } else {
