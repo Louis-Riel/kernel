@@ -1082,5 +1082,18 @@ void DisplayMemInfo(){
 }
 
 FILE *	fopenCd (const char *__restrict _name, const char *__restrict _type, bool notSure){
+  char* name = strdup(_name);
+  char* startPos = indexOf(name+1,"/");
+  char* endPos = startPos > name ? indexOf(startPos+1,"/"):NULL;
+
+  while (startPos && endPos) {
+    *endPos=0;
+    if (mkdir(name, 0775) != -1)
+      ESP_LOGI(__FUNCTION__,"mkdir %s",name);
+    *endPos='/';
+    startPos = endPos+1;
+    endPos = startPos > endPos ? indexOf(startPos+1,"/"):NULL;
+  }
+  ldfree(name);
   return fopen(_name, _type);
 }

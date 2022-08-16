@@ -176,6 +176,7 @@ class Table extends React.Component {
                 e(LocalJSONEditor, { key: `JE-${this.props.path}/${fld}`, 
                                 path: `${this.props.path}/${fld}`,
                                 editable: this.props.editable, 
+                                sortable: this.props.sortable,
                                 json: line[fld], 
                                 name: fld, 
                                 registerEventInstanceCallback: this.props.registerEventInstanceCallback 

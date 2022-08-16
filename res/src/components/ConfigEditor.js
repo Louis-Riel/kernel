@@ -2,7 +2,7 @@ class ConfigPage extends React.Component {
     componentDidMount() {
         if (this.isConnected()) {
             var abort = new AbortController()
-            var timer = setTimeout(() => abort.abort(), 4000);
+            var timer = setTimeout(() => abort.abort(), 8000);
             wfetch(`${httpPrefix}/config/${this.props.selectedDeviceId=="current"?"":this.props.selectedDeviceId+".json"}`, {
                     method: 'post',
                     signal: abort.signal
@@ -57,7 +57,7 @@ class ConfigPage extends React.Component {
 
     saveChanges() {
         var abort = new AbortController()
-        var timer = setTimeout(() => abort.abort(), 4000);
+        var timer = setTimeout(() => abort.abort(), 8000);
         wfetch(`${httpPrefix}/config`, {
                 method: 'put',
                 signal: abort.signal,

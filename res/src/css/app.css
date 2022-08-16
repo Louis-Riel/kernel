@@ -712,7 +712,6 @@ div.designer>details[open]>summary {
     border-radius: 10px;
     border: solid;
     border-color: silver;
-    margin-bottom: 50px;
 }
 
 div.mainApp>details>summary::marker {

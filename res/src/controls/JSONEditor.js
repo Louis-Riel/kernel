@@ -172,6 +172,7 @@ class LocalJSONEditor extends React.Component {
                 name: fld,
                 label: fld,
                 editable: this.props.editable,
+                sortable: this.props.sortable,
                 json: json[fld],
                 updateAppStatus: this.props.updateAppStatus,
                 registerEventInstanceCallback: this.props.registerEventInstanceCallback
@@ -263,7 +264,7 @@ class LocalJSONEditor extends React.Component {
 
     render() {
         if (this.state.json === null || this.state.json === undefined) {
-            return e("div", { id: `loading${this.id}` }, "Loading...");
+            return e("div", { id: `loading${this.id}` });
         } else if (this.props.label != null) {
             return e("fieldset", { id: `fs${this.props.label}`,className:"jsonNodes" }, [
                 e("legend", { key: 'legend' }, this.objectControlPannel()),

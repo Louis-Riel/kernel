@@ -68,7 +68,7 @@ class StatusPage extends React.Component {
     updateStatuses(requests, newState) {
         if (window.location.host || httpPrefix){
             var abort = new AbortController()
-            var timer = setTimeout(() => abort.abort(), 4000);
+            var timer = setTimeout(() => abort.abort(), 8000);
             if (this.props.selectedDeviceId == "current") {
                 this.updateStatus(requests.pop(), abort, newState).then(res => {
                     clearTimeout(timer);

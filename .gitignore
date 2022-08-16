@@ -10,3 +10,4 @@ wget-log
 node_modules
 .cache
 logs
+res/package-lock.json

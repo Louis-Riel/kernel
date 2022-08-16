@@ -210,7 +210,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
                 if ((runningBits = GetRunningBits()))
                 {
                     ESP_LOGW(__FUNCTION__, "Error in creating thread for %s(0x%" PRIXPTR "), retry %d, waiting on %d. %s", pcName, (uintptr_t)thread->pvTaskCode, retryCtn, runningBits, esp_err_to_name(ret));
-                    xEventGroupWaitBits(managedThreadBits, runningBits, pdFALSE, pdFALSE, portMAX_DELAY);
+                    xEventGroupWaitBits(managedThreadBits, runningBits, pdFALSE, pdFALSE, pdMS_TO_TICKS(1000));
                 }
                 else
                 {
@@ -338,16 +338,16 @@ uint8_t ManagedThreads::NumAllocatedThreads()
     void ManagedThreads::runThread(void *param)
     {
         mThread_t *thread = (mThread_t *)param;
-        ESP_LOGV(__FUNCTION__, "Running the %s thread", thread->pcName);
+        ESP_LOGI(__FUNCTION__, "Running the %s thread", thread->pcName);
         xEventGroupClearBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
         thread->isRunning = true;
 
-        size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
+        //size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
         thread->pvTaskCode(thread->pvParameters);
-        size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
-        if (diff != 0) {
-            ESP_LOGV(__FUNCTION__,"%s %d bytes memleak",thread->pcName,diff);
-        }
+        //size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
+        //if (diff != 0) {
+        //    ESP_LOGV(__FUNCTION__,"%s %d bytes memleak",thread->pcName,diff);
+        //}
 
         thread->isRunning = false;
         thread->started = false;

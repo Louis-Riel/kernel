@@ -214,7 +214,7 @@ class StorageViewer extends React.Component {
         if (window.location.host || httpPrefix){
             var abort = new AbortController();
         
-            var quitItNow = setTimeout(() => abort.abort(), 3000);
+            var quitItNow = setTimeout(() => abort.abort(), 8000);
             wfetch(`${httpPrefix}/files` + this.state.path, {
                 method: 'post',
                 signal: abort.signal

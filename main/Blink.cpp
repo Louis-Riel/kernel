@@ -632,8 +632,7 @@ static void serviceLoop(void *param)
     } 
     if (serviceBits & app_bits_t::WIFI_ON && !TheWifi::GetInstance())
     {
-      ESP_LOGI(__FUNCTION__,"Turning Wifi On");
-      CreateBackgroundTask(wifiSallyForth, "WifiSallyForth", 4096, NULL, tskIDLE_PRIORITY, NULL);
+      CreateBackgroundTask(wifiSallyForth, "WifiSallyForth", 8192, NULL, tskIDLE_PRIORITY, NULL);
     }
     else if ((serviceBits & app_bits_t::WIFI_OFF) && TheWifi::GetInstance())
     {
@@ -646,8 +645,8 @@ static void serviceLoop(void *param)
     ESP_LOGV(__FUNCTION__,"app_bits_t::REST:%d app_bits_t::WIFI_ON %d",serviceBits & app_bits_t::REST, serviceBits & app_bits_t::WIFI_ON);
     if ((serviceBits & app_bits_t::REST) && !TheRest::GetServer())
     {
-      ESP_LOGI(__FUNCTION__,"Turning Rest On");
       CreateBackgroundTask(restSallyForth, "restSallyForth", 8192, TheWifi::GetEventGroup(),tskIDLE_PRIORITY,NULL);
+      //restSallyForth(TheWifi::GetEventGroup());
     }
     if ((serviceBits & (app_bits_t::REST_OFF)) && TheRest::GetServer())
     {
@@ -671,6 +670,7 @@ static void serviceLoop(void *param)
       {
           ESP_LOGI(__FUNCTION__, "Starting GPS");
           CreateBackgroundTask(gpsSallyForth, "gpsSallyForth", 8196, appCfg, tskIDLE_PRIORITY, &gpsTask);
+          //gpsSallyForth(appCfg);
           ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, gpsEvent, NULL, NULL));
           ESP_LOGV(__FUNCTION__, "Started GPS");
       } else {
@@ -888,9 +888,8 @@ void app_main(void)
     ESP_LOGE(__FUNCTION__, "caps integrity error");
   }
   ESP_LOGI(__FUNCTION__, "Battery: %f", getBatteryVoltage());
+  new Bt();
 
   //Register event managers
   //new BufferedFile();
-
-  //new Bt();
 }

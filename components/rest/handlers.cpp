@@ -805,11 +805,11 @@ esp_err_t TheRest::app_handler(httpd_req_t *req)
         return httpd_resp_send(req, (const char *)app_css_start, app_css_end - app_css_start - 1);
     }
 
-    if (!endsWith(req->uri, "/") && !indexOf(req->uri, "/?"))
+    if (!endsWith(req->uri, "/") && !indexOf(req->uri, "/?") && !indexOf(req->uri,"index_sd.html"))
     {
         return sendFile(req, req->uri);
     }
-    bool isOffline = httpd_req_get_hdr_value_len(req, "offline");
+    bool isOffline = httpd_req_get_hdr_value_len(req, "offline") || indexOf(req->uri,"index_sd.html");
     if (AppConfig::HasSDCard() && isOffline) {
         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += (index_sd_html_end - index_sd_html_start);
         return httpd_resp_send(req, (const char *)index_sd_html_start, (index_sd_html_end - index_sd_html_start - 1));

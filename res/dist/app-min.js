@@ -287,10 +287,10 @@ function fromPlainToVersionned(obj, vobj, level = "") {
     return ret;
 }
 
-const getCellValue = (tr, idx) => tr.children[idx].innerText || tr.children[idx].textContent;
+const getCellValue = (tr, idx) => tr.children[idx]?.innerText || tr.children[idx]?.textContent;
 
 const comparer = (idx, asc) => (a, b) => ((v1, v2) =>
-    v1 !== '' && v2 !== '' && !isNaN(v1) && !isNaN(v2) ? v1 - v2 : v1.toString().localeCompare(v2)
+    v1 !== '' && v2 !== '' && !isNaN(v1) && !isNaN(v2) ? v1 - v2 : v1?.toString()?.localeCompare(v2)
 )(getCellValue(asc ? a : b, idx), getCellValue(asc ? b : a, idx));
 class BoolInput extends React.Component {
     constructor(props) {
@@ -600,6 +600,7 @@ class LocalJSONEditor extends React.Component {
                 name: fld,
                 label: fld,
                 editable: this.props.editable,
+                sortable: this.props.sortable,
                 json: json[fld],
                 updateAppStatus: this.props.updateAppStatus,
                 registerEventInstanceCallback: this.props.registerEventInstanceCallback
@@ -691,7 +692,7 @@ class LocalJSONEditor extends React.Component {
 
     render() {
         if (this.state.json === null || this.state.json === undefined) {
-            return e("div", { id: `loading${this.id}` }, "Loading...");
+            return e("div", { id: `loading${this.id}` });
         } else if (this.props.label != null) {
             return e("fieldset", { id: `fs${this.props.label}`,className:"jsonNodes" }, [
                 e("legend", { key: 'legend' }, this.objectControlPannel()),
@@ -1073,6 +1074,7 @@ class Table extends React.Component {
                 e(LocalJSONEditor, { key: `JE-${this.props.path}/${fld}`, 
                                 path: `${this.props.path}/${fld}`,
                                 editable: this.props.editable, 
+                                sortable: this.props.sortable,
                                 json: line[fld], 
                                 name: fld, 
                                 registerEventInstanceCallback: this.props.registerEventInstanceCallback 
@@ -1847,7 +1849,7 @@ class PinDriverFlags extends React.Component {
     updateStatuses(requests, newState) {
         if (window.location.host || httpPrefix){
             var abort = new AbortController()
-            var timer = setTimeout(() => abort.abort(), 4000);
+            var timer = setTimeout(() => abort.abort(), 8000);
             if (this.props.selectedDeviceId == "current") {
                 this.updateStatus(requests.pop(), abort, newState).then(res => {
                     clearTimeout(timer);
@@ -1961,7 +1963,7 @@ class ConfigPage extends React.Component {
     componentDidMount() {
         if (this.isConnected()) {
             var abort = new AbortController()
-            var timer = setTimeout(() => abort.abort(), 4000);
+            var timer = setTimeout(() => abort.abort(), 8000);
             wfetch(`${httpPrefix}/config/${this.props.selectedDeviceId=="current"?"":this.props.selectedDeviceId+".json"}`, {
                     method: 'post',
                     signal: abort.signal
@@ -2016,7 +2018,7 @@ class ConfigPage extends React.Component {
 
     saveChanges() {
         var abort = new AbortController()
-        var timer = setTimeout(() => abort.abort(), 4000);
+        var timer = setTimeout(() => abort.abort(), 8000);
         wfetch(`${httpPrefix}/config`, {
                 method: 'put',
                 signal: abort.signal,
@@ -2241,7 +2243,7 @@ class LiveEventPannel extends React.Component {
                 resolve({dataType:eventType.dataType,...event});
             } else {
                 var toControler = new AbortController();
-                const timer = setTimeout(() => toControler.abort(), 3000);
+                const timer = setTimeout(() => toControler.abort(), 8000);
                 wfetch(`${httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
                     method: 'post',
                     signal: toControler.signal
@@ -2353,7 +2355,7 @@ class EventsPage extends React.Component {
     getJsonConfig() {
         return new Promise((resolve, reject) => {
             if (window.location.hostname || httpPrefix){
-                const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
+                const timer = setTimeout(() => this.props.pageControler.abort(), 8000);
                 wfetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
                     method: 'post',
                     signal: this.props.pageControler.signal
@@ -2711,7 +2713,7 @@ class StorageViewer extends React.Component {
         if (window.location.host || httpPrefix){
             var abort = new AbortController();
         
-            var quitItNow = setTimeout(() => abort.abort(), 3000);
+            var quitItNow = setTimeout(() => abort.abort(), 8000);
             wfetch(`${httpPrefix}/files` + this.state.path, {
                 method: 'post',
                 signal: abort.signal

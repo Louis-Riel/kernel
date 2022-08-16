@@ -34,7 +34,6 @@ esp_netif_t *ap_netif = NULL;
 wifi_event_ap_staconnected_t *station = (wifi_event_ap_staconnected_t *)dmalloc(sizeof(wifi_event_ap_staconnected_t));
 wifi_ap_record_t ap_info[DEFAULT_SCAN_LIST_SIZE];
 TaskHandle_t restHandle = NULL;
-TaskHandle_t timeHandle = NULL;
 
 static TheWifi *theInstance = NULL;
 
@@ -725,9 +724,8 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             xEventGroupClearBits(evtGrp, WIFI_DISCONNECTED_BIT);
             theWifi->ParseStateBits(theWifi->stationStat);
 
-            if (!theWifi->isSidPuller((const char *)theWifi->wifi_config.sta.ssid, true))
-                CreateBackgroundTask(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, &timeHandle);
             xEventGroupSetBits(s_app_eg, app_bits_t::REST);
+            CreateBackgroundTask(updateTime, "updateTime", 4096, NULL, tskIDLE_PRIORITY, NULL);
 
             //CreateBackgroundTask(restSallyForth, "restSallyForth", 8196, evtGrp, tskIDLE_PRIORITY, NULL);
 
@@ -799,6 +797,7 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             theWifi->ParseStateBits(theWifi->stationStat);
             break;
         case WIFI_EVENT_STA_STOP:
+            ESP_LOGI(__FUNCTION__, "Wifi Station is down");
             xEventGroupClearBits(evtGrp, WIFI_STA_UP_BIT);
             theWifi->ParseStateBits(theWifi->stationStat);
             break;
