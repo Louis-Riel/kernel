@@ -1,0 +1,115 @@
+.logContainer {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    align-items: flex-start;
+    align-content: flex-start;
+    width: 100%;
+    margin-top: auto;
+    overflow: auto;
+    height: -webkit-fill-available;
+}
+
+.logControlPannel {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: flex-start;
+    justify-content: flex-start;
+    align-items: flex-start;
+    column-gap: 10px;
+}
+
+.filterPannel {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: flex-start;
+    justify-content: flex-start;
+    align-items: center;
+    border: solid aquamarine 1px;
+    border-radius: 10px 10px 0 0;
+}
+
+.filterPannelContent {
+    border-top: 1px solid #7fffd4;
+    -webkit-column-gap: 5px;
+    column-gap: 5px;
+    display: flex;
+}
+
+.logLevelFilter {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: flex-start;
+    align-items: center;
+    border-right: solid aquamarine 1px;
+    padding-left: 10px;
+    background: linear-gradient(to bottom,#040404,#3a4a38);
+}
+
+.logLevelFilterContent {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    justify-content: flex-start;
+    align-items: center;
+    padding-left: 20px;
+}
+
+label.MuiFormControlLabel-root {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: flex-start;
+    justify-content: space-between;
+    align-items: center;
+    padding-right: 10px;
+    border-radius: 10px;
+}
+
+.loglines {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+}
+
+.log.LOGD,
+.log.LOGW,
+.log.LOGI,
+.log.LOGV,
+.log.LOGE {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.log div {
+    padding-right: 5px;
+    font-size: small;
+}
+
+.LOGLEVEL {
+    clear: both;
+    width: 15px;
+}
+
+.log.LOGI {
+    color: chartreuse;
+}
+
+.log.LOGE {
+    color: #f77575;;
+}
+
+.log.LOGW {
+    color: yellow;
+}
+
+.log.LOGV {
+    color: aquamarine;
+}

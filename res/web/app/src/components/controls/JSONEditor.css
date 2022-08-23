@@ -1,0 +1,119 @@
+.fieldgroup {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    height: fit-content;
+    align-items: flex-start;
+}
+
+.jsonNodes input {
+    background: linear-gradient(to bottom, #2d332d80, #09130880);
+    color: chartreuse;
+}
+
+td>fieldset {
+    margin: 0;
+    padding: 0;
+}
+
+label {
+    font-size: small;
+    background: linear-gradient(to bottom,#2d332d,#091308);
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+}
+
+label div {
+    margin-right: 10px;
+    margin-left: 10px;
+    text-align: center;
+}
+
+.label {
+    margin-top: 10px;
+    color: aqua;
+    font-style: italic;
+    padding-bottom: 10px;
+    font-size: small;
+}
+
+label.MuiInputLabel-root {
+    background: none;
+    color: aquamarine;
+}
+
+div.MuiOutlinedInput-root {
+    background: linear-gradient(to bottom,#cec9c961,#3a4a38);
+    color:aqua;
+}
+
+div.value {
+    font-family: monospace;
+}
+
+.reportbtn {
+    margin-left: 5px;
+    cursor: pointer;
+}
+
+.chartcontainer {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: space-between;
+    align-items: stretch;
+    max-width: 700px;
+    min-height: 200px;
+}
+
+.MuiTooltip-tooltip>.chartcontainer {
+    min-height: 80px;
+}
+
+.MuiTooltip-tooltip {
+    width: 200px;
+    background-color: black !important;
+}
+
+i.reportbtn.fa.fa-eraser {
+    position: relative;
+    width: 0;
+    height: 0;
+    top: -20px;
+    left: 20px;
+}
+
+.fieldgroup>fieldset {
+    background: linear-gradient(to bottom,#151a15,#273426);
+    padding-right: 0;
+    height: fit-content;
+    padding-bottom: 0;
+    margin: 0;
+    border: solid #535a53 1px;
+    border-radius: 10px;
+}
+
+.fieldgroup.commandable, .object,.array {
+    display: flex;
+    flex-direction: row;
+    column-gap: 10px;
+    row-gap: 10px;
+}
+
+.statusclass.jsonNodes {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: flex-start;
+    justify-content: flex-start;
+    column-gap: 10px;
+    row-gap: 10px;
+}
+
+.fieldgroup.field {
+    align-items: stretch;
+    padding-right: 10px;
+}

@@ -1,0 +1,14 @@
+.commands {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: space-between;
+    align-items: center;
+    column-gap: 5px;
+    margin: 5px;
+}
+
+li.MuiMenuItem-root {
+    color: antiquewhite;
+}
