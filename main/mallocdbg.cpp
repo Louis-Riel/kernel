@@ -48,7 +48,7 @@ void* dbgmalloc(const char* funcname, size_t size)
             if (dmalloc.name != NULL){
                 if (strcmp(dmalloc.name,funcname)==0){
                     dmalloc.hitCount++;
-                    dmalloc.bytes =+ size;
+                    dmalloc.bytes += size;
                     foundIt=true;
                     break;
                 }
@@ -78,7 +78,7 @@ void dbgfree(const char* funcname, void* ptr)
         {
             if ((dmalloc.name != NULL) && (strcmp(dmalloc.name,funcname))==0){
                 dmalloc.hitCount--;
-                dmalloc.bytes-=sizeof(&ptr);
+                //dmalloc.bytes-=sizeof(&ptr);
                 break;
             }
         }
