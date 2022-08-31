@@ -92,6 +92,8 @@ TheWifi::TheWifi(AppConfig *appcfg)
     stationStat = AppConfig::GetAppStatus()->GetConfig("/wifi/station");
     apStat = AppConfig::GetAppStatus()->GetConfig("/wifi/ap");
 
+    stationStat->SetStringProperty("Ip", "");
+
     if (handlerDescriptors == NULL)
         EventManager::RegisterEventHandler((handlerDescriptors = BuildHandlerDescriptors()));
 
@@ -814,8 +816,8 @@ void TheWifi::network_event(void *handler_arg, esp_event_base_t base, int32_t ev
             sprintf(ipaddt, IPSTR, IP2STR(&theWifi->staIp.ip));
             ESP_LOGI(__FUNCTION__, "AP ip::%s", ipaddt);
             //xEventGroupSetBits(s_app_eg, REST);
-            theWifi->ParseStateBits(theWifi->apStat);
             theWifi->apStat->SetStringProperty("Ip", ipaddt);
+            theWifi->ParseStateBits(theWifi->apStat);
             break;
         case WIFI_EVENT_AP_STOP:
             ESP_LOGI(__FUNCTION__, "AP STOPPED");

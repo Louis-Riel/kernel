@@ -180,6 +180,7 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
         ESP_LOGI(__FUNCTION__,"Client is inserted at position %d",idx);
         cJSON* client = cJSON_CreateObject();
         cJSON_AddItemToArray(jClients,client);
+        clients[idx].jConnectTs = cJSON_AddStringToObject(client,"ConnectTs",emptySpace);
         clients[idx].jErrCount = cJSON_AddNumberToObject(client,"Errors",0);
         clients[idx].jBytesIn = cJSON_AddNumberToObject(client,"BytesIn",0);
         clients[idx].jBytesOut = cJSON_AddNumberToObject(client,"BytesOut",0);
@@ -188,10 +189,6 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
         clients[idx].jLastTs = cJSON_AddStringToObject(client,"LastTs",emptySpace);
       } else {
         ESP_LOGI(__FUNCTION__,"Client took position %d",idx);
-        cJSON_SetNumberValue(clients[idx].jErrCount,0);
-        cJSON_SetNumberValue(clients[idx].jBytesIn, 0);
-        cJSON_SetNumberValue(clients[idx].jBytesOut, 0);
-        cJSON_SetNumberValue(clients[idx].jIsLive, true);
       }
 
       sockaddr_in6 addr;
@@ -201,6 +198,17 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
       } else {
         inet_ntop(AF_INET6, &addr.sin6_addr, clients[idx].jAddr->valuestring, 30);
       }
+
+      cJSON_SetNumberValue(clients[idx].jErrCount,0);
+      cJSON_SetNumberValue(clients[idx].jBytesIn, 0);
+      cJSON_SetNumberValue(clients[idx].jBytesOut, 0);
+      cJSON_SetNumberValue(clients[idx].jIsLive, true);
+
+      struct tm timeinfo;
+      time(&clients[idx].lastTs);
+      localtime_r(&clients[idx].lastTs, &timeinfo);
+      strftime(clients[idx].jConnectTs->valuestring, 30, "%c", &timeinfo);
+
       AppConfig::SignalStateChange(state_change_t::MAIN);
       return true;
     }

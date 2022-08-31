@@ -376,9 +376,13 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
     ctmp1 = lastIndexOf(parPath,"/");
     if (ctmp1){
       *ctmp1=0;
-      parJson = GetJSONConfig(parPath);
+      parJson = GetJSONConfig(json,parPath,createWhenMissing);
     } else {
       parJson = cJSON_GetObjectItem(json,parPath);
+    }
+    if (!parJson) {
+      ESP_LOGV(__FUNCTION__,"Cannot find parent:%s", parPath);
+      return NULL;
     }
     ESP_LOGV(__FUNCTION__, "Parented by:%s", parPath);
   } else {
@@ -596,8 +600,8 @@ bool AppConfig::SetStringProperty(const char *path, const char *value)
 
   if (!holder)
   {
-    holder = GetJSONConfig(parPath,true);
     if (filePath) {
+      holder = GetJSONConfig(parPath,true);
       ESP_LOGV(__FUNCTION__, "Added versioned string for %s to %s", path, value);
       cJSON_AddStringToObject(holder, "value",value);
       cJSON_AddNumberToObject(holder, "version",0);
@@ -605,8 +609,7 @@ bool AppConfig::SetStringProperty(const char *path, const char *value)
     } else {
       ESP_LOGV(__FUNCTION__, "Added straight up string for %s to %s(%s) parPath:%s", path, value, ctmp1?ctmp1+1:path, parPath);
       hasChanges = true;
-      cJSON_DeleteItemFromObject(ctmp1?holder:json,ctmp1?ctmp1+1:path);
-      cJSON_AddStringToObject(ctmp1?GetJSONConfig(parPath):json,ctmp1?ctmp1+1:path,value);
+      cJSON_AddStringToObject(json,ctmp1?ctmp1+1:path,value);
     }
   } else if (cJSON_IsObject(holder))
   {
@@ -695,15 +698,16 @@ void AppConfig::SetIntProperty(const char *path, int value)
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   if (!holder)
   {
-    holder = GetJSONConfig(path,true);
     if (filePath) {
+      holder = GetJSONConfig(path,true);
       ESP_LOGV(__FUNCTION__, "Added versioned int for %s to %d", path, value);
       cJSON_AddNumberToObject(holder, "value",value);
       cJSON_AddNumberToObject(holder, "version",0);
     } else {
       ESP_LOGV(__FUNCTION__, "Added straight up int for %s to %d", path, value);
-      cJSON_DeleteItemFromObject(ctmp1?holder:json,ctmp1?ctmp1+1:path);
-      cJSON_AddNumberToObject(ctmp1?holder:json,ctmp1?ctmp1+1:path,value);
+      // cJSON_DeleteItemFromObject(ctmp1?holder:json, ctmp1?ctmp1+1:path);
+      // cJSON_AddNumberToObject(ctmp1?holder:json, ctmp1?ctmp1+1:path,value);
+      cJSON_AddNumberToObject(json, ctmp1?ctmp1+1:path,value);
     }
     SaveAppConfig();
     //xSemaphoreGiveRecursive(sema);
@@ -796,15 +800,14 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   if (!holder)
   {
-    holder = GetJSONConfig(path,true);
     if (filePath) {
+      holder = GetJSONConfig(path,true);
       ESP_LOGV(__FUNCTION__, "Added versioned int for %s to %f", path, value);
       cJSON_AddNumberToObject(holder, "value",value);
       cJSON_AddNumberToObject(holder, "version",0);
     } else {
       ESP_LOGV(__FUNCTION__, "Added straight up int for %s to %f", path, value);
-      cJSON_DeleteItemFromObject(ctmp1?holder:json,ctmp1?ctmp1+1:path);
-      cJSON_AddNumberToObject(ctmp1?holder:json,ctmp1?ctmp1+1:path,value);
+      cJSON_AddNumberToObject(json,ctmp1?ctmp1+1:path,value);
     }
     SaveAppConfig();
     //xSemaphoreGiveRecursive(sema);

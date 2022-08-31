@@ -423,7 +423,7 @@ void Bt::bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param
         break;
     }
     default: {
-        ESP_LOGD(__FUNCTION__, "event: %d", event);
+        ESP_LOGD(__FUNCTION__, "event:%d", event);
         break;
     }
     }
@@ -463,7 +463,7 @@ void Bt::InitDevice(){
     cJSON_SetValuestring(btStatus, "On");
     AppConfig::SignalStateChange(state_change_t::MAIN);
 
-    char *dev_name = "THE_FUCK_YOU_LOOKIN_AT";
+    const char *dev_name = "THE_FUCK_YOU_LOOKIN_AT";
     esp_bt_dev_set_device_name(dev_name);
 
     /* register GAP callback function */

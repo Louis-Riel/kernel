@@ -19,6 +19,7 @@ public:
     httpd_handle_t hd;
     int fd;
     time_t lastTs;
+    cJSON* jConnectTs;
     cJSON* jBytesIn;
     cJSON* jBytesOut;
     cJSON* jLastTs;

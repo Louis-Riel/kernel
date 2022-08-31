@@ -762,7 +762,7 @@ void* jmalloc(size_t size)
 
 void jfree(void* ptr)
 {
-  ldfree(ptr);
+  dbgfree("jmalloc", ptr);
 }
 
 void app_main(void)
@@ -888,7 +888,7 @@ void app_main(void)
     ESP_LOGE(__FUNCTION__, "caps integrity error");
   }
   ESP_LOGI(__FUNCTION__, "Battery: %f", getBatteryVoltage());
-  new Bt();
+  //new Bt();
 
   //Register event managers
   //new BufferedFile();
