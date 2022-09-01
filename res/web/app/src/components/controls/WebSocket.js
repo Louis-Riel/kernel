@@ -20,23 +20,20 @@ export default class WebSocketManager extends Component {
         if (!this.widget)
             return;
             
-        var canvas = this.widget.current.getContext("2d");
-        canvas.clearRect(0,0,100,40);
+        this.canvas.clearRect(0,0,100,40);
     
-        this.browser(canvas, 2, 2, 30, 30, 10);
-        this.chip(canvas, 70, 2, 20, 30, 5);
+        this.browser(2, 2, 30, 30, 10);
+        this.chip(70, 2, 20, 30, 5);
     
         if (window.anims.length){
-            window.anims.forEach(anim => {
-                this.drawSprite(anim, canvas);
-            });
+            window.anims.forEach(this.drawSprite.bind(this));
 
             window.anims = window.anims.filter(anim => anim.state != 2);
             window.requestAnimationFrame(window.animRenderer);
         }
     }
     
-    drawSprite(anim, canvas) {
+    drawSprite(anim) {
         if (!anim.state) {
             anim.state = 1;
             anim.x = anim.from == "chip" ? this.chipX : this.browserX;
@@ -53,24 +50,24 @@ export default class WebSocketManager extends Component {
         if ((anim.y-(width/2)) <= 0) {
             anim.y = width;
         }
-        canvas.beginPath();
-        canvas.lineWidth = 2;
-        canvas.shadowBlur = 2;
-        canvas.strokeStyle = anim.lineColor;
-        canvas.shadowColor = anim.fillColor;
-        canvas.fillStyle = anim.fillColor;
-        canvas.moveTo(anim.x+width, anim.y);
-        canvas.arc(anim.x, anim.y, width, 0, 2 * Math.PI);
-        canvas.fill();
-        canvas.stroke();
+        this.canvas.beginPath();
+        this.canvas.lineWidth = 2;
+        this.canvas.shadowBlur = 2;
+        this.canvas.strokeStyle = anim.lineColor;
+        this.canvas.shadowColor = anim.fillColor;
+        this.canvas.fillStyle = anim.fillColor;
+        this.canvas.moveTo(anim.x+width, anim.y);
+        this.canvas.arc(anim.x, anim.y, width, 0, 2 * Math.PI);
+        this.canvas.fill();
+        this.canvas.stroke();
 
         if (anim.weight > 1) {
             var today = ""+anim.weight
-            canvas.font = Math.min(20,8+anim.weight)+"px Helvetica";
-            var txtbx = canvas.measureText(today);
-            canvas.fillStyle=anim.textColor;
-            canvas.strokeStyle = anim.textColor;
-            canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
+            this.canvas.font = Math.min(20,8+anim.weight)+"px Helvetica";
+            var txtbx = this.canvas.measureText(today);
+            this.canvas.fillStyle=anim.textColor;
+            this.canvas.strokeStyle = anim.textColor;
+            this.canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
         }    
         
         if (anim.direction==1?(anim.x > anim.endX):(anim.x < anim.endX)) {
@@ -79,61 +76,61 @@ export default class WebSocketManager extends Component {
         return anim;
     }
 
-    browser(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
+    browser(startX, startY, boxWidht, boxHeight, cornerSize) {
         this.browserX=startX+boxWidht;
-        canvas.beginPath();
-        canvas.strokeStyle = '#00ffff';
-        canvas.lineWidth = 2;
-        canvas.shadowBlur = 2;
-        canvas.shadowColor = '#002222';
-        canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#000000") : "#000000"
-        this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
+        this.canvas.beginPath();
+        this.canvas.strokeStyle = '#00ffff';
+        this.canvas.lineWidth = 2;
+        this.canvas.shadowBlur = 2;
+        this.canvas.shadowColor = '#002222';
+        this.canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#000000") : "#000000"
+        this.roundedRectagle(startX, startY, boxWidht, boxHeight, cornerSize);
         canvas.fill();
         if (this.state?.lanDevices?.length) {
-            this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight * (this.state.lanDevices.length/254), cornerSize);
+            this.roundedRectagle(startX, startY, boxWidht, boxHeight * (this.state.lanDevices.length/254), cornerSize);
         }
 
-        canvas.stroke();
+        this.canvas.stroke();
     }
 
-    chip(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
+    chip(startX, startY, boxWidht, boxHeight, cornerSize) {
         this.chipX=startX;
-        canvas.beginPath();
+        this.canvas.beginPath();
         const pinWidth = 4;
         const pinHeight = 2;
         const pinVCount = 3;
 
-        canvas.strokeStyle = '#00ffff';
-        canvas.lineWidth = 2;
-        canvas.shadowBlur = 2;
-        canvas.shadowColor = '#000000';
-        canvas.fillStyle = "#00ffff";
-        this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
+        this.canvas.strokeStyle = '#00ffff';
+        this.canvas.lineWidth = 2;
+        this.canvas.shadowBlur = 2;
+        this.canvas.shadowColor = '#000000';
+        this.canvas.fillStyle = "#00ffff";
+        this.roundedRectagle(startX, startY, boxWidht, boxHeight, cornerSize);
 
         for (var idx = 0; idx < pinVCount; idx++) {
-            canvas.moveTo(startX,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX-pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX-pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            this.canvas.moveTo(startX,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            this.canvas.lineTo(startX-pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            this.canvas.lineTo(startX-pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            this.canvas.lineTo(startX,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
 
-            canvas.moveTo(startX+boxWidht,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX+boxWidht+pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX+boxWidht+pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
-            canvas.lineTo(startX+boxWidht,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            this.canvas.moveTo(startX+boxWidht,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            this.canvas.lineTo(startX+boxWidht+pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            this.canvas.lineTo(startX+boxWidht+pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
+            this.canvas.lineTo(startX+boxWidht,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
         }
-        canvas.stroke();
+        this.canvas.stroke();
     }
 
-    roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize) {
-        canvas.moveTo(startX + cornerSize, startY);
-        canvas.lineTo(startX + boxWidht - (2 * cornerSize), startY);
-        canvas.arcTo(startX + boxWidht, startY, startX + boxWidht, startY + cornerSize, cornerSize);
-        canvas.lineTo(startX + boxWidht, startY + boxHeight - cornerSize);
-        canvas.arcTo(startX + boxWidht, startY + boxHeight, startX + boxWidht - cornerSize, startY + boxHeight, cornerSize);
-        canvas.lineTo(startX + cornerSize, startY + boxHeight);
-        canvas.arcTo(startX, startY + boxHeight, startX, startY + boxHeight - cornerSize, cornerSize);
-        canvas.lineTo(startX, startY + cornerSize);
-        canvas.arcTo(startX, startY, startX + cornerSize, startY, cornerSize);
+    roundedRectagle(startX, startY, boxWidht, boxHeight, cornerSize) {
+        this.canvas.moveTo(startX + cornerSize, startY);
+        this.canvas.lineTo(startX + boxWidht - (2 * cornerSize), startY);
+        this.canvas.arcTo(startX + boxWidht, startY, startX + boxWidht, startY + cornerSize, cornerSize);
+        this.canvas.lineTo(startX + boxWidht, startY + boxHeight - cornerSize);
+        this.canvas.arcTo(startX + boxWidht, startY + boxHeight, startX + boxWidht - cornerSize, startY + boxHeight, cornerSize);
+        this.canvas.lineTo(startX + cornerSize, startY + boxHeight);
+        this.canvas.arcTo(startX, startY + boxHeight, startX, startY + boxHeight - cornerSize, cornerSize);
+        this.canvas.lineTo(startX, startY + cornerSize);
+        this.canvas.arcTo(startX, startY, startX + cornerSize, startY, cornerSize);
     }
 
     AddLogLine(ln) {
@@ -206,6 +203,7 @@ export default class WebSocketManager extends Component {
     componentDidMount() {
         this.widget.current.addEventListener("click", this.handleClick.bind(this));
         if (!this.mounted){
+            this.canvas = this.widget.current.getContext("2d");
             window.animRenderer = this.drawDidget.bind(this);
             window.requestAnimationFrame(window.animRenderer);
         }

@@ -20,6 +20,7 @@ void restSallyForth(void *pvParameter) {
 
 TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     :ManagedDevice(REST_BASE),
+      postData((char*)dmalloc(JSON_BUFFER_SIZE)),
       eventGroup(xEventGroupCreate()),
       wifiEventGroup(evtGrp),
       restConfig(HTTPD_DEFAULT_CONFIG()),
@@ -29,6 +30,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       storageFlags(initStorage()),
       system_status(NULL)
 {
+    memset(postData,0,JSON_BUFFER_SIZE);
     if (restInstance == NULL)
     {
         deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
@@ -110,6 +112,7 @@ TheRest::~TheRest()
     xEventGroupSetBits(getAppEG(), app_bits_t::REST_OFF);
     ldfree(ipAddr);
     ldfree(gwAddr);
+    ldfree(postData);
     restInstance=NULL;
 }
 

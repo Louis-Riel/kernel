@@ -21,6 +21,10 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
+static cJSON *tasks = NULL;
+static const char* RESP_OK = "OK";
+static TheRest *restInstance = NULL;
+
 //char* kmlFileName=(char*)dmalloc(255);
 float temperatureReadFixed()
 {
@@ -37,8 +41,6 @@ float temperatureReadFixed()
     float temp_c = (temp_f - 32) / 1.8;
     return temp_c;
 }
-
-static cJSON *tasks = NULL;
 
 cJSON *tasks_json()
 {
@@ -396,9 +398,11 @@ void UpdateStringProp(cfg_label_t *cfg, char *val)
 
 esp_err_t TheRest::HandleWifiCommand(httpd_req_t *req)
 {
+    if (restInstance == NULL) {
+        restInstance = TheRest::GetServer();
+    }
     esp_err_t ret = 0;
-    char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
-    int rlen = httpd_req_recv(req, postData, JSON_BUFFER_SIZE);
+    int rlen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE);
     if (rlen == 0)
     {
         httpd_resp_send_500(req);
@@ -407,16 +411,16 @@ esp_err_t TheRest::HandleWifiCommand(httpd_req_t *req)
     else
     {
         TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += rlen;
-        *(postData + rlen) = 0;
-        ESP_LOGI(__FUNCTION__, "Got %s", postData);
-        cJSON *jresponse = cJSON_ParseWithLength(postData, JSON_BUFFER_SIZE);
-        if (jresponse != NULL)
+        *(restInstance->postData + rlen) = 0;
+        ESP_LOGI(__FUNCTION__, "Got %s", restInstance->postData);
+        cJSON *jresponse = cJSON_ParseWithLength(restInstance->postData, JSON_BUFFER_SIZE);
+        if (jresponse != NULL)  
         {
             cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "enabled");
             if (jitem && (strcmp(jitem->valuestring, "no") == 0))
             {
                 ESP_LOGI(__FUNCTION__, "All done wif wifi");
-                ret = httpd_resp_send(req, "OK", 2);
+                ret = httpd_resp_send(req, RESP_OK, 2);
                 TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                 xEventGroupClearBits(getAppEG(), app_bits_t::WIFI_ON);
                 xEventGroupSetBits(getAppEG(), app_bits_t::WIFI_OFF);
@@ -428,7 +432,6 @@ esp_err_t TheRest::HandleWifiCommand(httpd_req_t *req)
             ESP_LOGE(__FUNCTION__, "Error whilst parsing json");
         }
     }
-    ldfree(postData);
     xEventGroupSetBits(getAppEG(), app_bits_t::TRIPS_COMMITTED);
 
     return ret;
@@ -493,8 +496,10 @@ void parseFiles(void *param)
 
 esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
     esp_err_t ret = ESP_FAIL;
-    char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
-    int rlen = httpd_req_recv(req, postData, JSON_BUFFER_SIZE);
+    if (restInstance == NULL) {
+        restInstance = TheRest::GetServer();
+    }
+    int rlen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE);
     if (rlen == 0)
     {
         ESP_LOGE(__FUNCTION__, "no body");
@@ -502,8 +507,8 @@ esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
     }
     else
     {
-        *(postData+rlen)=0;
-        cJSON* stat = cJSON_ParseWithLength(postData,JSON_BUFFER_SIZE);
+        *(restInstance->postData+rlen)=0;
+        cJSON* stat = cJSON_ParseWithLength(restInstance->postData,JSON_BUFFER_SIZE);
         if (stat) {
             AppConfig* appStat = new AppConfig(stat,NULL);
             if (appStat->HasProperty("name")) {
@@ -514,7 +519,7 @@ esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
                     EventDescriptor_t* ed = EventHandlerDescriptor::GetEventDescriptor(dev->eventBase,"STATUS");
                     if (ed){
                         EventInterpretor::RunMethod(NULL,"Post",(void*)&stat,false);
-                        ESP_LOGV(__FUNCTION__,"Posted %s to %s",postData, name);
+                        ESP_LOGV(__FUNCTION__,"Posted %s to %s",restInstance->postData, name);
                         char* nstat = cJSON_Print(dev->status);
                         ret=httpd_resp_send(req,nstat,strlen(nstat));
                         ldfree(nstat);
@@ -528,24 +533,26 @@ esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
                 }
             } else {
                 ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"Missing name");
-                ESP_LOGE(__FUNCTION__,"Missing name in %s",postData);
+                ESP_LOGE(__FUNCTION__,"Missing name in %s",restInstance->postData);
             }
             delete appStat;
             cJSON_Delete(stat);
         } else {
             ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"Cannot parse JSON");
-            ESP_LOGE(__FUNCTION__,"Cannot parse(%s)",postData);
+            ESP_LOGE(__FUNCTION__,"Cannot parse(%s)",restInstance->postData);
         }
     }
-    ldfree(postData);
     return ret;
 }
 
 esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
 {
+    if (restInstance == NULL) {
+        restInstance = TheRest::GetServer();
+    }
     esp_err_t ret = 0;
     char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
-    int rlen = httpd_req_recv(req, postData, JSON_BUFFER_SIZE);
+    int rlen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE);
     if (rlen == 0)
     {
         ESP_LOGE(__FUNCTION__, "no body");
@@ -554,9 +561,9 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
     else
     {
         TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += rlen;
-        *(postData + rlen) = 0;
-        ESP_LOGV(__FUNCTION__, "Got %s", postData);
-        cJSON *jresponse = cJSON_ParseWithLength(postData, rlen);
+        *(restInstance->postData + rlen) = 0;
+        ESP_LOGV(__FUNCTION__, "Got %s", restInstance->postData);
+        cJSON *jresponse = cJSON_ParseWithLength(restInstance->postData, rlen);
         if (jresponse != NULL)
         {
             cJSON *jClass = cJSON_GetObjectItem(jresponse, "className");
@@ -572,7 +579,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                     ESP_LOGE(__FUNCTION__, "Cannot find class %s", jClass->valuestring);
                     ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_404_NOT_FOUND, jClass->valuestring);
                 } else {
-                    ret = httpd_resp_send(req, "OK", 2);
+                    ret = httpd_resp_send(req, RESP_OK, 2);
                 }
             } else {
                 cJSON *jcommand = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
@@ -597,7 +604,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                 else if (jcommand && (strcmp(jcommand->valuestring, "factoryReset") == 0))
                 {
                     AppConfig::ResetAppConfig(true);
-                    ret = httpd_resp_send(req, "OK", 2);
+                    ret = httpd_resp_send(req, RESP_OK, 2);
                     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                 }
                 else if (jcommand && (strcmp(jcommand->valuestring, "flush") == 0))
@@ -607,13 +614,13 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                     if (fileName && fileName->valuestring && (slen=strlen(fileName->valuestring))) {
                         if ((slen == 1) && (fileName->valuestring[0] == '*')) {
                             BufferedFile::FlushAll();
-                            ret = httpd_resp_send(req, "OK", 2);
+                            ret = httpd_resp_send(req, RESP_OK, 2);
                             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                         } else {
                             BufferedFile* bfile = (BufferedFile*)ManagedDevice::GetByName(fileName->valuestring);
                             if (bfile) {
                                 bfile->Flush();
-                                ret = httpd_resp_send(req, "OK", 2);
+                                ret = httpd_resp_send(req, RESP_OK, 2);
                                 TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                                 AppConfig::SignalStateChange(state_change_t::MAIN);
                             } else {
@@ -621,7 +628,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                                 TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 14;
                             }
                         }
-                        ret = httpd_resp_send(req, "OK", 2);
+                        ret = httpd_resp_send(req, RESP_OK, 2);
                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                     } else {
                         ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,"Not Implemented");
@@ -631,7 +638,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                 else if (jcommand && (strcmp(jcommand->valuestring, "scanaps") == 0))
                 {
                     if (TheWifi::GetInstance()->wifiScan()) {
-                        ret = httpd_resp_send(req, "OK", 2);
+                        ret = httpd_resp_send(req, RESP_OK, 2);
                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                     } else {
                         ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR,"Cannot Scan Wifi");
@@ -655,7 +662,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                         if (strcmp(event->valuestring, "off") == 0) {
                             gps->gpsStop();
                         }
-                        ret = httpd_resp_send(req, "OK", 2);
+                        ret = httpd_resp_send(req, RESP_OK, 2);
                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                     } else {
                         ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"GPS not running");
@@ -668,7 +675,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                     TinyGPSPlus* gps = TinyGPSPlus::runningInstance();
                     if (gps && event->valuedouble) {
                         gps->setRefreshRate(event->valuedouble);
-                        ret = httpd_resp_send(req, "OK", 2);
+                        ret = httpd_resp_send(req, RESP_OK, 2);
                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                     } else {
                         ret = httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,"GPS not running");
@@ -690,7 +697,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 25;
         }
     }
-    ldfree(postData);
+    ldfree(restInstance->postData);
     return ret;
 }
 
@@ -828,18 +835,16 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
         struct stat st;
         esp_err_t ret = ESP_FAIL;
         size_t tlen;
-        char *opeartion = NULL;
-        char *fileType = NULL;
+        char *opeartion = TheRest::GetServer()->postData;
+        char *fileType = TheRest::GetServer()->postData+500;
 
         ret = stat(fname, &st);
 
         if (ret == 0)
         {
             if ((tlen = httpd_req_get_hdr_value_len(req, "operation")) &&
-                (opeartion = (char *)dmalloc(tlen + 1)) &&
                 (httpd_req_get_hdr_value_str(req, "operation", opeartion, tlen + 1) == ESP_OK) &&
                 (tlen = httpd_req_get_hdr_value_len(req, "ftype")) &&
-                (fileType = (char *)dmalloc(tlen + 1)) &&
                 (httpd_req_get_hdr_value_str(req, "ftype", fileType, tlen + 1) == ESP_OK))
             {
                 if (opeartion[0] == 'd')
@@ -850,7 +855,7 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                         ESP_LOGV(__FUNCTION__, "%s is a file", fname);
                         if (deleteFile(fname))
                         {
-                            ret = httpd_resp_send(req, "OK", 2);
+                            ret = httpd_resp_send(req, RESP_OK, 2);
                             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                         }
                         else
@@ -864,7 +869,7 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                         ESP_LOGV(__FUNCTION__, "%s is a folder", fname);
                         if (rmDashFR(fname))
                         {
-                            ret = httpd_resp_send(req, "OK", 3);
+                            ret = httpd_resp_send(req, RESP_OK, 3);
                             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
                         }
                         else
@@ -876,28 +881,21 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                 }
                 else
                 {
-                    ESP_LOGE(__FUNCTION__, "bad operation");
+                    ESP_LOGE(__FUNCTION__, "bad operation.");
                     ret = httpd_resp_send_408(req);
                 }
             }
             else
             {
-                char *res = (char *)dmalloc(JSON_BUFFER_SIZE);
-                char *path = (char *)dmalloc(255);
+                char *path = restInstance->postData+1024;
                 strcpy(path, fname);
                 char *fpos = strrchr(path, '/');
                 *fpos = 0;
                 httpd_resp_set_type(req, "application/json");
-                sprintf(res, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}", path, fpos + 1, "file", (uint32_t)st.st_size);
-                ret = httpd_resp_send(req, res, strlen(res));
-                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(res);
-                ldfree(path);
-                ldfree(res);
+                sprintf(restInstance->postData+2048, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d}", path, fpos + 1, "file", (uint32_t)st.st_size);
+                ret = httpd_resp_send(req, restInstance->postData+2048, strlen(restInstance->postData+2048));
+                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(restInstance->postData+2048);
             }
-            if (opeartion)
-                ldfree(opeartion);
-            if (fileType)
-                ldfree(fileType);
             return ret;
         }
         return httpd_resp_send_500(req);
@@ -910,6 +908,9 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
 
 esp_err_t TheRest::config_template_handler(httpd_req_t *req)
 {
+    if (restInstance == NULL) {
+        restInstance = TheRest::GetServer();
+    }
     ESP_LOGV(__FUNCTION__, "Config template Handler:%s", req->uri);
     if (req->method == HTTP_POST)
     {
@@ -931,6 +932,9 @@ esp_err_t TheRest::config_template_handler(httpd_req_t *req)
 
 esp_err_t TheRest::config_handler(httpd_req_t *req)
 {
+    if (restInstance == NULL) {
+        restInstance = TheRest::GetServer();
+    }
     ESP_LOGV(__FUNCTION__, "Config Handler.");
     esp_err_t ret = ESP_OK;
     AppConfig *appcfg = AppConfig::GetAppConfig();
@@ -938,7 +942,7 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
 
     int len = 0, curLen = -1;
     char *postData = (char *)dmalloc(JSON_BUFFER_SIZE * 2);
-    while ((curLen = httpd_req_recv(req, postData + len, len - (JSON_BUFFER_SIZE * 2))) > 0)
+    while ((curLen = httpd_req_recv(req, restInstance->postData + len, len - (JSON_BUFFER_SIZE * 2))) > 0)
     {
         len += curLen;
     }
@@ -955,16 +959,16 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
     {
         if (len)
         {
-            postData[len] = 0;
-            ESP_LOGV(__FUNCTION__, "postData(%d):%s", len, postData);
-            cJSON *newCfg = cJSON_ParseWithLength(postData, len);
+            restInstance->postData[len] = 0;
+            ESP_LOGV(__FUNCTION__, "postData(%d):%s", len, restInstance->postData);
+            cJSON *newCfg = cJSON_ParseWithLength(restInstance->postData, len);
             if (newCfg)
             {
                 if (true)
                 {
                     ESP_LOGI(__FUNCTION__, "Updating local config");
                     appcfg->SetAppConfig(newCfg);
-                    ret = httpd_resp_send(req, postData, strlen(postData));
+                    ret = httpd_resp_send(req, restInstance->postData, strlen(restInstance->postData));
                 }
                 else
                 {
@@ -974,9 +978,9 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
                     // FILE *cfg = fopen(fname, "w");
                     // if (cfg)
                     // {
-                    //     fwrite(postData, strlen(postData), sizeof(char), cfg);
-                    //     ret = httpd_resp_send(req, postData, strlen(postData));
-                    //     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(postData);
+                    //     fwrite(restInstance->postData, strlen(restInstance->postData), sizeof(char), cfg);
+                    //     ret = httpd_resp_send(req, restInstance->postData, strlen(restInstance->postData));
+                    //     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(restInstance->postData);
                     //     fclose(cfg);
                     // }
                     // else
@@ -1033,7 +1037,6 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
         }
     }
 
-    ldfree(postData);
     return ret;
 }
 
@@ -1153,11 +1156,14 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
 esp_err_t TheRest::download_handler(httpd_req_t *req)
 {
     ESP_LOGI(__FUNCTION__, "Downloading %s", req->uri);
+    if (restInstance == NULL) {
+        restInstance = TheRest::GetServer();
+    }
 
     int len = 0, curLen = -1;
     char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
     MFile *dest = new MFile((char *)req->uri);
-    while ((curLen = httpd_req_recv(req, postData, JSON_BUFFER_SIZE)) > 0)
+    while ((curLen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE)) > 0)
     {
         ESP_LOGV(__FUNCTION__, "Chunck len:%d, cur:%d method:%d", curLen, len, req->method);
         dest->Write((uint8_t *)postData, curLen);
@@ -1170,8 +1176,8 @@ esp_err_t TheRest::download_handler(httpd_req_t *req)
     //if (endsWith(req->uri, "tar"))
     //    CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
     TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += 2;
-    ldfree(postData);
-    return httpd_resp_send(req, "OK", 2);
+    ldfree(restInstance->postData);
+    return httpd_resp_send(req, RESP_OK, 2);
 }
 
 esp_err_t TheRest::ota_handler(httpd_req_t *req)

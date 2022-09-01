@@ -118,6 +118,7 @@ protected:
   static esp_err_t findFiles(httpd_req_t *req, const char *path, const char *ext, bool recursive, char *res, uint32_t resLen);
 
 private:
+  char* postData;
   EventGroupHandle_t eventGroup;
   EventGroupHandle_t wifiEventGroup;
   httpd_config_t restConfig;
