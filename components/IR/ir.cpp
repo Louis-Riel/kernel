@@ -43,7 +43,6 @@ IRDecoder::rmt_timing_t IRDecoder::timing_groups[] = {
 IRDecoder::~IRDecoder(){
     ldfree((void*)name);
     EventManager::UnRegisterEventHandler(handlerDescriptors);
-    ldfree(buf);
     ESP_LOGI(__FUNCTION__,"Destructor");
 }
 
@@ -53,8 +52,7 @@ IRDecoder::IRDecoder(AppConfig* config)
     channelNo((rmt_channel_t)config->GetIntProperty("channelNo")),
     config(config),
     rb(NULL),
-    timingGroup(NULL),
-    buf((char*)dmalloc(1024))
+    timingGroup(NULL)
 {
     isRunning=true;
     AppConfig* apin = new AppConfig(status,AppConfig::GetAppStatus());
@@ -107,12 +105,12 @@ void IRDecoder::IRPoller(void *arg){
         while ((items=(rmt_item32_t *) xRingbufferReceive(ir->rb, &length, portMAX_DELAY))) {
             if ((code=ir->read(items,length))){
                 length /= 4;
-                if (cJSON_PrintPreallocated(ir->status,ir->buf,1024,false)){
-                    //AppConfig::SignalStateChange(state_change_t::MAIN);
-                    esp_event_post(ir->eventBase,eventIds::CODE,ir->buf,strlen(ir->buf),portMAX_DELAY);
-                } else {
-                    ESP_LOGW(__FUNCTION__,"Could not parse status");
-                }
+                postedEvent_t pevent;
+                pevent.base=ir->IRDECODER_BASE;
+                pevent.id=eventIds::CODE;
+                pevent.event_data=ir->status;
+                pevent.eventDataType=event_data_type_tp::JSON;
+                EventManager::ProcessEvent(&pevent);
             }
             vRingbufferReturnItem(ir->rb, (void *) items);
         }

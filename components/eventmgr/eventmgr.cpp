@@ -116,21 +116,17 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
             switch (postedEvent->eventDataType)
             {
             case event_data_type_tp::JSON:
-                jpl = cJSON_Parse((const char*)postedEvent->event_data);
-                if (jpl) {
-                    cJSON_AddItemToObject(jevt,"data",jpl);
-                } else if (cJSON_IsInvalid((cJSON*)postedEvent->event_data)) {
-                    ESP_LOGW(__FUNCTION__,"Cannot jsonify data for %s %s %s",edesc->baseName,edesc->eventName, (char*)postedEvent->event_data);
-                } else {
-                    cJSON_AddItemReferenceToObject(jevt,"data",(cJSON*)postedEvent->event_data);
-                }
+                cJSON_AddStringToObject(jevt,"dataType","JSON");
+                cJSON_AddItemReferenceToObject(jevt,"data",(cJSON*)postedEvent->event_data);
                 break;
             case event_data_type_tp::String:
+                cJSON_AddStringToObject(jevt,"dataType","String");
                 cJSON_AddStringToObject(jevt,"data",(char*)postedEvent->event_data);
                 break;
             case event_data_type_tp::Number:
+                cJSON_AddStringToObject(jevt,"dataType","Number");
                 ESP_LOGV(__FUNCTION__,"Got %s(%d) %d",postedEvent->base,postedEvent->id ,(int)postedEvent->event_data);
-                cJSON_AddNumberToObject(jevt,"data",(int)postedEvent->event_data);
+                cJSON_AddNumberToObject(jevt,"data",*((int*)postedEvent->event_data));
                 break;
             default:
                 ESP_LOGV(__FUNCTION__,"Unknown event data type for %s-%s",edesc->baseName,edesc->eventName);
@@ -145,6 +141,17 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
         ldfree(evtMgr->eventBuffer);
         evtMgr->eventBuffer = NULL;
     }
+
+    uint32_t numDevs = ManagedDevice::GetNumRunningInstances();
+    if (numDevs) {
+        ManagedDevice** runningInstances = ManagedDevice::GetRunningInstances();
+        for (uint32_t idx = 0; idx < numDevs; idx++ ) {
+            if (runningInstances[idx] && runningInstances[idx]->status && (runningInstances[idx]->eventBase ==  postedEvent->base)) {
+                runningInstances[idx]->ProcessEvent(postedEvent);
+            }
+        }
+    }
+
     EventInterpretor* interpretor;
     uint8_t idx =0;
     while ((idx < MAX_NUM_EVENTS) && 
@@ -159,8 +166,7 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
             }
         }
     }
-    if ((postedEvent->eventDataType == event_data_type_tp::JSON) ||
-        (postedEvent->eventDataType == event_data_type_tp::String)){
+    if ((postedEvent->eventDataType == event_data_type_tp::String)){
         ldfree(postedEvent->event_data);
     }
 }
@@ -184,7 +190,6 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
         switch (ed->dataType)
         {
         case event_data_type_tp::String:
-        case event_data_type_tp::JSON:
             postedEvent.event_data=dmalloc(strlen((char*)event_data)+1);
             strcpy((char*)postedEvent.event_data,(char*)event_data);
             ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent.event_data);

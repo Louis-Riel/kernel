@@ -17,6 +17,10 @@ html,body,#root,.App {
   color: #97ea44;
 }
 
+a {
+  color: aquamarine;
+}
+
 button.MuiButtonBase-root {
   color: aquamarine;
 }

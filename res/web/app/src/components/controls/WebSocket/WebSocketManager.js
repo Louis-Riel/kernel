@@ -1,7 +1,6 @@
 import {createElement as e, createRef, Component} from 'react';
-import { getInSpot, getAnims } from '../../utils/utils';
-import { fromVersionedToPlain } from '../../utils/utils';
-import './WebService.css';
+import { getInSpot, getAnims, fromVersionedToPlain } from '../../../utils/utils';
+import './WebSocket.css';
 
 var httpPrefix = "";
 
@@ -26,7 +25,9 @@ export default class WebSocketManager extends Component {
         this.chip(70, 2, 20, 30, 5);
     
         if (window.anims.length){
-            window.anims.forEach(this.drawSprite.bind(this));
+            window.anims.forEach(anim => {
+                this.drawSprite(anim, this.canvas);
+            });
 
             window.anims = window.anims.filter(anim => anim.state != 2);
             window.requestAnimationFrame(window.animRenderer);
@@ -85,7 +86,7 @@ export default class WebSocketManager extends Component {
         this.canvas.shadowColor = '#002222';
         this.canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#000000") : "#000000"
         this.roundedRectagle(startX, startY, boxWidht, boxHeight, cornerSize);
-        canvas.fill();
+        this.canvas.fill();
         if (this.state?.lanDevices?.length) {
             this.roundedRectagle(startX, startY, boxWidht, boxHeight * (this.state.lanDevices.length/254), cornerSize);
         }
@@ -133,6 +134,71 @@ export default class WebSocketManager extends Component {
         this.canvas.arcTo(startX, startY, startX + cornerSize, startY, cornerSize);
     }
 
+    openWs() {
+        if (!window.location.hostname && !httpPrefix) {
+            return;
+        }
+        if (this.state?.connecting || this.state?.connected) {
+            return;
+        }
+        this.state.connecting=true;
+        this.state.running=false;
+        this.startWs();
+    }
+
+    closeWs() {
+        if (this.ws) {
+            this.state.autoRefresh=false;
+            this.ws.close();
+            this.ws = null;
+            window.requestAnimationFrame(this.drawDidget.bind(this));
+        }
+    }
+
+    startWs() {
+        var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
+        var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
+        ws.onmessage = (event) => {
+          stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
+        };
+        ws.onopen = () => {
+          stopItWithThatShit = this.wsOpen(stopItWithThatShit, ws);
+        };
+        ws.onerror = (err) => {
+          this.wsError(err, stopItWithThatShit, ws);
+        };
+        ws.onclose = (evt => {
+          this.wsClose(stopItWithThatShit);
+        });
+    }
+    
+    wsClose(stopItWithThatShit) {
+        clearTimeout(stopItWithThatShit);
+        this.state.connected = false;
+        this.state.connecting = false;
+        window.requestAnimationFrame(window.animRenderer);
+        if (this.state.autoRefresh)
+          this.openWs();
+    }
+    
+    wsError(err, stopItWithThatShit, ws) {
+        console.error(err);
+        clearTimeout(stopItWithThatShit);
+        this.state.error = err;
+        window.requestAnimationFrame(window.animRenderer);
+        ws.close();
+    }
+    
+    wsOpen(stopItWithThatShit, ws) {
+        clearTimeout(stopItWithThatShit);
+        this.state.connected = true;
+        this.state.connecting = false;
+        ws.send("Connected");
+        window.requestAnimationFrame(window.animRenderer);
+        stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3500);
+        return stopItWithThatShit;
+    }
+    
     AddLogLine(ln) {
         var anims = window.anims.filter(anim => anim.type == "log" && anim.level == ln[0]);
         var inSpot = getInSpot(anims, "chip");
@@ -200,84 +266,12 @@ export default class WebSocketManager extends Component {
         this.props?.eventCBFns?.forEach(eventCBFn=>eventCBFn.fn(event));
     }
     
-    componentDidMount() {
-        this.widget.current.addEventListener("click", this.handleClick.bind(this));
-        if (!this.mounted){
-            this.canvas = this.widget.current.getContext("2d");
-            window.animRenderer = this.drawDidget.bind(this);
-            window.requestAnimationFrame(window.animRenderer);
-        }
-
-        this.mounted = true;
-    }
-
     handleClick(event) {
-        if ((event.offsetX > 2) &&
-            (event.offsetX < 32) &&
-            (event.offsetY > 2) &&
-            (event.offsetY < 32)) {
-            this.state.autoRefresh = !this.state.autoRefresh;
-            this.state.autoRefresh ? this.openWs() : this.closeWs();
-        }
+        this.state.autoRefresh = !this.state.autoRefresh;
+        this.state.autoRefresh ? this.openWs() : this.closeWs();
     }
 
-    openWs() {
-        if (!window.location.hostname && !httpPrefix) {
-            return;
-        }
-        if (this.state?.connecting || this.state?.connected) {
-            return;
-        }
-        this.state.connecting=true;
-        this.state.running=false;
-        this.startWs();
-      }
-    
-      startWs() {
-        var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
-        var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
-        ws.onmessage = (event) => {
-          stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
-        };
-        ws.onopen = () => {
-          stopItWithThatShit = this.wsOpen(stopItWithThatShit, ws);
-        };
-        ws.onerror = (err) => {
-          this.wsError(err, stopItWithThatShit, ws);
-        };
-        ws.onclose = (evt => {
-          this.wsClose(stopItWithThatShit);
-        });
-      }
-    
-      wsClose(stopItWithThatShit) {
-        clearTimeout(stopItWithThatShit);
-        this.state.connected = false;
-        this.state.connecting = false;
-        window.requestAnimationFrame(window.animRenderer);
-        if (this.state.autoRefresh)
-          this.openWs();
-      }
-    
-      wsError(err, stopItWithThatShit, ws) {
-        console.error(err);
-        clearTimeout(stopItWithThatShit);
-        this.state.error = err;
-        window.requestAnimationFrame(window.animRenderer);
-        ws.close();
-      }
-    
-      wsOpen(stopItWithThatShit, ws) {
-        clearTimeout(stopItWithThatShit);
-        this.state.connected = true;
-        this.state.connecting = false;
-        ws.send("Connected");
-        window.requestAnimationFrame(window.animRenderer);
-        stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3500);
-        return stopItWithThatShit;
-      }
-    
-      processMessage(stopItWithThatShit, event, ws) {
+    processMessage(stopItWithThatShit, event, ws) {
         clearTimeout(stopItWithThatShit);
         if (!this.state.running || this.state.timeout) {
           this.state.running = true;
@@ -303,11 +297,23 @@ export default class WebSocketManager extends Component {
         }
         stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 4000);
         return stopItWithThatShit;
-      }
+    }
     
+    componentDidMount() {
+        if (!this.mounted){
+            this.canvas = this.widget.current.getContext("2d");
+
+            window.animRenderer = this.drawDidget.bind(this);
+            window.requestAnimationFrame(window.animRenderer);
+        }
+        //this.widget.current.addEventListener("click", this.handleClick.bind(this));
+
+        this.mounted = true;
+    }
+
     render() {
         return (
-            <canvas className="wsctrl" width="100" height="40" onClick={this.handleClick.bind(this)} ref={this.widget}></canvas>
+            <div className="wsctrl"  width="100" height="40" onClick={this.handleClick.bind(this)}><canvas className="wsctrl" width="100" height="40" ref={this.widget}></canvas></div>
         )
     }
 }

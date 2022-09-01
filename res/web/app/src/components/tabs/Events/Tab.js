@@ -28,10 +28,13 @@ class LiveEvent extends Component {
     }
 
     parseData(props) {
-        if (props.dataType == "Number") {
-            return e("div", { key: props.data.name, className: "description" }, 
-                        e("div", { key: "data", className: "propNumber" }, props.data)
-                    );
+        if (props.dataType != "JSON") {
+            return (
+                <div  className= "description">  
+                    <div className= "propName">data</div>
+                    <div className= "propValue">{ props.data }</div>
+                </div>
+            );
         }
         return Object.keys(props.data)
             .filter(prop => typeof props.data[prop] != 'object' && !Array.isArray(props.data[prop]))

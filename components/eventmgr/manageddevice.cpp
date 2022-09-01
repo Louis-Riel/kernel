@@ -102,7 +102,7 @@ EventHandlerDescriptor* ManagedDevice::BuildHandlerDescriptors(){
   return new EventHandlerDescriptor(eventBase,(char*)ManagedDevice::eventBase);
 }
 
-void ManagedDevice::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
+void ManagedDevice::ProcessEvent(postedEvent_t* postedEvent){
 
 }
 

@@ -183,10 +183,11 @@ export default class LocalJSONEditor extends Component {
                 var f1s = this.getFieldWeight(json, f1);
                 var f2s = this.getFieldWeight(json, f2);
                 if (f1s === f2s) {
-                    return f1.localeCompare(f2);
+                    return 1;
                 }
                 return f1s > f2s ? 1 : f2s > f1s ? -1 : 0;
-            }).filter(fld => !json[fld] || !(typeof(json[fld]) === "object" && Object.keys(json[fld]).filter(fld=>fld != "class" && fld != "name").length==0));
+            })
+            .filter(fld => !json[fld] || !(typeof(json[fld]) === "object" && Object.keys(json[fld]).filter(fld=>fld != "class" && fld != "name").length==0));
     }
 
     getFieldWeight(json, f1) {

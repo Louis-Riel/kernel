@@ -160,41 +160,37 @@ export default class StatusPage extends Component {
     }
 
     render() {
-        if (this.state?.status){
-            return [
-                e("div",{key: "buttonbar", className: "buttonbar"},[
-                    e(Button, { key: "refresh", onClick: elem => this.updateAppStatus() }, "Refresh"),
-                    e(Button, { key: "reboot", onClick: elem => this.SendCommand({ 'command': 'reboot' }) }, "Reboot"),
-                    e(Button, { key: "factoryReset", onClick: elem => this.SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
-                    e(FirmwareUpdater, { key: "firmwareUpdater" }),
-                    e( FormControl,{key: "refreshRate"},[
-                        e(InputLabel,{
-                            key: "label",
-                            className: "label",
-                            id: "stat-refresh-label"
-                        },"Refresh Rate"),
-                        e(Select,{
-                            key:"options",
-                            id: "stat-refresh",
-                            labelId:"stat-refresh-label", 
-                            label: "Refresh Rate",
-                            value: this.state.refreshRate,
-                            onChange: elem => this.setState({refreshRate:elem.target.value})
-                        },["Manual", "2 secs", "5 secs", "10 secs","30 secs","1 mins","5 mins","10 mins","30 mins","60 mins"].map((term,idx)=>e(MenuItem,{key:idx,value:term},term)))
-                    ])
-                ]),
-                e(LocalJSONEditor, {
-                    path: '/',
-                    json: this.state.status, 
-                    editable: false,
-                    sortable: true,
-                    selectedDeviceId: this.props.selectedDeviceId,
-                    registerStateCallback: this.props.registerStateCallback,
-                    registerEventInstanceCallback: this.props.registerEventInstanceCallback
-                })
-            ];
-        } else {
-            return e("div",{key:genUUID()},"Loading...");
-        }
+        return [
+            e("div",{key: "buttonbar", className: "buttonbar"},[
+                e(Button, { key: "refresh", onClick: elem => this.updateAppStatus() }, "Refresh"),
+                e(Button, { key: "reboot", onClick: elem => this.SendCommand({ 'command': 'reboot' }) }, "Reboot"),
+                e(Button, { key: "factoryReset", onClick: elem => this.SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
+                e(FirmwareUpdater, { key: "firmwareUpdater" }),
+                e( FormControl,{key: "refreshRate"},[
+                    e(InputLabel,{
+                        key: "label",
+                        className: "label",
+                        id: "stat-refresh-label"
+                    },"Refresh Rate"),
+                    e(Select,{
+                        key:"options",
+                        id: "stat-refresh",
+                        labelId:"stat-refresh-label", 
+                        label: "Refresh Rate",
+                        value: this.state.refreshRate,
+                        onChange: elem => this.setState({refreshRate:elem.target.value})
+                    },["Manual", "2 secs", "5 secs", "10 secs","30 secs","1 mins","5 mins","10 mins","30 mins","60 mins"].map((term,idx)=>e(MenuItem,{key:idx,value:term},term)))
+                ])
+            ]),
+            this.state?.status ? e(LocalJSONEditor, {
+                path: '/',
+                json: this.state.status, 
+                editable: false,
+                sortable: true,
+                selectedDeviceId: this.props.selectedDeviceId,
+                registerStateCallback: this.props.registerStateCallback,
+                registerEventInstanceCallback: this.props.registerEventInstanceCallback
+            }): e("div",{key:genUUID()},"Loading...")
+        ] ;
     }
 }

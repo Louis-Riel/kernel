@@ -551,7 +551,6 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
         restInstance = TheRest::GetServer();
     }
     esp_err_t ret = 0;
-    char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
     int rlen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE);
     if (rlen == 0)
     {
@@ -600,6 +599,9 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                     CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, fname, tskIDLE_PRIORITY, NULL);
                     ret = httpd_resp_send(req, "parsing", 7);
                     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 7;
+                    if (fname) {
+                        ldfree(fname);
+                    }
                 }
                 else if (jcommand && (strcmp(jcommand->valuestring, "factoryReset") == 0))
                 {
@@ -697,7 +699,6 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 25;
         }
     }
-    ldfree(restInstance->postData);
     return ret;
 }
 
@@ -941,7 +942,7 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
 
     int len = 0, curLen = -1;
-    char *postData = (char *)dmalloc(JSON_BUFFER_SIZE * 2);
+//    char *postData = (char *)dmalloc(JSON_BUFFER_SIZE * 2);
     while ((curLen = httpd_req_recv(req, restInstance->postData + len, len - (JSON_BUFFER_SIZE * 2))) > 0)
     {
         len += curLen;
@@ -1161,12 +1162,12 @@ esp_err_t TheRest::download_handler(httpd_req_t *req)
     }
 
     int len = 0, curLen = -1;
-    char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
+    //char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
     MFile *dest = new MFile((char *)req->uri);
     while ((curLen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE)) > 0)
     {
         ESP_LOGV(__FUNCTION__, "Chunck len:%d, cur:%d method:%d", curLen, len, req->method);
-        dest->Write((uint8_t *)postData, curLen);
+        dest->Write((uint8_t *)restInstance->postData, curLen);
         len += curLen;
     }
     dest->Close();
@@ -1176,7 +1177,6 @@ esp_err_t TheRest::download_handler(httpd_req_t *req)
     //if (endsWith(req->uri, "tar"))
     //    CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
     TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += 2;
-    ldfree(restInstance->postData);
     return httpd_resp_send(req, RESP_OK, 2);
 }
 

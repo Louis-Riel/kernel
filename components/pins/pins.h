@@ -23,12 +23,11 @@ public:
     Pin(AppConfig* config);
     ~Pin();
     static void PollPins();
-    static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
+    void ProcessEvent(postedEvent_t* postedEvent);
     bool isRtcGpio;
     enum eventIds {
         OFF,ON,TRIGGER,STATUS
     };
-    bool ProcessEvent(Pin::eventIds event,uint8_t param);
     static cJSON* BuildConfigTemplate();
     static bool ProcessCommand(ManagedDevice* pin, cJSON * parms);
 protected:
@@ -47,7 +46,6 @@ protected:
 private:
     AppConfig* config;
     cJSON* pinStatus;
-    char* buf;
 };
 
 class AnalogPin:ManagedDevice {

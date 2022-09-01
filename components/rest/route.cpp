@@ -30,7 +30,6 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       storageFlags(initStorage()),
       system_status(NULL)
 {
-    memset(postData,0,JSON_BUFFER_SIZE);
     if (restInstance == NULL)
     {
         deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");

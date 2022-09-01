@@ -10,7 +10,7 @@ import Box from '@mui/material/Box';
 import StorageViewer from "./components/tabs/Storage/Tab";
 import StatusPage from './components/tabs/State/Tab';
 import ConfigPage from './components/tabs/Config/Tab';
-import WebSocketManager from './components/controls/WebSocket';
+import WebSocketManager from './components/controls/WebSocket/WebSocketManager';
 import LogLines from './components/tabs/Logs/Tab';
 import EventsPage from './components/tabs/Events/Tab';
 

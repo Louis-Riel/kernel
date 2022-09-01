@@ -104,6 +104,15 @@ enum class compare_origin_t
     Litteral
 };
 
+struct postedEvent_t
+{
+    esp_event_base_t base;
+    int32_t id;
+    void *event_data;
+    event_data_type_tp eventDataType;
+};
+
+
 class EventCondition
 {
 public:
@@ -183,21 +192,13 @@ public:
     cJSON *GetConfig();
     bool ValidateConfig();
     static EventManager *GetInstance();
+    static void ProcessEvent(postedEvent_t* postedEvent);
 
 private:
-    struct postedEvent_t
-    {
-        esp_event_base_t base;
-        int32_t id;
-        void *event_data;
-        event_data_type_tp eventDataType;
-    };
-
     cJSON *config;
     cJSON *programs;
     char* eventBuffer;
     static void EventPoller(void* param);
-    static void ProcessEvent(postedEvent_t* postedEvent);
     static void EventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     QueueHandle_t eventQueue;
 };
@@ -213,19 +214,21 @@ public:
     esp_err_t PostEvent(void *content, size_t len, int32_t event_id);
     esp_event_base_t eventBase;
     EventHandlerDescriptor *handlerDescriptors;
-    static void RunHealthCheck(void* param);
-    static ManagedDevice* GetByName(const char* name);
 
-    static ManagedDevice** GetRunningInstances();
-    static uint32_t GetNumRunningInstances();
     bool ProcessCommand(cJSON *command);
+    void ProcessEvent(postedEvent_t* postedEvent);
+
+    static void RunHealthCheck(void* param);
+    static uint32_t GetNumRunningInstances();
+    static ManagedDevice** GetRunningInstances();
+    static ManagedDevice* GetByName(const char* name);
     static cJSON* BuildConfigTemplate();
     static cJSON *BuildStatus(void *instance);
     static cJSON* GetConfigTemplates();
+
     cJSON *status;
 
 protected:
-    static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     EventHandlerDescriptor *BuildHandlerDescriptors();
     bool (*hcFnc)(void *);
     bool (*commandFnc)(ManagedDevice*, cJSON *);
