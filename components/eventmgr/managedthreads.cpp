@@ -360,6 +360,11 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         }
 
         xEventGroupSetBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
+
+        if (thread->pcName) {
+            ldfree(thread->pcName);
+        }
+
         vTaskDelete(NULL);
     }
 
