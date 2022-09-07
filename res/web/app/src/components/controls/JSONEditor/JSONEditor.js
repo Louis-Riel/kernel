@@ -1,9 +1,12 @@
 import {createElement as e, Component} from 'react';
 import ROProp from './ROProp';
 import Table from './Table';
-import CmdButton from './CmdButton';
-import {IsDatetimeValue, genUUID} from '../../utils/utils'
+import {IsDatetimeValue, genUUID} from '../../../utils/utils'
 import './JSONEditor.css';
+import { EditableLabel } from './EditableLabel';
+import { StateCommands } from './StateCommands';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner';
 
 export default class LocalJSONEditor extends Component {
     constructor(props) {
@@ -187,7 +190,7 @@ export default class LocalJSONEditor extends Component {
                 }
                 return f1s > f2s ? 1 : f2s > f1s ? -1 : 0;
             })
-            .filter(fld => !json[fld] || !(typeof(json[fld]) === "object" && Object.keys(json[fld]).filter(fld=>fld != "class" && fld != "name").length==0));
+            .filter(fld => !json[fld] || !(typeof(json[fld]) === "object" && Object.keys(json[fld]).filter(fld=>fld !== "class" && fld !== "name").length==0));
     }
 
     getFieldWeight(json, f1) {
@@ -220,7 +223,7 @@ export default class LocalJSONEditor extends Component {
 
     render() {
         if (this.state.json === null || this.state.json === undefined) {
-            return e("div", { id: `loading${this.id}` });
+            return <FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />;
         } else if (this.props.label != null) {
             return e("fieldset", { id: `fs${this.props.label}`,className:"jsonNodes" }, [
                 e("legend", { key: 'legend' }, this.objectControlPannel()),
@@ -232,54 +235,3 @@ export default class LocalJSONEditor extends Component {
     }
 }
 
-class StateCommands extends Component {
-    render() {
-        return e("div",{key:'commands',name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
-            key: `${cmd.command}-${cmd.param1}`,
-            name:this.props.name,
-            onSuccess:this.props.onSuccess,
-            onError:this.props.onError,
-            ...cmd
-        })));
-    }
-}
-
-class EditableLabel extends Component {
-    constructor(props) {
-        super(props);
-        this.state ={
-            editing: false
-        }
-    }
-
-    getLabel() {
-        return e("div",{onClick: elem=>this.setState({"editing":true}), className:"label"},this.props.label);
-    }
-
-    updateLabel(elem){
-        this.newLabel= elem.target.value;
-    }
-
-    cancelUpdate(elem) {
-        this.newLabel=undefined;
-        this.setState({editing:false});
-    }
-
-    getEditable() {
-        return [
-            e("input",{key: "edit", defaultValue: this.props.label, onChange:this.updateLabel.bind(this)}),
-            e("div",{key: "ok", onClick: elem=>this.setState({"editing":false}), className:"ok-button", dangerouslySetInnerHTML: {__html: "&check;"}}),
-            e("div",{key: "cancel", onClick: this.cancelUpdate.bind(this), className:"cancel-button", dangerouslySetInnerHTML: {__html: "&Chi;"}})
-        ]
-    }
-
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        if (this.props.onChange && this.newLabel && (prevState.editing !== this.state.editing)) {
-            this.props.onChange(this.newLabel, this.props.label);
-        }
-    }
-
-    render() {
-        return this.state.editing ? this.getEditable() : this.getLabel();
-    }
-}

@@ -10,4 +10,4 @@ services:
     volumes:
       - /mnt/c/Users/Louis-SebastienRiel/Documents/git/kernel/kernel/logs:/var/log/nginx
       - /mnt/c/Users/Louis-SebastienRiel/Documents/git/kernel/kernel/res/web/nginx:/etc/nginx
-      - /mnt/c/Users/Louis-SebastienRiel/Documents/git/kernel/kernel/res/web/app/build:/usr/share/nginx/html
+      - /home/nix/test/app/build:/usr/share/nginx/html

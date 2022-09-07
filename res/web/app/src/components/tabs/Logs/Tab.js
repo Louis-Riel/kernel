@@ -27,7 +27,7 @@ export default class LogLines extends Component {
             var nlvl = nmsg.substr(0, 1);
             var nts = nmsg.substr(3, 12);
             var nfunc = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
-            return nlvl == lvl && nts == ts && nfunc == func;
+            return nlvl === lvl && nts === ts && nfunc === func;
         })) {
             recIdx=this.state.logLines.length;
         }
@@ -55,7 +55,7 @@ export default class LogLines extends Component {
         return e(FormControlLabel,{
             key:"ffiltered" + lvl + func,
             className:"effiltered",
-            label: `${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") == func).length})`,
+            label: `${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") === func).length})`,
             control:e(Checkbox, {
                 key: "ctrl",
                 checked: this.state.logLevels[lvl][func],
@@ -93,7 +93,7 @@ export default class LogLines extends Component {
 
     renderLogLevelFilters() {
         return Object.keys(this.state.logLevels).map(lvl => {
-            return this.renderLogLevelFilter(lvl,this.state.logLines.filter(logln => logln.match(/^[^IDVEW]*(.+)/)[1].substr(0, 1) == lvl))
+            return this.renderLogLevelFilter(lvl,this.state.logLines.filter(logln => logln.match(/^[^IDVEW]*(.+)/)[1].substr(0, 1) === lvl))
         })
     }
 

@@ -1,4 +1,4 @@
-import {createElement as e, createRef, Component} from 'react';
+import { createRef, Component} from 'react';
 import { getInSpot, getAnims, fromVersionedToPlain } from '../../../utils/utils';
 import './WebSocket.css';
 
@@ -29,7 +29,7 @@ export default class WebSocketManager extends Component {
                 this.drawSprite(anim, this.canvas);
             });
 
-            window.anims = window.anims.filter(anim => anim.state != 2);
+            window.anims = window.anims.filter(anim => anim.state !== 2);
             window.requestAnimationFrame(window.animRenderer);
         }
     }
@@ -37,9 +37,9 @@ export default class WebSocketManager extends Component {
     drawSprite(anim) {
         if (!anim.state) {
             anim.state = 1;
-            anim.x = anim.from == "chip" ? this.chipX : this.browserX;
-            anim.endX = anim.from == "chip" ? this.browserX : this.chipX;
-            anim.direction=anim.from=="browser"?1:-1;
+            anim.x = anim.from === "chip" ? this.chipX : this.browserX;
+            anim.endX = anim.from === "chip" ? this.browserX : this.chipX;
+            anim.direction=anim.from ==="browser"?1:-1;
             anim.y = anim.startY;
             anim.tripLen = 1600.0;
             anim.startWindow = performance.now();
@@ -71,7 +71,7 @@ export default class WebSocketManager extends Component {
             this.canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
         }    
         
-        if (anim.direction==1?(anim.x > anim.endX):(anim.x < anim.endX)) {
+        if (anim.direction===1?(anim.x > anim.endX):(anim.x < anim.endX)) {
             anim.state = 2;
         }
         return anim;
@@ -141,8 +141,8 @@ export default class WebSocketManager extends Component {
         if (this.state?.connecting || this.state?.connected) {
             return;
         }
-        this.state.connecting=true;
-        this.state.running=false;
+        this.setState({connecting:true,running:false});
+
         this.startWs();
     }
 
@@ -156,7 +156,7 @@ export default class WebSocketManager extends Component {
     }
 
     startWs() {
-        var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
+        var ws = this.ws = new WebSocket("ws://" + (httpPrefix === "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
         var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
         ws.onmessage = (event) => {
           stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
@@ -174,8 +174,7 @@ export default class WebSocketManager extends Component {
     
     wsClose(stopItWithThatShit) {
         clearTimeout(stopItWithThatShit);
-        this.state.connected = false;
-        this.state.connecting = false;
+        this.setState({connected:false,connecting:false});
         window.requestAnimationFrame(window.animRenderer);
         if (this.state.autoRefresh)
           this.openWs();
@@ -184,15 +183,14 @@ export default class WebSocketManager extends Component {
     wsError(err, stopItWithThatShit, ws) {
         console.error(err);
         clearTimeout(stopItWithThatShit);
-        this.state.error = err;
+        this.setState({error: err});
         window.requestAnimationFrame(window.animRenderer);
         ws.close();
     }
     
     wsOpen(stopItWithThatShit, ws) {
         clearTimeout(stopItWithThatShit);
-        this.state.connected = true;
-        this.state.connecting = false;
+        this.setState({connected:true,connecting:false});
         ws.send("Connected");
         window.requestAnimationFrame(window.animRenderer);
         stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3500);
@@ -200,7 +198,7 @@ export default class WebSocketManager extends Component {
     }
     
     AddLogLine(ln) {
-        var anims = window.anims.filter(anim => anim.type == "log" && anim.level == ln[0]);
+        var anims = window.anims.filter(anim => anim.type === "log" && anim.level === ln[0]);
         var inSpot = getInSpot(anims, "chip");
         if (inSpot) {
             inSpot.weight++;
@@ -212,10 +210,10 @@ export default class WebSocketManager extends Component {
                 from: "chip",
                 level:lvl,
                 weight: 1,
-                lineColor: lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+                lineColor: lvl === 'D' || lvl === 'I' ? "green" : ln[0] === 'W' ? "yellow" : "red",
                 shadowColor: '#000000',
                 fillColor: '#000000',
-                textColor: lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+                textColor: lvl === 'D' || lvl === 'I' ? "green" : ln[0] === 'W' ? "yellow" : "red",
                 startY: 25
             })
             window.requestAnimationFrame(window.animRenderer);
@@ -224,7 +222,7 @@ export default class WebSocketManager extends Component {
     }
 
     UpdateState(state) {
-        var anims = window.anims.filter(anim => anim.type == "state");
+        var anims = window.anims.filter(anim => anim.type === "state");
         var inSpot = getInSpot(anims, "chip");
         if (inSpot) {
             inSpot.weight++;
@@ -245,7 +243,7 @@ export default class WebSocketManager extends Component {
     }
 
     ProcessEvent(event) {
-        var anims = window.anims.filter(anim => anim.type == "event");
+        var anims = window.anims.filter(anim => anim.type === "event");
         var inSpot = getInSpot(anims, "chip");
         if (inSpot) {
             inSpot.weight++;
@@ -280,7 +278,7 @@ export default class WebSocketManager extends Component {
         }
     
         if (event && event.data) {
-          if (event.data[0] == "{") {
+          if (event.data[0] === "{") {
             try {
               if (event.data.startsWith('{"eventBase"')) {
                 this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
@@ -295,7 +293,7 @@ export default class WebSocketManager extends Component {
         } else {
           this.ProcessEvent(undefined);
         }
-        stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 4000);
+        stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 6000);
         return stopItWithThatShit;
     }
     

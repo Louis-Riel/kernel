@@ -1,5 +1,5 @@
 import {createElement as e, Component} from 'react';
-import { IsNumberValue, isFloat, genUUID, IsBooleanValue, comparer} from '../../utils/utils';
+import { IsNumberValue, isFloat, genUUID, IsBooleanValue, comparer} from '../../../utils/utils';
 import LocalJSONEditor from './JSONEditor'
 
 var httpPrefix = "";
@@ -15,7 +15,7 @@ export default class Table extends Component {
 
     componentDidUpdate(prevProps, prevState) {
         var keycol = this.getKeyColumn();
-        if (this.state.keyColumn != keycol){
+        if (this.state.keyColumn !== keycol){
             this.setState({keyColumn:keycol});
         }
     }
@@ -48,7 +48,7 @@ export default class Table extends Component {
     addRow(e){
         e.stopPropagation();
         e.preventDefault();
-        if ((this.props.json.length == 0) || (typeof this.props.json[0] == "object")){
+        if ((this.props.json.length === 0) || (typeof this.props.json[0] === "object")){
             this.props.json.push({});
         } else if (Array.isArray(this.props.json[0])) {
             this.props.json.push([]);
@@ -87,9 +87,9 @@ export default class Table extends Component {
                 return new Date(val * 1000).toLocaleString();
             } else if (IsNumberValue(val)) {
                 if (isFloat(val)) {
-                    if ((this.props.name.toLowerCase() != "lattitude") &&
-                        (this.props.name.toLowerCase() != "longitude") &&
-                        (this.props.name != "lat") && (this.props.name != "lng")) {
+                    if ((this.props.name.toLowerCase() !== "lattitude") &&
+                        (this.props.name.toLowerCase() !== "longitude") &&
+                        (this.props.name !== "lat") && (this.props.name !== "lng")) {
                         val = parseFloat(val).toFixed(2);
                     } else {
                         val = parseFloat(val).toFixed(8);
@@ -97,10 +97,10 @@ export default class Table extends Component {
                 }
             }
             if (IsBooleanValue(val)) {
-                val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
+                val = ((val === "true") || (val === "yes") || (val === true)) ? "Y" : "N"
             }
     
-            if ((fld == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+            if ((fld === "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
                 return e("a", { href: `${httpPrefix}${val}` }, val);
             }
             return val;
@@ -175,8 +175,7 @@ export default class Table extends Component {
                                    editable: this.props.editable, 
                                    sortable: this.props.sortable, 
                                    name: fld, 
-                                   json: line[fld], 
-                                   name: fld 
+                                   json: line[fld]
                                  }) : 
                         null :
                 e(LocalJSONEditor, { key: `JE-${this.props.path}/${fld}`, 
@@ -204,10 +203,10 @@ export default class Table extends Component {
                             ...this.props.json.flatMap(row => Object.keys(row))
                             .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
                             .map(fld => {
-                                if (!this.cols.some(col => fld == col)) {
+                                if (!this.cols.some(col => fld === col)) {
                                     this.cols.push(fld);
                                     var val = this.getValue(fld,this.props.json[0][fld]);
-                                    if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
+                                    if (!this.sortedOn && !Array.isArray(val) && typeof val !== 'object' && isNaN(this.getValue(fld,val))) {
                                         this.sortedOn = fld;
                                     }
                                 }

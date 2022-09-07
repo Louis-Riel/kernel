@@ -26,7 +26,7 @@
 #include <sys/time.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
-const char* TheWifi::WIFI_BASE="TheWifi";
+const char* TheWifi::WIFI_BASE="wifi";
 
 uint8_t s_retry_num = 0;
 esp_netif_t *sta_netif = NULL;

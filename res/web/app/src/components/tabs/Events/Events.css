@@ -116,7 +116,7 @@ details {
     flex-direction: row;
     flex-wrap: nowrap;
     align-content: center;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     padding: 0 15px;
 }

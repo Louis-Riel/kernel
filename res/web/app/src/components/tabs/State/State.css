@@ -12,3 +12,32 @@
 li.MuiMenuItem-root {
     color: antiquewhite;
 }
+
+div.MuiListItemIcon-root>svg {
+    color: aquamarine;
+}
+
+div.subitem {
+    margin-left: 15px;
+}
+
+div.MuiCollapse-wrapperInner>.statusclass.jsonNodes {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    justify-content: flex-start;
+    align-items: flex-start;
+}
+
+ul.MuiMenu-list {
+    background-color: #2f3b2d;
+}
+
+ul.MuiMenu-list >li.Mui-selected {
+    background-color: #485a46;
+}
+
+ul.MuiMenu-list >li:hover {
+    background-color: #394836c9;
+}

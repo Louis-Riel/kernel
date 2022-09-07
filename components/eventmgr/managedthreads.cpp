@@ -363,6 +363,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
 
         if (thread->pcName) {
             ldfree(thread->pcName);
+            thread->pcName=NULL;
         }
 
         vTaskDelete(NULL);
@@ -414,7 +415,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
                 if (!threads[idx]->started) {
                     freeThread=idx;
                 }
-                if (name && strcmp(name,threads[idx]->pcName) == 0) {
+                if (name && threads[idx] && threads[idx]->pcName && strcmp(name,threads[idx]->pcName) == 0) {
                     lastRunning = idx;
                 }
             }

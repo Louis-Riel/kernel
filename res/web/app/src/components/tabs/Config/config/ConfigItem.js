@@ -13,7 +13,7 @@ export default class ConfigItem extends Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        if ((this.state != prevState) && this.props.onChange) {
+        if ((this.state !== prevState) && this.props.onChange) {
             this.props.onChange(this.state.instance);
         }
     }
@@ -38,7 +38,7 @@ export default class ConfigItem extends Component {
                 return value;
             }
             if (typeof value === "string") {
-                if (value.indexOf(".") != -1) {
+                if (value.indexOf(".") !== -1) {
                     return parseFloat(value);
                 }
                 return parseInt(value);
@@ -53,7 +53,7 @@ export default class ConfigItem extends Component {
     }
 
     getFieldWeight(field) {
-        if (field == this.props.nameField) {
+        if (field === this.props.nameField) {
             return 100;
         }
 
@@ -76,7 +76,7 @@ export default class ConfigItem extends Component {
                       .sort((a,b) => {
                         var wa = this.getFieldWeight(a);
                         var wb = this.getFieldWeight(b);
-                        if (wa == wb) {
+                        if (wa === wb) {
                             return a.localeCompare(b);
                         }
                         return wb - wa;
@@ -100,7 +100,7 @@ export default class ConfigItem extends Component {
             }):
             e(TextField, {
                 key: key,
-                autoFocus: tp == "text",
+                autoFocus: tp === "text",
                 value: this.parseFieldValue(this.props.item[key]),
                 label: key,
                 type: tp,

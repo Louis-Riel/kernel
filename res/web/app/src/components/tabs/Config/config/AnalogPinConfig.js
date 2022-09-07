@@ -14,11 +14,11 @@ export default class AnalogPinConfig extends Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        if ((this.state != prevState) && this.props.onChange) {
+        if ((this.state !== prevState) && this.props.onChange) {
             this.props.onChange(this.state);
         }
         
-        if (prevProps?.item != this.props?.item) {
+        if (prevProps?.item !== this.props?.item) {
             this.setState({pin: this.props.item});
         }
     }
@@ -34,8 +34,8 @@ export default class AnalogPinConfig extends Component {
     }
 
     onChange(name, value) {
-        this.state.pin[name] = name == "name" ? value : name == "channel_atten" ? parseFloat(value) : parseInt(value); 
-        if (name == "pinNo") {
+        this.state.pin[name] = name === "name" ? value : name === "channel_atten" ? parseFloat(value) : parseInt(value); 
+        if (name === "pinNo") {
             this.state.pin.channel = this.pinNoToChannel(this.state.pin.pinNo);
         }
         this.setState(this.state);

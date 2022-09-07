@@ -62,14 +62,14 @@
   ],
   "events": [
     {
-      "eventBase": { "version": 0, "value": "TheWifi" },
+      "eventBase": { "version": 0, "value": "wifi" },
       "eventId": { "version": 2, "value": "IP_EVENT_STA_LOST_IP" },
       "program": { "version": 1, "value": "blinktwice" },
       "conditions": [],
       "params": {}
     },
     {
-      "eventBase": { "version": 1, "value": "TheWifi" },
+      "eventBase": { "version": 1, "value": "wifi" },
       "eventId": { "version": 2, "value": "IP_EVENT_STA_GOT_IP" },
       "program": { "version": 0, "value": "blink" },
       "conditions": [],

@@ -1,7 +1,7 @@
 import {createElement as e, Component} from 'react';
 import {Tooltip} from '@mui/material';
 import * as Recharts from "recharts";
-import { IsNumberValue, isFloat, genUUID, IsBooleanValue, IsDatetimeValue, degToRad} from '../../utils/utils';
+import { IsNumberValue, isFloat, genUUID, IsBooleanValue, IsDatetimeValue, degToRad} from '../../../utils/utils';
 
 var httpPrefix = "";
 
@@ -73,7 +73,7 @@ export default class ROProp extends Component {
     }
 
     renderTime(input, fld, val) {
-        if (input == null) {
+        if (input === null) {
             return;
         }
         var { hrs, smoothmin, today, time } = this.getTimeComponents(fld, val);
@@ -111,7 +111,7 @@ export default class ROProp extends Component {
 
         if (now.getFullYear() <= 1970) {
             today = (now.getDate() - 1) + ' Days';
-            if (hrs == 0)
+            if (hrs === 0)
                 time = (min ? min + ":" : "") + ('0' + sec).slice(-2) + "." + mil;
 
             else
@@ -178,7 +178,7 @@ export default class ROProp extends Component {
                 e(Recharts.LineChart,{key:"chart", data: this.state.lastStates, className: "chart", margin: {left:20}},[
                     e(Recharts.Line, {key:"line", dot: !summary, type:"monotone", dataKey:"value", stroke:"#8884d8", isAnimationActive: false}),
                     summary?null:e(Recharts.CartesianGrid, {key:"grid", hide:summary, strokeDasharray:"5 5", stroke:"#ccc"}),
-                    e(Recharts.XAxis, {key:"thexs", hide:summary, dataKey:"ts",type: 'number', domain: ['auto', 'auto'],name: 'Time', tickFormatter: (unixTime) => new Date(unixTime).toLocaleTimeString(), type: "number"}),
+                    e(Recharts.XAxis, {key:"thexs", hide:summary, dataKey:"ts",type: 'number', domain: ['auto', 'auto'],name: 'Time', tickFormatter: (unixTime) => new Date(unixTime).toLocaleTimeString()}),
                     e(Recharts.YAxis, {key:"theys", hide:summary, dataKey:"value", domain: ['auto', 'auto']}),
                     e(Recharts.Tooltip, {key:"tooltip", contentStyle: {backgroundColor: "black"}, labelStyle: {backgroundColor: "black"}, className:"tooltip", labelFormatter: t => new Date(t).toLocaleString()})]))];
     }

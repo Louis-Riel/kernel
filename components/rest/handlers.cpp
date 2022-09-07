@@ -730,14 +730,6 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
     {
         ESP_LOGV(__FUNCTION__, "No move in request");
     }
-    if (endsWith(path, "tar"))
-        httpd_resp_set_type(req, "application/x-tar");
-    else if (endsWith(path, "kml"))
-        httpd_resp_set_type(req, "application/vnd.google-earth.kml+xml");
-    else if (endsWith(path, "json"))
-        httpd_resp_set_type(req, "application/json");
-    else
-        httpd_resp_set_type(req, "application/octet-stream");
 
     ESP_LOGV(__FUNCTION__, "Sending %s willmove:%d", path, moveTheSucker);
     httpd_resp_set_hdr(req, "filename", path);
@@ -792,23 +784,56 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
     return ESP_OK;
 }
 
+esp_err_t add_type(httpd_req_t *req, const char* fileName) {
+    if (endsWith(fileName,"html") || (strcmp(fileName,"/")==0)) {
+        ESP_LOGI(__FUNCTION__,"html type for :%s",fileName);
+        return httpd_resp_set_type(req,"text/html");
+    }
+    if (endsWith(fileName,"js")) {
+        ESP_LOGI(__FUNCTION__,"js type for :%s",fileName);
+        return httpd_resp_set_type(req,"text/javascript");
+    }
+    if (endsWith(fileName,"css")) {
+        ESP_LOGI(__FUNCTION__,"css type for :%s",fileName);
+        return httpd_resp_set_type(req,"text/css");
+    }
+    if (endsWith(fileName,"txt")) {
+        ESP_LOGI(__FUNCTION__,"txt type for :%s",fileName);
+        return httpd_resp_set_type(req,"text/txt");
+    }
+    if (endsWith(fileName,"json")) {
+        ESP_LOGI(__FUNCTION__,"json type for :%s",fileName);
+        return httpd_resp_set_type(req,"text/json");
+    }
+    if (endsWith(fileName,"ico")) {
+        ESP_LOGI(__FUNCTION__,"ico type for :%s",fileName);
+        return httpd_resp_set_type(req,"image/x-icon");
+    }
+    if (endsWith(fileName,"png")) {
+        ESP_LOGI(__FUNCTION__,"png type for :%s",fileName);
+        return httpd_resp_set_type(req,"image/png");
+    }
+    ESP_LOGI(__FUNCTION__,"No type for :%s",fileName);
+    httpd_resp_set_type(req, "application/octet-stream");
+    return ESP_OK;
+}
+
 esp_err_t TheRest::app_handler(httpd_req_t *req)
 {
-    if (endsWith(req->uri, "favicon.ico"))
+    ESP_ERROR_CHECK(add_type(req,req->uri));
+    ESP_LOGI(__FUNCTION__,"File:%s",req->uri);
+    if (strcmp(req->uri, "/favicon.ico")==0)
     {
-        httpd_resp_set_type(req, "image/x-icon");
         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += (favicon_ico_end - favicon_ico_start);
         return httpd_resp_send(req, (const char *)favicon_ico_start, favicon_ico_end - favicon_ico_start);
     }
-    if (endsWith(req->uri, "app-min.js"))
+    if (strcmp(req->uri, "/dist/app-min.js")==0)
     {
-        httpd_resp_set_type(req, "text/javascript");
         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += (app_js_end - app_js_start - 1);
         return httpd_resp_send(req, (const char *)app_js_start, app_js_end - app_js_start - 1);
     }
-    if (endsWith(req->uri, "app-min.css"))
+    if (strcmp(req->uri, "/dist/app-min.css")==0)
     {
-        httpd_resp_set_type(req, "text/css");
         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += (app_css_end - app_css_start - 1);
         return httpd_resp_send(req, (const char *)app_css_start, app_css_end - app_css_start - 1);
     }
@@ -1161,9 +1186,17 @@ esp_err_t TheRest::download_handler(httpd_req_t *req)
         restInstance = TheRest::GetServer();
     }
 
-    int len = 0, curLen = -1;
-    //char *postData = (char *)dmalloc(JSON_BUFFER_SIZE);
-    MFile *dest = new MFile((char *)req->uri);
+    int len = 0, curLen = -1, fnameLen=httpd_req_get_hdr_value_len(req, "filename");
+    MFile *dest = NULL;
+    if (fnameLen++) {
+        char* fname = (char*)dmalloc(fnameLen);
+        httpd_req_get_hdr_value_str(req,"filename",fname,fnameLen);
+        dest = new MFile(fname);
+        ldfree(fname);
+    } else {
+        dest = new MFile(req->uri);
+    }
+    
     while ((curLen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE)) > 0)
     {
         ESP_LOGV(__FUNCTION__, "Chunck len:%d, cur:%d method:%d", curLen, len, req->method);
@@ -1177,6 +1210,7 @@ esp_err_t TheRest::download_handler(httpd_req_t *req)
     //if (endsWith(req->uri, "tar"))
     //    CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
     TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += 2;
+
     return httpd_resp_send(req, RESP_OK, 2);
 }
 

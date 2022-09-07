@@ -19,9 +19,6 @@ MFile::~MFile(){
     if (file && IsOpen()) {
         Close();
     }
-    if (name){
-        ldfree(name);
-    }
 }
 
 MFile::MFile()

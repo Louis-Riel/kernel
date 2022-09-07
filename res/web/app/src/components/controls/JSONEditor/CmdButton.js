@@ -1,6 +1,6 @@
 import {createElement as e, Component} from 'react';
 import { Button, FormControl, InputLabel, Input } from '@mui/material'
-import {wfetch, genUUID} from '../../utils/utils'
+import {wfetch, genUUID} from '../../../utils/utils'
 
 var httpPrefix = "";
 
@@ -42,7 +42,7 @@ export default class CmdButton extends Component {
                     type: typeof this.state[param] === "number" || !isNaN(this.state[param]) ? 'number' : 'text',
                     label: param,
                     value: this.state[param],
-                    onChange: elem => {this.state[param] = elem.target.type === 'number' ? parseInt(elem.target.value) : elem.target.value; this.setState(this.state)}
+                    onChange: elem => this.setState({[param]: elem.target.type === 'number' ? parseInt(elem.target.value) : elem.target.value})
                 })]);
     }
 

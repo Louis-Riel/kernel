@@ -1,7 +1,5 @@
 'use strict';
 
-var httpPrefix = "";//"http://localhost:81";
-var app = null;
 //#region utility functions
 export function genUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -146,37 +144,31 @@ export function wfetch(requestInfo, params) {
         }));
       }
   
-      try{
-        fetch(requestInfo,params).then(resp => {
-          var chipResponseAnim = getAnims().filter(anim => anim.type === "post" && anim.from === "chip");
-          var inSpot = getInSpot(chipResponseAnim, "chip");
-    
-          if (inSpot) {
-            inSpot.weight++;
-          } else {
-            getAnims().push({
-                type:"post",
-                from: "chip",
-                weight: 1,
-                lineColor: '#00ffff',
-                textColor: '#00ffff',
-                shadowColor: '#000000',
-                fillColor: '#004444',
-                startY: 25
-            });
-          }
-          resolve(resp);
-        })
-        .catch(err => {
-          reqAnim.color="red";
-          reqAnim.lineColor="red";
-          reject(err);
-        });
-      } catch(e) {
+      fetch(requestInfo,params).then(resp => {
+        var chipResponseAnim = getAnims().filter(anim => anim.type === "post" && anim.from === "chip");
+        var inSpot = getInSpot(chipResponseAnim, "chip");
+  
+        if (inSpot) {
+          inSpot.weight++;
+        } else {
+          getAnims().push({
+              type:"post",
+              from: "chip",
+              weight: 1,
+              lineColor: '#00ffff',
+              textColor: '#00ffff',
+              shadowColor: '#000000',
+              fillColor: '#004444',
+              startY: 25
+          });
+        }
+        resolve(resp);
+      })
+      .catch(err => {
         reqAnim.color="red";
         reqAnim.lineColor="red";
-        reject(e);
-      }
+        reject(err);
+      });
 
       if (window.animRenderer) {
         window.requestAnimationFrame(window.animRenderer);

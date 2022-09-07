@@ -17,12 +17,12 @@ export default class PinDriverFlags extends Component {
 
     getValue(state) {
         return state.digital_in.value | 
-               state.digital_out.value << 1 | 
-               state.pullup.value << 2 | 
-               state.pulldown.value << 3 | 
-               state.touch.value << 4 | 
-               state.wakeonhigh.value << 5 | 
-               state.wakeonlow.value << 6;
+               (state.digital_out.value << 1) | 
+               (state.pullup.value << 2) | 
+               (state.pulldown.value << 3) | 
+               (state.touch.value << 4) | 
+               (state.wakeonhigh.value << 5) | 
+               (state.wakeonlow.value << 6);
     }
 
     getFlagNames(value) {
@@ -38,7 +38,7 @@ export default class PinDriverFlags extends Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        if (this.props.value != this.getValue(this.state)) {
+        if (this.props.value !== this.getValue(this.state)) {
             this.props.onChange(this.getValue(this.state));
         }
     }
@@ -46,11 +46,11 @@ export default class PinDriverFlags extends Component {
     isValidChange(name, value) {
         var newState =  JSON.parse(JSON.stringify(this.state));
         newState[name].value = value;
-        if ((name == "digital_in" || name == "digital_out") && value) {
-            if ((name == "digital_in") && newState.digital_out.value) {
+        if ((name === "digital_in" || name === "digital_out") && value) {
+            if ((name === "digital_in") && newState.digital_out.value) {
                 this.state.digital_out.value = false;
             }
-            if ((name == "digital_out") && newState.digital_in.value) {
+            if ((name === "digital_out") && newState.digital_in.value) {
                 this.state.digital_in.value = false;
                 this.state.pullup.value = false;
                 this.state.pulldown.value = false;

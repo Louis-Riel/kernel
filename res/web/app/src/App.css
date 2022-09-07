@@ -66,3 +66,8 @@ button.MuiButtonBase-root.MuiButton-text {
   align-items: center;
   margin: 20px 5px;
 }
+
+.hidden {
+  visibility: hidden;
+  display: none !important;
+}

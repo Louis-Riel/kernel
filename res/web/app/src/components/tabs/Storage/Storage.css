@@ -16,7 +16,7 @@ table.greyGridTable tfoot {
     font-size: x-large;
 }
 
-table.greyGridTable caption {
+table.greyGridTable div caption {
     position: sticky;
     top: 0;
     height: 30px;
@@ -43,7 +43,7 @@ table.greyGridTable thead * {
     background: #181d17;
     border-bottom: 2px solid #c0c0c0;
     position: sticky;
-    top: 28px;
+    top: 0;
     color: aqua;
     padding-top: 8px;
 }
@@ -79,4 +79,43 @@ table.greyGridTable tbody tr td {
 
 table.greyGridTable tbody tr td a {
     color: #97ea44;
+}
+
+.file-operations {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.upload-progress {
+    border: 1px solid #535a54;
+    font-size: small;
+    padding: 1px 5px;
+}
+
+.MuiTooltip-tooltip {
+    border: solid 1px darkcyan;
+}
+
+span.MuiTooltip-arrow {
+    color: darkcyan;
+}
+
+.info {
+    color: greenyellow;
+}
+
+.debug {
+    color: whitesmoke;
+}
+
+.warning {
+    color: yellow;
+}
+
+.error {
+    color: red;
 }

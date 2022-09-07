@@ -1,5 +1,5 @@
-import {createElement as e, Component} from 'react';
-import {wfetch, genUUID} from '../../utils/utils';
+import {Component} from 'react';
+import {wfetch } from '../../utils/utils';
 import CryptoJS from 'crypto-js';
 
 var httpPrefix = "";
@@ -40,21 +40,22 @@ export default class FirmwareUpdater extends Component {
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        if ((this.state.loaded == "Flashing") && (this.state.waiter == null)) {
+        if ((this.state.loaded === "Flashing") && (this.state.waiter === null)) {
             this.waitForDevFlashing();
         }
 
         if (this.state.firmware && !this.state.md5) {
-            this.state.md5 = "loading";
+            this.setState({md5 : "loading"});
             var reader = new FileReader();
             reader.onload = () => {
                 var res = reader.resultString || reader.result;
                 var md5 = CryptoJS.algo.SHA256.create();
                 md5.update(CryptoJS.enc.Latin1.parse(reader.result));
-                this.state.fwdata = new Uint8Array(this.state.firmware.size);
+                var fwdata = new Uint8Array(this.state.firmware.size);
                 for (var i = 0; i < res.length; i++) {
-                    this.state.fwdata[i] = res.charCodeAt(i);
+                    fwdata[i] = res.charCodeAt(i);
                 }
+                this.setState({fwdata : fwdata});
 
                 this.setState({
                     md5: md5.finalize().toString(CryptoJS.enc.Hex),
@@ -81,12 +82,14 @@ export default class FirmwareUpdater extends Component {
     }
 
     render() {
-        return e("form", { key: genUUID(), onSubmit: this.UploadFirmware.bind(this) },
-            e("fieldset", { key: genUUID() }, [
-                e("input", { key: genUUID(), type: "file", name: "firmware", onChange: event => this.setState({ firmware: event.target.files[0] }) }),
-                e("button", { key: genUUID() }, "Upload"),
-                e("div", { key: genUUID() }, this.state?.loaded)
-            ])
-        );
+        return (
+            <form onSubmit={this.UploadFirmware.bind(this)}>
+                <fieldset>
+                    <input type= "file" name="firmware" multiple onChange={event => this.setState({ firmware: event.target.files[0] }) }></input>
+                    <button>Upload</button>
+                    <div>{this.state?.loaded}</div>
+                </fieldset>
+            </form>
+        )       
     }
 }

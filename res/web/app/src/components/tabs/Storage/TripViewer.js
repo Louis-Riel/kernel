@@ -21,7 +21,7 @@ export default class TripViewer extends Component {
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        if (!prevProps.points || !prevProps.points.length || !prevProps.points.length || prevProps.points.length != this.props.points.length){
+        if (!prevProps.points || !prevProps.points.length || !prevProps.points.length || prevProps.points.length !== this.props.points.length){
             this.firstRender=true;
         }
         this.mapCanvas = this.mapWidget.getContext("2d");                    
@@ -156,7 +156,7 @@ export default class TripViewer extends Component {
             this.popupCanvas.font = "12px Helvetica";
             var txtSz = this.popupCanvas.measureText(new Date(`${this.focused.timestamp} UTC`).toLocaleString());
             var props =  Object.keys(this.focused)
-                               .filter(prop => prop != "timestamp" && !prop.match(/.*tile.*/i));
+                               .filter(prop => prop !== "timestamp" && !prop.match(/.*tile.*/i));
 
             var boxHeight=50 + (9*props.length);
             var boxWidth=txtSz.width+10;
@@ -245,20 +245,20 @@ export default class TripViewer extends Component {
             (this.getClientX(point) <= (event.offsetX + margin)) &&
             (this.getClientY(point) >= (event.offsetY - margin)) &&
             (this.getClientY(point) <= (event.offsetY + margin)));
-        if (focused != this.focused){
+        if (focused !== this.focused){
             this.focused=focused;
             window.requestAnimationFrame(this.drawPointPopup.bind(this));
         }
     }
 
     getPropValue(name,val) {
-        if (name == "speed") {
+        if (name === "speed") {
             return `${Math.floor(1.852*val/100.0)} km/h`;
         }
-        if (name == "altitude") {
+        if (name === "altitude") {
             return `${Math.floor(val/100)}m`;
         }
-        if ((name == "longitude") || (name == "latitude")) {
+        if ((name === "longitude") || (name === "latitude")) {
             return val;
         }
         return Math.round(val);
