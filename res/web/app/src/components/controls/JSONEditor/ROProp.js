@@ -1,7 +1,12 @@
-import {createElement as e, Component} from 'react';
+import {createElement as e, Component, lazy, Suspense} from 'react';
 import {Tooltip} from '@mui/material';
-import * as Recharts from "recharts";
 import { IsNumberValue, isFloat, genUUID, IsBooleanValue, IsDatetimeValue, degToRad} from '../../../utils/utils';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faEraser } from '@fortawesome/free-solid-svg-icons';
+import { faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { faLineChart } from '@fortawesome/free-solid-svg-icons';
+import * as Recharts from "recharts";
+
 
 var httpPrefix = "";
 
@@ -159,7 +164,7 @@ export default class ROProp extends Component {
                       width: "200",
                       height: "100",
                       title: this.state.graph ? "Close" : this.getReport(true)
-                    },e('i',{key:"thei", onClick: elem=>this.setState({"graph":this.state.graph?false:true})}, e('svg',{className: "reportbtn fa fa-line-chart", key: "graphbtn"}))
+                    },e('i',{key:"thei", onClick: elem=>this.setState({"graph":this.state.graph?false:true})}, <FontAwesomeIcon className='reportbtn' icon={faLineChart} />)
                   );
         }
         return ret;
@@ -173,7 +178,7 @@ export default class ROProp extends Component {
     }
 
     getReport(summary) {
-        return [ !summary && this.state?.lastStates?.length ? e('i',{key:'thei', onClick: elem=>this.setState({"lastStates":[],"graph":false})},e('svg',{className: "reportbtn fa fa-eraser", key: "clear data"})) : null,
+        return [ !summary && this.state?.lastStates?.length ? e('i',{key:'thei', onClick: elem=>this.setState({"lastStates":[],"graph":false})},<FontAwesomeIcon className='reportbtn' icon={faEraser} />) : null,
                 e(Recharts.ResponsiveContainer,{key:"chartcontainer", className: "chartcontainer"},
                 e(Recharts.LineChart,{key:"chart", data: this.state.lastStates, className: "chart", margin: {left:20}},[
                     e(Recharts.Line, {key:"line", dot: !summary, type:"monotone", dataKey:"value", stroke:"#8884d8", isAnimationActive: false}),

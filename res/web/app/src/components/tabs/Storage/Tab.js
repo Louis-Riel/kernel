@@ -119,7 +119,7 @@ export default class StorageViewer extends Component {
 
     render() {
         if (!this.state?.files) {
-            return e("div", { key: "Loading" }, "Loading......");
+            return <FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />;
         } else {
             return e("div", { key: "Files", 
                 className: `file-table ${this.state.loaded?"":"loading"}` }, 

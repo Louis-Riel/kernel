@@ -80,3 +80,14 @@ div.edior-pannel>button.MuiButton-root {
     border: none;
     background:transparent
 }
+
+li>label {
+    position: absolute !important;
+    left: 0px;
+    top: 0px;
+    transform: translate(26px, 0px) scale(0.75);
+}
+
+div.MuiListItemIcon-root>svg {
+    color: aquamarine;
+}

@@ -1,9 +1,16 @@
-import {createElement as e, Component} from 'react';
-import AnalogPinConfig from './AnalogPinConfig';
-import DigitalPinConfig from './DigitalPinConfig';
-import ConfigItem from './ConfigItem';
+import {createElement as e, Component, lazy, Suspense} from 'react';
 import { Tabs, Tab, Button } from '@mui/material';
 import { wfetch } from '../../../../utils/utils';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
+import { faPlusSquare } from '@fortawesome/free-solid-svg-icons'
+import { faClone } from '@fortawesome/free-solid-svg-icons'
+import { faTrashCan } from '@fortawesome/free-solid-svg-icons'
+
+
+const AnalogPinConfig = lazy(() => import('./AnalogPinConfig'));
+const DigitalPinConfig = lazy(() => import('./DigitalPinConfig'));
+const ConfigItem = lazy(() => import('./ConfigItem'));
 
 var httpPrefix = "";
 
@@ -42,7 +49,7 @@ export default class ConfigGroup extends Component {
         if (this.props.config && this.state.configTemplates) {
             return this.renderArrayTypes();
         } else {
-            return e("div", {key: "loading"}, "Loading...");
+            return <FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />;
         }
     }
 
@@ -54,12 +61,8 @@ export default class ConfigGroup extends Component {
                 value: this.state.currentTab,
                 onChange: (_, v) => { this.setState({ currentTab: v }); },
                 key: "ConfigTypes"
-            }, [...tabs.map(this.renderTypeTab.bind(this)),
-            e(Tab, { key: "full-config", label: "Configuration", value: "Configuration" })]),
-            tabs.map(this.renderConfigType.bind(this)),
-            e("div",{key:`config-control-panel`,className:`edior-pannel ${this.state.currentTab === "Configuration" ? "":"hidden"}`},
-                    this.props.fullEditor())
-            
+            }, tabs.map(this.renderTypeTab.bind(this))),
+            tabs.map(this.renderConfigType.bind(this))
         ];
     }
 
@@ -71,7 +74,7 @@ export default class ConfigGroup extends Component {
 
     renderConfigType(key) {
         return e("div",{key:`${key.class}-control-panel`,className:`edior-pannel ${this.state.currentTab === key.collectionName ? "":"hidden"}`},[
-            e(Button, { key: "add", onClick: evt=> {this.props.config[key.collectionName] ? this.props.config[key.collectionName].push({}) : this.props.config[key.collectionName] = [{}]; this.props.onChange()} }, e("i",{key:"add", className:"fa fa-plus-square"})),
+            e(Button, { key: "add", onClick: evt=> {this.props.config[key.collectionName] ? this.props.config[key.collectionName].push({}) : this.props.config[key.collectionName] = [{}]; this.props.onChange()} }, <FontAwesomeIcon icon={faPlusSquare} />),
             e("div",{key:"items", className:`config-cards`}, this.props.config[key.collectionName] ? Object.keys(this.props.config[key.collectionName]).map(idx =>
                 this.renderEditor(key,this.props.config[key.collectionName],idx)) : null)
         ]);
@@ -83,9 +86,11 @@ export default class ConfigGroup extends Component {
 
     renderEditor(key, item, idx) {
         return  e("div",{key:`${key.collectionName}-${idx}-control-editor`,className:`control-editor`},[
-                    e( this.supportedTypes[key.collectionName]?.component || ConfigItem, { key: key.collectionName + idx, value: key, role: "tabpanel", item: item[idx], onChange: this.props.onChange}),
-                    e(Button, { key: "dup", onClick: evt=> {this.props.config[key.collectionName].push(JSON.parse(JSON.stringify(this.props.config[key.collectionName][idx]))); this.props.onChange()} }, e("i",{key:"copy", className:"fa fa-clone"})),
-                    e(Button, { key: "delete", onClick: evt=> {this.props.config[key.collectionName].splice(idx,1); this.props.onChange()} }, e("i",{key:"copy", className:"fa fa-trash"})),
+                    <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
+                        {e( this.supportedTypes[key.collectionName]?.component || ConfigItem, { key: key.collectionName + idx, value: key, role: "tabpanel", item: item[idx], onChange: this.props.onChange})}
+                    </Suspense>,
+                    e(Button, { key: "dup", onClick: evt=> {this.props.config[key.collectionName].push(JSON.parse(JSON.stringify(this.props.config[key.collectionName][idx]))); this.props.onChange()} }, <FontAwesomeIcon icon={faClone} />),
+                    e(Button, { key: "delete", onClick: evt=> {this.props.config[key.collectionName].splice(idx,1); this.props.onChange()} }, <FontAwesomeIcon icon={faTrashCan} />),
                 ]);
     }
 

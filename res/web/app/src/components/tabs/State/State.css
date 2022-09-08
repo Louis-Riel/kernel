@@ -41,3 +41,7 @@ ul.MuiMenu-list >li.Mui-selected {
 ul.MuiMenu-list >li:hover {
     background-color: #394836c9;
 }
+
+div.subitem>div>svg {
+    margin-right: 20px;
+}

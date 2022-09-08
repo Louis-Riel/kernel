@@ -1,6 +1,8 @@
 import {Component} from 'react';
-import {wfetch } from '../../utils/utils';
+import {wfetch } from '../../../utils/utils';
 import CryptoJS from 'crypto-js';
+import { Button } from '@mui/material';
+import './FirmwareUpdater.css';
 
 var httpPrefix = "";
 
@@ -10,15 +12,14 @@ export default class FirmwareUpdater extends Component {
         this.state = {};
     }
 
-    UploadFirmware(form) {
-        form.preventDefault();
+    UploadFirmware() {
         this.setState({ loaded: `Sending ${this.state.len} firmware bytes` })
         if (this.state.fwdata && this.state.md5) {
             return wfetch(`${httpPrefix}/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
                 method: 'post',
                 body: this.state.fwdata
             }).then(res => res.text())
-                .then(res => this.setState({ loaded: res }));
+              .then(res => this.setState({ loaded: res }));
         }
     }
 
@@ -32,7 +33,7 @@ export default class FirmwareUpdater extends Component {
             clearTimeout(stopAbort);
             return res.json()
         })
-        .then(state => this.setState({ waiter: null, loaded: `Loaded version ${state.build.ver} built on ${state.build.date}` }))
+        .then(state => this.setState({ waiter: null, loaded: `Loaded version built on ${state.build.date}` }))
         .catch(err => {
             clearTimeout(stopAbort);
             this.setState({ waiter: setTimeout(() => this.waitForDevFlashing(), 500) });
@@ -55,11 +56,10 @@ export default class FirmwareUpdater extends Component {
                 for (var i = 0; i < res.length; i++) {
                     fwdata[i] = res.charCodeAt(i);
                 }
-                this.setState({fwdata : fwdata});
 
                 this.setState({
                     md5: md5.finalize().toString(CryptoJS.enc.Hex),
-                    fwdata: this.state.fwdata,
+                    fwdata: fwdata,
                     len: this.state.firmware.size
                 });
                 console.log(JSON.stringify(this.state.md5));
@@ -83,13 +83,34 @@ export default class FirmwareUpdater extends Component {
 
     render() {
         return (
-            <form onSubmit={this.UploadFirmware.bind(this)}>
-                <fieldset>
-                    <input type= "file" name="firmware" multiple onChange={event => this.setState({ firmware: event.target.files[0] }) }></input>
-                    <button>Upload</button>
-                    <div>{this.state?.loaded}</div>
-                </fieldset>
-            </form>
+            <div className="firmware_updater">
+                <label for="firmware-upload" class="custom-file-upload">
+                 <Button onClick={_=>this.HandleClick()}>
+                    {this.state.fwdata?`Upload${this.state?.loaded?`(${this.state.loaded})`:``}`:"Update Firmware"}
+                 </Button>
+                </label>
+                <input id="firmware-upload" type= "file" name="firmware" multiple onChange={event => this.setState({ firmware: event.target.files[0] }) }></input>
+            </div>
         )       
+    }
+
+    HandleClick() {
+        if (this.state.fwdata) { 
+            if ((this.state.loaded.indexOf("Loaded version")===0)||
+                (this.state.loaded.indexOf("Not new")===0) ||
+                (this.state.loaded.indexOf("Bad Checksum")===0)) {
+                this.setState({
+                    loaded:"",
+                    firmware: undefined,
+                    md5: undefined,
+                    waiter: null,
+                    fwdata: undefined
+                });
+            } else if (this.state.loaded.indexOf("100% loaded")===0) {
+                this.UploadFirmware();
+            }
+        } else {
+            document.getElementById("firmware-upload").click()
+        }
     }
 }

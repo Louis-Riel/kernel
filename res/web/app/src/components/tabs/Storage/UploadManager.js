@@ -1,6 +1,9 @@
 import { createRef, Component} from 'react';
 import { Button, ClickAwayListener, Tooltip, Zoom } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faFolderPlus } from '@fortawesome/free-solid-svg-icons'
+import { faFileArrowDown } from '@fortawesome/free-solid-svg-icons'
+
 import { wfetch } from '../../../utils/utils'
 
 export default class UploadManager extends Component {
@@ -66,7 +69,7 @@ export default class UploadManager extends Component {
             <Button
                 className="file-operation"
                 onClick={_ => this.hiddenFileInput.current.click()}>
-                <FontAwesomeIcon icon={this.props.target === "file" ? "file" : "folder"}></FontAwesomeIcon>
+                <FontAwesomeIcon icon={this.props.target === "file" ? faFileArrowDown : faFolderPlus}></FontAwesomeIcon>
             </Button>
         </div>;
     }

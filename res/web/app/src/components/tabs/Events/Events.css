@@ -131,11 +131,12 @@ details {
 }
 
 .description {
+    align-content: center;
+    align-items: center;
+    -webkit-column-gap: 3px;
+    column-gap: 13px;
     display: flex;
     flex-direction: row;
     flex-wrap: nowrap;
-    align-content: center;
-    justify-content: center;
-    align-items: center;
-    column-gap: 3px;
+    justify-content: space-between;
 }

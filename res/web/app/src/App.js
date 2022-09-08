@@ -76,6 +76,7 @@ export default function BasicTabs() {
     <Box class="App">
       <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
         <WebSocketManager
+          enabled={window.location.pathname.indexOf("sdcard") === -1}
           stateCBFns={stateCBFns}
           logCBFns={logCBFns}
           eventCBFns={eventCBFns}
@@ -122,6 +123,7 @@ export default function BasicTabs() {
           <ConfigPage 
             onChangeFolder={(folder)=>setPath(folder)}
             hasLoaded={value===2}
+            selectedDeviceId="current"
           ></ConfigPage>
         </Suspense>
       </div>

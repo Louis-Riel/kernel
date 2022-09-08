@@ -8,9 +8,9 @@ export default class WebSocketManager extends Component {
     constructor(props) {
         super(props);
         this.widget = createRef();
-        this.state = {autoRefresh:true};
+        this.state = {enabled:this.props.enabled};
         window.anims=getAnims();
-        if (this.state?.autoRefresh && (httpPrefix || window.location.hostname)) {
+        if (this.state?.enabled && (httpPrefix || window.location.hostname)) {
             this.openWs();
         }
     }
@@ -84,7 +84,7 @@ export default class WebSocketManager extends Component {
         this.canvas.lineWidth = 2;
         this.canvas.shadowBlur = 2;
         this.canvas.shadowColor = '#002222';
-        this.canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#000000") : "#000000"
+        this.canvas.fillStyle = this.state?.enabled ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#000000") : "#000000"
         this.roundedRectagle(startX, startY, boxWidht, boxHeight, cornerSize);
         this.canvas.fill();
         if (this.state?.lanDevices?.length) {
@@ -148,7 +148,7 @@ export default class WebSocketManager extends Component {
 
     closeWs() {
         if (this.ws) {
-            this.state.autoRefresh=false;
+            this.state.enabled=false;
             this.ws.close();
             this.ws = null;
             window.requestAnimationFrame(this.drawDidget.bind(this));
@@ -157,7 +157,7 @@ export default class WebSocketManager extends Component {
 
     startWs() {
         var ws = this.ws = new WebSocket("ws://" + (httpPrefix === "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
-        var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
+        var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 10000);
         ws.onmessage = (event) => {
           stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
         };
@@ -176,7 +176,7 @@ export default class WebSocketManager extends Component {
         clearTimeout(stopItWithThatShit);
         this.setState({connected:false,connecting:false});
         window.requestAnimationFrame(window.animRenderer);
-        if (this.state.autoRefresh)
+        if (this.state.enabled)
           this.openWs();
     }
     
@@ -265,8 +265,8 @@ export default class WebSocketManager extends Component {
     }
     
     handleClick(event) {
-        this.state.autoRefresh = !this.state.autoRefresh;
-        this.state.autoRefresh ? this.openWs() : this.closeWs();
+        this.state.enabled = !this.state.enabled;
+        this.state.enabled ? this.openWs() : this.closeWs();
     }
 
     processMessage(stopItWithThatShit, event, ws) {

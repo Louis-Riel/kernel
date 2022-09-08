@@ -21,7 +21,7 @@ import './State.css';
 
 var httpPrefix = "";
 const LocalJSONEditor = lazy(() => import('../../controls/JSONEditor/JSONEditor'));
-const FirmwareUpdater = lazy(() => import('../../controls/FirmwareUpdater'));
+const FirmwareUpdater = lazy(() => import('../../controls/FirmwareUpdater/FirmwareUpdater'));
 
 
 export default class StatusPage extends Component {
@@ -99,13 +99,12 @@ export default class StatusPage extends Component {
 
     refreshStatus(stat) {
         if (stat){
-            this.filterProperties(stat).then(stat=>{
-                const flds = Object.keys(stat);
-                var status = this.state?.status || {};
-                for (const fld in flds) {
-                    status[flds[fld]] = stat[flds[fld]];    
-                }
-                this.setState({status:status});
+            this.filterProperties(stat)
+                .then(stat=>{
+                Object.entries(stat)
+                      .filter(stat => this.state.status[stat[0]])
+                      .forEach(stat => this.state.status[stat[0]] = stat[1]);
+                this.setState({status:this.state.status});
             });
         } else {
             this.updateAppStatus();
@@ -128,19 +127,19 @@ export default class StatusPage extends Component {
             this.updateStatus(requests.pop(), undefined, newState).then(_res => {
                 //(timer);
                 document.getElementById("Status").style.opacity = 1;
+                this.setState({
+                    error: null,
+                    status: Object.keys(this.state.status)
+                                  .reduce((pv,cv)=>{
+                                    pv[cv]=this.state.status[cv]; 
+                                    pv[cv].value= Array.isArray(newState[cv]?.value) ? 
+                                                                    {[cv]:newState[cv].value} : 
+                                                                    (newState[cv]?.value || pv[cv]?.value);
+                                    return pv;},{})
+                });
+
                 if (requests.length > 0) {
                     this.updateStatuses(requests, newState);
-                } else {
-                    this.setState({
-                        error: null,
-                        status: Object.keys(this.state.status)
-                                      .reduce((pv,cv)=>{
-                                        pv[cv]=this.state.status[cv]; 
-                                        pv[cv].value= Array.isArray(newState[cv]?.value) ? 
-                                                                        {[cv]:newState[cv].value} : 
-                                                                        (newState[cv]?.value || pv[cv]?.value);
-                                        return pv;},{})
-                    });
                 }
             }).catch(err => {
                 document.getElementById("Status").style.opacity = 0.5
@@ -253,7 +252,8 @@ export default class StatusPage extends Component {
             component="nav"
             aria-labelledby="nested-list-subheader">
                 {
-                    Object.keys(this.state.status).sort((a,b)=>a.localeCompare(b)).map(fld => this.renderEditorGroup(fld))
+                    Object.keys(this.state.status).sort((a,b)=>a.localeCompare(b))
+                                                  .map(fld => this.renderEditorGroup(fld))
                 }
             </List>
     }
@@ -269,7 +269,6 @@ export default class StatusPage extends Component {
     renderGroup(fld) {
         return <div>
             <ListItemButton onClick={_ => {
-                this.state.status[fld] || (this.state.status[fld] = {});
                 this.state.status[fld].opened = !this.state.status[fld]?.opened;
                 this.setState({ status: this.state.status });
             } }>
@@ -317,7 +316,6 @@ export default class StatusPage extends Component {
     renderComponents(fld) {
         return <div>
             <ListItemButton onClick={_ => {
-                this.state.status[fld] || (this.state.status[fld] = {});
                 this.state.status[fld].opened = !this.state.status[fld]?.opened;
                 this.setState({ status: this.state.status });
             } }>

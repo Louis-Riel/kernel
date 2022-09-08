@@ -2,6 +2,8 @@ import {createElement as e, Component} from 'react';
 import './Events.css';
 import { wfetch,fromVersionedToPlain } from '../../../utils/utils';
 import { LiveEventPannel } from './LiveEventPannel';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
 
 export var httpPrefix = "";
 
@@ -43,7 +45,7 @@ export default class EventsPage extends Component {
                 e(LiveEventPannel,{ key: "eventpannel",registerEventCallback:this.props.registerEventCallback})
             ];
         } else {
-            return e("div",{key: "loading"},"Loading.....");
+            return <FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />;
         }
     }
 }
