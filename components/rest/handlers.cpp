@@ -786,34 +786,38 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
 
 esp_err_t add_type(httpd_req_t *req, const char* fileName) {
     if (endsWith(fileName,"html") || (strcmp(fileName,"/")==0)) {
-        ESP_LOGI(__FUNCTION__,"html type for :%s",fileName);
+        ESP_LOGV(__FUNCTION__,"html type for :%s",fileName);
         return httpd_resp_set_type(req,"text/html");
     }
     if (endsWith(fileName,"js")) {
-        ESP_LOGI(__FUNCTION__,"js type for :%s",fileName);
+        ESP_LOGV(__FUNCTION__,"js type for :%s",fileName);
         return httpd_resp_set_type(req,"text/javascript");
     }
     if (endsWith(fileName,"css")) {
-        ESP_LOGI(__FUNCTION__,"css type for :%s",fileName);
+        ESP_LOGV(__FUNCTION__,"css type for :%s",fileName);
         return httpd_resp_set_type(req,"text/css");
     }
     if (endsWith(fileName,"txt")) {
-        ESP_LOGI(__FUNCTION__,"txt type for :%s",fileName);
+        ESP_LOGV(__FUNCTION__,"txt type for :%s",fileName);
         return httpd_resp_set_type(req,"text/txt");
     }
     if (endsWith(fileName,"json")) {
-        ESP_LOGI(__FUNCTION__,"json type for :%s",fileName);
+        ESP_LOGV(__FUNCTION__,"json type for :%s",fileName);
         return httpd_resp_set_type(req,"text/json");
     }
     if (endsWith(fileName,"ico")) {
-        ESP_LOGI(__FUNCTION__,"ico type for :%s",fileName);
+        ESP_LOGV(__FUNCTION__,"ico type for :%s",fileName);
         return httpd_resp_set_type(req,"image/x-icon");
     }
     if (endsWith(fileName,"png")) {
-        ESP_LOGI(__FUNCTION__,"png type for :%s",fileName);
+        ESP_LOGV(__FUNCTION__,"png type for :%s",fileName);
         return httpd_resp_set_type(req,"image/png");
     }
-    ESP_LOGI(__FUNCTION__,"No type for :%s",fileName);
+    if (endsWith(fileName,"svg")) {
+        ESP_LOGV(__FUNCTION__,"png type for :%s",fileName);
+        return httpd_resp_set_type(req,"image/svg+xml");
+    }
+    ESP_LOGV(__FUNCTION__,"No type for :%s",fileName);
     httpd_resp_set_type(req, "application/octet-stream");
     return ESP_OK;
 }
@@ -821,7 +825,7 @@ esp_err_t add_type(httpd_req_t *req, const char* fileName) {
 esp_err_t TheRest::app_handler(httpd_req_t *req)
 {
     ESP_ERROR_CHECK(add_type(req,req->uri));
-    ESP_LOGI(__FUNCTION__,"File:%s",req->uri);
+    ESP_LOGV(__FUNCTION__,"File:%s",req->uri);
     if (strcmp(req->uri, "/favicon.ico")==0)
     {
         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += (favicon_ico_end - favicon_ico_start);
@@ -1426,7 +1430,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                             else
                             {
                                 fclose(fw);
-                                ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d", len);
+                                ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d.", len);
                                 deinitSpiff(false);
                                 return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Error with weird md5 len");
                             }
