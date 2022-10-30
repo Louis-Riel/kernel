@@ -20,11 +20,9 @@ export default class LocalJSONEditor extends Component {
     }
 
     componentWillUnmount() {
-        this.mounted=false;
-    }
-
-    componentDidMount() {
-        this.mounted=true;
+        if (this.props.unRegisterEventInstanceCallback && this.props.name) {
+            this.props.unRegisterEventInstanceCallback(this.ProcessEvent.bind(this),`${this.props.class}-${this.props.name}`);
+        }
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
@@ -34,7 +32,7 @@ export default class LocalJSONEditor extends Component {
     }
 
     ProcessEvent(evt) {
-        if (this.mounted && evt?.data){
+        if (evt?.data){
             if (evt.data?.name === this.props.name){
                 this.setState({json: evt.data});
             }
@@ -129,6 +127,7 @@ export default class LocalJSONEditor extends Component {
                 path: `${this.props.path}/${fld}`,
                 name: fld,
                 label: fld,
+                selectedDevice: this.props.selectedDevice,
                 editable: this.props.editable,
                 sortable: this.props.sortable,
                 json: json[fld],
@@ -145,6 +144,7 @@ export default class LocalJSONEditor extends Component {
                 name: fld,
                 path: `${this.props.path}/${fld}`,
                 label: fld,
+                selectedDevice: this.props.selectedDevice,
                 json: json[fld],
                 registerEventInstanceCallback: this.props.registerEventInstanceCallback,
                 editable: this.props.editable,
@@ -154,7 +154,13 @@ export default class LocalJSONEditor extends Component {
     }
 
     renderCommands(fld, json) {
-        return { fld: fld, element: e(StateCommands, { key: `${fld}cmds`, name: json["name"], commands: json[fld], onSuccess: this.props.updateAppStatus }) };
+        return { fld: fld, element: e(StateCommands, { 
+            key: `${fld}cmds`, 
+            name: json["name"], 
+            selectedDevice: this.props.selectedDevice,
+            commands: json[fld], 
+            onSuccess: this.props.updateAppStatus 
+        }) };
     }
 
     renderVersioned(json) {

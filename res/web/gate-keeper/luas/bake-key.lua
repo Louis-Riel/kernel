@@ -58,7 +58,7 @@ function GetKey()
     local numKeys=0
     for key, value in pairs(ngx.shared.dskeys:get_keys()) do
         local path = string.gsub(value,"[^:]+:","")
-        if string.find(ngx.req.get_uri_args().path, path) then
+        if string.match(ngx.req.get_uri_args().path, path) then
             keyCandidates[numKeys] = value
             numKeys = numKeys + 1
         end

@@ -7,12 +7,11 @@ import { SFile } from './SFile'
 
 const UploadManager = lazy(() => import('./UploadManager'));
 
-export var httpPrefix = "";
-
 export default class StorageViewer extends Component {
     constructor(props) {
         super(props);
         this.state = { 
+            httpPrefix:"",
             loaded: false, 
             files: null,
             cache:{images:{}},
@@ -35,7 +34,7 @@ export default class StorageViewer extends Component {
         if (this.mounted){
             fileStatsToFetch.forEach(fileToFetch => {
                 this.registerFileWork(new Promise((resolve, reject) => {
-                    wfetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
+                    wfetch(`${this.state.httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
                         method: 'post'
                     }).then(data => {
                         data.json().then(jdata => {
@@ -51,34 +50,32 @@ export default class StorageViewer extends Component {
     }
 
     fetchFiles() {
-        if (window.location.host || httpPrefix){
-            var abort = new AbortController();
-        
-            var quitItNow = setTimeout(() => abort.abort(), 8000);
-            wfetch(`${httpPrefix}/files` + this.props.path, {
-                method: 'post',
-                signal: abort.signal
-            }).then(data => {
-                clearInterval(quitItNow);
-                data.json()
-                    .then(files => files.sort((f1, f2) => {
-                        if (f1.ftype !== f2.ftype) {
-                            return f1.ftype === "folder" ? 1 : -1;
-                        }
-                        return f1.name === f2.name ? 0 : f1.name > f2.name ? 1 : -1;
-                    })).then(files => {
-                        if (this.mounted){
-                            this.setState({ loaded: true, files: files, total: files.reduce((e1,e2) => e1 + e2.size,0) });
-                            var fileStatsToFetch = files.filter(file => file.ftype === "file" && !file.size);
-                            for (var idx = 0; idx < Math.min(3, fileStatsToFetch.length); idx++) {
-                                if (fileStatsToFetch.length) {
-                                    this.GetFileStat(fileStatsToFetch);
-                                }
+        var abort = new AbortController();
+    
+        var quitItNow = setTimeout(() => abort.abort(), 8000);
+        wfetch(`${this.state.httpPrefix}/files` + this.props.path, {
+            method: 'post',
+            signal: abort.signal
+        }).then(data => {
+            clearInterval(quitItNow);
+            data.json()
+                .then(files => files.sort((f1, f2) => {
+                    if (f1.ftype !== f2.ftype) {
+                        return f1.ftype === "folder" ? 1 : -1;
+                    }
+                    return f1.name === f2.name ? 0 : f1.name > f2.name ? 1 : -1;
+                })).then(files => {
+                    if (this.mounted){
+                        this.setState({ loaded: true, files: files, total: files.reduce((e1,e2) => e1 + e2.size,0) });
+                        var fileStatsToFetch = files.filter(file => file.ftype === "file" && !file.size);
+                        for (var idx = 0; idx < Math.min(3, fileStatsToFetch.length); idx++) {
+                            if (fileStatsToFetch.length) {
+                                this.GetFileStat(fileStatsToFetch);
                             }
                         }
-                    });
-            }).catch(console.error);
-        }
+                    }
+                });
+        }).catch(console.error);
     }
 
     componentDidUpdate(prevProps, prevState) {
@@ -88,6 +85,21 @@ export default class StorageViewer extends Component {
 
         if (prevProps && (prevProps.path !== this.props.path)) {
             this.fetchFiles();
+        }
+
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+            } else {
+                this.setState({httpPrefix:""});
+            }
+        }
+        if (prevState.httpPrefix !== this.state.httpPrefix) {
+            if ((this.state.path || '/') === "/") {
+                this.fetchFiles();
+            } else {
+                this.props.onChangeFolder&&this.props.onChangeFolder("/");
+            }
         }
     }
 
@@ -147,6 +159,7 @@ export default class StorageViewer extends Component {
                     <SFile
                         file={file}
                         cache={this.state.cache}
+                        selectedDevice={this.props.selectedDevice}
                         path= {this.props.path}
                         registerFileWork= {this.registerFileWork.bind(this)}
                         onChangeFolder= {(folder) => this.props.onChangeFolder(folder)}
@@ -160,12 +173,14 @@ export default class StorageViewer extends Component {
                       {this.props.path}
                       <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
                         <UploadManager 
+                                selectedDevice={this.props.selectedDevice}
                                 destination={this.props.path}
                                 target="file">
                         </UploadManager>
                       </Suspense>
                       <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
                         <UploadManager 
+                                selectedDevice={this.props.selectedDevice}
                                 destination={this.props.path}
                                 target="folder">
                         </UploadManager>

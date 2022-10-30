@@ -12,8 +12,6 @@ const AnalogPinConfig = lazy(() => import('./AnalogPinConfig'));
 const DigitalPinConfig = lazy(() => import('./DigitalPinConfig'));
 const ConfigItem = lazy(() => import('./ConfigItem'));
 
-var httpPrefix = "";
-
 export default class ConfigGroup extends Component {
     constructor(props) {
         super(props);
@@ -29,13 +27,24 @@ export default class ConfigGroup extends Component {
             }
         };
         this.state = {
+            httpPrefix:"",
             currentTab: undefined
         };
-        wfetch(`${httpPrefix}/templates/config`,{
+        wfetch(`${this.state.httpPrefix}/templates/config`,{
             method: 'post'
         }).then(data => data.json())
           .then(this.updateConfigTemplates.bind(this))
           .catch(console.error);
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+            } else {
+                this.setState({httpPrefix:""});
+            }
+        }
     }
 
     updateConfigTemplates(configTemplates) {

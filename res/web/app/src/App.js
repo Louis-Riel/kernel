@@ -1,11 +1,8 @@
-import logo from './logo.svg';
 import './App.css';
 
 import {useState, lazy, Suspense} from 'react';
-import PropTypes from 'prop-types';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner';
@@ -16,32 +13,7 @@ const ConfigPage = lazy(() => import('./components/tabs/Config/Tab'));
 const WebSocketManager = lazy(() => import('./components/controls/WebSocket/WebSocketManager'));
 const LogLines = lazy(() => import('./components/tabs/Logs/Tab'));
 const EventsPage = lazy(() => import('./components/tabs/Events/Tab'));
-
-function TabPanel(props) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`simple-tabpanel-${index}`}
-      aria-labelledby={`simple-tab-${index}`}
-      {...other}
-    >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          <Typography>{children}</Typography>
-        </Box>
-      )}
-    </div>
-  );
-}
-
-TabPanel.propTypes = {
-  children: PropTypes.node,
-  index: PropTypes.number.isRequired,
-  value: PropTypes.number.isRequired,
-};
+const DeviceList = lazy(() => import('./components/controls/DeviceList/DeviceList'));
 
 function a11yProps(index) {
   return {
@@ -56,15 +28,16 @@ export default function BasicTabs() {
   const [stateCBFns, updateStateCallbacks] = useState([]);
   const [logCBFns, updateLogCallbacks] = useState([]);
   const [eventCBFns, updateEventCallbacks] = useState([]);
+  const [selectedDevice, updateSelectedDevice] = useState({});
   const [tabStates, updateTabStates ] = useState([
-    {name: "Storage"},
+    {name:"Storage"},
     {name:"Status"},
     {name:"Config"},
     {name:"Logs"},
     {name:"Events"}
   ]);
 
-  const handleChange = (event, newValue) => {
+  const tabChange = (event, newValue) => {
     setValue(newValue);
     tabStates.filter((tab,idx)=>idx!==newValue && tab.opened).forEach(tab=>tab.opened=false);
     tabStates[newValue].opened=true;
@@ -74,19 +47,28 @@ export default function BasicTabs() {
 
   return (
     <Box class="App">
-      <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
-        <WebSocketManager
-          enabled={window.location.pathname.indexOf("sdcard") === -1}
-          stateCBFns={stateCBFns}
-          logCBFns={logCBFns}
-          eventCBFns={eventCBFns}
-        ></WebSocketManager>
-      </Suspense>
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={value} onChange={handleChange} aria-label="The tabs">
-          { tabStates.map((tab,idx)=><Tab label={tab.name} {...a11yProps(idx)}></Tab>)}
-        </Tabs>
-      </Box>
+      <div className="control-bar">
+        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <Tabs value={value} onChange={tabChange} aria-label="The tabs">
+            { tabStates.map((tab,idx)=><Tab label={tab.name} {...a11yProps(idx)}></Tab>)}
+          </Tabs>
+        </Box>
+        <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
+          <DeviceList
+              selectedDevice= {selectedDevice}
+              onSet= {val => updateSelectedDevice(val)}></DeviceList>
+        </Suspense>
+        {tabStates[value].controlPanel ? tabStates[value].controlPanel() : undefined}
+        <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
+          <WebSocketManager
+            enabled={window.location.pathname.indexOf("sdcard") === -1}
+            selectedDevice= {selectedDevice}
+            stateCBFns={stateCBFns}
+            logCBFns={logCBFns}
+            eventCBFns={eventCBFns}
+          ></WebSocketManager>
+        </Suspense>
+      </div>
       {tabStates.map((tab,idx)=>getTabContent(idx))}
     </Box>
   );
@@ -99,6 +81,7 @@ export default function BasicTabs() {
         className={`pageContent ${value===0?"":"hidden"}`}>
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <StorageViewer 
+            selectedDevice={selectedDevice}
             path={path || "/"}
             onChangeFolder={(folder)=>setPath(folder)}
           ></StorageViewer>
@@ -109,10 +92,15 @@ export default function BasicTabs() {
         className={`pageContent ${value === 1 ? "" : "hidden"}`}>
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <StatusPage
-            selectedDeviceId="current"
+            selectedDevice={selectedDevice}
             className={`pageContent ${value === 1 ? "" : "hidden"}`}
             registerEventInstanceCallback={registerEventInstanceCallback}
             registerStateCallback={registerStateCallback}
+            unRegisterEventInstanceCallback={unRegisterEventInstanceCallback}
+            unRegisterStateCallback={unRegisterStateCallback}
+            registerControlPanel={(ctrlPanel)=>{
+              tabStates[1].controlPanel=ctrlPanel;
+            }}
           ></StatusPage>
         </Suspense>
         </div>
@@ -121,9 +109,8 @@ export default function BasicTabs() {
         className={`pageContent ${value===2?"":"hidden"}`}>
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <ConfigPage 
-            onChangeFolder={(folder)=>setPath(folder)}
+            selectedDevice={selectedDevice}
             hasLoaded={value===2}
-            selectedDeviceId="current"
           ></ConfigPage>
         </Suspense>
       </div>
@@ -133,6 +120,7 @@ export default function BasicTabs() {
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <LogLines 
             registerLogCallback={registerLogCallback}
+            unRegisterLogCallback={unRegisterLogCallback}
           ></LogLines>
         </Suspense>
       </div>
@@ -141,7 +129,9 @@ export default function BasicTabs() {
         className={`pageContent ${value===4?"":"hidden"}`}>
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <EventsPage 
+            selectedDevice={selectedDevice}
             registerEventCallback={registerEventInstanceCallback}
+            unRegisterEventCallback={unRegisterEventInstanceCallback}
           ></EventsPage>
         </Suspense>
       </div>
@@ -152,24 +142,47 @@ export default function BasicTabs() {
   }
 
   function getTabContent(tabNo) {
-    return tabStates[tabNo]?.loaded || (tabNo===value) ? buildTabContent(tabNo) : undefined;
+    return (tabStates[tabNo]?.loaded || (window.location.pathname.indexOf("sdcard") === -1)) || (tabNo===value) ? buildTabContent(tabNo) : undefined;
   }
 
   function registerStateCallback(stateCBFn) {
     if (!stateCBFns.find(fn => fn.name === stateCBFn.name))
       updateStateCallbacks(cur => [...cur,stateCBFn]);
   }
-  
+
+  function unRegisterStateCallback(stateCBFn) {
+    var idx = stateCBFns.findIndex(fn => fn.name === stateCBFn.name);
+    if (idx >= 0) {
+      stateCBFns.slice(idx,1);
+      updateStateCallbacks(stateCBFns);
+    }
+  }
+
   function registerLogCallback(logCBFn) {
     if (!logCBFns.find(fn => fn.name === logCBFn.name))
       updateLogCallbacks(cur=>[...cur,logCBFn]);
   }
-  
+
+  function unRegisterLogCallback(logCBFn) {
+    var idx = logCBFns.findIndex(fn => fn.name === logCBFn.name);
+    if (idx >= 0) {
+      logCBFns.splice(idx,1);
+      updateLogCallbacks(logCBFns);
+    }
+  }
+
   function registerEventInstanceCallback(eventCBFn,instance) {
     if (!eventCBFns.find(fn => fn.fn.name === eventCBFn.name && fn.instance === instance)) {
       updateEventCallbacks(cur=>[...cur, {fn:eventCBFn,instance:instance}]);
     }
   }  
+
+  function unRegisterEventInstanceCallback(eventCBFn,instance) {
+    var idx = eventCBFns.findIndex(fn => fn.fn.name === eventCBFn.name && fn.instance === instance);
+    if (idx >= 0) {
+      logCBFns.splice(idx,1);
+      updateEventCallbacks(eventCBFns);
+    }
+  }  
 }
 
-//export default App;

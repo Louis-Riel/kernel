@@ -1,12 +1,11 @@
 import {createElement as e, Component} from 'react';
 import {wfetch} from '../../../utils/utils'
 
-var httpPrefix = "";
-
 export default class TripViewer extends Component {
     constructor(props) {
         super(props);
         this.state={
+            httpPrefix:"",
             cache:this.props.cache,
             zoomlevel:15,
             latitude:0,
@@ -21,6 +20,14 @@ export default class TripViewer extends Component {
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+            } else {
+                this.setState({httpPrefix:""});
+            }
+        }
+
         if (!prevProps.points || !prevProps.points.length || !prevProps.points.length || prevProps.points.length !== this.props.points.length){
             this.firstRender=true;
         }
@@ -303,7 +310,7 @@ export default class TripViewer extends Component {
             var newImg;
             wfetch(`https://tile.openstreetmap.de/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
                 .then(resp => resp.blob())
-                .then(imgData => wfetch(`${httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
+                .then(imgData => wfetch(`${this.state.httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
                     method: 'put',
                     body: (newImg=imgData)
                 }).then(resolve(newImg)).catch(resolve(newImg)))
@@ -322,7 +329,7 @@ export default class TripViewer extends Component {
             if (this.testing) {
                 return resolve(this.drawWatermark(tileX,tileY));
             }
-            wfetch(`${httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
+            wfetch(`${this.state.httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
                 .then(resp => resolve(resp.status >= 300? this.downloadTile(tileX,tileY):resp.blob()))
                 .catch(err => {
                     if (retryCount > 3) {

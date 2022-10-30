@@ -139,7 +139,8 @@ struct dataPoint
 
 class AppConfig {
 public:
-  AppConfig(const char* filePath);
+  explicit AppConfig(const char* filePath);
+  explicit AppConfig(cJSON* json);
   AppConfig(cJSON* json, AppConfig* root);
   ~AppConfig();
 

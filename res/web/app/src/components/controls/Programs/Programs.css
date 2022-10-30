@@ -1,0 +1,96 @@
+ul.programs {
+    display: flex;
+    flex-direction: column;
+    align-content: stretch;
+    justify-content: center;
+    align-items: stretch;
+    flex-wrap: nowrap;
+}
+
+li.program {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    align-content: stretch;
+    align-items: stretch;
+}
+
+ul.inLineThreads {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    align-content: center;
+    flex-wrap: nowrap;
+}
+
+li.inLineThread {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;
+    align-content: stretch;
+    align-items: stretch;
+}
+
+ul.pgms {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: stretch;
+    justify-content: center;
+    align-items: stretch;
+}
+
+li.pgm {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: stretch;
+    justify-content: center;
+    align-items: stretch;
+}
+
+.method-summary {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: flex-start;
+    align-items: baseline;
+}
+
+.method-summary>.name {
+    color: chartreuse;
+}
+
+.method-summary>.detail {
+    color: aqua;
+    padding-left: 5px;
+    font-size: x-small;
+}
+
+.param-entry {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: space-between;
+    align-items: baseline;
+    column-gap: 10px;
+}
+
+.param-entry > .value {
+    color: aqua;
+    font-size: small;
+    padding-right: 10px;
+}
+
+.thread-method {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: flex-start;
+    column-gap: 10px;
+}

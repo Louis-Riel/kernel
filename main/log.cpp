@@ -9,9 +9,9 @@
 static LogFunction_t callbacks[5];
 static void* params[5];
 static SemaphoreHandle_t logMutex = xSemaphoreCreateMutex();
-static BufferedFile* logFile = NULL;
-static char* logBuf = NULL;
-static TaskHandle_t dltask = NULL;
+static BufferedFile* logFile = nullptr;
+static char* logBuf = nullptr;
+static TaskHandle_t dltask = nullptr;
 static EventGroupHandle_t app_eg = xEventGroupCreate();
 const char* EMPTY_STRING = "";
 static bool logInitializing = false;
@@ -25,14 +25,14 @@ const char* getLogFName(){
 }
 
 void dumpTheLogs(void* params){
-    if (dltask == NULL) {
+    if (dltask == nullptr) {
         dltask = (TaskHandle_t)1; //Just not null
     }
 
     if (logFile)
         logFile->Flush();
 
-    dltask = NULL;
+    dltask = nullptr;
 }
 
 void dumpLogs(){
@@ -41,14 +41,14 @@ void dumpLogs(){
         return;
     }
 
-    if (dltask == NULL) {
+    if (dltask == nullptr) {
         CreateWokeBackgroundTask(dumpTheLogs, "dumpLogs", 8192, (void*)true, tskIDLE_PRIORITY+10, &dltask);
     }
 }
 
 void registerLogCallback( LogFunction_t callback, void* param) {
     for (int idx=0; idx < 5; idx++){
-        if (callbacks[idx] == NULL) {
+        if (callbacks[idx] == nullptr) {
             callbacks[idx]=callback;
             params[idx]=param;
             break;
@@ -59,15 +59,15 @@ void registerLogCallback( LogFunction_t callback, void* param) {
 void unregisterLogCallback( LogFunction_t callback) {
     for (int idx=0; idx < 5; idx++){
         if (callbacks[idx] == callback) {
-            callbacks[idx]=NULL;
+            callbacks[idx]=nullptr;
             break;
         }
     }
 }
 
 int loggit(const char *fmt, va_list args) {
-    if (*fmt != 'V' && (((logFile == NULL) && !logInitializing) ||
-                        ((logFile != NULL) && logInitialized))) {
+    if (*fmt != 'V' && (((logFile == nullptr) && !logInitializing) ||
+                        ((logFile != nullptr) && logInitialized))) {
         xSemaphoreTake(logMutex,portMAX_DELAY);
         if (!logBuf) {
             logBuf = (char*)dmalloc(LOG_LN_SIZE);
@@ -75,35 +75,31 @@ int loggit(const char *fmt, va_list args) {
 
         uint32_t lineLen=vsprintf(logBuf,fmt,args);
 
-        if ((*fmt == 'E') || (*fmt == 'W') || AppConfig::HasSDCard()) {
-            if ((logFile==NULL) && !logInitializing) {
-                logInitializing = true;
-                struct tm timeinfo = { 0 };
-                time_t now;
-                time(&now);
-                localtime_r(&now, &timeinfo);
+        if (((*fmt == 'E') || (*fmt == 'W') || AppConfig::HasSDCard()) && ((logFile==nullptr) && !logInitializing)) {
+            logInitializing = true;
+            struct tm timeinfo = { 0 };
+            time_t now;
+            time(&now);
+            localtime_r(&now, &timeinfo);
 
-                char* lpath=(char*)dmalloc(255);
-                char* logfname=(char*)dmalloc(355);
-                sprintf(lpath,"/sdcard/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetAppConfig()->GetStringProperty("devName"));
-                localtime_r(&now, &timeinfo);
-                strftime(logfname, 254, lpath, &timeinfo);
-                printf("\nlogfname:%s\n",logfname);
-                logFile = new BufferedFile(logfname);
-                ldfree(lpath);
-                ldfree(logfname);
-                logInitializing = false;
-                logInitialized = true;
-            }
+            auto* lpath=(char*)dmalloc(255);
+            auto* logfname=(char*)dmalloc(355);
+            sprintf(lpath,"/sdcard/logs/%s/%%Y/%%m/%%d/%%H-%%M-%%S.log",AppConfig::GetAppConfig()->GetStringProperty("devName"));
+            localtime_r(&now, &timeinfo);
+            strftime(logfname, 254, lpath, &timeinfo);
+            printf("\nlogfname:%s\n",logfname);
+            logFile = new BufferedFile(logfname);
+            ldfree(lpath);
+            ldfree(logfname);
+            logInitializing = false;
+            logInitialized = true;
         }
         if (logFile && logInitialized) {
             logFile->Write((uint8_t*)logBuf,lineLen);
         }
         for (int idx=0; idx < 5; idx++){
-            if (callbacks[idx] != NULL) {
-                if (!callbacks[idx](params[idx],logBuf)){
-                    callbacks[idx] = nullptr;
-                }
+            if ((callbacks[idx] != nullptr) && (!callbacks[idx](params[idx],logBuf))){
+                callbacks[idx] = nullptr;
             }
         }
         xSemaphoreGive(logMutex);

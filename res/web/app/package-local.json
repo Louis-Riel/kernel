@@ -33,8 +33,8 @@
     "webpack": "^5.74.0"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
+    "start": "react-scripts start --host 0.0.0.0",
+    "build": "GENERATE_SOURCEMAP=true react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -44,6 +44,7 @@
       "react-app/jest"
     ]
   },
+  "homepage": "http://localhost:1234/",
   "browserslist": {
     "production": [
       ">0.2%",

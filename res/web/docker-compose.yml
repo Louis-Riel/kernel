@@ -9,7 +9,7 @@ services:
       - ./logs/webapp:/usr/local/openresty/nginx/logs
       - ./front-gate/web:/etc/nginx/conf.d
       - ./front-gate/signit.lua:/usr/local/openresty/nginx/signit.lua
-      - /home/nix/test/app/build:/usr/share/nginx/html
+      - ./app/build:/usr/share/nginx/html
     networks:
       - keys
 

@@ -1,20 +1,20 @@
 #include "mallocdbg.h"
 
 #ifdef DEBUG_MALLOC
-static cJSON* memstats = NULL;
+static cJSON* memstats = nullptr;
 
 cJSON* getMemoryStats(){
     cJSON* memstat;
     for (mallocdbg &dmalloc : mallocs)
     {
-        if (dmalloc.name != NULL) {
-            if (memstats == NULL) {
+        if (dmalloc.name != nullptr) {
+            if (memstats == nullptr) {
                 memstats = cJSON_CreateArray();
             }
             bool found=false;
             cJSON_ArrayForEach(memstat,memstats) {
-                cJSON* func = memstat ? cJSON_GetObjectItem(memstat,"function") : NULL;
-                if (func != NULL) {
+                cJSON const* func = memstat ? cJSON_GetObjectItem(memstat,"function") : nullptr;
+                if (func != nullptr) {
                     if (strcmp(dmalloc.name,func->valuestring)==0) {
                         found=true;
                         cJSON_SetIntValue(cJSON_GetObjectItem(memstat,"hitcount"),dmalloc.hitCount);
@@ -34,29 +34,29 @@ cJSON* getMemoryStats(){
 
 void* dbgmalloc(const char* funcname, size_t size)
 {
-    void* ptr = NULL;
+    void* ptr = nullptr;
 
     if(size > 0)
     {
         ptr = heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
 
         #ifdef DEBUG_MALLOC
-        mallocdbg* freeSpot=NULL;
+        mallocdbg* freeSpot=nullptr;
         bool foundIt=false;
         for (mallocdbg &dmalloc : mallocs)
         {
-            if (dmalloc.name != NULL){
+            if (dmalloc.name != nullptr){
                 if (strcmp(dmalloc.name,funcname)==0){
                     dmalloc.hitCount++;
                     dmalloc.bytes += size;
                     foundIt=true;
                     break;
                 }
-            } else if (freeSpot == NULL) {
+            } else if (freeSpot == nullptr) {
                 freeSpot = &dmalloc;
             }
         }
-        if ((!foundIt) && (freeSpot != NULL)) {
+        if ((!foundIt) && (freeSpot != nullptr)) {
             freeSpot->name = (char*)malloc(strlen(funcname)+1);
             strcpy(freeSpot->name,funcname);
             freeSpot->hitCount++;
@@ -70,13 +70,13 @@ void* dbgmalloc(const char* funcname, size_t size)
 
 void dbgfree(const char* funcname, void* ptr)
 {
-    if(ptr != NULL)
+    if(ptr != nullptr)
     {
 
         #ifdef DEBUG_MALLOC
         for (mallocdbg &dmalloc : mallocs)
         {
-            if ((dmalloc.name != NULL) && (strcmp(dmalloc.name,funcname))==0){
+            if ((dmalloc.name != nullptr) && (strcmp(dmalloc.name,funcname))==0){
                 dmalloc.hitCount--;
                 //dmalloc.bytes-=sizeof(&ptr);
                 break;

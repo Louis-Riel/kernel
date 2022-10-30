@@ -1,9 +1,3 @@
-.wsctrl {
-    position: absolute;
-    right: 0;
-    top: 5px;
-}
-
 div.wsctrl {
     z-index: 1;
 }

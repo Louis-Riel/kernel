@@ -1,0 +1,28 @@
+.event-header {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: flex-start;
+    align-items: center;
+    column-gap: 5px;
+}
+
+.event-id {
+    color: aquamarine;
+    font-size: x-small;
+}
+
+div.event>div>.MuiCollapse-wrapperInner {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    justify-content: center;
+    align-items: flex-start;
+    row-gap: 15px;
+}
+
+div.MuiCollapse-root.event.MuiCollapse-entered {
+    margin-top: 20px;
+}

@@ -32,7 +32,6 @@ label div {
 }
 
 .label {
-    margin-top: 10px;
     color: aqua;
     font-style: italic;
     padding-bottom: 10px;
@@ -42,11 +41,21 @@ label div {
 label.MuiInputLabel-root {
     background: none;
     color: aquamarine;
+    top: -6px;
 }
 
 div.MuiOutlinedInput-root {
-    background: linear-gradient(to bottom,#cec9c961,#3a4a38);
-    color:aqua;
+    color: aqua;
+    border: solid darkcyan;
+    border-radius: 20px;
+}
+
+svg.MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium.MuiSelect-icon {
+    color: aquamarine;
+}
+
+div.MuiSelect-select {
+    padding: 2px 15px;
 }
 
 div.value {

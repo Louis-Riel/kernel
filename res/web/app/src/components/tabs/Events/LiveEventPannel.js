@@ -2,7 +2,6 @@ import { createElement as e, Component } from 'react';
 import { Button, FormControlLabel, Checkbox } from '@mui/material';
 import { wfetch } from '../../../utils/utils';
 import { LiveEvent } from './LiveEvent';
-import { httpPrefix } from './Tab';
 
 export class LiveEventPannel extends Component {
     constructor(props) {
@@ -12,20 +11,30 @@ export class LiveEventPannel extends Component {
         if (this.props.registerEventCallback) {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
-        this.mounted = false;
-        this.state = { filters: {} };
-    }
-
-    componentDidMount() {
-        this.mounted = true;
+        this.state = { 
+            httpPrefix:"",
+            filters: {} 
+        };
     }
 
     componentWillUnmount() {
-        this.mounted = false;
+        if (this.props.unRegisterEventInstanceCallback && this.props.name) {
+            this.props.unRegisterEventInstanceCallback(this.ProcessEvent.bind(this),`${this.props.class}-${this.props.name}`);
+        }
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+            } else {
+                this.setState({httpPrefix:""});
+            }
+        }
     }
 
     ProcessEvent(evt) {
-        if (evt && this.mounted && this.isEventVisible(evt)) {
+        if (evt && this.isEventVisible(evt)) {
             var lastEvents = (this.state?.lastEvents || []).concat(evt);
             while (lastEvents.length > 100) {
                 lastEvents.shift();
@@ -64,7 +73,7 @@ export class LiveEventPannel extends Component {
             return { dataType: eventType.dataType, ...event };
         } else {
             var req = this.eventTypeRequests.find(req => (req.eventBase === event.eventBase) && (req.eventId === event.eventId));
-            if (!req && this.mounted) {
+            if (!req) {
                 this.getEventDescriptor(event)
                     .then(eventType => this.setState({
                         lastState: this.state.lastEvents
@@ -86,7 +95,7 @@ export class LiveEventPannel extends Component {
             } else {
                 var toControler = new AbortController();
                 const timer = setTimeout(() => toControler.abort(), 8000);
-                wfetch(`${httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
+                wfetch(`${this.state.httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
                     method: 'post',
                     signal: toControler.signal
                 }).then(data => {
@@ -144,21 +153,24 @@ export class LiveEventPannel extends Component {
                     })
                 })
             ),
-            e("div", { key: "filterList", className: `eventIds` }, filter[1].eventIds.map(eventId => e("div", { key: eventId.eventId, className: `filteritem ${eventId.eventId}` }, [
-                e("div", { key: "evifiltered", className: "evifiltered" },
-                    e(FormControlLabel, {
-                        key: eventId.eventId,
-                        className: "eifiltered",
-                        label: eventId.eventId,
-                        control: e(Checkbox, {
-                            key: "ctrl",
-                            checked: eventId.visible,
-                            onChange: event => this.updateEventIdFilter(eventId, event.target.checked),
-                        })
-                    }
+            e("div", { key: "filterList", className: `eventIds` }, 
+                filter[1].eventIds.map(eventId => e("div", { key: eventId.eventId, className: `filteritem ${eventId.eventId}` }, [
+                    e("div", { key: "evifiltered", className: "evifiltered" },
+                        e(FormControlLabel, {
+                            key: eventId.eventId,
+                            className: "eifiltered",
+                            label: eventId.eventId,
+                            control: e(Checkbox, {
+                                key: "ctrl",
+                                checked: eventId.visible,
+                                onChange: event => this.updateEventIdFilter(eventId, event.target.checked),
+                            })
+                        }
+                        )
                     )
-                )
-            ]))));
+                ]))
+            )
+        );
     }
 
     isEventVisible(event) {

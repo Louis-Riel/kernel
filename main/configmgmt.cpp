@@ -23,22 +23,22 @@ AppConfig *GetAppConfig()
   return AppConfig::GetAppConfig();
 }
 
-AppConfig *AppConfig::configInstance = NULL;
-AppConfig *AppConfig::statusInstance = NULL;
+AppConfig *AppConfig::configInstance = nullptr;
+AppConfig *AppConfig::statusInstance = nullptr;
 
 AppConfig::AppConfig(const char *filePath)
     : version(0)
-    , json(NULL)
+    , json(nullptr)
     , filePath(filePath)
     , root(this)
     , sema(xSemaphoreCreateRecursiveMutex())
 {
-  if ((configInstance == NULL) && (filePath != NULL))
+  if ((configInstance == nullptr) && (filePath != nullptr))
   {
     ESP_LOGV(__FUNCTION__, "Setting global config instance");
     configInstance = this;
     FILE *currentCfg = fopen(filePath, "r");
-    if (currentCfg == NULL)
+    if (currentCfg == nullptr)
     {
       ESP_LOGV(__FUNCTION__, "Getting default config for %s", filePath);
       json = cJSON_ParseWithLength((const char *)defaultconfig_json_start, defaultconfig_json_end - defaultconfig_json_start);
@@ -55,11 +55,11 @@ AppConfig::AppConfig(const char *filePath)
       if (sjson && (strlen(sjson) > 0))
       {
         cJSON *toBeCfg = cJSON_ParseWithLength(sjson, fileStat.st_size);
-        if ((toBeCfg != NULL) && (cJSON_GetObjectItem(toBeCfg, "wifitype") != NULL))
+        if ((toBeCfg != nullptr) && (cJSON_GetObjectItem(toBeCfg, "wifitype") != nullptr))
         {
           json = toBeCfg;
         }
-        else if (sjson != NULL)
+        else if (sjson != nullptr)
         {
           ESP_LOGE(__FUNCTION__, "Corrupted configuration, not applying:%s", sjson);
         }
@@ -73,12 +73,21 @@ AppConfig::AppConfig(const char *filePath)
   }
 }
 
+AppConfig::AppConfig(cJSON *json)
+    : version(0)
+    , json(json)
+    , filePath(nullptr)
+    , root(nullptr)
+    , sema(nullptr)
+{
+}
+
 AppConfig::AppConfig(cJSON *json, AppConfig *root)
     : version(0)
     , json(json)
-    , filePath(root == NULL ? NULL : root->filePath)
-    , root(root == NULL ? this : root)
-    , sema(root == NULL ? xSemaphoreCreateRecursiveMutex() : root->sema)
+    , filePath(root == nullptr ? nullptr : root->filePath)
+    , root(root == nullptr ? this : root)
+    , sema(root == nullptr ? xSemaphoreCreateRecursiveMutex() : root->sema)
 {
 }
 
@@ -99,9 +108,9 @@ AppConfig *AppConfig::GetAppConfig()
 
 AppConfig *AppConfig::GetAppStatus()
 {
-  if (statusInstance == NULL)
+  if (statusInstance == nullptr)
   {
-    statusInstance = new AppConfig(cJSON_CreateObject(), NULL);
+    statusInstance = new AppConfig(cJSON_CreateObject());
     statusInstance->eg = xEventGroupCreate();
     ESP_LOGV(__FUNCTION__,"Initializing Status");
   }
@@ -115,22 +124,22 @@ bool AppConfig::HasSDCard()
 
 bool AppConfig::isValid()
 {
-  return (json != NULL) && !cJSON_IsInvalid(json);
+  return (json != nullptr) && !cJSON_IsInvalid(json);
 }
 
 void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
 {
-  cJSON *curCfgItem = NULL;
-  cJSON *newCfgItem = NULL;
-  cJSON *curCfgValItem = NULL;
-  cJSON *newCfgVerItem = NULL;
-  cJSON *curCfgVerItem = NULL;
-  cJSON *newCfgValItem = NULL;
-  cJSON *curArrayItem = NULL;
-  cJSON *newArrayItem = NULL;
+  cJSON *curCfgItem = nullptr;
+  cJSON *newCfgItem = nullptr;
+  cJSON *curCfgValItem = nullptr;
+  cJSON *newCfgVerItem = nullptr;
+  cJSON *curCfgVerItem = nullptr;
+  cJSON *newCfgValItem = nullptr;
+  cJSON *curArrayItem = nullptr;
+  cJSON *newArrayItem = nullptr;
   bool foundIt = false;
   uint8_t newIdx = 0, curIdx = 0;
-  ESP_LOGV(__FUNCTION__, "Parsing src:%d dest:%d", curConfig == NULL, newConfig == NULL);
+  ESP_LOGV(__FUNCTION__, "Parsing src:%d dest:%d", curConfig == nullptr, newConfig == nullptr);
 
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   cJSON_ArrayForEach(curCfgItem, curConfig)
@@ -149,7 +158,7 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
         ESP_LOGV(__FUNCTION__, "Parsing %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
         int curVer = cJSON_GetNumberValue(curCfgVerItem);
         int newVer = -1;
-        if ((newCfgItem != NULL) &&
+        if ((newCfgItem != nullptr) &&
             (newCfgVerItem = cJSON_GetObjectItem(newCfgItem, "version")) &&
             (newCfgValItem = cJSON_GetObjectItem(newCfgItem, "value")))
         {
@@ -215,7 +224,7 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
       }
       else if (cJSON_IsObject(curCfgItem))
       {
-        if (newCfgItem != NULL)
+        if (newCfgItem != nullptr)
         {
           ESP_LOGV(__FUNCTION__, "******Parsing %s item id:%s", "object field", curCfgItem->string ? curCfgItem->string : "?");
           MergeJSon(curCfgItem, newCfgItem);
@@ -230,7 +239,7 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
       else
       {
         ESP_LOGV(__FUNCTION__, "Parsing %s item id:%s", "value field", curCfgItem->string ? curCfgItem->string : "?");
-        if (newCfgItem != NULL)
+        if (newCfgItem != nullptr)
         {
           cJSON_ReplaceItemInObject(curConfig, newCfgItem->string, cJSON_Duplicate(newCfgItem,true));
         }
@@ -247,7 +256,7 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
 
 void AppConfig::SetAppConfig(cJSON *config)
 {
-  if (config == NULL)
+  if (config == nullptr)
   {
     ESP_LOGE(__FUNCTION__, "Save with empty set");
     return;
@@ -293,7 +302,7 @@ void AppConfig::SaveAppConfig()
 void AppConfig::SaveAppConfig(bool skipMount)
 {
   AppConfig *config = AppConfig::GetAppConfig();
-  if ((config == NULL) || (config->filePath == NULL) || (root != config))
+  if ((config == nullptr) || (config->filePath == nullptr) || (root != config))
   {
     return;
   }
@@ -302,7 +311,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   version++;
   uint8_t storage = skipMount ? 0 : initStorage();
   FILE *currentCfg = fopen(config->filePath, "w");
-  if (currentCfg != NULL)
+  if (currentCfg != nullptr)
   {
     char *sjson = cJSON_PrintUnformatted(config->json);
     ESP_LOGV(__FUNCTION__, "Config(%d):%s", strlen(sjson),sjson);
@@ -334,7 +343,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
 
 AppConfig *AppConfig::GetConfig(const char *path)
 {
-  if ((path == NULL) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
+  if ((path == nullptr) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
   {
     return this;
   }
@@ -353,7 +362,7 @@ cJSON *AppConfig::GetJSONConfig(const char *path)
 
 cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMissing)
 {
-  if ((json == NULL) || (path == NULL) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
+  if ((json == nullptr) || (path == nullptr) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
   {
     return json;
   }
@@ -370,8 +379,8 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
   cJSON* parJson;
   char parPath[255];
   strcpy(parPath,path);
-  char* ctmp1 = NULL;
-  if ((slash = indexOf(path, "/")) != NULL)
+  char* ctmp1 = nullptr;
+  if ((slash = indexOf(path, "/")) != nullptr)
   {
     ctmp1 = lastIndexOf(parPath,"/");
     if (ctmp1){
@@ -382,27 +391,27 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
     }
     if (!parJson) {
       ESP_LOGV(__FUNCTION__,"Cannot find parent:%s", parPath);
-      return NULL;
+      return nullptr;
     }
     ESP_LOGV(__FUNCTION__, "Parented by:%s", parPath);
   } else {
     parJson = json;
   }
   if (ctmp1) {
-    if (parJson == NULL) {
+    if (parJson == nullptr) {
       ESP_LOGE(__FUNCTION__,"Missing parent json");
       //xSemaphoreGiveRecursive(sema);
-      return NULL;
+      return nullptr;
     }
   } else {
-    if (json == NULL) {
+    if (json == nullptr) {
       ESP_LOGE(__FUNCTION__,"Missing parent json.");
       //xSemaphoreGiveRecursive(sema);
-      return NULL;
+      return nullptr;
     }
   }
   ESP_LOGV(__FUNCTION__, "Getting JSON at:%s from %s", ctmp1?ctmp1+1:parPath,parPath);
-  cJSON* ret = NULL;
+  cJSON* ret = nullptr;
   if (!cJSON_HasObjectItem(ctmp1?parJson:json, ctmp1?ctmp1+1:parPath))
   {
     if (createWhenMissing){
@@ -423,7 +432,7 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
 
 bool AppConfig::isItemObject(const char *path)
 {
-  return GetPropertyHolder(GetJSONConfig(path)) == NULL;
+  return GetPropertyHolder(GetJSONConfig(path)) == nullptr;
 }
 
 cJSON *AppConfig::GetPropertyHolder(const char* path){
@@ -432,13 +441,13 @@ cJSON *AppConfig::GetPropertyHolder(const char* path){
 
 cJSON *AppConfig::GetPropertyHolder(cJSON *prop)
 {
-  if (prop == NULL)
+  if (prop == nullptr)
   {
-    return NULL;
+    return nullptr;
   }
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
 
-  cJSON* ret = NULL;
+  cJSON* ret = nullptr;
   if (cJSON_IsObject(prop))
   {
     if (cJSON_HasObjectItem(prop, "version"))
@@ -469,22 +478,22 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
   if (!isValid())
   {
     ESP_LOGE(__FUNCTION__, "Cannot Get property at path:%s from null config", path);
-    return NULL;
+    return nullptr;
   }
-  if ((path == NULL) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
+  if ((path == nullptr) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
   {
-    ESP_LOGW(__FUNCTION__, "Invalid os Missing path:%s", path == NULL ? "*null*" : path);
-    return NULL;
+    ESP_LOGW(__FUNCTION__, "Invalid os Missing path:%s", path == nullptr ? "*null*" : path);
+    return nullptr;
   }
-  if (json == NULL)
+  if (json == nullptr)
   {
     ESP_LOGE(__FUNCTION__, "Cannot Get property at path:%s from null json", path);
-    return NULL;
+    return nullptr;
   }
-  if (path == NULL)
+  if (path == nullptr)
   {
     ESP_LOGE(__FUNCTION__, "Cannot Get property Missing path");
-    return NULL;
+    return nullptr;
   }
 
   if (path[0] == '/')
@@ -496,16 +505,16 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
   ESP_LOGV(__FUNCTION__, "Getting JSON at %s", path);
 
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
-  cJSON *prop = NULL;
+  cJSON *prop = nullptr;
   char *lastSlash = lastIndexOf(path, "/");
-  if (lastSlash != NULL)
+  if (lastSlash != nullptr)
   {
     char propPath[255];
     memcpy(propPath, path, lastSlash - path);
     propPath[lastSlash - path] = 0;
-    ESP_LOGV(__FUNCTION__, "Pathed value prop at %s,%s,%s", path == NULL ? "*null*" : path, lastSlash, propPath);
+    ESP_LOGV(__FUNCTION__, "Pathed value prop at %s,%s,%s", path == nullptr ? "*null*" : path, lastSlash, propPath);
     cJSON *holder = GetJSONConfig(json, propPath, createWhenMissing);
-    if (holder != NULL)
+    if (holder != nullptr)
     {
       ESP_LOGV(__FUNCTION__,"%s found through recursion",path);
       prop = cJSON_GetObjectItem(holder, lastSlash + 1);
@@ -517,32 +526,32 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
   }
   else
   {
-    ESP_LOGV(__FUNCTION__, "Value prop at %s(%d)", path == NULL ? "*null*" : path, createWhenMissing);
-    if ((path == NULL) || (json == NULL))
+    ESP_LOGV(__FUNCTION__, "Value prop at %s(%d)", path == nullptr ? "*null*" : path, createWhenMissing);
+    if ((path == nullptr) || (json == nullptr))
     {
-      ESP_LOGW(__FUNCTION__, "(path == NULL)%d (json == null)%d", (path == NULL), (json == NULL));
+      ESP_LOGW(__FUNCTION__, "(path == nullptr)%d (json == null)%d", (path == nullptr), (json == nullptr));
     }
     prop = cJSON_GetObjectItem(json, path);
-    if (createWhenMissing && (prop == NULL))
+    if (createWhenMissing && (prop == nullptr))
     {
-      if (filePath != NULL)
+      if (filePath != nullptr)
       {
-        ESP_LOGV(__FUNCTION__, "Creating versioned prop at %s", path == NULL ? "*null*" : path);
+        ESP_LOGV(__FUNCTION__, "Creating versioned prop at %s", path == nullptr ? "*null*" : path);
         prop = cJSON_AddObjectToObject(json, path);
         cJSON_AddObjectToObject(prop, "value");
         cJSON_AddObjectToObject(prop, "version");
       }
       else
       {
-        ESP_LOGV(__FUNCTION__, "Creating prop at %s", path == NULL ? "*null*" : path);
+        ESP_LOGV(__FUNCTION__, "Creating prop at %s", path == nullptr ? "*null*" : path);
         prop = cJSON_CreateObject();
         cJSON_AddItemToObject(json, path, prop);
       }
     }
     else
     {
-      if (prop == NULL)
-        ESP_LOGV(__FUNCTION__, "Missing prop at %s", path == NULL ? "*null*" : path);
+      if (prop == nullptr)
+        ESP_LOGV(__FUNCTION__, "Missing prop at %s", path == nullptr ? "*null*" : path);
       else
       {
         ESP_LOGV(__FUNCTION__,"%s found",path);
@@ -556,7 +565,7 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
 
 bool AppConfig::HasProperty(const char *path)
 {
-  return GetPropertyHolder(GetJSONProperty(json,path,false)) != NULL;
+  return GetPropertyHolder(GetJSONProperty(json,path,false)) != nullptr;
 }
 
 const char *AppConfig::GetStringProperty(const char *path)
@@ -564,11 +573,11 @@ const char *AppConfig::GetStringProperty(const char *path)
   if (!isValid())
   {
     ESP_LOGW(__FUNCTION__,"%s is invalid",path);
-    return NULL;
+    return nullptr;
   }
-  ESP_LOGV(__FUNCTION__, "Getting string value at %s", path == NULL ? "*null*" : path);
+  ESP_LOGV(__FUNCTION__, "Getting string value at %s", path == nullptr ? "*null*" : path);
   cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
-  if ((prop != NULL) && (prop->valuestring != NULL))
+  if ((prop != nullptr) && (prop->valuestring != nullptr))
   {
     return prop->valuestring;
   }
@@ -582,7 +591,7 @@ bool AppConfig::SetStringProperty(const char *path, const char *value)
     ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s from null config", path);
     return false;
   }
-  if (value == NULL) {
+  if (value == nullptr) {
     ESP_LOGW(__FUNCTION__, "Cannot set property at path:%s from null value", path);
     return false;
   }
@@ -618,7 +627,7 @@ bool AppConfig::SetStringProperty(const char *path, const char *value)
     if (!val || !version) {
       ESP_LOGW(__FUNCTION__,"Weirdness at versioned path %s",path);
     } else {
-      ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == NULL?"*NULL*":filePath);
+      ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == nullptr?"*nullptr*":filePath);
       if (strcmp(val->valuestring, value) != 0)
       {
         ESP_LOGV(__FUNCTION__, "Setting versioned %s to %s", path, value);
@@ -655,7 +664,7 @@ int32_t AppConfig::GetIntProperty(const char *path, int32_t defaultValue)
   }
 
   cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
-  if (prop != NULL)
+  if (prop != nullptr)
   {
     return prop->valueint;
   }
@@ -669,9 +678,9 @@ int32_t AppConfig::GetIntProperty(const char *path)
     ESP_LOGE(__FUNCTION__,"Cannot get %s as json is invalid",path);
     return -1;
   }
-  //ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == NULL ? "*null*" : path);
+  //ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == nullptr ? "*null*" : path);
   cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
-  if (prop != NULL)
+  if (prop != nullptr)
   {
     return prop->valueint;
   }
@@ -682,10 +691,10 @@ void AppConfig::SetIntProperty(const char *path, int value)
 {
   if (!isValid())
   {
-    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s from null(%d) or invalid(%d) config", path, json==NULL,cJSON_IsInvalid(json));
+    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s from null(%d) or invalid(%d) config", path, json==nullptr,cJSON_IsInvalid(json));
     return;
   }
-  ESP_LOGV(__FUNCTION__, "Setting int value at %s=%d", path == NULL ? "*null*" : path,value);
+  ESP_LOGV(__FUNCTION__, "Setting int value at %s=%d", path == nullptr ? "*null*" : path,value);
 
   cJSON *holder = GetJSONConfig(json, path, false);
   char parPath[255];
@@ -723,7 +732,7 @@ void AppConfig::SetIntProperty(const char *path, int value)
       //xSemaphoreGiveRecursive(sema);
       return;
     }
-    ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == NULL?"*NULL*":filePath);
+    ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == nullptr?"*nullptr*":filePath);
     if (val->valueint != value)
     {
       ESP_LOGV(__FUNCTION__, "Setting versioned %s to %d", path, value);
@@ -771,9 +780,9 @@ double AppConfig::GetDoubleProperty(const char *path)
   {
     return -1;
   }
-  //ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == NULL ? "*null*" : path);
+  //ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == nullptr ? "*null*" : path);
   cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
-  if (prop != NULL)
+  if (prop != nullptr)
   {
     return prop->valuedouble;
   }
@@ -784,10 +793,10 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
 {
   if (!isValid())
   {
-    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s from null(%d) or invalid(%d) config", path, json==NULL,cJSON_IsInvalid(json));
+    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s from null(%d) or invalid(%d) config", path, json==nullptr,cJSON_IsInvalid(json));
     return;
   }
-  ESP_LOGV(__FUNCTION__, "Setting int value at %s=%f", path == NULL ? "*null*" : path,value);
+  ESP_LOGV(__FUNCTION__, "Setting int value at %s=%f", path == nullptr ? "*null*" : path,value);
 
   cJSON *holder = GetJSONConfig(json, path, false);
   char parPath[255];
@@ -823,7 +832,7 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
       //xSemaphoreGiveRecursive(sema);
       return;
     }
-    ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == NULL?"*NULL*":filePath);
+    ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == nullptr?"*nullptr*":filePath);
     if (val->valueint != value)
     {
       ESP_LOGV(__FUNCTION__, "Setting versioned %s to %f", path, value);
@@ -853,9 +862,9 @@ bool AppConfig::GetBoolProperty(const char *path)
     return false;
   }
   cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
-  if (prop != NULL)
+  if (prop != nullptr)
   {
-    return prop->valuestring != NULL ? strcmp(prop->valuestring, "true") == 0 : prop->valueint;
+    return prop->valuestring != nullptr ? strcmp(prop->valuestring, "true") == 0 : prop->valueint;
   }
   return false;
 }
@@ -887,10 +896,10 @@ item_state_t AppConfig::GetStateProperty(const char *path)
 
 bool AppConfig::IsAp()
 {
-  return indexOf(GetStringProperty("wifitype"), "AP") != NULL;
+  return indexOf(GetStringProperty("wifitype"), "AP") != nullptr;
 }
 
 bool AppConfig::IsSta()
 {
-  return indexOf(GetStringProperty("wifitype"), "STA") != NULL;
+  return indexOf(GetStringProperty("wifitype"), "STA") != nullptr;
 }

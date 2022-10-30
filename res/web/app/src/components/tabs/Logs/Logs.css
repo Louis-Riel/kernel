@@ -41,11 +41,11 @@
 
 .logLevelFilter {
     display: flex;
-    flex-direction: column;
+    justify-content: flex-end;
+    padding: 3px;
+    flex-direction: row;
     flex-wrap: nowrap;
-    align-content: center;
-    justify-content: flex-start;
-    align-items: center;
+    align-items: baseline;
     border-right: solid aquamarine 1px;
     padding-left: 10px;
     background: linear-gradient(to bottom,#040404,#3a4a38);
@@ -112,4 +112,31 @@ label.MuiFormControlLabel-root {
 
 .log.LOGV {
     color: aquamarine;
+}
+
+span.MuiChip-label.MuiChip-labelMedium {
+    color: aquamarine;
+}
+
+.logLevelFilter > div > .MuiChip-root {
+    border-color: white;
+    border-style: solid;
+    border-width: 1px;
+}
+
+.logLevelFilter > div > .MuiChip-root.filtered {
+    opacity: 65%;
+}
+
+.logLevelFilter>.logLevelFilterContent>.MuiChip-root {
+    height: 23px;
+}
+
+.logLevelFilterTitle>div>.MuiChip-label {
+    font-size: large;
+}
+
+.logLevelFilterTitle {
+    border-right: solid 1px aquamarine;
+    padding-right: 7px;
 }

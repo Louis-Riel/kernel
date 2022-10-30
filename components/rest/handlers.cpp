@@ -20,9 +20,9 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-static cJSON *tasks = NULL;
+static cJSON *tasks = nullptr;
 static const char* RESP_OK = "OK";
-static TheRest *restInstance = NULL;
+static TheRest *restInstance = nullptr;
 
 //char* kmlFileName=(char*)dmalloc(255);
 float temperatureReadFixed()
@@ -41,41 +41,52 @@ float temperatureReadFixed()
     return temp_c;
 }
 
+void UpsertTaskJson(cJSON* task, TaskStatus_t const * taskStatus,uint32_t totalRunTime) {
+    if (cJSON_HasObjectItem(task,"Name")) {
+        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "TaskNumber"), taskStatus->xTaskNumber);
+        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Priority"), taskStatus->uxCurrentPriority);
+        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Runtime"), taskStatus->ulRunTimeCounter);
+        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Core"), taskStatus->xCoreID > 100 ? -1 : taskStatus->xCoreID);
+        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "State"), taskStatus->eCurrentState);
+        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Stackfree"), taskStatus->usStackHighWaterMark * 4);
+        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Pct"), ((double)taskStatus->ulRunTimeCounter / totalRunTime) * 100.0);
+    } else {
+        cJSON_AddStringToObject(task, "Name", taskStatus->pcTaskName);
+        cJSON_AddNumberToObject(task, "TaskNumber", taskStatus->xTaskNumber);
+        cJSON_AddNumberToObject(task, "Priority", taskStatus->uxCurrentPriority);
+        cJSON_AddNumberToObject(task, "Runtime", taskStatus->ulRunTimeCounter);
+        cJSON_AddNumberToObject(task, "Core", taskStatus->xCoreID > 100 ? -1 : taskStatus->xCoreID);
+        cJSON_AddNumberToObject(task, "State", taskStatus->eCurrentState);
+        cJSON_AddNumberToObject(task, "Stackfree", taskStatus->usStackHighWaterMark * 4);
+        cJSON_AddNumberToObject(task, "Pct", ((double)taskStatus->ulRunTimeCounter / totalRunTime) * 100.0);
+    }
+}
+
 cJSON *TheRest::tasks_json()
 {
-    volatile UBaseType_t numTasks = uxTaskGetNumberOfTasks();
-    uint32_t totalRunTime;
-    TaskStatus_t *statuses = (TaskStatus_t *)dmalloc(numTasks * sizeof(TaskStatus_t));
-    cJSON *task = NULL;
-    cJSON* toGo[32];
-    int numToGo=0;
-    bool firstPass = true;
-    if (statuses != NULL)
+    UBaseType_t numTasks = uxTaskGetNumberOfTasks();
+    auto *statuses = (TaskStatus_t *)dmalloc(numTasks * sizeof(TaskStatus_t));
+    if (statuses != nullptr)
     {
+        uint32_t totalRunTime;
+        cJSON *task = nullptr;
+        cJSON* toGo[32];
+        int numToGo=0;
         numTasks = uxTaskGetSystemState(statuses, numTasks, &totalRunTime);
         if (totalRunTime > 0)
         {
-            if (tasks == NULL){
+            if (tasks == nullptr){
                 tasks = cJSON_CreateArray();
             }
             for (uint32_t taskNo = 0; taskNo < numTasks; taskNo++)
             {
                 bool found = false;
                 cJSON_ArrayForEach(task, tasks) {
-                    cJSON* taskName = task ? cJSON_GetObjectItem(task,"Name") : NULL;
+                    cJSON const* taskName = task ? cJSON_GetObjectItem(task,"Name") : nullptr;
                     if (taskName && (strcmp(taskName->valuestring,statuses[taskNo].pcTaskName) == 0)) {
                         found=true;
-                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "TaskNumber"), statuses[taskNo].xTaskNumber);
-                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Priority"), statuses[taskNo].uxCurrentPriority);
-                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Runtime"), statuses[taskNo].ulRunTimeCounter);
-                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Core"), statuses[taskNo].xCoreID > 100 ? -1 : statuses[taskNo].xCoreID);
-                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "State"), statuses[taskNo].eCurrentState);
-                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Stackfree"), statuses[taskNo].usStackHighWaterMark * 4);
-                        cJSON_SetNumberValue(cJSON_GetObjectItem(task, "Pct"), ((double)statuses[taskNo].ulRunTimeCounter / totalRunTime) * 100.0);
-                        if (!firstPass) {
-                            break;
-                        }
-                    } else if (firstPass) {
+                        UpsertTaskJson(task, &statuses[taskNo],totalRunTime);
+                    } else if (taskName != nullptr) {
                         bool stillExists = false;
                         for (uint32_t ttaskNo = 0; ttaskNo < numTasks; ttaskNo++) {
                             stillExists = strcmp(statuses[ttaskNo].pcTaskName,taskName->valuestring)==0;
@@ -89,29 +100,24 @@ cJSON *TheRest::tasks_json()
                     }
                 }
 
-                if (!found && cJSON_AddItemToArray(tasks,task=cJSON_CreateObject())) {
-                    cJSON_AddStringToObject(task, "Name", statuses[taskNo].pcTaskName);
-                    cJSON_AddNumberToObject(task, "TaskNumber", statuses[taskNo].xTaskNumber);
-                    cJSON_AddNumberToObject(task, "Priority", statuses[taskNo].uxCurrentPriority);
-                    cJSON_AddNumberToObject(task, "Runtime", statuses[taskNo].ulRunTimeCounter);
-                    cJSON_AddNumberToObject(task, "Core", statuses[taskNo].xCoreID > 100 ? -1 : statuses[taskNo].xCoreID);
-                    cJSON_AddNumberToObject(task, "State", statuses[taskNo].eCurrentState);
-                    cJSON_AddNumberToObject(task, "Stackfree", statuses[taskNo].usStackHighWaterMark * 4);
-                    cJSON_AddNumberToObject(task, "Pct", ((double)statuses[taskNo].ulRunTimeCounter / totalRunTime) * 100.0);
+                if (!found) {
+                    task=cJSON_CreateObject();
+                    if (task && cJSON_AddItemToArray(tasks,task)) {
+                        UpsertTaskJson(task, &statuses[taskNo],totalRunTime);
+                    }
                 }
-                firstPass=false; 
             }
         }
         ldfree(statuses);
-    }
-    while (tasks && (--numToGo>=0))
-    {
-        int taskIdx = -1;
-        cJSON_ArrayForEach(task,tasks) {
-            taskIdx++;
-            if (task == toGo[numToGo]) {
-                cJSON_DeleteItemFromArray(tasks,taskIdx);
-                break;
+        while (--numToGo>=0)
+        {
+            int taskIdx = -1;
+            cJSON_ArrayForEach(task,tasks) {
+                taskIdx++;
+                if (task == toGo[numToGo]) {
+                    cJSON_DeleteItemFromArray(tasks,taskIdx);
+                    break;
+                }
             }
         }
     }
@@ -124,7 +130,7 @@ cJSON* TheRest::status_json() {
     ESP_LOGV(__FUNCTION__, "Status Handler");
 
     struct timeval tv_now;
-    gettimeofday(&tv_now, NULL);
+    gettimeofday(&tv_now, nullptr);
     int64_t time_us = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
 
     if (!rest->system_status) {
@@ -165,7 +171,7 @@ cJSON* TheRest::bake_status_json()
     ESP_LOGV(__FUNCTION__, "Bake Status Handler");
 
     struct timeval tv_now;
-    gettimeofday(&tv_now, NULL);
+    gettimeofday(&tv_now, nullptr);
     int64_t time_us = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
 
     cJSON* status = cJSON_CreateObject();
@@ -201,7 +207,7 @@ cJSON* TheRest::bake_status_json()
 
 esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext, bool recursive, char *res, uint32_t resLen)
 {
-    if ((path == NULL) || (strlen(path) == 0))
+    if ((path == nullptr) || (strlen(path) == 0))
     {
         ESP_LOGE(__FUNCTION__, "Missing path");
         return ESP_FAIL;
@@ -230,25 +236,47 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
 
     DIR *theFolder;
     struct dirent *fi;
-    if ((theFolder = opendir(path)) != NULL)
+    if ((theFolder = opendir(path)) != nullptr)
     {
-        while ((fi = readdir(theFolder)) != NULL)
+        while ((fi = readdir(theFolder)) != nullptr)
         {
-            if (strlen(fi->d_name) == 0)
+            if (strlen(fi->d_name) > 0)
             {
-                break;
-            }
-            if (fi->d_type == DT_DIR)
-            {
-                if (recursive)
+                if (fi->d_type == DT_DIR)
                 {
-                    dcnt++;
-                    sprintf(kmlFileName, "%s/%s", path, fi->d_name);
-                    fpos += sprintf(theFolders + fpos, "%s", kmlFileName) + 1;
-                    ESP_LOGV(__FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding dir %s", path, fcnt, dcnt, fpos, kmlFileName);
+                    if (recursive)
+                    {
+                        dcnt++;
+                        sprintf(kmlFileName, "%s/%s", path, fi->d_name);
+                        fpos += sprintf(theFolders + fpos, "%s", kmlFileName) + 1;
+                        ESP_LOGV(__FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding dir %s", path, fcnt, dcnt, fpos, kmlFileName);
+                    }
+                    if ((ext == nullptr) || (strlen(ext) == 0))
+                    {
+                        if (sLen > (resLen - 100))
+                        {
+                            ESP_LOGV(__FUNCTION__, "Buffer Overflow, flushing");
+                            if ((ret = httpd_resp_send_chunk(req, res, sLen)) != ESP_OK)
+                            {
+                                ESP_LOGE(__FUNCTION__, "Error sending chunk %s sLenL%d, actuallen:%d", esp_err_to_name(ret), sLen, strlen(res));
+                                break;
+                            }
+                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(res);
+                            memset(res, 0, resLen);
+                            sLen = 0;
+                        }
+
+                        sLen += sprintf(res + sLen, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d},",
+                                        path,
+                                        fi->d_name,
+                                        fi->d_type == DT_DIR ? "folder" : "file",
+                                        0);
+                    }
                 }
-                if ((ext == NULL) || (strlen(ext) == 0))
+                else if ((ext == nullptr) || (strlen(ext) == 0) || endsWith(fi->d_name, ext))
                 {
+                    fcnt++;
+                    ESP_LOGV(__FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding file %s", path, fcnt, dcnt, fpos, fi->d_name);
                     if (sLen > (resLen - 100))
                     {
                         ESP_LOGV(__FUNCTION__, "Buffer Overflow, flushing");
@@ -257,47 +285,24 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
                             ESP_LOGE(__FUNCTION__, "Error sending chunk %s sLenL%d, actuallen:%d", esp_err_to_name(ret), sLen, strlen(res));
                             break;
                         }
-                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(res);
+                        else
+                        {
+                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(res);
+                        }
                         memset(res, 0, resLen);
                         sLen = 0;
                     }
-
+                    sprintf(theFName, "%s/%s", path, fi->d_name);
+                    if (fcnt < 20)
+                        stat(theFName, &st);
+                    else
+                        st.st_size = 0;
                     sLen += sprintf(res + sLen, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d},",
                                     path,
                                     fi->d_name,
                                     fi->d_type == DT_DIR ? "folder" : "file",
-                                    0);
+                                    (uint32_t)st.st_size);
                 }
-            }
-            else if ((ext == NULL) || (strlen(ext) == 0) || endsWith(fi->d_name, ext))
-            {
-                fcnt++;
-                ESP_LOGV(__FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding file %s", path, fcnt, dcnt, fpos, fi->d_name);
-                if (sLen > (resLen - 100))
-                {
-                    ESP_LOGV(__FUNCTION__, "Buffer Overflow, flushing");
-                    if ((ret = httpd_resp_send_chunk(req, res, sLen)) != ESP_OK)
-                    {
-                        ESP_LOGE(__FUNCTION__, "Error sending chunk %s sLenL%d, actuallen:%d", esp_err_to_name(ret), sLen, strlen(res));
-                        break;
-                    }
-                    else
-                    {
-                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(res);
-                    }
-                    memset(res, 0, resLen);
-                    sLen = 0;
-                }
-                sprintf(theFName, "%s/%s", path, fi->d_name);
-                if (fcnt < 20)
-                    stat(theFName, &st);
-                else
-                    st.st_size = 0;
-                sLen += sprintf(res + sLen, "{\"folder\":\"%s\",\"name\":\"%s\",\"ftype\":\"%s\",\"size\":%d},",
-                                path,
-                                fi->d_name,
-                                fi->d_type == DT_DIR ? "folder" : "file",
-                                (uint32_t)st.st_size);
             }
         }
         closedir(theFolder);
@@ -337,7 +342,7 @@ esp_err_t TheRest::eventDescriptor_handler(httpd_req_t *req){
     if (eventId) {
         *eventId++=0;
         ESP_LOGV(__FUNCTION__,"base:%s id:%s",eventBase,eventId);
-        EventDescriptor_t* ed = NULL;
+        EventDescriptor_t const* ed = nullptr;
         if (eventId[0] <= 9) {
             ed=EventHandlerDescriptor::GetEventDescriptor(eventBase,atoi(eventId));
         } else {
@@ -388,16 +393,16 @@ void UpdateGpioProp(cfg_gpio_t *cfg, gpio_num_t val)
 
 void UpdateStringProp(cfg_label_t *cfg, char *val)
 {
-    if ((val == NULL) || (strcmp(cfg->value, val) != 0))
+    if ((val == nullptr) || (strcmp(cfg->value, val) != 0))
     {
-        strcpy(cfg->value, val == NULL ? "" : val);
+        strcpy(cfg->value, val == nullptr ? "" : val);
         cfg->version++;
     }
 }
 
 esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
     esp_err_t ret = ESP_FAIL;
-    if (restInstance == NULL) {
+    if (restInstance == nullptr) {
         restInstance = TheRest::GetServer();
     }
     int rlen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE);
@@ -411,15 +416,15 @@ esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
         *(restInstance->postData+rlen)=0;
         cJSON* stat = cJSON_ParseWithLength(restInstance->postData,JSON_BUFFER_SIZE);
         if (stat) {
-            AppConfig* appStat = new AppConfig(stat,NULL);
+            auto* appStat = new AppConfig(stat);
             if (appStat->HasProperty("name")) {
                 const char* name = appStat->GetStringProperty("name");
                 ManagedDevice* dev = ManagedDevice::GetByName(name);
                 if (dev) {
                     ESP_LOGV(__FUNCTION__,"Posting state to %s",dev->eventBase);
-                    EventDescriptor_t* ed = EventHandlerDescriptor::GetEventDescriptor(dev->eventBase,"STATUS");
+                    EventDescriptor_t const* ed = EventHandlerDescriptor::GetEventDescriptor(dev->eventBase,"STATUS");
                     if (ed){
-                        EventInterpretor::RunMethod(NULL,"Post",(void*)&stat,false);
+                        EventInterpretor::RunMethod(nullptr,"Post",(void*)&stat,false);
                         ESP_LOGV(__FUNCTION__,"Posted %s to %s",restInstance->postData, name);
                         char* nstat = cJSON_Print(dev->status);
                         ret=httpd_resp_send(req,nstat,strlen(nstat));
@@ -448,7 +453,7 @@ esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
 
 esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
 {
-    if (restInstance == NULL) {
+    if (restInstance == nullptr) {
         restInstance = TheRest::GetServer();
     }
     esp_err_t ret = 0;
@@ -464,10 +469,10 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
         *(restInstance->postData + rlen) = 0;
         ESP_LOGV(__FUNCTION__, "Got %s", restInstance->postData);
         cJSON *jresponse = cJSON_ParseWithLength(restInstance->postData, rlen);
-        if (jresponse != NULL)
+        if (jresponse != nullptr)
         {
             cJSON *jClass = cJSON_GetObjectItem(jresponse, "className");
-            if ((jClass != NULL) && (ManagedDevice::GetNumRunningInstances() > 0)) {
+            if ((jClass != nullptr) && (ManagedDevice::GetNumRunningInstances() > 0)) {
                 ManagedDevice **dev = ManagedDevice::GetRunningInstances();
                 bool processed = false;
                 for (uint32_t idx = 0; idx < ManagedDevice::GetNumRunningInstances(); idx++) {
@@ -482,7 +487,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                     ret = httpd_resp_send(req, RESP_OK, 2);
                 }
             } else {
-                cJSON *jcommand = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
+                cJSON const *jcommand = cJSON_GetObjectItemCaseSensitive(jresponse, "command");
                 if (jcommand && (strcmp(jcommand->valuestring, "reboot") == 0))
                 {
                     ret = httpd_resp_send(req, "Rebooting", 9);
@@ -492,7 +497,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                 }
                 else if (jcommand && (strcmp(jcommand->valuestring, "scanNetwork") == 0))
                 {
-                    CreateBackgroundTask(TheRest::ScanNetwork,"ScanNetwork",4096, NULL, tskIDLE_PRIORITY,NULL);
+                    CreateBackgroundTask(TheRest::ScanNetwork,"ScanNetwork",4096, nullptr, tskIDLE_PRIORITY,nullptr);
                     ret = httpd_resp_send(req, RESP_OK, 2);
                 }
                 else if (jcommand && (strcmp(jcommand->valuestring, "factoryReset") == 0))
@@ -567,7 +572,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                 {
                     cJSON *event = cJSON_GetObjectItemCaseSensitive(jresponse, "param1");
                     TinyGPSPlus* gps = TinyGPSPlus::runningInstance();
-                    if (gps && event->valuedouble) {
+                    if (gps && (event->valuedouble > 0.0)) {
                         gps->setRefreshRate(event->valuedouble);
                         ret = httpd_resp_send(req, RESP_OK, 2);
                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
@@ -606,14 +611,14 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
             if (endsWith(path, "log"))
             {
                 const char *clfn = getLogFName();
-                if (!clfn && (strlen(clfn) > 0) && endsWith(clfn, path))
+                if (clfn && (strlen(clfn) > 0) && endsWith(clfn, path))
                 {
                     ESP_LOGI(__FUNCTION__, "Not moving %s as is it active(%s)", path, clfn);
                     moveTheSucker = false;
                 }
                 else
                 {
-                    ESP_LOGI(__FUNCTION__, "Will move %s as it is not active trip %s", path, clfn);
+                    ESP_LOGI(__FUNCTION__, "Will move %s as it is not active log %s", path, clfn);
                 }
             }
         }
@@ -629,7 +634,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
     uint32_t len = 0;
     if (startsWith(path, "/sdcard") ? initSPISDCard(false) : initSpiff(false))
     {
-        if ((theFile = fopen(path, "r")) != NULL)
+        if ((theFile = fopen(path, "r")) != nullptr)
         {
             ESP_LOGV(__FUNCTION__, "%s opened", path);
             uint8_t *buf = (uint8_t *)dmalloc(F_BUF_SIZE);
@@ -648,13 +653,13 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
                     break;
                 }
             }
-            httpd_resp_send_chunk(req, NULL, 0);
+            httpd_resp_send_chunk(req, nullptr, 0);
             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += len;
             ldfree(buf);
             fclose(theFile);
             if (moveTheSucker)
             {
-                char *topath = (char *)dmalloc(530);
+                auto *topath = (char *)dmalloc(530);
                 memset(topath, 0, 530);
                 sprintf(topath, "/sdcard/sent%s", path);
                 if (!moveFile(path, topath))
@@ -754,7 +759,7 @@ esp_err_t TheRest::app_handler(httpd_req_t *req)
 
 esp_err_t TheRest::stat_handler(httpd_req_t *req)
 {
-    char *fname = (char *)(req->uri + 5);
+    auto *fname = req->uri + 5;
     if (req->method == HTTP_POST)
     {
         ESP_LOGV(__FUNCTION__, "Getting stats on %s", fname);
@@ -834,7 +839,7 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
 
 esp_err_t TheRest::config_template_handler(httpd_req_t *req)
 {
-    if (restInstance == NULL) {
+    if (restInstance == nullptr) {
         restInstance = TheRest::GetServer();
     }
     ESP_LOGV(__FUNCTION__, "Config template Handler:%s", req->uri);
@@ -858,7 +863,7 @@ esp_err_t TheRest::config_template_handler(httpd_req_t *req)
 
 esp_err_t TheRest::config_handler(httpd_req_t *req)
 {
-    if (restInstance == NULL) {
+    if (restInstance == nullptr) {
         restInstance = TheRest::GetServer();
     }
     ESP_LOGV(__FUNCTION__, "Config Handler.");
@@ -933,7 +938,7 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
     {
         if (true)
         {
-            cJSON *jcfg = appcfg->GetJSONConfig(NULL);
+            cJSON const *jcfg = appcfg->GetJSONConfig(nullptr);
             char *sjson = cJSON_PrintUnformatted(jcfg);
             if (sjson)
             {
@@ -968,10 +973,10 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
 
 esp_err_t TheRest::list_files_handler(httpd_req_t *req)
 {
-    char *jsonbuf = (char *)dmalloc(JSON_BUFFER_SIZE);
+    auto *jsonbuf = (char *)dmalloc(JSON_BUFFER_SIZE);
     memset(jsonbuf, 0, JSON_BUFFER_SIZE);
     *jsonbuf = '[';
-    if (findFiles(req, (char *)(req->uri + 6), NULL, false, jsonbuf, JSON_BUFFER_SIZE - 1) != ESP_OK)
+    if (findFiles(req, req->uri + 6, nullptr, false, jsonbuf, JSON_BUFFER_SIZE - 1) != ESP_OK)
     {
         ESP_LOGE(__FUNCTION__, "Error wilst sending file list");
         ldfree(jsonbuf);
@@ -987,7 +992,7 @@ esp_err_t TheRest::list_files_handler(httpd_req_t *req)
     ESP_LOGV(__FUNCTION__, "Getting %s url:%s(%d)", req->uri + 6, req->uri, strlen(jsonbuf));
     esp_err_t ret = httpd_resp_send_chunk(req, jsonbuf, strlen(jsonbuf));
     ESP_LOGV(__FUNCTION__, "Sent final chunck of %d", strlen(jsonbuf));
-    ret = httpd_resp_send_chunk(req, NULL, 0);
+    ret = httpd_resp_send_chunk(req, nullptr, 0);
     ldfree(jsonbuf);
     return ret;
 }
@@ -997,13 +1002,13 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
     ESP_LOGV(__FUNCTION__, "Status Handler");
     esp_err_t ret = ESP_FAIL;
 
-    char *path = (char *)req->uri + 8;
+    const char *path = req->uri + 8;
     ESP_LOGV(__FUNCTION__, "uri:%s method: %s path:%s", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path);
 
     if (req->method == http_method::HTTP_POST)
     {
         httpd_resp_set_type(req, "application/json");
-        char *sjson = NULL;
+        char *sjson = nullptr;
         if (strlen(path) == 0 || (strlen(path) == 1 && path[0] == '/'))
         {
             ESP_LOGV(__FUNCTION__, "Getting root");
@@ -1024,7 +1029,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         else if (strcmp(path, "repeating_tasks") == 0)
         {
             ESP_LOGV(__FUNCTION__, "Getting tasks");
-            cJSON *status = ManagedThreads::GetRepeatingTaskStatus();
+            cJSON const *status = ManagedThreads::GetRepeatingTaskStatus();
             if (status){
                 sjson = cJSON_PrintUnformatted(status);
             } else {
@@ -1035,14 +1040,14 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         else if (strcmp(path, "app") == 0)
         {
             ESP_LOGV(__FUNCTION__, "Getting app");
-            sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(NULL));
+            sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(nullptr));
         }
         else if (AppConfig::GetAppStatus()->HasProperty(path))
         {
             ESP_LOGV(__FUNCTION__, "Getting %s status", path);
             sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(path));
         }
-        if ((sjson != NULL) && (strlen(sjson) > 0))
+        if (sjson != nullptr)
         {
             ret = httpd_resp_send(req, sjson, strlen(sjson));
             TheRest::GetServer()->jBytesOut->valuedouble += strlen(sjson);
@@ -1078,14 +1083,14 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
 esp_err_t TheRest::download_handler(httpd_req_t *req)
 {
     ESP_LOGI(__FUNCTION__, "Downloading %s", req->uri);
-    if (restInstance == NULL) {
+    if (restInstance == nullptr) {
         restInstance = TheRest::GetServer();
     }
 
     int len = 0, curLen = -1, fnameLen=httpd_req_get_hdr_value_len(req, "filename");
-    MFile *dest = NULL;
+    MFile *dest = nullptr;
     if (fnameLen++) {
-        char* fname = (char*)dmalloc(fnameLen);
+        auto* fname = (char*)dmalloc(fnameLen);
         httpd_req_get_hdr_value_str(req,"filename",fname,fnameLen);
         dest = new MFile(fname);
         ldfree(fname);
@@ -1148,12 +1153,12 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                         struct stat st;
                         bool hasmd5 = stat("/lfs/firmware/current.bin.md5", &st) == 0;
 
-                        FILE *fw = NULL;
-                        if (!hasmd5 || ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL))
+                        FILE *fw = nullptr;
+                        if (!hasmd5 || ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != nullptr))
                         {
                             char ccmd5[70];
                             memset(ccmd5, 0, 70);
-                            uint32_t len = 0;
+                            int len = 0;
                             if (!hasmd5 || ((len = fread((void *)ccmd5, 1, 70, fw)) > 0))
                             {
                                 if (hasmd5) {
@@ -1169,11 +1174,10 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                 }
                                 else
                                 {
-                                    uint8_t *img = (uint8_t *)dmalloc(totLen); //heap_caps_malloc(totLen, MALLOC_CAP_SPIRAM);
+                                    auto *img = (uint8_t *)dmalloc(totLen); //heap_caps_malloc(totLen, MALLOC_CAP_SPIRAM);
                                     memset(img, 0, totLen);
                                     ESP_LOGI(__FUNCTION__, "RAM:%d...len:%d md5:%s", esp_get_free_heap_size(), totLen, md5);
 
-                                    uint8_t ccmd5[70];
                                     memset(ccmd5, 0, 70);
                                     mbedtls_md_context_t ctx;
                                     mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
@@ -1183,7 +1187,6 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                     mbedtls_md_starts(&ctx);
 
                                     uint32_t curLen = 0;
-                                    int len = 0;
 
                                     do
                                     {
@@ -1238,14 +1241,14 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                             }
                                         }
 
-                                        if ((fw = fopenCd("/lfs/firmware/current.bin", "w", true)) != NULL)
+                                        if ((fw = fopenCd("/lfs/firmware/current.bin", "w", true)) != nullptr)
                                         {
                                             ESP_LOGI(__FUNCTION__, "Writing /lfs/firmware/current.bin");
                                             if (fwrite((void *)img, 1, totLen, fw) == totLen)
                                             {
                                                 fclose(fw);
 
-                                                if ((fw = fopenCd("/lfs/firmware/tobe.bin.md5", "w", true)) != NULL)
+                                                if ((fw = fopenCd("/lfs/firmware/tobe.bin.md5", "w", true)) != nullptr)
                                                 {
                                                     fwrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
                                                     fclose(fw);
@@ -1257,7 +1260,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                                     pi = esp_partition_find(ESP_PARTITION_TYPE_APP,            // Get partition iterator for
                                                                             ESP_PARTITION_SUBTYPE_APP_FACTORY, // Ashy Flashy partition
                                                                             "factory");
-                                                    if (pi == NULL) // Check result
+                                                    if (pi == nullptr) // Check result
                                                     {
                                                         ESP_LOGE(__FUNCTION__, "Failed to find factory partition");
                                                         ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to find factory partition");
@@ -1357,8 +1360,8 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
     {
         if (initSpiff(false))
         {
-            FILE *fw = NULL;
-            if ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
+            FILE *fw = nullptr;
+            if ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != nullptr)
             {
                 char ccmd5[70];
                 uint32_t len = 0;

@@ -133,6 +133,12 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# Kernel
+#
+CONFIG_ENABLE_VALIDATED_REQUESTS=y
+# end of Kernel
+
+#
 # Compiler options
 #
 # CONFIG_COMPILER_OPTIMIZATION_DEFAULT is not set

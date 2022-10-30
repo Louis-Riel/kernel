@@ -2,12 +2,11 @@ import {createElement as e, Component} from 'react';
 import { Button, FormControl, InputLabel, Input } from '@mui/material'
 import {wfetch, genUUID} from '../../../utils/utils'
 
-var httpPrefix = "";
-
 export default class CmdButton extends Component {
     constructor(props) {
         super(props);
         this.state = {
+            httpPrefix:this.props.selectedDevice?.ip ? this.props.selectedDevice.ip : "",
             param1: this.props.param1,
             param2: this.props.param2,
             param3: this.props.param3,
@@ -17,7 +16,7 @@ export default class CmdButton extends Component {
         };
     }
     runIt() {
-        wfetch(`${httpPrefix}/status/cmd`, {
+        wfetch(`${this.state.httpPrefix}/status/cmd`, {
             method: this.props.HTTP_METHOD,
             body: JSON.stringify({command: this.props.command, className: this.props.className ,name: this.props.name, ...this.state})
         }).then(data => data.text())
@@ -55,6 +54,16 @@ export default class CmdButton extends Component {
 
     hasComplexCommand() {
         return Object.keys(this.props).filter(k => k.endsWith("_editable") && this.props[k]).length > 0
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+            } else {
+                this.setState({httpPrefix:""});
+            }
+        }
     }
 
     render() {

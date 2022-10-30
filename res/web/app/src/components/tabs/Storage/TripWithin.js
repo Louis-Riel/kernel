@@ -22,7 +22,7 @@ export class TripWithin extends Component {
     render() {
         return e("div", { key: "renderedtrip", className: "rendered trip" }, [
             this.getIcon(),
-            this.state?.viewer === "trip" ? e(TripViewer, { key: "tripviewer", points: this.props.points, cache: this.props.cache, onClose: () => this.setState({ "viewer": "" }) }) : null
+            this.state?.viewer === "trip" ? e(TripViewer, { key: "tripviewer", selectedDevice:this.props.selectedDevice, points: this.props.points, cache: this.props.cache, onClose: () => this.setState({ "viewer": "" }) }) : null
         ]
         );
     }

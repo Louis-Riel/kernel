@@ -7,45 +7,14 @@
 
 const char* TheRest::REST_BASE="Rest";
 
-static TheRest *restInstance = NULL;
+static TheRest *restInstance = nullptr;
 static uint32_t deviceId = 0;
 
 void restSallyForth(void *pvParameter) {
-    if (TheRest::GetServer() == NULL) {
+    if (TheRest::GetServer() == nullptr) {
         TheRest::GetServer(pvParameter);
     }
     deviceId?deviceId:deviceId=AppConfig::GetAppConfig()->GetIntProperty("deviceid");
-}
-
-esp_err_t TheRest::checkTheSum(httpd_req_t *req) {
-    size_t hlen = httpd_req_get_hdr_value_len(req, "The-Hash");
-    esp_err_t ret = ESP_OK;
-    if (hlen > 1) {
-        char theHash[65];
-        if (httpd_req_get_hdr_value_str(req, "The-Hash", theHash, 65) == ESP_OK) {
-            ESP_LOGD(__FUNCTION__,"Hash:%s(%s)",req->uri, theHash);
-            // mbedtls_sha256_context ctx;
-            // mbedtls_sha256_init(&ctx);
-            // mbedtls_sha256_update(&ctx, reinterpret_cast<const uint8_t*>("abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"), 64);
-            // uint8_t digest[32];
-            // mbedtls_sha256_finish(&ctx, digest);
-            // mbedtls_sha256_free(&ctx);
-            // unsigned long t1 = micros();
-
-            // for (int i = 0; i < sizeof(digest); ++i) {
-            //     Serial.printf("%02x", digest[i]);
-            // }
-        } else {
-            ret=ESP_FAIL;
-            ESP_LOGE(__FUNCTION__,"%s got bad hash:%d",req->uri, hlen);
-            httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
-        }
-    } else {
-        ret=ESP_FAIL;
-        ESP_LOGW(__FUNCTION__,"%s got no hash",req->uri);
-        httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
-    }
-    return ret;
 }
 
 TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
@@ -54,19 +23,19 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       eventGroup(xEventGroupCreate()),
       wifiEventGroup(evtGrp),
       restConfig(HTTPD_DEFAULT_CONFIG()),
-      gwAddr(NULL),
-      ipAddr(NULL),
+      gwAddr(nullptr),
+      ipAddr(nullptr),
       app_eg(getAppEG()),
       storageFlags(initStorage()),
-      system_status(NULL)
+      system_status(nullptr)
 {
-    if (restInstance == NULL)
+    if (restInstance == nullptr)
     {
         deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
         ESP_LOGI(__FUNCTION__, "First Rest for %d", deviceId);
         restInstance = this;
         ESP_LOGI(__FUNCTION__, "Getting Config for %d", deviceId);
-        AppConfig* apin = new AppConfig(status,AppConfig::GetAppStatus());
+        auto* apin = new AppConfig(status,AppConfig::GetAppStatus());
         apin->SetIntProperty("numRequests",0);
         apin->SetIntProperty("processingTime_us",0);
         apin->SetIntProperty("BytesIn",0);
@@ -79,10 +48,10 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         jBytesOut = apin->GetPropertyHolder("BytesOut");
         jnumErrors = apin->GetPropertyHolder("Failures");
 
-        accessControlAllowOrigin=config && config->HasProperty("Access-Control-Allow-Origin") ? config->GetPropertyHolder("Access-Control-Allow-Origin") : NULL;
-        accessControlMaxAge=config && config->HasProperty("Access-Control-Max-Age") ? config->GetPropertyHolder("Access-Control-Max-Age") : NULL;
-        accessControlAllowMethods=config && config->HasProperty("Access-Control-Allow-Methods") ? config->GetPropertyHolder("Access-Control-Allow-Methods") : NULL;
-        accessControlAllowHeaders=config && config->HasProperty("Access-Control-Allow-Headers") ? config->GetPropertyHolder("Access-Control-Allow-Headers") : NULL;
+        accessControlAllowOrigin=config && config->HasProperty("Access-Control-Allow-Origin") ? config->GetPropertyHolder("Access-Control-Allow-Origin") : nullptr;
+        accessControlMaxAge=config && config->HasProperty("Access-Control-Max-Age") ? config->GetPropertyHolder("Access-Control-Max-Age") : nullptr;
+        accessControlAllowMethods=config && config->HasProperty("Access-Control-Allow-Methods") ? config->GetPropertyHolder("Access-Control-Allow-Methods") : nullptr;
+        accessControlAllowHeaders=config && config->HasProperty("Access-Control-Allow-Headers") ? config->GetPropertyHolder("Access-Control-Allow-Headers") : nullptr;
         delete apin;
     }
     if (xEventGroupGetBits(eventGroup) & HTTP_SERVING)
@@ -94,12 +63,14 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     ESP_LOGI(__FUNCTION__, "Waiting for wifi");
     xEventGroupWaitBits(wifiEventGroup, WIFI_CONNECTED_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
     ESP_LOGV(__FUNCTION__, "Registering RegisterEventHandler");
-    if (handlerDescriptors == NULL)
-        EventManager::RegisterEventHandler((handlerDescriptors = BuildHandlerDescriptors()));
+    if (handlerDescriptors == nullptr){
+        handlerDescriptors = BuildHandlerDescriptors();
+        EventManager::RegisterEventHandler(handlerDescriptors);
+    }
 
     ESP_LOGI(__FUNCTION__, "Getting Ip for %d", deviceId);
 
-    if ((gwAddr == NULL) && (ipAddr == NULL))
+    if ((gwAddr == nullptr) && (ipAddr == nullptr))
     {
         TheWifi *theWifi = TheWifi::GetInstance();
         ipAddr = (char *)dmalloc(16);
@@ -110,8 +81,8 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     }
 
     hcUrl = (char*)dmalloc(30);
-    sprintf((char*)hcUrl,"http://%s/status/",ipAddr);
-    restConfig.uri_match_fn = this->routeHttpTraffic;
+    sprintf(hcUrl,"http://%s/status/",ipAddr);
+    restConfig.uri_match_fn = TheRest::routeHttpTraffic;
     restConfig.lru_purge_enable = true;
 
     ESP_LOGI(__FUNCTION__, "Starting server on port %d ip%s gw:%s", restConfig.server_port, ipAddr, restInstance->gwAddr);
@@ -126,7 +97,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         xEventGroupSetBits(eventGroup, HTTP_SERVING);
         xEventGroupSetBits(app_eg,app_bits_t::REST);
         xEventGroupClearBits(app_eg,app_bits_t::REST_OFF);
-        PostEvent(NULL,0,HTTP_SERVING);
+        PostEvent(nullptr,0,HTTP_SERVING);
     }
     else
     {
@@ -139,7 +110,7 @@ TheRest::~TheRest()
     ESP_LOGI(__FUNCTION__,"Rest resting");
     deinitStorage(storageFlags);
     vEventGroupDelete(eventGroup);
-    if (handlerDescriptors != NULL)
+    if (handlerDescriptors != nullptr)
         EventManager::UnRegisterEventHandler((handlerDescriptors = BuildHandlerDescriptors()));
 
     httpd_stop(server);
@@ -148,7 +119,7 @@ TheRest::~TheRest()
     ldfree(ipAddr);
     ldfree(gwAddr);
     ldfree(postData);
-    restInstance=NULL;
+    restInstance=nullptr;
 }
 
 bool TheRest::routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_t match_upto)
@@ -242,7 +213,7 @@ TheRest *TheRest::GetServer()
 
 void TheRest::GetServer(void *evtGrp)
 {
-    if (restInstance == NULL)
+    if (restInstance == nullptr)
         restInstance = new TheRest(AppConfig::GetAppConfig()->GetConfig("Rest"), (EventGroupHandle_t)evtGrp);
 }
 
@@ -263,14 +234,14 @@ char *TheRest::GetRequest(const char *url, size_t *len)
 
 char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, size_t *len)
 {
-    return SendRequest(url, method, len, NULL);
+    return SendRequest(url, method, len, nullptr);
 }
 
 char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, size_t *len, char *charBuf)
 {
-    esp_http_client_handle_t client = NULL;
-    esp_http_client_config_t *config = NULL;
-    bool isPreAllocated = charBuf != NULL;
+    esp_http_client_handle_t client = nullptr;
+    esp_http_client_config_t *config = nullptr;
+    bool isPreAllocated = charBuf != nullptr;
 
     config = (esp_http_client_config_t *)dmalloc(sizeof(esp_http_client_config_t));
     memset(config, 0, sizeof(esp_http_client_config_t));
@@ -285,7 +256,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
     int hlen = 0;
     int retCode = -1;
     size_t totLen = isPreAllocated ? *len : 0;
-    char *retVal = NULL;
+    char *retVal = nullptr;
     
     if ((client = esp_http_client_init(config)) &&
         ((err = esp_http_client_open(client, 0)) == ESP_OK) &&
@@ -326,7 +297,7 @@ char *TheRest::SendRequest(const char *url, esp_http_client_method_t method, siz
 
 cJSON *TheRest::PostJSonRequest(const char *url)
 {
-    cJSON *ret = NULL;
+    cJSON *ret = nullptr;
     size_t len = 0;
     ESP_LOGV(__FUNCTION__, "Posting (%s).", url);
     char *sjson = PostRequest(url, &len);
@@ -351,7 +322,7 @@ cJSON *TheRest::PostJSonRequest(const char *url)
 cJSON *TheRest::GetDeviceConfig(esp_ip4_addr_t *ipInfo, uint32_t deviceId)
 {
     char *url = (char *)dmalloc(100);
-    cJSON *jret = NULL;
+    cJSON *jret = nullptr;
 
     if (deviceId)
         sprintf((char *)url, "http://" IPSTR "/config/%d", IP2STR(ipInfo), deviceId);
@@ -408,10 +379,10 @@ esp_err_t TheRest::SendConfig(char *addr, cJSON *cfg)
 
 void TheRest::MergeConfig(void *param)
 {
-    ESP_LOGI(__FUNCTION__, "Merging Config %d %d",restInstance == NULL, restInstance == NULL ? 0 : restInstance->gwAddr==NULL);
+    ESP_LOGI(__FUNCTION__, "Merging Config %d %d",restInstance == nullptr, restInstance == nullptr ? 0 : restInstance->gwAddr==nullptr);
     uint32_t addr = ipaddr_addr(restInstance->gwAddr);
     cJSON *newCfg = restInstance->GetDeviceConfig((esp_ip4_addr *)&addr, deviceId);
-    cJSON *curCfg = AppConfig::GetAppConfig()->GetJSONConfig(NULL);
+    cJSON *curCfg = AppConfig::GetAppConfig()->GetJSONConfig(nullptr);
     if (newCfg)
     {
         if (!cJSON_Compare(newCfg, curCfg, true))
@@ -453,7 +424,7 @@ void TheRest::SendStatus(void *param)
 
     cJSON *cstats = status_json();
     cJSON *jstats = tasks_json();
-    cJSON *astats = AppConfig::GetAppStatus()->GetJSONConfig(NULL);
+    cJSON *astats = AppConfig::GetAppStatus()->GetJSONConfig(nullptr);
     cJSON *jtmp;
     cJSON_ArrayForEach(jtmp, cstats)
     {
@@ -573,7 +544,7 @@ bool TheRest::HealthCheck(void* instance){
         TheRest* theRest = (TheRest*)instance;
         size_t len=0;
         char* resp = theRest->SendRequest(theRest->hcUrl,HTTP_METHOD_POST,&len);
-        if (resp != NULL){
+        if (resp != nullptr){
             ldfree(resp);
             return true;
         }

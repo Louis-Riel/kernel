@@ -25,7 +25,7 @@ typedef enum{
     DOWNLOAD_STARTED = BIT7,
     DOWNLOAD_FINISHED = BIT8
 } restServerState_t;
-class WebsocketManager : ManagedDevice
+class WebsocketManager : private ManagedDevice
 {
 public:
   WebsocketManager();
@@ -100,11 +100,6 @@ public:
   static const char* REST_BASE;
 
 protected:
-  const char* hcUrl;
-  const cJSON* accessControlAllowOrigin;
-  const cJSON* accessControlMaxAge;
-  const cJSON* accessControlAllowMethods;
-  const cJSON* accessControlAllowHeaders;
   static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
   static bool HealthCheck(void *instance);
   static void ScanNetwork(void *instance);
@@ -141,6 +136,11 @@ protected:
   static esp_err_t checkTheSum(httpd_req_t *req);
 
 private:
+  char* hcUrl;
+  const cJSON* accessControlAllowOrigin;
+  const cJSON* accessControlMaxAge;
+  const cJSON* accessControlAllowMethods;
+  const cJSON* accessControlAllowHeaders;
   char* postData;
   EventGroupHandle_t eventGroup;
   EventGroupHandle_t wifiEventGroup;
@@ -164,123 +164,123 @@ private:
           {.uri = "/templates/config*",
            .method = HTTP_POST,
            .handler = config_template_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/config*",
            .method = HTTP_POST,
            .handler = config_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/config*",
            .method = HTTP_PUT,
            .handler = config_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/files/*",
            .method = HTTP_POST,
            .handler = list_files_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/status/*",
            .method = HTTP_POST,
            .handler = status_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/status/*",
            .method = HTTP_PUT,
            .handler = status_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/stat/*",
            .method = HTTP_POST,
            .handler = stat_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/stat/*",
            .method = HTTP_DELETE,
            .handler = stat_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/ota/*",
            .method = HTTP_POST,
            .handler = ota_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/sdcard/*",
            .method = HTTP_PUT,
            .handler = download_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/eventDescriptor/*",
            .method = HTTP_POST,
            .handler = eventDescriptor_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL},
+           .supported_subprotocol = nullptr},
           {.uri = "/lfs/*",
            .method = HTTP_PUT,
            .handler = download_handler,
-           .user_ctx = NULL,
+           .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,
-           .supported_subprotocol = NULL}};
+           .supported_subprotocol = nullptr}};
 
   const httpd_uri_t appUri = {
       .uri = "*",
       .method = HTTP_GET,
       .handler = app_handler,
-      .user_ctx = NULL,
+      .user_ctx = nullptr,
       .is_websocket = false,
       .handle_ws_control_frames = false,
-      .supported_subprotocol = NULL};
+      .supported_subprotocol = nullptr};
 
   const httpd_uri_t restPostUri = {
       .uri = "*",
       .method = HTTP_POST,
       .handler = rest_handler,
-      .user_ctx = NULL,
+      .user_ctx = nullptr,
       .is_websocket = false,
       .handle_ws_control_frames = false,
-      .supported_subprotocol = NULL};
+      .supported_subprotocol = nullptr};
 
   const httpd_uri_t restPutUri = {
       .uri = "*",
       .method = HTTP_PUT,
       .handler = rest_handler,
-      .user_ctx = NULL,
+      .user_ctx = nullptr,
       .is_websocket = false,
       .handle_ws_control_frames = false,
-      .supported_subprotocol = NULL};
+      .supported_subprotocol = nullptr};
 
   const httpd_uri_t wsUri = {
       .uri = "/ws",
       .method = HTTP_GET,
       .handler = ws_handler,
-      .user_ctx = NULL,
+      .user_ctx = nullptr,
       .is_websocket = true,
       .handle_ws_control_frames = false,
-      .supported_subprotocol = NULL};
+      .supported_subprotocol = nullptr};
 };
 
 #endif

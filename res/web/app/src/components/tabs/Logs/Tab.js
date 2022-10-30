@@ -1,4 +1,5 @@
 import {createElement as e, Component} from 'react';
+import Chip from '@mui/material/Chip';
 import { FormControlLabel, Checkbox, Button } from '@mui/material';
 import './Logs.css';
 
@@ -52,27 +53,13 @@ export default class LogLines extends Component {
     }
 
     renderLogFunctionFilter(lvl,func,logLines) {    
-        return e(FormControlLabel,{
-            key:"ffiltered" + lvl + func,
-            className:"effiltered",
-            label: `${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") === func).length})`,
-            control:e(Checkbox, {
-                key: "ctrl",
-                checked: this.state.logLevels[lvl][func],
-                onChange: event => {this.state.logLevels[lvl][func] = event.target.checked; this.setState(this.state);}
-            })});
+        var label =  `${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") === func).length})`;
+        return <Chip label={label} disabled={!this.state.logLevels[lvl].visible} className={this.state.logLevels[lvl][func] ? "enabled" : "filtered"} onClick={() => {this.state.logLevels[lvl][func] = !this.state.logLevels[lvl][func]; this.setState(this.state);}} />;
     }
 
     renderLogLevelFilterControl(lvl,logLines) {   
-        return e(FormControlLabel,{
-            key:"lfiltered" + lvl,
-            className:"elfiltered",
-            label: `Log Level ${lvl}(${logLines.length})`,
-            control:e(Checkbox, {
-                key: "ctrl",
-                checked: this.state.logLevels[lvl].visible,
-                onChange: event => {this.state.logLevels[lvl].visible = event.target.checked; this.setState(this.state);}
-            })});
+        var label =  `Log Level ${lvl}(${logLines.length})`;
+        return <Chip label={label} className={this.state.logLevels[lvl].visible ? "enabled" : "filtered"} onClick={() => {this.state.logLevels[lvl].visible = !this.state.logLevels[lvl].visible; this.setState(this.state);}} />;
     }
 
     renderLogFunctionFilters(lvl, logLines) {
@@ -99,7 +86,6 @@ export default class LogLines extends Component {
 
     renderFilterPannel() {
         return e("div", { key: "filterPannel", className: "filterPannel" }, [
-            e("div", { key: "filterPannelTitle",className: "filterPannelTitle" }, "Filters"),
             e("div", { key: "filterPannelContent",className: "filterPannelContent" }, this.renderLogLevelFilters())
         ]);
     }

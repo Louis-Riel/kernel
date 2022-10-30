@@ -2,19 +2,38 @@ import { createRef, Component} from 'react';
 import { getInSpot, getAnims, fromVersionedToPlain } from '../../../utils/utils';
 import './WebSocket.css';
 
-var httpPrefix = "";
-
 export default class WebSocketManager extends Component {
     constructor(props) {
         super(props);
         this.widget = createRef();
-        this.state = {enabled:this.props.enabled};
+        this.state = {
+            httpPrefix:"",
+            enabled:props.enabled
+        };
         window.anims=getAnims();
-        if (this.state?.enabled && (httpPrefix || window.location.hostname)) {
-            this.openWs();
-        }
     }
     
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+            } else {
+                this.setState({httpPrefix:""});
+            }
+        }
+
+        if (prevState.httpPrefix !== this.state.httpPrefix) {
+            if (this.state.enabled) {
+                this.ws?.close();
+            }
+        }
+
+        if ((prevState.enabled != this.state.enabled ) || 
+            (this.ws != this.state.enabled)) {
+                this.state.enabled ? this.startWs() : this.stopWs();
+        }
+    }
+
     drawDidget(){
         if (!this.widget)
             return;
@@ -30,6 +49,10 @@ export default class WebSocketManager extends Component {
             });
 
             window.anims = window.anims.filter(anim => anim.state !== 2);
+            window.requestAnimationFrame(window.animRenderer);
+        }
+
+        if (this.state.connecting) {
             window.requestAnimationFrame(window.animRenderer);
         }
     }
@@ -84,7 +107,18 @@ export default class WebSocketManager extends Component {
         this.canvas.lineWidth = 2;
         this.canvas.shadowBlur = 2;
         this.canvas.shadowColor = '#002222';
-        this.canvas.fillStyle = this.state?.enabled ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#000000") : "#000000"
+        var idx = (Date.now()%3)+2;
+        if ( this.state?.enabled) {
+            if (this.state.error) {
+                this.canvas.fillStyle="#f27c7c";
+            } else if (this.state.connecting) {
+                this.canvas.fillStyle=`#00${[idx,idx,idx,idx].join('')}`;
+            } if (this.state.connected) {
+                this.canvas.fillStyle="#00ffff59";
+            }
+        } else {
+            this.canvas.fillStyle="#000000";
+        }
         this.roundedRectagle(startX, startY, boxWidht, boxHeight, cornerSize);
         this.canvas.fill();
         if (this.state?.lanDevices?.length) {
@@ -134,30 +168,21 @@ export default class WebSocketManager extends Component {
         this.canvas.arcTo(startX, startY, startX + cornerSize, startY, cornerSize);
     }
 
-    openWs() {
-        if (!window.location.hostname && !httpPrefix) {
-            return;
-        }
-        if (this.state?.connecting || this.state?.connected) {
-            return;
-        }
-        this.setState({connecting:true,running:false});
-
-        this.startWs();
-    }
-
-    closeWs() {
+    stopWs() {
         if (this.ws) {
-            this.state.enabled=false;
             this.ws.close();
-            this.ws = null;
-            window.requestAnimationFrame(this.drawDidget.bind(this));
+            this.ws = undefined;
         }
     }
 
     startWs() {
-        var ws = this.ws = new WebSocket("ws://" + (httpPrefix === "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
-        var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 10000);
+        if (this.state.connecting || this.state.connected) {
+            return;
+        }
+        this.setState({connecting:true,running:false});
+        var ws = this.ws = new WebSocket("ws://" + (this.state.httpPrefix === "" ? `${window.location.hostname}:${window.location.port}` : this.state.httpPrefix.substring(7)) + "/ws");
+        var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3600);
+        
         ws.onmessage = (event) => {
           stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
         };
@@ -174,17 +199,16 @@ export default class WebSocketManager extends Component {
     
     wsClose(stopItWithThatShit) {
         clearTimeout(stopItWithThatShit);
+        this.ws = null;
         this.setState({connected:false,connecting:false});
-        window.requestAnimationFrame(window.animRenderer);
-        if (this.state.enabled)
-          this.openWs();
+        window.animRenderer && window.requestAnimationFrame(window.animRenderer);
     }
     
     wsError(err, stopItWithThatShit, ws) {
         console.error(err);
         clearTimeout(stopItWithThatShit);
         this.setState({error: err});
-        window.requestAnimationFrame(window.animRenderer);
+        window.animRenderer && window.requestAnimationFrame(window.animRenderer);
         ws.close();
     }
     
@@ -192,8 +216,8 @@ export default class WebSocketManager extends Component {
         clearTimeout(stopItWithThatShit);
         this.setState({connected:true,connecting:false});
         ws.send("Connected");
-        window.requestAnimationFrame(window.animRenderer);
-        stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3500);
+        window.animRenderer && window.requestAnimationFrame(window.animRenderer);
+        stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3600);
         return stopItWithThatShit;
     }
     
@@ -264,11 +288,6 @@ export default class WebSocketManager extends Component {
         this.props?.eventCBFns?.forEach(eventCBFn=>eventCBFn.fn(event));
     }
     
-    handleClick(event) {
-        this.state.enabled = !this.state.enabled;
-        this.state.enabled ? this.openWs() : this.closeWs();
-    }
-
     processMessage(stopItWithThatShit, event, ws) {
         clearTimeout(stopItWithThatShit);
         if (!this.state.running || this.state.timeout) {
@@ -293,7 +312,11 @@ export default class WebSocketManager extends Component {
         } else {
           this.ProcessEvent(undefined);
         }
-        stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 6000);
+        stopItWithThatShit = setTimeout(() => { 
+            this.setState({timeout: "Message"}); 
+            ws.close(); 
+            console.log("Message timeout");
+        }, 3600);
         return stopItWithThatShit;
     }
     
@@ -304,14 +327,12 @@ export default class WebSocketManager extends Component {
             window.animRenderer = this.drawDidget.bind(this);
             window.requestAnimationFrame(window.animRenderer);
         }
-        //this.widget.current.addEventListener("click", this.handleClick.bind(this));
-
         this.mounted = true;
     }
 
     render() {
         return (
-            <div className="wsctrl"  width="100" height="40" onClick={this.handleClick.bind(this)}><canvas className="wsctrl" width="100" height="40" ref={this.widget}></canvas></div>
+            <div className="wsctrl"  width="100" height="40" onClick={evt=>this.setState({enabled:!this.state.enabled})}><canvas className="wsctrl" width="100" height="40" ref={this.widget}></canvas></div>
         )
     }
 }

@@ -39,6 +39,10 @@
     align-items: center;
 }
 
+.propName {
+    color: cyan;
+}
+
 .liveEvent {
     background: linear-gradient(to bottom, #2d332d, #091308);
     margin: 5px;

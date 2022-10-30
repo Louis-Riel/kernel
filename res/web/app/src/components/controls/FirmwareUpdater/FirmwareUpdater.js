@@ -4,18 +4,18 @@ import CryptoJS from 'crypto-js';
 import { Button } from '@mui/material';
 import './FirmwareUpdater.css';
 
-var httpPrefix = "";
-
 export default class FirmwareUpdater extends Component {
     constructor(props) {
         super(props);
-        this.state = {};
+        this.state = {
+            httpPrefix:"",
+        };
     }
 
     UploadFirmware() {
         this.setState({ loaded: `Sending ${this.state.len} firmware bytes` })
         if (this.state.fwdata && this.state.md5) {
-            return wfetch(`${httpPrefix}/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
+            return wfetch(`${this.state.httpPrefix}/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
                 method: 'post',
                 body: this.state.fwdata
             }).then(res => res.text())
@@ -26,7 +26,7 @@ export default class FirmwareUpdater extends Component {
     waitForDevFlashing() {
         var abort = new AbortController();
         var stopAbort = setTimeout(() => { abort.abort() }, 1000);
-        wfetch(`${httpPrefix}/status/app`, {
+        wfetch(`${this.state.httpPrefix}/status/app`, {
             method: 'post',
             signal: abort.signal
         }).then(res => {
@@ -41,6 +41,14 @@ export default class FirmwareUpdater extends Component {
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+            } else {
+                this.setState({httpPrefix:""});
+            }
+        }
+
         if ((this.state.loaded === "Flashing") && (this.state.waiter === null)) {
             this.waitForDevFlashing();
         }

@@ -31,8 +31,12 @@ button.MuiButtonBase-root.Mui-selected {
 
 button.MuiButtonBase-root.MuiButton-text {
   background: linear-gradient(180deg,#1e261d,#273225);
-  border: solid 1px #535a54;
-  padding: 1px 5px;
+  border: 1px solid #535a54;
+  padding: 0px 5px;
+  min-width: auto;
+  border-radius: 20px;
+  border-color: cyan;
+  border-width: 2px;
 }
 
 .pageContent {
@@ -60,14 +64,36 @@ button.MuiButtonBase-root.MuiButton-text {
 .buttonbar {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-content: center;
   justify-content: space-between;
   align-items: center;
-  margin: 20px 5px;
+  margin-top: 15px;
 }
 
 .hidden {
   visibility: hidden;
   display: none !important;
+}
+
+.control-bar {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+div.MuiTabs-flexContainer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+label.Mui-focused {
+  color: lightcyan !important;
+}
+
+.MuiFormControl-root {
+  min-width: 90px;
 }

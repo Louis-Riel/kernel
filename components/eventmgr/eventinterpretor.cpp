@@ -7,9 +7,9 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 EventInterpretor::EventInterpretor(cJSON *json, cJSON *programs)
-    : programs(programs), config(json), programName(NULL), method(NULL), params(NULL), app_eg(getAppEG())
+    : programs(programs), config(json), programName(nullptr), method(nullptr), params(nullptr), app_eg(getAppEG())
 {
-    AppConfig *cfg = new AppConfig(json, NULL);
+    auto *cfg = new AppConfig(json);
     memset(conditions, 0, 5 * sizeof(void *));
     memset(isAnd, 0, 5 * sizeof(bool));
     eventBase = cfg->GetStringProperty("eventBase");
@@ -45,7 +45,7 @@ EventInterpretor::EventInterpretor(cJSON *json, cJSON *programs)
     }
     if (cJSON_HasObjectItem(json, "conditions"))
     {
-        cJSON *condition = NULL;
+        cJSON *condition = nullptr;
         int idx = 0;
         char *boper;
         cJSON_ArrayForEach(condition, cJSON_GetObjectItem(json, "conditions"))
@@ -57,7 +57,7 @@ EventInterpretor::EventInterpretor(cJSON *json, cJSON *programs)
             if (cJSON_HasObjectItem(condition, "boper"))
             {
                 boper = cJSON_GetObjectItem(condition, "boper")->valuestring;
-                if (boper == NULL)
+                if (boper == nullptr)
                 {
                     boper = cJSON_GetObjectItem(cJSON_GetObjectItem(condition, "boper"), "value")->valuestring;
                 }
@@ -112,7 +112,7 @@ bool EventInterpretor::IsValid(esp_event_base_t eventBase, int32_t id, void *eve
 
 bool EventInterpretor::IsProgram()
 {
-    return (programName != NULL);
+    return (programName != nullptr);
 }
 
 const char *EventInterpretor::GetProgramName()
@@ -121,23 +121,23 @@ const char *EventInterpretor::GetProgramName()
     {
         return programName;
     }
-    return NULL;
+    return nullptr;
 }
 
 void EventInterpretor::RunProgram(const char *programName)
 {
-    RunProgram(NULL, programName);
+    RunProgram(nullptr, programName);
 }
 
 void EventInterpretor::_RunProgram(void* arg)
 {
     LoopyArgs *args = (LoopyArgs *)arg;
-    args->interpretor->RunProgram(NULL, args->program);
+    args->interpretor->RunProgram(nullptr, args->program);
 }
 
 void EventInterpretor::RunProgram(void *event_data, const char *programName)
 {
-    AppConfig *program = NULL;
+    AppConfig *program = nullptr;
     cJSON *prog;
     if (!programs)
     {
@@ -146,7 +146,7 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
     }
     cJSON_ArrayForEach(prog, programs)
     {
-        AppConfig *aprog = new AppConfig(prog, NULL);
+        auto *aprog = new AppConfig(prog);
         if (aprog->HasProperty("name") && (strcmp(aprog->GetStringProperty("name"), programName) == 0))
         {
             program = aprog;
@@ -163,7 +163,7 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
     if (program->HasProperty("inLineThreads"))
     {
         cJSON *item;
-        cJSON *jprog = program->GetJSONConfig(NULL);
+        cJSON *jprog = program->GetJSONConfig(nullptr);
         ESP_LOGV(__FUNCTION__, "Running inline %s", programName);
         if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE)
         {
@@ -173,7 +173,7 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
         }
         cJSON_ArrayForEach(item, cJSON_GetObjectItem(jprog, "inLineThreads"))
         {
-            if ((item == NULL) || cJSON_IsInvalid(item))
+            if ((item == nullptr) || cJSON_IsInvalid(item))
             {
                 ESP_LOGI(__FUNCTION__, "Unparsable JSON");
                 continue;
@@ -184,11 +184,11 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
                 ESP_LOGV(__FUNCTION__, "item:%s:%s", programName, ctmp);
                 ldfree(ctmp);
             }
-            AppConfig *aitem = new AppConfig(item, NULL);
+            AppConfig *aitem = new AppConfig(item);
             if (aitem->HasProperty("method"))
             {
-                cJSON *mParams = aitem->HasProperty("params") ? aitem->GetJSONConfig("params") : NULL;
-                if ((mParams != NULL) && (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE))
+                cJSON *mParams = aitem->HasProperty("params") ? aitem->GetJSONConfig("params") : nullptr;
+                if ((mParams != nullptr) && (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE))
                 {
                     char *ctmp = cJSON_Print(mParams);
                     ESP_LOGV(__FUNCTION__, "%s mParams:%s",programName, ctmp);
@@ -200,13 +200,13 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
             {
                 if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
                 {
-                    char *tmp = cJSON_Print(aitem->GetJSONConfig(NULL));
+                    char *tmp = cJSON_Print(aitem->GetJSONConfig(nullptr));
                     ESP_LOGV(__FUNCTION__, "%s running program from %s",programName, tmp);
                     ldfree(tmp);
                 }
                 RunProgram(event_data, aitem->GetStringProperty("program"));
             }
-            else if (item != NULL)
+            else if (item != nullptr)
             {
                 ESP_LOGE(__FUNCTION__, "Nothing to run for inline thread");
             }
@@ -218,12 +218,12 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
         cJSON *item;
         uint32_t threads = 0;
         ESP_LOGV(__FUNCTION__, "Running parallel %s", programName);
-        cJSON_ArrayForEach(item, cJSON_GetObjectItem(program->GetJSONConfig(NULL), "parallelThreads"))
+        cJSON_ArrayForEach(item, cJSON_GetObjectItem(program->GetJSONConfig(nullptr), "parallelThreads"))
         {
-            AppConfig *aitem = new AppConfig(item, NULL);
+            AppConfig *aitem = new AppConfig(item);
             if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
             {
-                char *tmp = cJSON_Print(aitem->GetJSONConfig(NULL));
+                char *tmp = cJSON_Print(aitem->GetJSONConfig(nullptr));
                 ESP_LOGV(__FUNCTION__, "%s running program from %s",programName, tmp);
                 ldfree(tmp);
             }
@@ -338,8 +338,8 @@ uint8_t EventInterpretor::RunMethod(EventInterpretor *instance, const char *meth
 
     ESP_LOGV(__FUNCTION__, "Got %s method:(%s)", inBackground ? "backgroung" : "foreground", method);
 
-    TaskFunction_t theFunc = NULL;
-    cJSON *mParams = event_data == NULL ? instance->params : (cJSON*)event_data;
+    TaskFunction_t theFunc = nullptr;
+    cJSON *mParams = event_data == nullptr ? instance->params : (cJSON*)event_data;
 
     if (strcmp(method, "wifioff") == 0)
     {
@@ -433,7 +433,7 @@ uint8_t EventInterpretor::RunMethod(EventInterpretor *instance, const char *meth
         else
         {
             char *tmp = cJSON_Print(mParams);
-            ESP_LOGW(__FUNCTION__, "Missing param sleep:%s", tmp == NULL ? "null" : tmp);
+            ESP_LOGW(__FUNCTION__, "Missing param sleep:%s", tmp == nullptr ? "null" : tmp);
             if (tmp)
                 ldfree(tmp);
         }
@@ -451,11 +451,11 @@ uint8_t EventInterpretor::RunMethod(EventInterpretor *instance, const char *meth
             {
                 // if (strcmp(jeventbase->valuestring, "MFile") == 0)
                 // {
-                //     BufferedFile::ProcessEvent(NULL, edesc->baseName, edesc->id, &mParams);
+                //     BufferedFile::ProcessEvent(nullptr, edesc->baseName, edesc->id, &mParams);
                 // }
                 // else if (strcmp(jeventbase->valuestring, "DigitalPin") == 0)
                 // {
-                //     Pin::ProcessEvent(NULL, edesc->baseName, edesc->id, &mParams);
+                //     Pin::ProcessEvent(nullptr, edesc->baseName, edesc->id, &mParams);
                 // }
                 // else 
                 // {
@@ -475,7 +475,7 @@ uint8_t EventInterpretor::RunMethod(EventInterpretor *instance, const char *meth
         else
         {
             char *tmp = cJSON_Print(mParams);
-            ESP_LOGW(__FUNCTION__, "Missing event id or base:%s", tmp == NULL ? "null" : tmp);
+            ESP_LOGW(__FUNCTION__, "Missing event id or base:%s", tmp == nullptr ? "null" : tmp);
             if (tmp)
                 ldfree(tmp);
         }
@@ -484,9 +484,9 @@ uint8_t EventInterpretor::RunMethod(EventInterpretor *instance, const char *meth
     if (theFunc)
     {
         if (inBackground)
-            return CreateWokeBackgroundTask(theFunc, method, 4096, NULL, tskIDLE_PRIORITY, NULL);
+            return CreateWokeBackgroundTask(theFunc, method, 4096, nullptr, tskIDLE_PRIORITY, nullptr);
         else
-            CreateWokeInlineTask(theFunc, method, 4096, NULL);
+            CreateWokeInlineTask(theFunc, method, 4096, nullptr);
     }
     return UINT8_MAX;
 }
@@ -497,13 +497,13 @@ EventCondition::EventCondition(cJSON *json)
     , valOrigin(GetOriginType(json, "src"))
     , compType(GetEntityType(json, "comp"))
     , compOrigin(GetOriginType(json, "comp"))
-    , compStrVal(NULL)
-    , valJsonPropName(NULL)
-    , compJsonPropName(NULL)
+    , compStrVal(nullptr)
+    , valJsonPropName(nullptr)
+    , compJsonPropName(nullptr)
     , compIntValue(0)
     , compDblValue(0.0)
-    , srcJson(NULL)
-    , compJson(NULL)
+    , srcJson(nullptr)
+    , compJson(nullptr)
 {
     cJSON *comp = cJSON_GetObjectItem(json, "comp");
 
@@ -619,7 +619,7 @@ double EventCondition::GetDoubleValue(bool isSrc, compare_origin_t origin, void 
     {
     case compare_origin_t::Config:
     case compare_origin_t::State:
-        if ((origin == compare_origin_t::State) && (srcJson == NULL))
+        if ((origin == compare_origin_t::State) && (srcJson == nullptr))
         {
             retVal = cJSON_GetNumberValue(cJSON_GetObjectItem(TheRest::status_json(), isSrc ? valJsonPropName : compJsonPropName));
         }
@@ -627,7 +627,7 @@ double EventCondition::GetDoubleValue(bool isSrc, compare_origin_t origin, void 
         {
             retVal = cJSON_GetNumberValue(isSrc ? srcJson : compJson);
         }
-        ESP_LOGV(__FUNCTION__, "Getting double %s value from json %s:%f", isSrc ? "src" : "dest", isSrc ? valJsonPropName == NULL ? "null" : valJsonPropName : compJsonPropName == NULL ? "null"
+        ESP_LOGV(__FUNCTION__, "Getting double %s value from json %s:%f", isSrc ? "src" : "dest", isSrc ? valJsonPropName == nullptr ? "null" : valJsonPropName : compJsonPropName == nullptr ? "null"
                                                                                                                                                                                              : compJsonPropName,
                  retVal);
         return retVal;
@@ -654,7 +654,7 @@ int EventCondition::GetIntValue(bool isSrc, compare_origin_t origin, void *event
     {
     case compare_origin_t::Config:
     case compare_origin_t::State:
-        if ((origin == compare_origin_t::State) && (srcJson == NULL))
+        if ((origin == compare_origin_t::State) && (srcJson == nullptr))
         {
             retVal = cJSON_GetNumberValue(cJSON_GetObjectItem(TheRest::status_json(), isSrc ? valJsonPropName : compJsonPropName));
         }
@@ -662,7 +662,7 @@ int EventCondition::GetIntValue(bool isSrc, compare_origin_t origin, void *event
         {
             retVal = cJSON_GetNumberValue(isSrc ? srcJson : compJson);
         }
-        ESP_LOGV(__FUNCTION__, "Getting double %s value from json %s:%d", isSrc ? "src" : "dest", isSrc ? valJsonPropName == NULL ? "null" : valJsonPropName : compJsonPropName == NULL ? "null"
+        ESP_LOGV(__FUNCTION__, "Getting double %s value from json %s:%d", isSrc ? "src" : "dest", isSrc ? valJsonPropName == nullptr ? "null" : valJsonPropName : compJsonPropName == nullptr ? "null"
                                                                                                                                                                                              : compJsonPropName,
                  retVal);
         return retVal;
@@ -712,11 +712,11 @@ void EventCondition::PrintState()
                  (int)valOrigin,
                  (int)compType,
                  (int)compOrigin,
-                 compStrVal == NULL ? "*null*" : compStrVal,
+                 compStrVal == nullptr ? "*null*" : compStrVal,
                  compIntValue,
                  compDblValue,
-                 valJsonPropName == NULL ? "*null*" : valJsonPropName,
-                 compJsonPropName == NULL ? "*null*" : compJsonPropName);
+                 valJsonPropName == nullptr ? "*null*" : valJsonPropName,
+                 compJsonPropName == nullptr ? "*null*" : compJsonPropName);
     }
 }
 
@@ -803,13 +803,13 @@ bool EventCondition::IsValid()
 
 compare_operation_t EventCondition::GetCompareOperator(cJSON *json)
 {
-    if (json == NULL)
+    if (json == nullptr)
     {
         ESP_LOGW(__FUNCTION__, "Missing input param");
         return compare_operation_t::Invalid;
     }
     cJSON *val = cJSON_GetObjectItem(json, "operator");
-    if (val == NULL)
+    if (val == nullptr)
     {
         char *sjson = cJSON_PrintUnformatted(json);
         ESP_LOGW(__FUNCTION__, "Invalid operator:%s", sjson);
@@ -848,13 +848,13 @@ compare_operation_t EventCondition::GetCompareOperator(cJSON *json)
 
 compare_entity_type_t EventCondition::GetEntityType(cJSON *json, const char *fldName)
 {
-    if ((json == NULL) || (fldName == NULL) || (strlen(fldName) == 0))
+    if ((json == nullptr) || (fldName == nullptr) || (strlen(fldName) == 0))
     {
         ESP_LOGW(__FUNCTION__, "Missing input param");
         return compare_entity_type_t::Invalid;
     }
     cJSON *val = cJSON_GetObjectItem(cJSON_GetObjectItem(json, fldName), "otype");
-    if ((val == NULL) || (val->valuestring == NULL))
+    if ((val == nullptr) || (val->valuestring == nullptr))
     {
         char *sjson = cJSON_PrintUnformatted(json);
         ESP_LOGW(__FUNCTION__, "Invalid operator(%s):%s", fldName, sjson);
@@ -881,13 +881,13 @@ compare_entity_type_t EventCondition::GetEntityType(cJSON *json, const char *fld
 
 compare_origin_t EventCondition::GetOriginType(cJSON *json, const char *fldName)
 {
-    if ((json == NULL) || (fldName == NULL) || (strlen(fldName) == 0))
+    if ((json == nullptr) || (fldName == nullptr) || (strlen(fldName) == 0))
     {
         ESP_LOGW(__FUNCTION__, "Missing input param");
         return compare_origin_t::Invalid;
     }
     cJSON *val = cJSON_GetObjectItem(json, fldName);
-    if (val == NULL)
+    if (val == nullptr)
     {
         char *sjson = cJSON_PrintUnformatted(json);
         ESP_LOGW(__FUNCTION__, "Invalid origin:%s", sjson);

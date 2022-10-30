@@ -26,7 +26,7 @@ Apa102::Apa102(AppConfig* config)
     if (numLeds && spiBufferLen && clkPin && dataPin && pwrPin){
         xEventGroupClearBits(eg, 0xff);
         xEventGroupSetBits(eg,apa102_state_t::idle);
-        AppConfig* appstate = new AppConfig(status,AppConfig::GetAppStatus());
+        auto* appstate = new AppConfig(status,AppConfig::GetAppStatus());
         memset(&spiTransObject, 0, sizeof(spiTransObject));
         memset(&devcfg, 0, sizeof(devcfg));
         memset(&buscfg, 0, sizeof(buscfg));

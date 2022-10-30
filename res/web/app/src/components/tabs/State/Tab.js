@@ -19,7 +19,6 @@ import { faToggleOn } from '@fortawesome/free-solid-svg-icons/faToggleOn'
 import { faGauge } from '@fortawesome/free-solid-svg-icons/faGauge'
 import './State.css';
 
-var httpPrefix = "";
 const LocalJSONEditor = lazy(() => import('../../controls/JSONEditor/JSONEditor'));
 const FirmwareUpdater = lazy(() => import('../../controls/FirmwareUpdater/FirmwareUpdater'));
 
@@ -28,6 +27,7 @@ export default class StatusPage extends Component {
     constructor(props) {
         super(props);
         this.state={
+            httpPrefix:"",
             refreshRate:"Manual",
             componentOpenState:{},
             status:{
@@ -67,6 +67,7 @@ export default class StatusPage extends Component {
         if (this.props.registerStateCallback) {
             this.props.registerStateCallback(this.refreshStatus.bind(this));
         }
+        this.props?.registerControlPanel(this.renderControlPannel.bind(this));
     }
 
     getRefreshRate() {
@@ -85,6 +86,17 @@ export default class StatusPage extends Component {
             if (this.state.refreshRate !== "Manual"){
                 this.refreshTimer = setInterval(()=>{this.updateAppStatus()},this.getRefreshRate());
             }
+        }
+
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+            } else {
+                this.setState({httpPrefix:""});
+            }
+        }
+        if (prevState.httpPrefix !== this.state.httpPrefix) {
+            this.updateAppStatus();
         }
     }
 
@@ -123,52 +135,44 @@ export default class StatusPage extends Component {
         }
         //var abort = new AbortController()
         //var timer = setTimeout(() => abort.abort(), 8000);
-        if (this.props.selectedDeviceId === "current") {
-            this.updateStatus(requests.pop(), undefined, newState).then(_res => {
-                //(timer);
-                document.getElementById("Status").style.opacity = 1;
-                this.setState({
-                    error: null,
-                    status: Object.keys(this.state.status)
-                                  .reduce((pv,cv)=>{
-                                    pv[cv]=this.state.status[cv]; 
-                                    pv[cv].value= Array.isArray(newState[cv]?.value) ? 
-                                                                    {[cv]:newState[cv].value} : 
-                                                                    (newState[cv]?.value || pv[cv]?.value);
-                                    return pv;},{})
-                });
+        this.updateStatus(requests.pop(), undefined, newState).then(_res => {
+            //(timer);
+            document.getElementById("Status").style.opacity = 1;
+            this.setState({
+                error: null,
+                status: Object.keys(this.state.status)
+                                .reduce((pv,cv)=>{
+                                pv[cv]=this.state.status[cv]; 
+                                pv[cv].value= Array.isArray(newState[cv]?.value) ? 
+                                                                {[cv]:newState[cv].value} : 
+                                                                (newState[cv]?.value || pv[cv]?.value);
+                                return pv;},{})
+            });
 
-                if (requests.length > 0) {
+            if (requests.length > 0) {
+                this.updateStatuses(requests, newState);
+            }
+        }).catch(err => {
+            document.getElementById("Status").style.opacity = 0.5
+            //clearTimeout(timer);
+            if (err.code !== 20) {
+                var errors = requests.filter(req => req.error);
+                document.getElementById("Status").style.opacity = 0.5
+                if (errors[0]?.waitFor) {
+                    setTimeout(() => {
+                        if (err.message !== "Failed to wfetch")
+                            console.error(err);
+                        this.updateStatuses(requests, newState);
+                    }, errors[0].waitFor);
+                } else {
                     this.updateStatuses(requests, newState);
                 }
-            }).catch(err => {
-                document.getElementById("Status").style.opacity = 0.5
-                //clearTimeout(timer);
-                if (err.code !== 20) {
-                    var errors = requests.filter(req => req.error);
-                    document.getElementById("Status").style.opacity = 0.5
-                    if (errors[0]?.waitFor) {
-                        setTimeout(() => {
-                            if (err.message !== "Failed to wfetch")
-                                console.error(err);
-                            this.updateStatuses(requests, newState);
-                        }, errors[0].waitFor);
-                    } else {
-                        this.updateStatuses(requests, newState);
-                    }
-                }
-            });
-        } else if (this.props.selectedDeviceId) {
-            wfetch(`${httpPrefix}/lfs/status/${this.props.selectedDeviceId}.json`, {
-                method: 'get',
-                //signal: abort.signal
-            }).then(data => data.json()).then(fromVersionedToPlain)
-                .then(status => this.setState({ status: this.orderResults(status) }))
-        }
+            }
+        });
     }
 
     updateStatus(request, abort, newState) {   
-        return new Promise((resolve, reject) => wfetch(`${httpPrefix}${request.url}`, {
+        return new Promise((resolve, reject) => wfetch(`${this.state.httpPrefix}${request.url}`, {
             method: 'post',
             //signal: abort.signal
         }).then(data => data.json())
@@ -203,7 +207,7 @@ export default class StatusPage extends Component {
     }
 
     SendCommand(body) {
-        return wfetch(`${httpPrefix}/status/cmd`, {
+        return wfetch(`${this.state.httpPrefix}/status/cmd`, {
             method: 'PUT',
             body: JSON.stringify(body)
         }).then(res => res.text().then(console.log))
@@ -213,38 +217,44 @@ export default class StatusPage extends Component {
 
     render() {
         return <div>
-                <div className="buttonbar">
-                    <Button onClick={elem => this.updateAppStatus() }>Refresh</Button>
-                    <Button onClick={elem => this.SendCommand({ 'command': 'reboot' }) }>Reboot</Button>
-                    <Button onClick={elem => this.SendCommand({ 'command': 'factoryReset' }) }>Factory Reset</Button>
-                    <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}><FirmwareUpdater></FirmwareUpdater></Suspense>
-                    <FormControl>
-                        <InputLabel
-                            key="label"
-                            className="label"
-                            id="stat-refresh-label">Refresh Rate</InputLabel>
-                        <Select
-                            key="options"
-                            id= "stat-refresh"
-                            labelId="stat-refresh-label"
-                            label= "Refresh Rate"
-                            value= {this.state.refreshRate}
-                            onChange= {elem => this.setState({refreshRate:elem.target.value})}>
-                         { ["Manual", 
-                            "2 secs", 
-                            "5 secs", 
-                            "10 secs",
-                            "30 secs",
-                            "1 mins",
-                            "5 mins",
-                            "10 mins",
-                            "30 mins",
-                            "60 mins"].map((term,idx)=><MenuItem value={term}>{term}</MenuItem>)}
-                        </Select>
-                    </FormControl>
-                </div>
                 {this.renderEditors()}
             </div>
+    }
+
+    renderControlPannel() {
+        return <div className="buttonbar">
+            <Button onClick={elem => this.updateAppStatus()}>Refresh</Button>
+            <Button onClick={elem => this.SendCommand({ 'command': 'reboot' })}>Reboot</Button>
+            <Button onClick={elem => this.SendCommand({ 'command': 'scanNetwork' })}>Scan Network</Button>
+            <Button onClick={elem => this.SendCommand({ 'command': 'factoryReset' })}>Factory Reset</Button>
+            <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
+                <FirmwareUpdater selectedDevice={this.props?.selectedDevice}></FirmwareUpdater>
+            </Suspense>
+            <FormControl>
+                <InputLabel
+                    key="label"
+                    className="label"
+                    id="stat-refresh-label">Refresh Rate</InputLabel>
+                <Select
+                    key="options"
+                    id="stat-refresh"
+                    labelId="stat-refresh-label"
+                    label="Refresh Rate"
+                    value={this.state?.refreshRate}
+                    onChange={elem => {this.setState({ refreshRate: elem.target.value });this.forceUpdate();}}>
+                    {["Manual",
+                        "2 secs",
+                        "5 secs",
+                        "10 secs",
+                        "30 secs",
+                        "1 mins",
+                        "5 mins",
+                        "10 mins",
+                        "30 mins",
+                        "60 mins"].map((term, idx) => <MenuItem value={term}>{term}</MenuItem>)}
+                </Select>
+            </FormControl>
+        </div>;
     }
 
     renderEditors() {
@@ -286,9 +296,11 @@ export default class StatusPage extends Component {
                         json={this.orderResults(this.state.status[fld].value)}
                         editable={false}
                         sortable={true}
-                        selectedDeviceId={this.props.selectedDeviceId}
+                        selectedDevice={this.props.selectedDevice}
                         registerStateCallback={this.props.registerStateCallback}
-                        registerEventInstanceCallback={this.props.registerEventInstanceCallback}>
+                        registerEventInstanceCallback={this.props.registerEventInstanceCallback}
+                        unRegisterStateCallback={this.props.unRegisterStateCallback}
+                        unRegisterEventInstanceCallback={this.props.unRegisterEventInstanceCallback}>
                     </LocalJSONEditor>
                 </Suspense>
             </Collapse>
@@ -359,7 +371,7 @@ export default class StatusPage extends Component {
                                         json={entry[1]?.reduce((pv, cv) => { pv[cv.name] = cv; return pv; }, {})}
                                         editable={false}
                                         sortable={true}
-                                        selectedDeviceId={this.props.selectedDeviceId}
+                                        selectedDevice={this.props.selectedDevice}
                                         registerStateCallback={this.props.registerStateCallback}
                                         registerEventInstanceCallback={this.props.registerEventInstanceCallback}>
                                     </LocalJSONEditor>

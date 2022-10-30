@@ -1,14 +1,24 @@
 import { createElement as e, Component } from 'react';
 import { wfetch } from '../../../utils/utils';
 import { TripWithin } from './TripWithin';
-import { httpPrefix } from './Tab';
 
 export class FileViewer extends Component {
     constructor(props) {
         super(props);
         this.state = {
+            httpPrefix:"",
             renderers: []
         };
+    }
+
+    componentDidUpdate(prevProps,prevState) {
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+            } else {
+                this.setState({httpPrefix:""});
+            }
+        }
     }
 
     componentDidMount() {
@@ -32,7 +42,7 @@ export class FileViewer extends Component {
     }
 
     parseLog(resolve, retryCount, reject) {
-        wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+        wfetch(`${this.state.httpPrefix}${this.props.folder}/${this.props.name}`)
             .then(resp => resp.text())
             .then(content => resolve(this.setState({
                 renderers: [{
@@ -60,7 +70,7 @@ export class FileViewer extends Component {
     }
 
     parseCsv(resolve, retryCount, reject) {
-        wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+        wfetch(`${this.state.httpPrefix}${this.props.folder}/${this.props.name}`)
             .then(resp => resp.text())
             .then(content => {
                 var cols = content.split(/\n|\r\n/)[0].split(",");
@@ -91,7 +101,7 @@ export class FileViewer extends Component {
         return this.state.renderers.map(renderer => {
             switch (renderer.name) {
                 case "trip":
-                    return renderer.points.length ? e(TripWithin, { key: "tripwithin", points: renderer.points, cache: this.props.cache }) : null;
+                    return renderer.points.length ? e(TripWithin, { key: "tripwithin", selectedDevice:this.props.selectedDevice, points: renderer.points, cache: this.props.cache }) : null;
 
                 case "loading":
                     return e('i', { className: "rendered reportbtn fa fa-spinner", key: "graphbtn", });
@@ -103,6 +113,6 @@ export class FileViewer extends Component {
     }
 
     render() {
-        return [e("a", { key: "filelink", href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]), this.getRenderers()];
+        return [e("a", { key: "filelink", href: `${this.state.httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]), this.getRenderers()];
     }
 }
