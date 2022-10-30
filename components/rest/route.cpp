@@ -1,10 +1,9 @@
 #include "./route.h"
 #include "esp_debug_helpers.h"
 #include "eventmgr.h"
+#include <mbedtls/sha256.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
-#define min(a, b) (((a) < (b)) ? (a) : (b))
-#define max(a, b) (((a) > (b)) ? (a) : (b))
 
 const char* TheRest::REST_BASE="Rest";
 
@@ -16,6 +15,37 @@ void restSallyForth(void *pvParameter) {
         TheRest::GetServer(pvParameter);
     }
     deviceId?deviceId:deviceId=AppConfig::GetAppConfig()->GetIntProperty("deviceid");
+}
+
+esp_err_t TheRest::checkTheSum(httpd_req_t *req) {
+    size_t hlen = httpd_req_get_hdr_value_len(req, "The-Hash");
+    esp_err_t ret = ESP_OK;
+    if (hlen > 1) {
+        char theHash[65];
+        if (httpd_req_get_hdr_value_str(req, "The-Hash", theHash, 65) == ESP_OK) {
+            ESP_LOGD(__FUNCTION__,"Hash:%s(%s)",req->uri, theHash);
+            // mbedtls_sha256_context ctx;
+            // mbedtls_sha256_init(&ctx);
+            // mbedtls_sha256_update(&ctx, reinterpret_cast<const uint8_t*>("abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmno"), 64);
+            // uint8_t digest[32];
+            // mbedtls_sha256_finish(&ctx, digest);
+            // mbedtls_sha256_free(&ctx);
+            // unsigned long t1 = micros();
+
+            // for (int i = 0; i < sizeof(digest); ++i) {
+            //     Serial.printf("%02x", digest[i]);
+            // }
+        } else {
+            ret=ESP_FAIL;
+            ESP_LOGE(__FUNCTION__,"%s got bad hash:%d",req->uri, hlen);
+            httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
+        }
+    } else {
+        ret=ESP_FAIL;
+        ESP_LOGW(__FUNCTION__,"%s got no hash",req->uri);
+        httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
+    }
+    return ret;
 }
 
 TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
@@ -44,9 +74,15 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         apin->SetIntProperty("Failures",0);
         jnumRequests = apin->GetPropertyHolder("numRequests");
         jprocessingTime_us = apin->GetPropertyHolder("processingTime_us");
+        jScanning = cJSON_HasObjectItem(status,"Scanning") ? cJSON_GetObjectItem(status,"Scanning") : cJSON_AddFalseToObject(status,"Scanning");
         jBytesIn = apin->GetPropertyHolder("BytesIn");
         jBytesOut = apin->GetPropertyHolder("BytesOut");
         jnumErrors = apin->GetPropertyHolder("Failures");
+
+        accessControlAllowOrigin=config && config->HasProperty("Access-Control-Allow-Origin") ? config->GetPropertyHolder("Access-Control-Allow-Origin") : NULL;
+        accessControlMaxAge=config && config->HasProperty("Access-Control-Max-Age") ? config->GetPropertyHolder("Access-Control-Max-Age") : NULL;
+        accessControlAllowMethods=config && config->HasProperty("Access-Control-Allow-Methods") ? config->GetPropertyHolder("Access-Control-Allow-Methods") : NULL;
+        accessControlAllowHeaders=config && config->HasProperty("Access-Control-Allow-Headers") ? config->GetPropertyHolder("Access-Control-Allow-Headers") : NULL;
         delete apin;
     }
     if (xEventGroupGetBits(eventGroup) & HTTP_SERVING)
@@ -207,7 +243,7 @@ TheRest *TheRest::GetServer()
 void TheRest::GetServer(void *evtGrp)
 {
     if (restInstance == NULL)
-        restInstance = new TheRest(AppConfig::GetAppConfig(), (EventGroupHandle_t)evtGrp);
+        restInstance = new TheRest(AppConfig::GetAppConfig()->GetConfig("Rest"), (EventGroupHandle_t)evtGrp);
 }
 
 void TheRest::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data)
@@ -459,24 +495,56 @@ EventHandlerDescriptor *TheRest::BuildHandlerDescriptors()
 {
     ESP_LOGV(__FUNCTION__, "TheRest: BuildHandlerDescriptors");
     EventHandlerDescriptor *handler = ManagedDevice::BuildHandlerDescriptors();
-    handler->AddEventDescriptor(restServerState_t::DOWNLOAD_FINISHED, "DOWNLOAD_FINISHED");
-    handler->AddEventDescriptor(restServerState_t::TAR_BUFFER_FILLED, "TAR_BUFFER_FILLED");
-    handler->AddEventDescriptor(restServerState_t::TAR_BUFFER_SENT, "TAR_BUFFER_SENT");
-    handler->AddEventDescriptor(restServerState_t::TAR_BUILD_DONE, "TAR_BUILD_DONE");
-    handler->AddEventDescriptor(restServerState_t::TAR_SEND_DONE, "TAR_SEND_DONE");
-    handler->AddEventDescriptor(restServerState_t::HTTP_SERVING, "HTTP_SERVING");
-    handler->AddEventDescriptor(restServerState_t::GETTING_TRIP_LIST, "GETTING_TRIP_LIST");
-    handler->AddEventDescriptor(restServerState_t::GETTING_TRIPS, "GETTING_TRIPS");
-    handler->AddEventDescriptor(restServerState_t::DOWNLOAD_STARTED, "DOWNLOAD_STARTED");
-    handler->AddEventDescriptor(restServerState_t::DOWNLOAD_FINISHED, "DOWNLOAD_FINISHED");
     ESP_LOGV(__FUNCTION__, "TheRest: Done BuildHandlerDescriptors");
     return handler;
+}
+
+void get_client_ip(httpd_req_t *req, char* ipstr)
+{
+    int sockfd = httpd_req_to_sockfd(req);
+    struct sockaddr_in6 addr;   // esp_http_server uses IPv6 addressing
+    socklen_t addr_size = sizeof(addr);
+    
+    if (getpeername(sockfd, (struct sockaddr *)&addr, &addr_size) < 0) {
+        ESP_LOGE(__FUNCTION__, "Error getting client IP");
+        return;
+    }
+    
+    inet_ntop(AF_INET, &addr.sin6_addr.un.u32_addr, ipstr, sizeof(ipstr));
+    //inet_ntop(AF_INET, &addr.sin6_addr, ipstr, sizeof(ipstr));
+    //sprintf(ipstr,"%d.%d.%d.%d",IP2STR(&addr.sin6_addr.un.u32_addr[3]));
+    ESP_LOGV(__FUNCTION__, "Client IP => %s", ipstr);
 }
 
 esp_err_t TheRest::rest_handler(httpd_req_t *req)
 {
     ESP_LOGV(__FUNCTION__, "rest handling (%d)%s", req->method, req->uri);
+
+    if (checkTheSum(req) != ESP_OK) {
+        return ESP_FAIL;
+    }
+
     uint32_t idx = 0;
+    char ipstr[INET6_ADDRSTRLEN] = {0};
+
+    if (restInstance->accessControlAllowOrigin && restInstance->accessControlAllowOrigin->valuestring) {
+        if (strcmp(restInstance->accessControlAllowOrigin->valuestring,"*") == 0) {
+            get_client_ip(req,ipstr);
+            ESP_ERROR_CHECK(httpd_resp_set_hdr(req,"Access-Control-Allow-Origin", ipstr));
+        } else {
+            ESP_ERROR_CHECK(httpd_resp_set_hdr(req,"Access-Control-Allow-Origin", restInstance->accessControlAllowOrigin->valuestring));
+        }
+    }
+
+    if (restInstance->accessControlMaxAge && restInstance->accessControlMaxAge->valuestring) {
+        ESP_ERROR_CHECK(httpd_resp_set_hdr(req,"Access-Control-Max-Age", restInstance->accessControlMaxAge->valuestring));
+    }
+    if (restInstance->accessControlAllowMethods && restInstance->accessControlAllowMethods->valuestring) {
+        ESP_ERROR_CHECK(httpd_resp_set_hdr(req,"Access-Control-Allow-Methods", restInstance->accessControlAllowMethods->valuestring));
+    }
+    if (restInstance->accessControlAllowHeaders && restInstance->accessControlAllowHeaders->valuestring) {
+        ESP_ERROR_CHECK(httpd_resp_set_hdr(req,"Access-Control-Allow-Headers", restInstance->accessControlAllowHeaders->valuestring));
+    }
 
     for (const httpd_uri_t &theUri : restInstance->restUris)
     {

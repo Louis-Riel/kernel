@@ -1,4 +1,3 @@
-#include "rest.h"
 #include "route.h"
 #include "math.h"
 #include "time.h"
@@ -42,7 +41,7 @@ float temperatureReadFixed()
     return temp_c;
 }
 
-cJSON *tasks_json()
+cJSON *TheRest::tasks_json()
 {
     volatile UBaseType_t numTasks = uxTaskGetNumberOfTasks();
     uint32_t totalRunTime;
@@ -396,104 +395,6 @@ void UpdateStringProp(cfg_label_t *cfg, char *val)
     }
 }
 
-esp_err_t TheRest::HandleWifiCommand(httpd_req_t *req)
-{
-    if (restInstance == NULL) {
-        restInstance = TheRest::GetServer();
-    }
-    esp_err_t ret = 0;
-    int rlen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE);
-    if (rlen == 0)
-    {
-        httpd_resp_send_500(req);
-        ESP_LOGE(__FUNCTION__, "no body");
-    }
-    else
-    {
-        TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += rlen;
-        *(restInstance->postData + rlen) = 0;
-        ESP_LOGI(__FUNCTION__, "Got %s", restInstance->postData);
-        cJSON *jresponse = cJSON_ParseWithLength(restInstance->postData, JSON_BUFFER_SIZE);
-        if (jresponse != NULL)  
-        {
-            cJSON *jitem = cJSON_GetObjectItemCaseSensitive(jresponse, "enabled");
-            if (jitem && (strcmp(jitem->valuestring, "no") == 0))
-            {
-                ESP_LOGI(__FUNCTION__, "All done wif wifi");
-                ret = httpd_resp_send(req, RESP_OK, 2);
-                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 2;
-                xEventGroupClearBits(getAppEG(), app_bits_t::WIFI_ON);
-                xEventGroupSetBits(getAppEG(), app_bits_t::WIFI_OFF);
-            }
-            cJSON_Delete(jresponse);
-        }
-        else
-        {
-            ESP_LOGE(__FUNCTION__, "Error whilst parsing json");
-        }
-    }
-    xEventGroupSetBits(getAppEG(), app_bits_t::TRIPS_COMMITTED);
-
-    return ret;
-}
-
-void parseFolderForTars(const char *folder)
-{
-    ESP_LOGI(__FUNCTION__, "Looking for tars in %s", folder);
-    DIR *tarFolder;
-    dirent *di;
-    char *fileName = (char *)dmalloc(300);
-    if ((tarFolder = opendir(folder)))
-    {
-        while ((di = readdir(tarFolder)) != NULL)
-        {
-            ESP_LOGV(__FUNCTION__, "tarlist:%s", di->d_name);
-            if (di->d_type == DT_DIR)
-            {
-                sprintf(fileName, "%s/%s", folder, di->d_name);
-                ESP_LOGV(__FUNCTION__, "folder:%s", fileName);
-                parseFolderForTars(fileName);
-            }
-            else
-            {
-                sprintf(fileName, "%s/%s", folder, di->d_name);
-                ESP_LOGV(__FUNCTION__, "filelist:%s", fileName);
-                size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
-                if (extractClientTar(fileName)) {
-                    unlink(fileName);
-                }
-                size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
-                if (diff > 0) {
-                    ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","extractClientTar",diff);
-                }
-            }
-        }
-        closedir(tarFolder);
-    }
-    else
-    {
-        ESP_LOGE(__FUNCTION__, "Cannot open %s", folder);
-    }
-    ldfree(fileName);
-}
-
-void parseFiles(void *param)
-{
-    char folderName[200];
-    if (param) {
-        strcpy(folderName,(char*)param);
-        ldfree(param);
-    } else {
-        strcpy(folderName,"/sdcard/tars");
-    }
-    size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
-    parseFolderForTars(folderName);
-    size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
-    if (diff > 0) {
-        ESP_LOGW(__FUNCTION__,"%s %d bytes memleak","parseFolderForTars",diff);
-    }
-}
-
 esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
     esp_err_t ret = ESP_FAIL;
     if (restInstance == NULL) {
@@ -589,19 +490,10 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                     esp_system_abort("Rebooting");
                     esp_restart();
                 }
-                else if (jcommand && (strcmp(jcommand->valuestring, "parseFiles") == 0))
+                else if (jcommand && (strcmp(jcommand->valuestring, "scanNetwork") == 0))
                 {
-                    cJSON *fileName = cJSON_GetObjectItemCaseSensitive(jresponse, "filename");
-                    char* fname = fileName == NULL ? NULL : (char*)dmalloc(strlen(fileName->string)+1);
-                    if (fname) {
-                        strcpy(fname,fileName->valuestring);
-                    } 
-                    CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, fname, tskIDLE_PRIORITY, NULL);
-                    ret = httpd_resp_send(req, "parsing", 7);
-                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 7;
-                    if (fname) {
-                        ldfree(fname);
-                    }
+                    CreateBackgroundTask(TheRest::ScanNetwork,"ScanNetwork",4096, NULL, tskIDLE_PRIORITY,NULL);
+                    ret = httpd_resp_send(req, RESP_OK, 2);
                 }
                 else if (jcommand && (strcmp(jcommand->valuestring, "factoryReset") == 0))
                 {
@@ -732,7 +624,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
     }
 
     ESP_LOGV(__FUNCTION__, "Sending %s willmove:%d", path, moveTheSucker);
-    httpd_resp_set_hdr(req, "filename", path);
+    //httpd_resp_set_hdr(req, "filename", path);
     FILE *theFile;
     uint32_t len = 0;
     if (startsWith(path, "/sdcard") ? initSPISDCard(false) : initSpiff(false))
@@ -824,6 +716,10 @@ esp_err_t add_type(httpd_req_t *req, const char* fileName) {
 
 esp_err_t TheRest::app_handler(httpd_req_t *req)
 {
+    if (checkTheSum(req) != ESP_OK) {
+        return ESP_FAIL;
+    }
+
     ESP_ERROR_CHECK(add_type(req,req->uri));
     ESP_LOGV(__FUNCTION__,"File:%s",req->uri);
     if (strcmp(req->uri, "/favicon.ico")==0)
@@ -1160,11 +1056,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
     }
     if (req->method == HTTP_PUT)
     {
-        if (endsWith(req->uri, "/wifi"))
-        {
-            ret = HandleWifiCommand(req);
-        }
-        else if (endsWith(req->uri, "/cmd"))
+        if (endsWith(req->uri, "/cmd"))
         {
             ret = HandleSystemCommand(req);
         }
@@ -1211,8 +1103,6 @@ esp_err_t TheRest::download_handler(httpd_req_t *req)
     delete dest;
     
     ESP_LOGV(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
-    //if (endsWith(req->uri, "tar"))
-    //    CreateWokeBackgroundTask(parseFiles, "parseFiles", 4096, NULL, tskIDLE_PRIORITY, NULL);
     TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += 2;
 
     return httpd_resp_send(req, RESP_OK, 2);

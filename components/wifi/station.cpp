@@ -15,7 +15,6 @@
 #include "bootloader_random.h"
 
 #include "esp_wifi.h"
-#include "rest.h"
 #include "../../main/utils.h"
 #include <esp_pm.h>
 #include <lwip/sockets.h>
@@ -613,7 +612,7 @@ static void updateTime(void *param)
         ESP_LOGV(__FUNCTION__,"SNTP Already running");
         return;
     }
-    ESP_LOGV(__FUNCTION__, "Initializing SNTP");
+    ESP_LOGI(__FUNCTION__, "Initializing SNTP");
     sntp_setoperatingmode(SNTP_OPMODE_POLL);
     sntp_setservername(0, "pool.ntp.org");
     sntp_set_time_sync_notification_cb(time_sync_notification_cb);
@@ -638,6 +637,7 @@ static void updateTime(void *param)
         time(&now);
         localtime_r(&now, &timeinfo);
     }
+    ESP_LOGI(__FUNCTION__, "SNTP Done");
 }
 
 void TheWifi::ParseStateBits(AppConfig *state)

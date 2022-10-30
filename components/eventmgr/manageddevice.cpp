@@ -27,8 +27,15 @@ ManagedDevice::ManagedDevice(const char *type,const char* name)
 }
 
 ManagedDevice::ManagedDevice(const char *type,const char *name, bool (*hcFnc)(void*),bool (*commandFnc)(ManagedDevice* instance, cJSON *))
+:ManagedDevice(type, name,NULL,NULL,NULL)
+{
+
+}
+
+ManagedDevice::ManagedDevice(const char *type,const char *name, bool (*hcFnc)(void*),bool (*commandFnc)(ManagedDevice* instance, cJSON *),void(*processEventFnc)(ManagedDevice*, postedEvent_t*))
 :eventBase((esp_event_base_t)type)
 ,handlerDescriptors(NULL)
+,processEventFnc(processEventFnc)
 ,status(NULL)
 ,hcFnc(hcFnc == NULL ? &HealthCheck : hcFnc)
 ,commandFnc(commandFnc)
@@ -103,7 +110,8 @@ EventHandlerDescriptor* ManagedDevice::BuildHandlerDescriptors(){
 }
 
 void ManagedDevice::ProcessEvent(postedEvent_t* postedEvent){
-
+  if (processEventFnc != NULL)
+    processEventFnc(this,postedEvent);
 }
 
 esp_err_t ManagedDevice::PostEvent(void* content, size_t len,int32_t event_id){

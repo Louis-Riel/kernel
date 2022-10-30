@@ -182,33 +182,13 @@ private:
     static void _RunProgram(void* arg);
 };
 
-class EventManager
-{
-public:
-    EventManager(cJSON *, cJSON *);
-    static void RegisterEventHandler(EventHandlerDescriptor *eventHandlerDescriptor);
-    static void UnRegisterEventHandler(EventHandlerDescriptor *eventHandlerDescriptor);
-    EventInterpretor *eventInterpretors[MAX_NUM_EVENTS];
-    cJSON *GetConfig();
-    bool ValidateConfig();
-    static EventManager *GetInstance();
-    static void ProcessEvent(postedEvent_t* postedEvent);
-
-private:
-    cJSON *config;
-    cJSON *programs;
-    char* eventBuffer;
-    static void EventPoller(void* param);
-    static void EventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
-    QueueHandle_t eventQueue;
-};
-
 class ManagedDevice
 {
 public:
     ManagedDevice(const char *type);
     ManagedDevice(const char *type, const char *name);
     ManagedDevice(const char *type, const char *name,bool (*hcFnc)(void *),bool (*commandFnc)(ManagedDevice* instance, cJSON *));
+    ManagedDevice(const char *type, const char *name,bool (*hcFnc)(void *),bool (*commandFnc)(ManagedDevice* instance, cJSON *),void (*processEventFnc)(ManagedDevice* instance, postedEvent_t*));
     ~ManagedDevice();
     const char *GetName();
     esp_err_t PostEvent(void *content, size_t len, int32_t event_id);
@@ -225,6 +205,7 @@ public:
     static cJSON* BuildConfigTemplate();
     static cJSON *BuildStatus(void *instance);
     static cJSON* GetConfigTemplates();
+    void (*processEventFnc)(ManagedDevice*, postedEvent_t*);
 
     cJSON *status;
 
@@ -242,6 +223,27 @@ private:
     static uint8_t numDevices;
     static uint32_t numErrors;
     static uint64_t lastErrorTs;
+};
+
+class EventManager
+{
+public:
+    EventManager(cJSON *, cJSON *);
+    static void RegisterEventHandler(EventHandlerDescriptor *eventHandlerDescriptor);
+    static void UnRegisterEventHandler(EventHandlerDescriptor *eventHandlerDescriptor);
+    EventInterpretor *eventInterpretors[MAX_NUM_EVENTS];
+    cJSON *GetConfig();
+    bool ValidateConfig();
+    static EventManager *GetInstance();
+    static void ProcessEvent(ManagedDevice* device, postedEvent_t* postedEvent);
+
+private:
+    cJSON *config;
+    cJSON *programs;
+    char* eventBuffer;
+    static void EventPoller(void* param);
+    static void EventProcessor(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
+    QueueHandle_t eventQueue;
 };
 
 class ManagedThreads

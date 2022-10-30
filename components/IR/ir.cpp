@@ -110,7 +110,7 @@ void IRDecoder::IRPoller(void *arg){
                 pevent.id=eventIds::CODE;
                 pevent.event_data=ir->status;
                 pevent.eventDataType=event_data_type_tp::JSON;
-                EventManager::ProcessEvent(&pevent);
+                EventManager::ProcessEvent(ir, &pevent);
             }
             vRingbufferReturnItem(ir->rb, (void *) items);
         }

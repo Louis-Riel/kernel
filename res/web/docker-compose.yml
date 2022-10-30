@@ -1,0 +1,50 @@
+version: '3'
+
+services:
+  front-gate:
+    build: ./front-gate
+    ports:
+      - 1234:1234
+    volumes:
+      - ./logs/webapp:/usr/local/openresty/nginx/logs
+      - ./front-gate/web:/etc/nginx/conf.d
+      - ./front-gate/signit.lua:/usr/local/openresty/nginx/signit.lua
+      - /home/nix/test/app/build:/usr/share/nginx/html
+    networks:
+      - keys
+
+  gate-keeper:
+    image: openresty/openresty
+    ports:
+      - 1235:1234
+    env_file:
+      - ./gate-keeper/.env
+    volumes:
+      - ./logs/gate-keeper:/usr/local/openresty/nginx/logs
+      - ./gate-keeper/openresty/bakeKeys.conf:/etc/nginx/conf.d/bakeKeys.conf
+      - ./gate-keeper/openresty/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./gate-keeper/luas/setup.lua:/usr/local/openresty/nginx/setup.lua
+      - ./gate-keeper/luas/bake-key.lua:/usr/local/openresty/nginx/bake-key.lua
+    networks:
+      - keys
+      - zuul
+
+  redis-cache:
+    build: ./gate-keeper/cache
+    restart: always
+    env_file:
+      - ./gate-keeper/.env
+    ports:
+      - 6379:6379
+    volumes: 
+      - redis-cache:/data
+      - ./gate-keeper/cache/redis.conf:/etc/redis/redis-templ.conf
+    networks:
+      - zuul
+
+volumes:
+  redis-cache:
+
+networks:
+  keys:
+  zuul:

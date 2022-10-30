@@ -83,16 +83,15 @@ void EventManager::EventPoller(void* param){
     memset(postedEvent,0,sizeof(postedEvent_t));
     EventManager* mgr = (EventManager*)param;
     EventGroupHandle_t appEg = getAppEG();
-    ESP_LOGI(__FUNCTION__,"Event Poller Running");
+    ESP_LOGV(__FUNCTION__,"Event Poller Running");
     while(!(xEventGroupGetBits(appEg) & app_bits_t::HIBERNATE) && xQueueReceive(mgr->eventQueue,postedEvent,portMAX_DELAY)){
-        ESP_LOGV(__FUNCTION__,"Processing Event %s %d",postedEvent->base, postedEvent->id);
-        ProcessEvent(postedEvent);
-        memset(postedEvent,0,sizeof(postedEvent_t));
+        ESP_LOGV(__FUNCTION__,"Processing Event %s %d %" PRIXPTR "",postedEvent->base, postedEvent->id, (uintptr_t)postedEvent->event_data);
+        ProcessEvent(NULL, postedEvent);
     }
     ldfree(postedEvent);
 }
 
-void EventManager::ProcessEvent(postedEvent_t* postedEvent){
+void EventManager::ProcessEvent(ManagedDevice* device, postedEvent_t* postedEvent){
     if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
         EventDescriptor_t* desc = EventHandlerDescriptor::GetEventDescriptor(postedEvent->base,postedEvent->id);
         if (desc) {
@@ -146,8 +145,17 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
     if (numDevs) {
         ManagedDevice** runningInstances = ManagedDevice::GetRunningInstances();
         for (uint32_t idx = 0; idx < numDevs; idx++ ) {
-            if (runningInstances[idx] && runningInstances[idx]->status && (runningInstances[idx]->eventBase ==  postedEvent->base)) {
-                runningInstances[idx]->ProcessEvent(postedEvent);
+            if (runningInstances[idx]) {
+                ESP_LOGV(__FUNCTION__,"Checking %s:%d with %s(%d) equal:%d",postedEvent->base,postedEvent->id, runningInstances[idx]->eventBase,runningInstances[idx]->processEventFnc==NULL ,strcmp(runningInstances[idx]->eventBase, postedEvent->base));
+            }
+            if (runningInstances[idx] && 
+                runningInstances[idx]->status && 
+                (strcmp(runningInstances[idx]->eventBase, postedEvent->base) == 0) && 
+                (runningInstances[idx] != device) &&
+                 runningInstances[idx]->processEventFnc
+                ) {
+                ESP_LOGV(__FUNCTION__,"Triggering %s:%d evd:%" PRIXPTR "",postedEvent->base,postedEvent->id, (uintptr_t)postedEvent->event_data);
+                runningInstances[idx]->processEventFnc(runningInstances[idx], postedEvent);
             }
         }
     }
@@ -194,10 +202,14 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
             strcpy((char*)postedEvent.event_data,(char*)event_data);
             ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent.event_data);
             break;
-        case event_data_type_tp::Number:
-            postedEvent.event_data=(void*)*(int*)event_data;
-            break;
         default:
+            ESP_LOGV(__FUNCTION__,"ptr1:%" PRIXPTR "",(uintptr_t)event_data);
+            if (event_data){
+                postedEvent.event_data = (void*)*((cJSON**)event_data);
+                ESP_LOGV(__FUNCTION__,"ptr2:%" PRIXPTR "",(uintptr_t)postedEvent.event_data);
+            } else {
+                postedEvent.event_data = event_data;
+            }
             break;
         }
         xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);

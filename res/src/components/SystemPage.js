@@ -164,7 +164,6 @@ class SystemPage extends React.Component {
         return [
             e("div", { key: "logpannel", className: "logpannel" }, [
                 e("button", { key: "reboot", onClick: elem => this.SendCommand({ 'command': 'reboot' }) }, "Reboot"),
-                e("button", { key: "parseFiles", onClick: elem => this.SendCommand({ 'command': 'parseFiles' }) }, "Parse Files"),
                 e("button", { key: "factoryReset", onClick: elem => this.SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
                 e(FirmwareUpdater, { key: "firmwareUpdater" })
             ]),

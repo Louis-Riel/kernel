@@ -24,7 +24,7 @@ Pin::~Pin(){
 }
 
 Pin::Pin(AppConfig* config)
-    :ManagedDevice(PIN_BASE,config->GetStringProperty("pinName"),NULL,&ProcessCommand),
+    :ManagedDevice(PIN_BASE,config->GetStringProperty("pinName"),NULL,&ProcessCommand,&ProcessEvent),
     pinNo(config->GetPinNoProperty("pinNo")),
     flags(config->GetIntProperty("driverFlags")),
     config(config),
@@ -153,7 +153,7 @@ void Pin::RefrestState(){
         pevent.id=curState?eventIds::ON : eventIds::OFF;
         pevent.event_data=status;
         pevent.eventDataType=event_data_type_tp::JSON;
-        EventManager::ProcessEvent(&pevent);
+        EventManager::ProcessEvent(this, &pevent);
     }
 }
 
@@ -179,13 +179,30 @@ void Pin::PollPins(){
   ESP_LOGV(__FUNCTION__, "ISR Service Started");
 }
 
-void Pin::ProcessEvent(postedEvent_t* postedEvent){
+void Pin::ProcessEvent(ManagedDevice* dev, postedEvent_t* postedEvent){
+    if (dev && postedEvent) {
+        ESP_LOGV(__FUNCTION__,"posting to %s",dev ->GetName());
+        ((Pin*) dev)->ProcessTheEvent(postedEvent);
+    } else {
+        ESP_LOGW(__FUNCTION__,"Stuff's missing dev:%d event:%d", dev==NULL, postedEvent==NULL);
+    }
+}
+
+void Pin::ProcessTheEvent(postedEvent_t* postedEvent){
     if (flags&gpio_driver_t::driver_type_t::digital_out){
-        cJSON* event = (cJSON*)postedEvent->event_data;
-        cJSON* jpinNo = event ? cJSON_GetObjectItem(event, "pinNo") :NULL;
-        cJSON* jpinName = event ? cJSON_GetObjectItem(event, "name") :NULL;
-        if ((jpinNo && (cJSON_GetNumberValue(jpinNo) == pinNo)) ||
-            (jpinName && (strcmp(jpinName->valuestring,GetName()) == 0))){
+        int cPinNo = postedEvent->eventDataType == event_data_type_tp::Number ? *((int*)postedEvent->event_data) : -1;
+        if (postedEvent->eventDataType == event_data_type_tp::Number) {
+            cPinNo = *((int*)postedEvent->event_data);
+            ESP_LOGV(__FUNCTION__,"d: %d==%d",cPinNo, pinNo);
+        } else if (postedEvent->event_data) {
+            cJSON* event = (cJSON*)postedEvent->event_data;
+            cJSON* jpinNo = event ? cJSON_GetObjectItem(event, "pinNo") :NULL;
+            cPinNo = cJSON_GetNumberValue(jpinNo);
+            ESP_LOGV(__FUNCTION__,"j: %d==%d",cPinNo, pinNo);
+        }  else {
+            ESP_LOGW(__FUNCTION__,"Missing event data");
+        }
+        if (cPinNo == pinNo){
             uint8_t state = 2;
             switch (postedEvent->id)
             {
@@ -209,11 +226,9 @@ void Pin::ProcessEvent(postedEvent_t* postedEvent){
             if ((state <= 1) && (state != pinStatus->valueint)) {
                 gpio_set_level(pinNo,state);
                 cJSON_SetIntValue(pinStatus,state);
-                EventManager::ProcessEvent(postedEvent);
+                EventManager::ProcessEvent(this, postedEvent);
                 ESP_LOGV(__FUNCTION__,"Pin %s from %d to %d",name,pinStatus->valueint,state);
             }
-        } else {
-            ESP_LOGE(__FUNCTION__,"Invalid event id for %s, missing pinno:%d",name, jpinNo==NULL);
         }
     }
 }
@@ -243,7 +258,7 @@ bool Pin::ProcessCommand(ManagedDevice* dev, cJSON * parms) {
         pevent.event_data = pin->status;
         pevent.eventDataType = event_data_type_tp::JSON;
         pevent.base = pin->eventBase;
-        pin->ProcessEvent(&pevent);
+        pin->ProcessTheEvent(&pevent);
         return true;
     }
     return false;

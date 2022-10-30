@@ -1,10 +1,8 @@
 #include "route.h"
 #include "mbedtls/md.h"
 
-
 bool TheRest::GetLocalMD5(char* ccmd5) {
     FILE *fw = NULL;
-    esp_err_t ret;
     bool retVal=false;
     ESP_LOGI(__FUNCTION__, "Reading MD5 RAM:%d...", esp_get_free_heap_size());
     if ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)

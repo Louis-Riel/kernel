@@ -4,9 +4,27 @@
 #include "esp_http_client.h"
 #include "esp_http_server.h"
 #include "eventmgr.h"
-#include "rest.h"
+#include "route.h"
 #include "../wifi/station.h"
+#include "esp_partition.h"
+#include "esp_ota_ops.h"
 
+#define min(a, b) (((a) < (b)) ? (a) : (b))
+#define max(a, b) (((a) > (b)) ? (a) : (b))
+
+void restSallyForth(void *pvParameter);
+
+typedef enum{
+    TAR_BUFFER_FILLED = BIT0,
+    TAR_BUFFER_SENT = BIT1,
+    TAR_BUILD_DONE = BIT2,
+    TAR_SEND_DONE = BIT3,
+    HTTP_SERVING = BIT4,
+    GETTING_TRIP_LIST = BIT5,
+    GETTING_TRIPS = BIT6,
+    DOWNLOAD_STARTED = BIT7,
+    DOWNLOAD_FINISHED = BIT8
+} restServerState_t;
 class WebsocketManager : ManagedDevice
 {
 public:
@@ -75,17 +93,21 @@ public:
   static void CheckUpgrade(void *param);
   static void MergeConfig(void *param);
   static void SendStatus(void *param);
-  static void SendTar(void *params);
   static esp_err_t SendConfig(char *addr, cJSON *cfg);
-  static esp_err_t HandleWifiCommand(httpd_req_t *req);
   static cJSON* status_json();
+  static cJSON* tasks_json();
   cJSON* bake_status_json();
   static const char* REST_BASE;
 
 protected:
   const char* hcUrl;
+  const cJSON* accessControlAllowOrigin;
+  const cJSON* accessControlMaxAge;
+  const cJSON* accessControlAllowMethods;
+  const cJSON* accessControlAllowHeaders;
   static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
   static bool HealthCheck(void *instance);
+  static void ScanNetwork(void *instance);
 
   EventHandlerDescriptor *BuildHandlerDescriptors();
   
@@ -116,6 +138,7 @@ protected:
   static esp_err_t HandleSystemCommand(httpd_req_t *req);
   static esp_err_t HandleStatusChange(httpd_req_t *req);
   static esp_err_t findFiles(httpd_req_t *req, const char *path, const char *ext, bool recursive, char *res, uint32_t resLen);
+  static esp_err_t checkTheSum(httpd_req_t *req);
 
 private:
   char* postData;
@@ -134,6 +157,7 @@ private:
   cJSON* jprocessingTime_us;
   cJSON* jBytesIn;
   cJSON* jBytesOut;
+  cJSON* jScanning;
 
   httpd_uri_t const restUris[12] =
       {

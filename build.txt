@@ -1,0 +1,140 @@
+[1/22] Performing build step for 'bootloader'
+[1/1] cd /mnt/c/Users/Louis-SebastienRiel/Documents/git/kernel/kernel/build/bootloader/esp-idf/esptool_py && /home/nix/.espressif/python_env/idf4.4_py3.8_env/bin/python /home/nix/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x1000 /mnt/c/Users/Louis-SebastienRiel/Documents/git/kernel/kernel/build/bootloader/bootloader.bin
+Bootloader binary size 0x6c60 bytes. 0x3a0 bytes (3%) free.
+[2/20] Linking C static library esp-idf/rest/librest.a
+[3/20] Linking C static library esp-idf/TinyGPS/libTinyGPS.a
+[4/20] Linking C static library esp-idf/mfile/libmfile.a
+[5/20] Building CXX object esp-idf/eventmgr/CMakeFiles/__idf_eventmgr.dir/manageddevice.cpp.obj
+In file included from ../components/eventmgr/manageddevice.cpp:1:
+../components/eventmgr/eventmgr.h:18: warning: "LOG_LOCAL_LEVEL" redefined
+ #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+ 
+In file included from ../components/eventmgr/../../main/logs.h:16,
+                 from ../components/eventmgr/eventmgr.h:13,
+                 from ../components/eventmgr/manageddevice.cpp:1:
+/home/nix/esp/esp-idf/components/log/include/esp_log.h:164: note: this is the location of the previous definition
+ #define LOG_LOCAL_LEVEL  CONFIG_LOG_MAXIMUM_LEVEL
+ 
+In file included from ../components/eventmgr/../../main/utils.h:7,
+                 from ../components/eventmgr/manageddevice.cpp:2:
+../components/eventmgr/../../main/mallocdbg.h:19:18: warning: 'mallocs' defined but not used [-Wunused-variable]
+ static mallocdbg mallocs[256];
+                  ^~~~~~~
+[6/20] Linking C static library esp-idf/eventmgr/libeventmgr.a
+[7/20] Linking C static library esp-idf/apa102/libapa102.a
+[8/20] Linking C static library esp-idf/pins/libpins.a
+[9/20] Linking C static library esp-idf/wifi/libwifi.a
+[10/20] Linking C static library esp-idf/servo/libservo.a
+[11/20] Linking C static library esp-idf/bluetooth/libbluetooth.a
+[12/20] Linking C static library esp-idf/IR/libIR.a
+[13/20] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/log.cpp.obj
+In file included from ../main/log.cpp:2:
+../main/utils.h:30: warning: "LOG_LOCAL_LEVEL" redefined
+ #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+ 
+In file included from ../main/logs.h:16,
+                 from ../main/log.cpp:1:
+/home/nix/esp/esp-idf/components/log/include/esp_log.h:164: note: this is the location of the previous definition
+ #define LOG_LOCAL_LEVEL  CONFIG_LOG_MAXIMUM_LEVEL
+ 
+../main/log.cpp: In function 'int loggit(const char*, va_list)':
+../main/log.cpp:81:42: warning: missing initializer for member 'tm::tm_min' [-Wmissing-field-initializers]
+                 struct tm timeinfo = { 0 };
+                                          ^
+../main/log.cpp:81:42: warning: missing initializer for member 'tm::tm_hour' [-Wmissing-field-initializers]
+../main/log.cpp:81:42: warning: missing initializer for member 'tm::tm_mday' [-Wmissing-field-initializers]
+../main/log.cpp:81:42: warning: missing initializer for member 'tm::tm_mon' [-Wmissing-field-initializers]
+../main/log.cpp:81:42: warning: missing initializer for member 'tm::tm_year' [-Wmissing-field-initializers]
+../main/log.cpp:81:42: warning: missing initializer for member 'tm::tm_wday' [-Wmissing-field-initializers]
+../main/log.cpp:81:42: warning: missing initializer for member 'tm::tm_yday' [-Wmissing-field-initializers]
+../main/log.cpp:81:42: warning: missing initializer for member 'tm::tm_isdst' [-Wmissing-field-initializers]
+In file included from ../main/utils.h:7,
+                 from ../main/log.cpp:2:
+../main/mallocdbg.h: At global scope:
+../main/mallocdbg.h:19:18: warning: 'mallocs' defined but not used [-Wunused-variable]
+ static mallocdbg mallocs[256];
+                  ^~~~~~~
+[14/20] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/utils.cpp.obj
+In file included from ../main/utils.cpp:15:
+../components/eventmgr/eventmgr.h:18: warning: "LOG_LOCAL_LEVEL" redefined
+ #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+ 
+In file included from /home/nix/esp/esp-idf/components/wear_levelling/include/wear_levelling.h:18,
+                 from /home/nix/esp/esp-idf/components/fatfs/vfs/esp_vfs_fat.h:22,
+                 from ../main/utils.cpp:4:
+/home/nix/esp/esp-idf/components/log/include/esp_log.h:164: note: this is the location of the previous definition
+ #define LOG_LOCAL_LEVEL  CONFIG_LOG_MAXIMUM_LEVEL
+ 
+../main/utils.cpp: In function 'bool initSPISDCard(bool)':
+../main/utils.cpp:584:26: warning: missing initializer for member 'spi_bus_config_t::data4_io_num' [-Wmissing-field-initializers]
+           .intr_flags = 0};
+                          ^
+../main/utils.cpp:584:26: warning: missing initializer for member 'spi_bus_config_t::data5_io_num' [-Wmissing-field-initializers]
+../main/utils.cpp:584:26: warning: missing initializer for member 'spi_bus_config_t::data6_io_num' [-Wmissing-field-initializers]
+../main/utils.cpp:584:26: warning: missing initializer for member 'spi_bus_config_t::data7_io_num' [-Wmissing-field-initializers]
+In file included from ../main/utils.h:7,
+                 from ../main/utils.cpp:17:
+../main/mallocdbg.h: At global scope:
+../main/mallocdbg.h:19:18: warning: 'mallocs' defined but not used [-Wunused-variable]
+ static mallocdbg mallocs[256];
+                  ^~~~~~~
+[15/20] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/Blink.cpp.obj
+In file included from ../main/Blink.cpp:4:
+../main/utils.h:30: warning: "LOG_LOCAL_LEVEL" redefined
+ #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
+ 
+In file included from ../main/utils.h:17,
+                 from ../main/Blink.cpp:4:
+/home/nix/esp/esp-idf/components/log/include/esp_log.h:164: note: this is the location of the previous definition
+ #define LOG_LOCAL_LEVEL  CONFIG_LOG_MAXIMUM_LEVEL
+ 
+../main/Blink.cpp: In function 'void doHibernate(void*)':
+../main/Blink.cpp:160:12: warning: unused variable 'ext_wakeup_off_pin_mask' [-Wunused-variable]
+   uint64_t ext_wakeup_off_pin_mask = 0;
+            ^~~~~~~~~~~~~~~~~~~~~~~
+../main/Blink.cpp: In function 'void Hibernate()':
+../main/Blink.cpp:228:24: warning: unused variable 'eg' [-Wunused-variable]
+     EventGroupHandle_t eg = getAppEG();
+                        ^~
+../main/Blink.cpp:229:17: warning: unused variable 'bits' [-Wunused-variable]
+     EventBits_t bits = xEventGroupGetBits(getAppEG());
+                 ^~~~
+../main/Blink.cpp: In function 'void gpsEvent(void*, esp_event_base_t, int32_t, void*)':
+../main/Blink.cpp:244:12: warning: unused variable 'dtmp' [-Wunused-variable]
+     double dtmp;
+            ^~~~
+../main/Blink.cpp: In function 'bool CleanupEmptyDirs(char*)':
+../main/Blink.cpp:722:9: warning: unused variable 'theFile' [-Wunused-variable]
+   FILE *theFile;
+         ^~~~~~~
+../main/Blink.cpp:724:15: warning: unused variable 'fileStat' [-Wunused-variable]
+   struct stat fileStat;
+               ^~~~~~~~
+../main/Blink.cpp: At global scope:
+../main/Blink.cpp:343:13: warning: 'void pollWakePins(void*)' defined but not used [-Wunused-function]
+ static void pollWakePins(void *arg)
+             ^~~~~~~~~~~~
+In file included from ../main/utils.h:7,
+                 from ../main/Blink.cpp:4:
+../main/mallocdbg.h:19:18: warning: 'mallocs' defined but not used [-Wunused-variable]
+ static mallocdbg mallocs[256];
+                  ^~~~~~~
+[16/20] Linking C static library esp-idf/main/libmain.a
+[17/20] Generating ld/sections.ld
+[18/20] Linking CXX executable usefuluseless.elf
+[19/20] Generating binary image from built executable
+esptool.py v3.3.2-dev
+Creating esp32 image...
+Merged 25 ELF sections
+Successfully created esp32 image.
+Generated /mnt/c/Users/Louis-SebastienRiel/Documents/git/kernel/kernel/build/usefuluseless.bin
+[20/20] cd /mnt/c/Users/Louis-SebastienRiel/Documents/git/kernel/kernel/build/esp-idf/esptool_py && /home/nix/.espressif/python_env/idf4.4_py3.8_env/bin/python /home/nix/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app /mnt/c/Users/Louis-SebastienRiel/Documents/git/kernel/kernel/build/partition_table/partition-table.bin /mnt/c/Users/Louis-SebastienRiel/Documents/git/kernel/kernel/build/usefuluseless.bin
+Warning: 1/2 app partitions are too small for binary usefuluseless.bin size 0x1815f0:
+  - Part 'factory' 0/0 @ 0x10000 size 0x40000 (overflow 0x1415f0)
+Executing action: all (aliases: build)
+Running ninja in directory /mnt/c/Users/Louis-SebastienRiel/Documents/git/kernel/kernel/build
+Executing "ninja all"...
+
+Project build complete. To flash, run this command:
+/home/nix/.espressif/python_env/idf4.4_py3.8_env/bin/python ../../../../../../../../home/nix/esp/esp-idf/components/esptool_py/esptool/esptool.py -p (PORT) -b 460800 --before default_reset --after hard_reset --chip esp32  write_flash --flash_mode dio --flash_size detect --flash_freq 40m 0x1000 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0xd000 build/ota_data_initial.bin 0x10000 build/usefuluseless.bin
+or run 'idf.py -p (PORT) flash'

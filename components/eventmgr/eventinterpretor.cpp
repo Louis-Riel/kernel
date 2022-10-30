@@ -1,5 +1,4 @@
 #include "eventmgr.h"
-#include "rest.h"
 #include "route.h"
 #include "mfile.h"
 #include "pins.h"
@@ -195,7 +194,7 @@ void EventInterpretor::RunProgram(void *event_data, const char *programName)
                     ESP_LOGV(__FUNCTION__, "%s mParams:%s",programName, ctmp);
                     ldfree(ctmp);
                 }
-                RunMethod(aitem->GetStringProperty("method"), mParams ? &mParams : NULL, false);
+                RunMethod(aitem->GetStringProperty("method"), mParams, false);
             }
             else if (aitem->HasProperty("program"))
             {
@@ -340,7 +339,7 @@ uint8_t EventInterpretor::RunMethod(EventInterpretor *instance, const char *meth
     ESP_LOGV(__FUNCTION__, "Got %s method:(%s)", inBackground ? "backgroung" : "foreground", method);
 
     TaskFunction_t theFunc = NULL;
-    cJSON *mParams = event_data == NULL ? instance->params : *(cJSON **)event_data;
+    cJSON *mParams = event_data == NULL ? instance->params : (cJSON*)event_data;
 
     if (strcmp(method, "wifioff") == 0)
     {
@@ -422,10 +421,6 @@ uint8_t EventInterpretor::RunMethod(EventInterpretor *instance, const char *meth
     {
         theFunc = TheRest::CheckUpgrade;
     }
-    else if (strcmp(method, "sendtar") == 0)
-    {
-        theFunc = TheRest::SendTar;
-    }
     else if (strcmp(method, "Sleep") == 0)
     {
         cJSON *jtime = cJSON_GetObjectItem(mParams, "time");
@@ -465,6 +460,7 @@ uint8_t EventInterpretor::RunMethod(EventInterpretor *instance, const char *meth
                 // else 
                 // {
                     ESP_LOGV(__FUNCTION__, "Posting %s to %s(%d)..", edesc->eventName, edesc->baseName, edesc->id);
+                    ESP_LOGV(__FUNCTION__,"ptr:%" PRIXPTR "",(uintptr_t)mParams);
                     if ((ret = esp_event_post(edesc->baseName, edesc->id, &mParams, sizeof(void *), portMAX_DELAY)) != ESP_OK)
                     {
                         ESP_LOGW(__FUNCTION__, "Cannot post %s to %s:%s..", jeventid->valuestring, jeventbase->valuestring, esp_err_to_name(ret));

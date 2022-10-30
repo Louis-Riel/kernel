@@ -10,7 +10,7 @@
 
 #ifdef DEBUG_MALLOC
 cJSON* getMemoryStats();
-typedef struct mallocdbg
+struct mallocdbg
 {
     char* name=0;
     int32_t hitCount=0;

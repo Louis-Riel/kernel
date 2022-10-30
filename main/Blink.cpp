@@ -30,7 +30,6 @@
 #include "esp_littlefs.h"
 #include "bootloader_random.h"
 #include "eventmgr.h"
-#include "rest.h"
 #include "route.h"
 #include "../components/pins/pins.h"
 #include "mfile.h"
@@ -41,6 +40,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include "nvs_flash.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 

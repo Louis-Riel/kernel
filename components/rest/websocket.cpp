@@ -1,5 +1,4 @@
 
-#include "rest.h"
 #include "route.h"
 #include <cstdio>
 #include <cstring>
@@ -253,7 +252,7 @@ void WebsocketManager::StatePoller(void* instance){
         ESP_LOGV(__FUNCTION__,"gState Changed %d", bits);
         cJSON_AddItemReferenceToObject(state,"gps",gpsState);
       } else if (bits&state_change_t::THREADS) {
-        cJSON_AddItemToObject(state,"tasks",tasks_json());
+        cJSON_AddItemToObject(state,"tasks",TheRest::tasks_json());
       } else if (bits&state_change_t::WIFI) {
         cJSON_AddItemReferenceToObject(state,"wifi",wifiState);
       } else {
@@ -281,6 +280,7 @@ void WebsocketManager::StatePoller(void* instance){
 
 esp_err_t TheRest::ws_handler(httpd_req_t *req) {
   ESP_LOGV(__FUNCTION__, "WEBSOCKET Session");
+
   if (stateHandler == NULL) {
     ESP_LOGI(__FUNCTION__, "Staring Manager");
     stateHandler = new WebsocketManager();

@@ -23,7 +23,8 @@ public:
     Pin(AppConfig* config);
     ~Pin();
     static void PollPins();
-    void ProcessEvent(postedEvent_t* postedEvent);
+    void ProcessTheEvent(postedEvent_t* postedEvent);
+    static void ProcessEvent(ManagedDevice* device, postedEvent_t* postedEvent);
     bool isRtcGpio;
     enum eventIds {
         OFF,ON,TRIGGER,STATUS
