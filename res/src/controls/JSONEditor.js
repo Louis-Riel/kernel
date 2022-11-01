@@ -1,15 +1,11 @@
 class StateCommands extends React.Component {
     render() {
         return e("div",{key:'commands',name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
-            key:genUUID(),
-            caption:cmd.caption || cmd.command,
-            command:cmd.command,
+            key: `${cmd.command}-${cmd.param1}`,
             name:this.props.name,
             onSuccess:this.props.onSuccess,
             onError:this.props.onError,
-            param1:cmd.param1,
-            param2:cmd.param2,
-            HTTP_METHOD:cmd.HTTP_METHOD
+            ...cmd
         })));
     }
 }
@@ -54,16 +50,14 @@ class EditableLabel extends React.Component {
     }
 }
 
-class JSONEditor extends React.Component {
+class LocalJSONEditor extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            value:props.json,
-            class: props.json?.class,
-            name: props.json?.name
+            json: props.json
         };
-        if (this.props.registerEventInstanceCallback && this.state.class && this.state.name) {
-            this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.state.class}-${this.state.name}`);
+        if (this.props.registerEventInstanceCallback && this.props.name) {
+            this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.props.class}-${this.props.name}`);
         }
     }
 
@@ -75,25 +69,30 @@ class JSONEditor extends React.Component {
         this.mounted=true;
     }
 
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps && prevProps.json && (prevProps.json != this.props.json)){
+            this.setState({json: this.props.json});
+        }
+    }
+
     ProcessEvent(evt) {
         if (this.mounted && evt?.data){
-            if ((evt.data?.class == this.state.class) && (evt.data?.name == this.state.name)){
-                this.setState({value: evt.data});
+            if (evt.data?.name == this.props.name){
+                this.setState({json: evt.data});
             }
         }
     }
 
     removeField(fld){
-        delete this.state.value[fld];
-        this.setState({value:this.state.value});
+        delete this.state.json[fld];
+        this.setState({value:this.state.json});
     }
 
     changeLabel(newLabel, oldLabel) {
         if (newLabel !== oldLabel) {
-            Object.defineProperty(this.state.value, newLabel,
-                Object.getOwnPropertyDescriptor(this.state.value, oldLabel));
-            delete this.state.value[oldLabel];
-            this.setState(this.state);
+            Object.defineProperty(this.state.json, newLabel,
+                Object.getOwnPropertyDescriptor(this.state.json, oldLabel));
+            delete this.state.json[oldLabel];
         }
     }
 
@@ -113,45 +112,9 @@ class JSONEditor extends React.Component {
     Parse(json) {
         if ((json !== undefined) && (json != null)) {
             if ((typeof json == "object") && (json.version === undefined)){
-                return e("div",{key: `jsonobject`,className:"statusclass jsonNodes"},this.getSortedProperties(json).map(fld => {
-                    if (Array.isArray(json[fld])) {
-                        if (fld == "commands"){
-                            return {fld:fld,element:e(StateCommands,{key:`jofieldcmds`,name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
-                        }
-                        return {fld:fld,element:e(Table, { key: `Table-Object-${this.props.path}/${fld}`, 
-                                                           name: fld, 
-                                                           path: `${this.props.path}/${fld}`,
-                                                           label: fld, 
-                                                           json: json[fld], 
-                                                           registerEventInstanceCallback: this.props.registerEventInstanceCallback, 
-                                                           editable: this.props.editable, 
-                                                           sortable: this.props.sortable })};
-                    } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
-                        return {fld:fld,element:e(JSONEditor, { 
-                            key: `JE-${this.props.path}/${fld}`,
-                            path: `${this.props.path}/${fld}`,
-                            name: fld, 
-                            label: fld, 
-                            editable: this.props.editable,
-                            json: json[fld],
-                            updateAppStatus:this.props.updateAppStatus,
-                            registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
-                    } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
-                        return {
-                            fld:fld,
-                            element: this.props.editable ?
-                                    e("label",{key:`${fld}label`},[
-                                        this.fieldControlPannel(fld),
-                                        e("input",{key:`input`,defaultValue:json[fld].value === undefined ?  json[fld] : json[fld].value ,onChange: this.processUpdate.bind(this)})]):
-                                    e(ROProp, { 
-                                        key: `rofld${fld}`, 
-                                        value: json[fld], 
-                                        name: fld, 
-                                        label: fld 
-                                    })
-                        };
-                    }
-                }).reduce((pv,cv)=>{
+                return e("div",{key: `jsonobject`,className:"statusclass jsonNodes"},this.getSortedProperties(json)
+                                                                                         .map(fld => this.renderField(json, fld))
+                                                                                         .reduce((pv,cv)=>{
                     if (cv){
                         var fc = this.getFieldClass(json,cv.fld);
                         var item = pv.find(it=>it.fclass == fc);
@@ -162,31 +125,100 @@ class JSONEditor extends React.Component {
                         }
                     }
                     return pv;
-                },[]).map((item,idx) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
+                },[]).map((item) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
             } else {
-                return (json.version !== undefined) || (this.props.editable && (typeof json != "object")) ?
-                            e("input",{key:`input`,defaultValue:json.value === undefined?json:json.value,onChange: this.processUpdate.bind(this)}):
-                            e(ROProp, { 
-                                key: 'rofield', 
-                                value: json, 
-                                name: "" 
-                            });
+                return this.renderVersioned(json);
             }
         } else {
             return null;
         }
     }
 
+    renderField(json, fld) {
+        if (Array.isArray(json[fld])) {
+            if (fld == "commands"){
+                return this.renderCommands(fld, json);
+            }
+            return this.renderArray(fld, json);
+        } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
+            return this.renderObject(fld, json);
+        } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
+            return this.renderFieldValue(fld, json);
+        }
+    }
+
+    renderFieldValue(fld, json) {
+        return {
+            fld: fld,
+            element: this.props.editable ?
+                e("label", { key: `${fld}label` }, [
+                    this.fieldControlPannel(fld),
+                    e("input", { key: `input`, defaultValue: json[fld].value === undefined ? json[fld] : json[fld].value, onChange: this.processUpdate.bind(this) })
+                ]) :
+                e(ROProp, {
+                    key: `rofld${fld}`,
+                    value: json[fld],
+                    name: fld,
+                    label: fld
+                })
+        };
+    }
+
+    renderObject(fld, json) {
+        return {
+            fld: fld, element: e(LocalJSONEditor, {
+                key: `JE-${this.props.path}/${fld}`,
+                path: `${this.props.path}/${fld}`,
+                name: fld,
+                label: fld,
+                editable: this.props.editable,
+                sortable: this.props.sortable,
+                json: json[fld],
+                updateAppStatus: this.props.updateAppStatus,
+                registerEventInstanceCallback: this.props.registerEventInstanceCallback
+            })
+        };
+    }
+
+    renderArray(fld, json) {
+        return {
+            fld: fld, element: e(Table, {
+                key: `Table-Object-${this.props.path}/${fld}`,
+                name: fld,
+                path: `${this.props.path}/${fld}`,
+                label: fld,
+                json: json[fld],
+                registerEventInstanceCallback: this.props.registerEventInstanceCallback,
+                editable: this.props.editable,
+                sortable: this.props.sortable
+            })
+        };
+    }
+
+    renderCommands(fld, json) {
+        return { fld: fld, element: e(StateCommands, { key: `${fld}cmds`, name: json["name"], commands: json[fld], onSuccess: this.props.updateAppStatus }) };
+    }
+
+    renderVersioned(json) {
+        return (json.version !== undefined) || (this.props.editable && (typeof json != "object")) ?
+            e("input", { key: `input`, defaultValue: json.value === undefined ? json : json.value, onChange: this.processUpdate.bind(this) }) :
+            e(ROProp, {
+                key: 'rofield',
+                value: json,
+                name: ""
+            });
+    }
+
     processUpdate(elem,fld) {
         if (fld) {
-            if (this.state.value[fld] === undefined) {
-                this.state.value[fld]={version:-1};
+            if (this.state.json[fld] === undefined) {
+                this.state.json[fld]={version:-1};
             }
-            this.state.value[fld].value=elem.target.value;
-            this.state.value[fld].version++;
+            this.state.json[fld].value=elem.target.value;
+            this.state.json[fld].version++;
         } else {
-            this.state.value.value=elem.target.value;
-            this.state.value.version++;
+            this.state.json.value=elem.target.value;
+            this.state.json.version++;
         }
     }
 
@@ -217,8 +249,8 @@ class JSONEditor extends React.Component {
     }
 
     addNewProperty(){
-        this.state.value[`prop${Object.keys(this.state.value).filter(prop => prop.match(/^prop.*/)).length+1}`]=null;
-        this.setState({value:this.state.value});
+        this.state.json[`prop${Object.keys(this.state.json).filter(prop => prop.match(/^prop.*/)).length+1}`]=null;
+        this.setState({value:this.state.json});
     }
 
     objectControlPannel(){
@@ -231,15 +263,15 @@ class JSONEditor extends React.Component {
     }
 
     render() {
-        if (this.state === null || this.state === undefined) {
-            return e("div", { id: `loading${this.id}` }, "Loading...");
+        if (this.state.json === null || this.state.json === undefined) {
+            return e("div", { id: `loading${this.id}` });
         } else if (this.props.label != null) {
             return e("fieldset", { id: `fs${this.props.label}`,className:"jsonNodes" }, [
                 e("legend", { key: 'legend' }, this.objectControlPannel()),
-                this.Parse(this.state.value)
+                this.Parse(this.state.json)
             ]);
         } else {
-            return this.Parse(this.props.json);
+            return this.Parse(this.state.json);
         }
     }
 }

@@ -1,0 +1,146 @@
+.eventPanel {
+    display: flex;
+    flex-direction: column;
+    padding-right: 1em;
+    padding-top: 10px;
+}
+
+.filterPanel {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: flex-start;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 10px;
+}
+
+.eventList {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.liveEvent {
+    background: linear-gradient(to bottom,#2d332d,#091308);
+    margin: 5px;
+    border-color: gray;
+    border-width: thin;
+    border-style: dotted;
+    padding: 5px;
+    border-radius: 20%;
+    width: fit-content;
+    font-size: small;
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: center;
+}
+
+.propName {
+    color: cyan;
+}
+
+.liveEvent {
+    background: linear-gradient(to bottom, #2d332d, #091308);
+    margin: 5px;
+    border-color: gray;
+    border-width: thin;
+    border-style: dotted;
+    padding: 5px;
+    border-radius: 20%;
+    width: fit-content;
+    font-size: small;
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: center;
+}
+
+.eventBase {
+    color: aqua
+}
+
+.eventId {
+    color: #5fdfc0;
+}
+
+.control {
+    display: flex;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    font: caption;
+    color: aquamarine;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    align-items: center;
+}
+
+div.events button {
+    margin-left: 5px;
+}
+
+.eventList {
+    display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+details.data {
+    color: aquamarine;
+    border: none;
+}
+
+details {
+    padding: 0.5em 0.5em 0.5em;
+    display: flex;
+}
+
+.evbfiltered {
+    border: solid aquamarine 1px;
+    border-radius: 10px 10px 0 0;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-content: center;
+    align-items: center;
+    padding: 0 10px;
+}
+
+.eventIds {
+    border: solid aquamarine 1px;
+    border-radius: 0 0 10px 10px;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px;
+}
+
+.evbfiltered>label>.MuiCheckbox-root, .evifiltered>label>.MuiCheckbox-root {
+    color: aqua;
+}
+
+.evifiltered>label>.MuiFormControlLabel-label {
+    font-size: small;
+    color:aqua
+}
+
+.description {
+    align-content: center;
+    align-items: center;
+    -webkit-column-gap: 3px;
+    column-gap: 13px;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+}

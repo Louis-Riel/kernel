@@ -1,0 +1,1 @@
+export const methods = ["wifioff", "healthcheck", "wifiSallyForth", "service", "hibernate", "Sleep", "Post"];

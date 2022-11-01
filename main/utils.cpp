@@ -1,7 +1,6 @@
-#include "utils.h"
 #include "esp_sleep.h"
 #include "driver/periph_ctrl.h"
-#include "../components/esp_littlefs/include/esp_littlefs.h"
+#include "esp_littlefs.h"
 #include "esp_vfs_fat.h"
 #include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
@@ -11,16 +10,21 @@
 #include "logs.h"
 #include "errno.h"
 #include "freertos/semphr.h"
-#include "esp32/rom/md5_hash.h"
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "eventmgr.h"
-#include "/home/riell/esp-4.3/esp-idf/components/pthread/include/esp_pthread.h"
+#include "mbedtls/md.h"
+#include "utils.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 #define F_BUF_SIZE 8192
 
 const char* logPath = "/lfs/logs";
+
+static bool spiInitialized = false;
 
 sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -30,6 +34,7 @@ esp_vfs_fat_sdmmc_mount_config_t mount_config = {
 sdmmc_card_t *card = NULL;
 const char mount_point[] = "/sdcard";
 int8_t numSdCallers = -1;
+int8_t numSpiffCallers = -1;
 wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 static SemaphoreHandle_t storageSema = xSemaphoreCreateMutex();
 
@@ -138,55 +143,48 @@ bool initSDMMCSDCard(bool log)
   esp_err_t ret = ESP_OK;
   if (numSdCallers == 0)
   {
-    ESP_LOGD(__FUNCTION__, "Using SDMMC peripheral");
+    ESP_LOGI(__FUNCTION__, "Using SDMMC peripheral");
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = true,
         .max_files = 5,
         .allocation_unit_size = 16 * 1024
     };
+    AppConfig *cfg = AppConfig::GetAppConfig()->GetConfig("/sdcard");
     sdmmc_card_t *card;
     const char mount_point[] = "/sdcard";
 
+    AppConfig *appState = AppConfig::GetAppStatus();
+    AppConfig *sdcState = appState->GetConfig("sdcard");
+
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.max_freq_khz = SDMMC_FREQ_DEFAULT;
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-    //slot_config.width = 4;
-    //slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
-    slot_config.gpio_cd = gpio_num_t::GPIO_NUM_4;
-    ESP_LOGI(__FUNCTION__, "Initializing SD card cs:%d wp:%d",slot_config.gpio_cd,slot_config.gpio_wp);
+    slot_config.width = 1;
 
-
-    // On chips where the GPIOs used for SD card can be configured, set them in
-    // the slot_config structure:
-    //slot_config.clk = GPIO_NUM_14;
-    //slot_config.gpio_wp = GPIO_NUM_15;
-    //slot_config.d0 = GPIO_NUM_2;
-    //slot_config.d1 = GPIO_NUM_4;
-    //slot_config.d2 = GPIO_NUM_12;
-    //slot_config.d3 = GPIO_NUM_13;
+    gpio_set_pull_mode(cfg->GetPinNoProperty("MisoPin"), GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(cfg->GetPinNoProperty("MosiPin"), GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(cfg->GetPinNoProperty("ClkPin"), GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode(cfg->GetPinNoProperty("CsPin"), GPIO_PULLUP_ONLY);
 
     ESP_LOGI(__FUNCTION__, "Mounting filesystem");
     ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
-    AppConfig *appState = AppConfig::GetAppStatus();
-    AppConfig *spiffState = appState->GetConfig("lfs");
-    AppConfig *sdcState = appState->GetConfig("sdcard");
+
+    ESP_LOGI(__FUNCTION__, "Initializing SD card cd:%d wp:%d",slot_config.gpio_cd,slot_config.gpio_wp);
 
     if (ret != ESP_OK) {
         sdcState->SetStateProperty("state", item_state_t::ERROR);
         if (ret == ESP_FAIL) {
             ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
-                     "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
+                    "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
         } else {
             ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
-                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+                    "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
         }
     } else {
       sdmmc_card_print_info(stdout, card);
       sdcState->SetStateProperty("state", item_state_t::ACTIVE);
     }
     ESP_LOGI(__FUNCTION__, "Filesystem mounted");
-
     // Card has been initialized, print its properties
   }
   numSdCallers++;
@@ -194,11 +192,6 @@ bool initSDMMCSDCard(bool log)
   return ret==ESP_OK;
 }
 bool deinitSDMMCSDCard(bool log)
-{
-  return false;
-}
-
-bool deinitSPISDCard(bool log)
 {
   xSemaphoreTake(storageSema,portMAX_DELAY);
   if (numSdCallers >= 0)
@@ -218,7 +211,7 @@ bool deinitSPISDCard(bool log)
         if (log)
           ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
       } else {
-          ESP_LOGD(__FUNCTION__, "lfs unmounted");
+          ESP_LOGI(__FUNCTION__, "lfs unmounted");
       }
       appState->SetStateProperty("/lfs/state", item_state_t::INACTIVE);
       xEventGroupClearBits(app_eg, SPIFF_MOUNTED);
@@ -229,7 +222,7 @@ bool deinitSPISDCard(bool log)
       if (esp_vfs_fat_sdmmc_unmount() == ESP_OK)
       {
         if (log)
-          ESP_LOGD(__FUNCTION__, "Unmounted SD Card");
+          ESP_LOGI(__FUNCTION__, "Unmounted SD Card");
       }
       else
       {
@@ -253,13 +246,93 @@ bool deinitSPISDCard(bool log)
   return true;
 }
 
-bool deinitSDCard(bool log)
+bool deinitSpiff(bool log)
 {
-  return deinitSPISDCard(log);
+  xSemaphoreTake(storageSema,portMAX_DELAY);
+  if (numSpiffCallers >= 0) {
+    numSpiffCallers--; 
+  } else {
+    numSpiffCallers=0;
+  }
+  if (log)
+    ESP_LOGV(__FUNCTION__, "SD callers %d", numSpiffCallers);
+  if (numSpiffCallers == 0)
+  {
+    esp_err_t ret = ESP_OK;
+    AppConfig *appState = AppConfig::GetAppStatus();
+    EventGroupHandle_t app_eg = getAppEG();
+    if (xEventGroupGetBits(app_eg) & SPIFF_MOUNTED)
+    {
+      ret = esp_vfs_littlefs_unregister("storage");
+      if (ret != ESP_OK)
+      {
+        if (log)
+          ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
+      } else {
+          ESP_LOGI(__FUNCTION__, "lfs unmounted");
+      }
+      appState->SetStateProperty("/lfs/state", item_state_t::INACTIVE);
+      xEventGroupClearBits(app_eg, SPIFF_MOUNTED);
+    }
+  }
+  else
+  {
+    if (log)
+      ESP_LOGV(__FUNCTION__, "Postponing SD card umount");
+  }
+  xSemaphoreGive(storageSema);
+  return true;
 }
 
-bool deinitSDCard(){
-  return deinitSDCard(false);
+bool deinitSPISDCard(bool log)
+{
+  log=true;
+  xSemaphoreTake(storageSema,portMAX_DELAY);
+  if (numSdCallers > 0){
+    numSdCallers--;
+  } else {
+    numSdCallers=0;
+  }
+
+  if (log)
+    ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
+  if (numSdCallers == 0)
+  {
+    AppConfig *appState = AppConfig::GetAppStatus();
+    EventGroupHandle_t app_eg = getAppEG();
+    if (xEventGroupGetBits(app_eg) & SDCARD_MOUNTED)
+    {
+      ESP_LOGV(__FUNCTION__, "Using SPI peripheral");
+      if (esp_vfs_fat_sdmmc_unmount() == ESP_OK)
+      {
+        if (log)
+          ESP_LOGI(__FUNCTION__, "Unmounted SD Card");
+      }
+      else
+      {
+        appState->SetStateProperty("/sdcard/state", item_state_t::ERROR);
+        if (log)
+          ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
+        xSemaphoreGive(storageSema);
+        return false;
+      }
+      xEventGroupClearBits(app_eg, SDCARD_MOUNTED);
+      appState->SetStateProperty("/sdcard/state", item_state_t::INACTIVE);
+    }
+  }
+  else
+  {
+    if (log)
+      ESP_LOGV(__FUNCTION__, "Postponing SD card umount");
+  }
+  xSemaphoreGive(storageSema);
+  return true;
+}
+
+bool deinitStorage(uint8_t flags)
+{
+  return (flags & SPIFF_FLAG ? deinitSpiff(false) : true) && (flags & SDCARD_FLAG ? deinitSPISDCard(false) : true);
+  //return deinitSDMMCSDCard(log);
 }
 
 struct dirFiles_t {
@@ -270,16 +343,15 @@ struct dirFiles_t {
 
 void CleanupLFS(void* param) {
   dirFiles_t* files = (dirFiles_t*)param;
-  ESP_LOGD(__FUNCTION__,"Looking for files to cleanup in %s, free:%d",files->curDir,*files->bytesFree);
+  ESP_LOGI(__FUNCTION__,"Looking for files to cleanup in %s, free:%d",files->curDir,*files->bytesFree);
 
   DIR *theFolder;
-  FILE *theFile;
   struct dirent *fi;
   struct stat fileStat;
   char* cpath = (char*)dmalloc(300);
 
-  if ((theFolder = openDir(files->curDir)) != NULL) {
-    while (((fi = readDir(theFolder)) != NULL) && (*files->bytesFree < 1782579)) {
+  if ((theFolder = opendir(files->curDir)) != NULL) {
+    while (((fi = readdir(theFolder)) != NULL) && (*files->bytesFree < 1782579)) {
       if (fi->d_type == DT_DIR) {
         dirFiles_t* cfiles = (dirFiles_t *)dmalloc(sizeof(dirFiles_t));
         cfiles->curDir = (char*)dmalloc(300);
@@ -292,13 +364,13 @@ void CleanupLFS(void* param) {
         stat(cpath,&fileStat);
         if (unlink(cpath) == 0) {
           *files->bytesFree+=fileStat.st_size;
-          ESP_LOGD(__FUNCTION__,"Deleted %s(%ld/%d)",cpath,fileStat.st_size,*files->bytesFree);
+          ESP_LOGI(__FUNCTION__,"Deleted %s(%ld/%d)",cpath,fileStat.st_size,*files->bytesFree);
         } else {
           ESP_LOGE(__FUNCTION__,"Failed to delete %s(%ld)",cpath,fileStat.st_size);
         }  
       }
     }
-    closeDir(theFolder);
+    closedir(theFolder);
   }
 
   if (files->root == files) {
@@ -311,6 +383,7 @@ void CleanupLFS(void* param) {
 
 esp_err_t setupLittlefs()
 {
+  ESP_LOGI(__FUNCTION__,"Setting up storage");
   const esp_vfs_littlefs_conf_t conf = {
       .base_path = "/lfs",
       .partition_label = "storage",
@@ -319,8 +392,8 @@ esp_err_t setupLittlefs()
 
   esp_err_t ret = esp_vfs_littlefs_register(&conf);
   AppConfig *appState = AppConfig::GetAppStatus();
-  ESP_LOGV(__FUNCTION__, "lfs mounted %d", ret);
-  AppConfig *spiffState = appState->GetConfig("/lfs");
+  ESP_LOGI(__FUNCTION__, "lfs mounted %d", ret);
+  AppConfig *spiffState = appState->GetConfig("lfs");
   if (ret != ESP_OK)
   {
     spiffState->SetStateProperty("state", item_state_t::ERROR);
@@ -348,9 +421,9 @@ esp_err_t setupLittlefs()
     *dirFiles->bytesFree = AppConfig::GetAppStatus()->GetIntProperty("/lfs/free");
     CleanupLFS(dirFiles);
   }
-  free(spiffState);
+  ldfree(spiffState);
 
-  ESP_LOGV(__FUNCTION__, "Space: %d/%d", used_bytes, total_bytes);
+  ESP_LOGI(__FUNCTION__, "Space: %zu/%zu", used_bytes, total_bytes);
   struct dirent *de;
   bool hasLogs = false;
   bool hasFw = false;
@@ -359,16 +432,15 @@ esp_err_t setupLittlefs()
   ESP_LOGV(__FUNCTION__, "Spiff is spiffy");
   EventGroupHandle_t app_eg = getAppEG();
   xEventGroupSetBits(app_eg, SPIFF_MOUNTED);
-  numSdCallers = -1;
 
-  DIR *root = openDir("/lfs");
+  DIR *root = opendir("/lfs");
   if (root == NULL)
   {
     ESP_LOGE(__FUNCTION__, "Cannot open lfs");
     return ESP_FAIL;
   }
 
-  while ((de = readDir(root)) != NULL)
+  while ((de = readdir(root)) != NULL)
   {
     ESP_LOGV(__FUNCTION__, "%d %s", de->d_type, de->d_name);
     if (strcmp(de->d_name, "logs") == 0)
@@ -384,7 +456,7 @@ esp_err_t setupLittlefs()
       hasCfg = true;
     }
   }
-  if ((ret = closeDir(root)) != ESP_OK)
+  if ((ret = closedir(root)) != ESP_OK)
   {
     ESP_LOGE(__FUNCTION__, "failed to close root %s", esp_err_to_name(ret));
     return ret;
@@ -397,7 +469,7 @@ esp_err_t setupLittlefs()
       ESP_LOGE(__FUNCTION__, "Failed in creating logs folder");
       return ESP_FAIL;
     }
-    ESP_LOGD(__FUNCTION__, "logs folder created");
+    ESP_LOGI(__FUNCTION__, "logs folder created");
   }
   if (!hasFw)
   {
@@ -406,7 +478,7 @@ esp_err_t setupLittlefs()
       ESP_LOGE(__FUNCTION__, "Failed in creating firmware folder");
       return ESP_FAIL;
     }
-    ESP_LOGD(__FUNCTION__, "firmware folder created");
+    ESP_LOGI(__FUNCTION__, "firmware folder created");
   }
 
   if (!hasCfg)
@@ -416,28 +488,32 @@ esp_err_t setupLittlefs()
       ESP_LOGE(__FUNCTION__, "Failed in creating config folder");
       return ESP_FAIL;
     }
-    ESP_LOGD(__FUNCTION__, "config folder created");
+    ESP_LOGI(__FUNCTION__, "config folder created");
   }
+
+  ESP_LOGI(__FUNCTION__,"Done setting up storage");
 
   return ESP_OK;
 }
 
 bool initSpiff(bool log) {
-    const esp_vfs_littlefs_conf_t conf = {
-        .base_path = "/lfs",
-        .partition_label = "storage",
-        .format_if_mount_failed = true,
-        .dont_mount = false};
-    AppConfig *appState = AppConfig::GetAppStatus();
-    AppConfig *spiffState = appState->GetConfig("lfs");
-    EventGroupHandle_t app_eg = getAppEG();
-    esp_err_t ret = ESP_OK;
-
+  if (numSpiffCallers <= 0)
+  {
     if (log)
       ESP_LOGV(__FUNCTION__, "Using SPI peripheral");
 
+    esp_err_t ret = ESP_OK;
+    EventGroupHandle_t app_eg = getAppEG();
     if (!(xEventGroupGetBits(app_eg) & SPIFF_MOUNTED))
     {
+      const esp_vfs_littlefs_conf_t conf = {
+          .base_path = "/lfs",
+          .partition_label = "storage",
+          .format_if_mount_failed = true,
+          .dont_mount = false};
+      AppConfig *appState = AppConfig::GetAppStatus();
+      AppConfig *spiffState = appState->GetConfig("lfs");
+
       ret = esp_vfs_littlefs_register(&conf);
       xEventGroupSetBits(app_eg, SPIFF_MOUNTED);
       if (ret != ESP_OK)
@@ -473,19 +549,23 @@ bool initSpiff(bool log) {
       ESP_LOGV(__FUNCTION__, "Cannot mount spiff, already mounted");
     }
     return ret==ESP_OK;
+  } else {
+    numSpiffCallers >= 0 ? numSpiffCallers++ : numSpiffCallers = 1;
+    return true;
+  }
 }
 
 bool initSPISDCard(bool log){
+  log=true;
+  if (log)
+    ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   xSemaphoreTake(storageSema,portMAX_DELAY);
-  ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   if (numSdCallers <= 0)
   {
     AppConfig *appState = AppConfig::GetAppStatus();
-    AppConfig *spiffState = appState->GetConfig("lfs");
     AppConfig *sdcState = appState->GetConfig("sdcard");
     EventGroupHandle_t app_eg = getAppEG();
     esp_err_t ret = ESP_FAIL;
-    numSdCallers=1;
 
     AppConfig *cfg = AppConfig::GetAppConfig()->GetConfig("/sdcard");
     if (cfg->HasProperty("MosiPin") &&
@@ -515,86 +595,78 @@ bool initSPISDCard(bool log){
       if (bus_cfg.miso_io_num &&
           bus_cfg.mosi_io_num &&
           bus_cfg.sclk_io_num &&
-          (!(xEventGroupGetBits(app_eg) & SDCARD_ERROR)))
+          (!(xEventGroupGetBits(app_eg) & SDCARD_ERROR)) &&
+          (!(xEventGroupGetBits(app_eg) & SDCARD_MOUNTED)))
       {
-        if ((ret = spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, 1)) == ESP_OK)
-        {
-          if ((ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card)) != ESP_OK)
+        if (!spiInitialized) {
+          if (((ret = spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, 1)) != ESP_OK) && !spiInitialized)
           {
-            if (ret == ESP_FAIL)
-            {
-              if (log)
-                ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
-                                       "If you want the card to be formatted, set format_if_mount_failed = true.");
-            }
-            else
-            {
-              if (log)
-                ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
-                                       "Make sure SD card lines have pull-up resistors in place.",
-                         esp_err_to_name(ret));
-            }
+            spiInitialized = false;
             sdcState->SetStateProperty("state", item_state_t::ERROR);
-            xEventGroupSetBits(app_eg, SDCARD_ERROR);
-            spi_bus_free(SPI2_HOST);
-            free(spiffState);
-            free(sdcState);
-            free(cfg);
-            xSemaphoreGive(storageSema);
-            return true;
+            ESP_LOGE(__FUNCTION__, "Failed in initializing spi bus %s", esp_err_to_name(ret));
+            return false;
           }
-
-          if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
-            sdmmc_card_print_info(stdout, card);
-          if (log)
-            ESP_LOGD(__FUNCTION__, "SD card mounted %d", (int)card);
-          sdcState->SetStateProperty("state", item_state_t::ACTIVE);
-          FATFS *fs;
-          DWORD fre_clust, fre_sect, tot_sect;
-
-          esp_err_t res = f_getfree("0:", &fre_clust, &fs);
-          if (res == ESP_OK)
+          spiInitialized = true;
+        }
+        if ((ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card)) != ESP_OK)
+        {
+          if (ret == ESP_FAIL)
           {
-            tot_sect = (fs->n_fatent - 2) * fs->csize;
-            fre_sect = fre_clust * fs->csize;
-            sdcState->SetIntProperty("total", tot_sect / 2);
-            sdcState->SetIntProperty("used", (tot_sect - fre_sect) / 2);
-            sdcState->SetIntProperty("free", fre_sect / 2);
+            if (log)
+              ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
+                                      "If you want the card to be formatted, set format_if_mount_failed = true.");
           }
-          xEventGroupSetBits(app_eg, SDCARD_MOUNTED);
-        }
-        else if (ret == ESP_ERR_INVALID_STATE)
-        {
-          xEventGroupClearBits(app_eg, SDCARD_MOUNTED);
+          else
+          {
+            if (log)
+              ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
+                                      "Make sure SD card lines have pull-up resistors in place.",
+                        esp_err_to_name(ret));
+          }
           sdcState->SetStateProperty("state", item_state_t::ERROR);
-          if (log)
-            ESP_LOGW(__FUNCTION__, "Error initing SPI bus %s", esp_err_to_name(ret));
-        }
-        else
-        {
-          sdcState->SetStateProperty("state", item_state_t::ERROR);
-          xEventGroupSetBits(app_eg, SDCARD_MOUNTED);
-          if (log)
-            ESP_LOGE(__FUNCTION__, "Error initing SPI bus %s", esp_err_to_name(ret));
-          free(spiffState);
-          free(sdcState);
-          free(cfg);
+          xEventGroupSetBits(app_eg, SDCARD_ERROR);
+          spi_bus_free(SPI2_HOST);
+          ldfree(sdcState);
+          ldfree(cfg);
+          numSdCallers=0;
           xSemaphoreGive(storageSema);
-          return true;
+          return false;
         }
+
+        if (LOG_LOCAL_LEVEL >= ESP_LOG_DEBUG)
+          sdmmc_card_print_info(stdout, card);
+        numSdCallers=1;
+        sdcState->SetStateProperty("state", item_state_t::ACTIVE);
+        FATFS *fs;
+        DWORD fre_clust, fre_sect, tot_sect;
+
+        esp_err_t res = f_getfree("0:", &fre_clust, &fs);
+        if (res == ESP_OK)
+        {
+          tot_sect = (fs->n_fatent - 2) * fs->csize;
+          fre_sect = fre_clust * fs->csize;
+          sdcState->SetIntProperty("total", tot_sect / 2);
+          sdcState->SetIntProperty("used", (tot_sect - fre_sect) / 2);
+          sdcState->SetIntProperty("free", fre_sect / 2);
+        }
+
+        xEventGroupSetBits(app_eg, SDCARD_MOUNTED | SDCARD_WORKING);
+        ldfree(sdcState);
+        ldfree(cfg);
+        xSemaphoreGive(storageSema);
+        return true;
       }
     }
     else
     {
       ESP_LOGW(__FUNCTION__, "Cannot mount SD, Missingparams");
     }
-    free(cfg);
-    free(spiffState);
-    free(sdcState);
+    ldfree(cfg);
+    ldfree(sdcState);
   }
   else
   {
-    numSdCallers++;
+    numSdCallers>= 0 ? numSdCallers++ : numSdCallers = 1;
     if (log)
       ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   }
@@ -602,18 +674,19 @@ bool initSPISDCard(bool log){
   return true;
 }
 
-bool initSDCard() {
-  return initSDCard(false);
+uint8_t initStorage() {
+  return initStorage(false);
 }
 
-bool initSDCard(bool log)
+uint8_t initStorage(bool log)
 {
-  return initSpiff(log) && initSPISDCard(log);
+  return (initSpiff(log) ? SPIFF_FLAG : 0) + (initSPISDCard(log) ? SDCARD_FLAG : 0);
+  //return initSpiff(log) && initSDMMCSDCard(log);
 }
 
 bool deleteFile(const char *fileName)
 {
-  ESP_LOGD(__FUNCTION__, "Deleting file %s", fileName);
+  ESP_LOGI(__FUNCTION__, "Deleting file %s", fileName);
   return unlink(fileName) == 0;
 }
 
@@ -624,9 +697,9 @@ bool rmDashFR(const char *folderName)
   char fileName[300];
   bool isABadDay = false;
 
-  if ((theFolder = openDir(folderName)) != NULL)
+  if ((theFolder = opendir(folderName)) != NULL)
   {
-    while (!isABadDay && ((fi = readDir(theFolder)) != NULL))
+    while (!isABadDay && ((fi = readdir(theFolder)) != NULL))
     {
       sprintf(fileName, "%s/%s", folderName, fi->d_name);
       if (fi->d_type == DT_DIR)
@@ -638,10 +711,10 @@ bool rmDashFR(const char *folderName)
         isABadDay |= !deleteFile(fileName);
       }
     }
-    closeDir(theFolder);
+    closedir(theFolder);
     if (!isABadDay)
     {
-      ESP_LOGD(__FUNCTION__, "Deleting folder %s", folderName);
+      ESP_LOGI(__FUNCTION__, "Deleting folder %s", folderName);
       return rmdir(folderName) == 0;
     }
     else
@@ -655,10 +728,10 @@ bool rmDashFR(const char *folderName)
 bool moveFile(const char *src, const char *dest)
 {
   int res;
-  FILE *srcF = fOpen(src, "r");
+  FILE *srcF = fopen(src, "r");
   if (srcF != 0)
   {
-    FILE *destF = fOpenCd(dest, "w", true);
+    FILE *destF = fopenCd(dest, "w", true);
     if (destF != NULL)
     {
       int ch = 0;
@@ -666,11 +739,11 @@ bool moveFile(const char *src, const char *dest)
       {
         fputc(ch, destF);
       }
-      fClose(destF);
-      fClose(srcF);
+      fclose(destF);
+      fclose(srcF);
       if ((res = unlink(src)) == 0)
       {
-        ESP_LOGD(__FUNCTION__, "moved %s to %s", src, dest);
+        ESP_LOGI(__FUNCTION__, "moved %s to %s", src, dest);
         return true;
       }
       else
@@ -810,7 +883,7 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
              configured->address, running->address);
     ESP_LOGW(__FUNCTION__, "(This can happen if either the OTA boot data or preferred boot image become corrupted somehow.)");
   }
-  ESP_LOGD(__FUNCTION__, "Running partition type %d subtype %d (offset 0x%08x)",
+  ESP_LOGI(__FUNCTION__, "Running partition type %d subtype %d (offset 0x%08x)",
            running->type, running->subtype, running->address);
 
   update_partition = esp_ota_get_next_update_partition(update_partition);
@@ -819,15 +892,13 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
   if (update_partition->address == configured->address)
   {
     isOnOta = true;
-    assert(update_partition != NULL);
-    ESP_LOGD(__FUNCTION__, "Skipping partition subtype %d at offset 0x%x",
+    ESP_LOGI(__FUNCTION__, "Skipping partition subtype %d at offset 0x%x",
              update_partition->subtype, update_partition->address);
   }
-  assert(update_partition != NULL);
-  ESP_LOGD(__FUNCTION__, "Writing to partition subtype %d at offset 0x%x",
+  ESP_LOGI(__FUNCTION__, "Writing to partition subtype %d at offset 0x%x",
            update_partition->subtype, update_partition->address);
 
-  if (initSDCard())
+  if (initSpiff(false))
   {
     if (isOnOta)
     {
@@ -838,7 +909,7 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
       esp_err_t err = esp_ota_begin(update_partition, totLen, &update_handle);
       if (err == ESP_OK)
       {
-        ESP_LOGD(__FUNCTION__, "esp_ota_begin succeeded %d ", totLen);
+        ESP_LOGI(__FUNCTION__, "esp_ota_begin succeeded %d ", totLen);
         err = esp_ota_write(update_handle, (const void *)img, totLen);
         if (err == ESP_OK)
         {
@@ -855,7 +926,7 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
                 deleteFile("/lfs/firmware/current.bin");
               }
               dumpTheLogs((void*)true);
-              deinitSDCard();
+              deinitSpiff(false);
               esp_system_abort("Flashing");
             }
             else
@@ -887,50 +958,56 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
 
 void UpgradeFirmware()
 {
-  initSDCard();
+  initSpiff(false);
   struct stat md5St, fwSt;
   char md5fName[] = "/lfs/firmware/tobe.bin.md5";
   char fwfName[] = "/lfs/firmware/current.bin";
   size_t md5len = 0;
   if ((stat(md5fName, &md5St) == 0) && (stat(fwfName, &fwSt) == 0))
   {
-    ESP_LOGD(__FUNCTION__, "We have a pending upgrade to process");
-    char srvrmd5[33], localmd5[33];
-    memset(srvrmd5,0,33);
-    memset(localmd5,0,33);
-    FILE *fmd5 = fOpen(md5fName, "r");
+    ESP_LOGI(__FUNCTION__, "We have a pending upgrade to process");
+    char srvrmd5[70], localmd5[70];
+    memset(srvrmd5,0,70);
+    memset(localmd5,0,70);
+    FILE *fmd5 = fopen(md5fName, "r");
     FILE *ffw = NULL;
     size_t chunckLen = 0, fwlen = 0;
     if (fmd5)
     {
-      if (((md5len = fRead(srvrmd5, sizeof(uint8_t), 33, fmd5)) >= 32) && (md5len <=33))
+      if (((md5len = fread(srvrmd5, sizeof(uint8_t), 33, fmd5)) >= 32) && (md5len <=33))
       {
-        ESP_LOGD(__FUNCTION__, "FW MD5 %d bits read", md5len);
-        if ((ffw = fOpen(fwfName, "r")) != NULL)
+        ESP_LOGI(__FUNCTION__, "FW MD5 %zu bits read", md5len);
+        if ((ffw = fopen(fwfName, "r")) != NULL)
         {
-          ESP_LOGD(__FUNCTION__, "FW %d bits to read", (int)fwSt.st_size);
+          ESP_LOGI(__FUNCTION__, "FW %d bits to read", (int)fwSt.st_size);
           if (fwSt.st_size)
           {
             uint8_t *fwbits = (uint8_t *)dmalloc(fwSt.st_size);
 
-            MD5Context md5_context;
-            MD5Init(&md5_context);
-            while ((chunckLen = fRead(fwbits + fwlen, sizeof(uint8_t), fwSt.st_size - fwlen, ffw)) > 0)
+            mbedtls_md_context_t ctx;
+            mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
+
+            mbedtls_md_init(&ctx);
+            mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
+            mbedtls_md_starts(&ctx);
+
+            while ((chunckLen = fread(fwbits + fwlen, sizeof(uint8_t), fwSt.st_size - fwlen, ffw)) > 0)
             {
-              MD5Update(&md5_context, fwbits + fwlen, chunckLen);
+              mbedtls_md_update(&ctx, fwbits + fwlen, chunckLen);
               fwlen += chunckLen;
-              ESP_LOGD(__FUNCTION__, "FW %d bits read", fwlen);
+              ESP_LOGI(__FUNCTION__, "FW %zu bits read", fwlen);
             }
-            uint8_t fmd[16];
-            MD5Final(fmd, &md5_context);
+            uint8_t shaResult[70];
+            mbedtls_md_finish(&ctx, shaResult);
+            mbedtls_md_free(&ctx);
 
-            for (uint8_t i = 0; i < 16; ++i)
+            for (uint8_t i = 0; i < 32; ++i)
             {
-              sprintf(&localmd5[i * 2], "%02x", (unsigned int)fmd[i]);
+              sprintf(&localmd5[i * 2], "%02x", (unsigned int)shaResult[i]);
             }
 
-            fClose(fmd5);
-            fClose(ffw);
+            fclose(fmd5);
+            fclose(ffw);
             if (strcmp(localmd5, srvrmd5) == 0)
             {
               flashTheThing(fwbits, fwlen);
@@ -955,9 +1032,9 @@ void UpgradeFirmware()
       }
       else
       {
-        ESP_LOGE(__FUNCTION__, "Bad md5 len:%d.", md5len);
+        ESP_LOGE(__FUNCTION__, "Bad md5 len:%zu.", md5len);
       }
-      fClose(fmd5);
+      fclose(fmd5);
     }
     else
     {
@@ -967,16 +1044,16 @@ void UpgradeFirmware()
   else
   {
     AppConfig* stat = AppConfig::GetAppStatus();
-    ESP_LOGD(__FUNCTION__, "No FW to update, running %s built on %s", stat->GetStringProperty("/build/ver"), stat->GetStringProperty("/build/date"));
+    ESP_LOGI(__FUNCTION__, "No FW to update, running %s built on %s", stat->GetStringProperty("/build/ver"), stat->GetStringProperty("/build/date"));
   }
-  deinitSDCard();
+  deinitSpiff(false);
 }
 
 void DisplayMemInfo(){
-	ESP_LOGD(__FUNCTION__,"heap_caps_get_free_size: %d", heap_caps_get_free_size(MALLOC_CAP_8BIT));
-	ESP_LOGD(__FUNCTION__,"heap_caps_get_minimum_free_size: %d", heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
-	ESP_LOGD(__FUNCTION__,"heap_caps_get_largest_free_block: %d", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-	ESP_LOGD(__FUNCTION__,"heap total size: %zu, heap free head %d, can use minimum is %d\n",heap_caps_get_total_size(MALLOC_CAP_DEFAULT), esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
+	ESP_LOGI(__FUNCTION__,"heap_caps_get_free_size: %zu", heap_caps_get_free_size(MALLOC_CAP_8BIT));
+	ESP_LOGI(__FUNCTION__,"heap_caps_get_minimum_free_size: %zu", heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
+	ESP_LOGI(__FUNCTION__,"heap_caps_get_largest_free_block: %zu", heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+	ESP_LOGI(__FUNCTION__,"heap total size: %zu, heap free head %d, can use minimum is %d\n",heap_caps_get_total_size(MALLOC_CAP_DEFAULT), esp_get_free_heap_size(), esp_get_minimum_free_heap_size());
   volatile UBaseType_t numTasks = uxTaskGetNumberOfTasks();
   uint32_t totalRunTime;
   TaskStatus_t *statuses = (TaskStatus_t *)dmalloc(numTasks * sizeof(TaskStatus_t));
@@ -988,7 +1065,7 @@ void DisplayMemInfo(){
       for (uint32_t taskNo = 0; taskNo < numTasks; taskNo++)
       {
         if (strcmp(tname,statuses[taskNo].pcTaskName)==0){
-          ESP_LOGD(__FUNCTION__, "TaskNumber:%d,Name:%s,Prio:%d,Runtime:%d,Core:%d,State:%d, StackFree:%d,Pct:%f", 
+          ESP_LOGI(__FUNCTION__, "TaskNumber:%d,Name:%s,Prio:%d,Runtime:%d,Core:%d,State:%d, StackFree:%d,Pct:%f", 
                 statuses[taskNo].xTaskNumber,
                 statuses[taskNo].pcTaskName,
                 statuses[taskNo].uxCurrentPriority,
@@ -1002,4 +1079,21 @@ void DisplayMemInfo(){
       }
   }
   ldfree(statuses);
+}
+
+FILE *	fopenCd (const char *__restrict _name, const char *__restrict _type, bool notSure){
+  char* name = strdup(_name);
+  char* startPos = indexOf(name+1,"/");
+  char* endPos = startPos > name ? indexOf(startPos+1,"/"):NULL;
+
+  while (startPos && endPos) {
+    *endPos=0;
+    if (mkdir(name, 0775) != -1)
+      ESP_LOGI(__FUNCTION__,"mkdir %s",name);
+    *endPos='/';
+    startPos = endPos+1;
+    endPos = startPos > endPos ? indexOf(startPos+1,"/"):NULL;
+  }
+  ldfree(name);
+  return fopen(_name, _type);
 }

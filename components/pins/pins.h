@@ -7,6 +7,7 @@
 #include <limits.h>
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
+#include "driver/adc.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_event.h"
@@ -15,17 +16,21 @@
 #include "../../main/utils.h"
 #include "cJSON.h"
 #include "eventmgr.h"
+#include "esp_adc_cal.h"
+
 class Pin:ManagedDevice {
 public:
     Pin(AppConfig* config);
     ~Pin();
     static void PollPins();
-    static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
+    void ProcessTheEvent(postedEvent_t* postedEvent);
+    static void ProcessEvent(ManagedDevice* device, postedEvent_t* postedEvent);
     bool isRtcGpio;
     enum eventIds {
         OFF,ON,TRIGGER,STATUS
     };
-    bool ProcessEvent(Pin::eventIds event,uint8_t param);
+    static cJSON* BuildConfigTemplate();
+    static bool ProcessCommand(ManagedDevice* pin, cJSON * parms);
 protected:
     static uint8_t numPins;
     static void queuePoller(void *arg);
@@ -42,7 +47,37 @@ protected:
 private:
     AppConfig* config;
     cJSON* pinStatus;
-    char* buf;
+};
+
+class AnalogPin:ManagedDevice {
+public:
+    AnalogPin(AppConfig* config);
+    ~AnalogPin();
+    static void PollPin(void* instance);
+    static cJSON* BuildConfigTemplate();
+
+protected:
+    static const char* PIN_BASE;
+    AppConfig* config;
+    gpio_num_t pinNo;
+    adc1_channel_t channel;
+    adc_bits_width_t  channel_width;
+    adc_atten_t  channel_atten;
+    uint32_t waitTime;
+    cJSON* currentMinValue;
+    cJSON* currentMaxValue;
+    cJSON* currentPercentage;
+    cJSON* configuredMinValue;
+    cJSON* configuredMaxValue;
+    cJSON* value;
+    cJSON* voltage;
+    bool isRunning;
+    esp_adc_cal_characteristics_t chars;
+
+    void InitDevice();
+    static adc1_channel_t PinNoToChannel(gpio_num_t pinNo);
+    static adc_bits_width_t GetChannelWidth(uint8_t value);
+    static adc_atten_t GetChannelAtten(double value);
 };
 
 #endif

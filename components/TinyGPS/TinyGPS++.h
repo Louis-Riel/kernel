@@ -99,7 +99,7 @@ typedef enum {
 //const uint8_t GGA_On[] =  { 0XB5, 0X62, 0X06, 0X01, 0X08, 0X00, 0XF0, 0X00, 0X00, 0X01, 0X01, 0X00, 0X00, 0X00, 0X01, 0X2C};
 
 
-unsigned long IRAM_ATTR millis();
+unsigned long millis();
 
 struct RawDegrees
 {
@@ -137,7 +137,7 @@ public:
       stat->SetDoubleProperty("Longitude",0.0);
       jlat = stat->GetPropertyHolder("Lattitude");
       jlng = stat->GetPropertyHolder("Longitude");
-      ESP_LOGD(__FUNCTION__,"TinyGPSLocation initializing %d %d",jlat== NULL,jlng == NULL);
+      ESP_LOGI(__FUNCTION__,"TinyGPSLocation initializing %d %d",jlat== NULL,jlng == NULL);
       delete stat;
    }
 
@@ -262,7 +262,7 @@ private:
    uint32_t lastCommitTime;
    uint32_t val, newval, diff;
    void commit();
-   void set(const char *term);
+   bool set(const char *term);
    const char* name;
    cJSON* jval;
 };
@@ -387,7 +387,7 @@ public:
 
 
   const char* GPSPLUS_EVENTS="GPSPLUS_EVENTS";
-  static void theLoop(void* param);
+  void InitGps();
   struct timeval lastMsgTs;
   enum gpsEvent {
      locationChanged=BIT0,
@@ -421,6 +421,7 @@ public:
   void unStackTask(uint8_t taskHandle);
   uint32_t getSleepTime();
   void flagProtocol(gps_protocol_t protocol, bool state);
+  void setRefreshRate(double rate);
   esp_err_t gps_esp_event_post(esp_event_base_t event_base,
                             int32_t event_id,
                             void* event_data,
@@ -439,7 +440,6 @@ private:
   esp_timer_handle_t periodic_timer;
   void adjustRate();
   void CalcChecksum(uint8_t *Message, uint8_t Length);
-  static void waitOnStop(void* gps);
 
   QueueHandle_t uart_queue;
 
@@ -470,8 +470,17 @@ private:
   uint8_t toBeFreqIdx;
   EventGroupHandle_t app_eg;
   AppConfig* gpsStatus;
+  cJSON* poiJson;
   cJSON* gpsVersion;
+  cJSON* refreshRate;
   bool skipNext;
+  uint8_t numPois = 0;
+  struct poi_t
+  {
+    double lng;
+    double lat;
+  } thePois[10];
+
 
   // internal utilities
   int fromHex(char a);

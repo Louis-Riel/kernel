@@ -34,10 +34,12 @@ typedef enum {
  GPS_OFF = BIT11,
  HIBERNATE = BIT12,
  IR = BIT13,
- MAX_APP_BITS = 14
+ REST_OFF = BIT14,
+ SDCARD_WORKING = BIT15,
+ MAX_APP_BITS = 16
 } app_bits_t;
 
-#define APP_SERVICE_BITS (app_bits_t::WIFI_ON|app_bits_t::WIFI_OFF|app_bits_t::REST|app_bits_t::GPS_ON|app_bits_t::HIBERNATE|app_bits_t::IR)
+#define APP_SERVICE_BITS (app_bits_t::WIFI_ON|app_bits_t::WIFI_OFF|app_bits_t::REST|app_bits_t::REST_OFF|app_bits_t::GPS_ON|app_bits_t::HIBERNATE|app_bits_t::IR)
 
 void initLog();
 void dumpLogs();

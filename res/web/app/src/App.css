@@ -1,0 +1,99 @@
+html,body,#root,.App {
+  height: 100%;
+  overflow: hidden;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-content: stretch;
+  justify-content: space-evenly;
+  align-items: stretch;
+}
+
+.App {
+  background: linear-gradient(to bottom,#040404,#3a4a38);
+  font-family: 'Ropa Sans',sans-serif;
+  font-size: x-large;
+  color: #97ea44;
+}
+
+a {
+  color: aquamarine;
+}
+
+button.MuiButtonBase-root {
+  color: aquamarine;
+}
+
+button.MuiButtonBase-root.Mui-selected {
+  color: aqua;
+}
+
+button.MuiButtonBase-root.MuiButton-text {
+  background: linear-gradient(180deg,#1e261d,#273225);
+  border: 1px solid #535a54;
+  padding: 0px 5px;
+  min-width: auto;
+  border-radius: 20px;
+  border-color: cyan;
+  border-width: 2px;
+}
+
+.pageContent {
+  overflow: auto;
+  height: -webkit-fill-available;
+  width: -webkit-fill-available;
+  padding-left: 15px;
+}
+
+.pageContent::-webkit-scrollbar {
+  height: 12px;
+  width: 12px;
+}
+
+.pageContent::-webkit-scrollbar-thumb {
+  background: #393812;
+  -webkit-border-radius: 1ex;
+  -webkit-box-shadow: 0 1px 2px rgba(0,0,0,.75);
+}
+
+.pageContent::-webkit-scrollbar-corner {
+  background: #000;
+}
+
+.buttonbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 15px;
+}
+
+.hidden {
+  visibility: hidden;
+  display: none !important;
+}
+
+.control-bar {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+div.MuiTabs-flexContainer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+label.Mui-focused {
+  color: lightcyan !important;
+}
+
+.MuiFormControl-root {
+  min-width: 90px;
+}

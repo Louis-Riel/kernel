@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_system.h"
@@ -40,6 +41,8 @@
 #define HTTP_MAX_NUM_BUFFER_CHUNCK HTTP_MAX_RECEIVE_BUFFER_SIZE/HTTP_RECEIVE_BUFFER_SIZE
 #define JSON_BUFFER_SIZE 8192
 #define KML_BUFFER_SIZE 204600
+#define SPIFF_FLAG 1
+#define SDCARD_FLAG 2
 
 extern const unsigned char favicon_ico_start[] asm("_binary_favicon_ico_start");
 extern const unsigned char favicon_ico_end[]   asm("_binary_favicon_ico_end");
@@ -107,7 +110,9 @@ struct gpio_driver_t {
     digital_out = BIT1,
     pullup = BIT2,
     pulldown = BIT3,
-    touch = BIT4
+    touch = BIT4,
+    wakeonhigh = BIT5,
+    wakeonlow = BIT6
   } driverFlags;
 };
 
@@ -134,7 +139,8 @@ struct dataPoint
 
 class AppConfig {
 public:
-  AppConfig(const char* filePath);
+  explicit AppConfig(const char* filePath);
+  explicit AppConfig(cJSON* json);
   AppConfig(cJSON* json, AppConfig* root);
   ~AppConfig();
 
@@ -143,8 +149,6 @@ public:
   static EventGroupHandle_t GetStateGroupHandle();
   static void ResetAppConfig(bool save);
   void SaveAppConfig();
-  static const char* GetActiveStorage();
-  static bool HasActiveStorage();
   static bool HasSDCard();
 
   bool isValid();
@@ -167,7 +171,7 @@ public:
   static void SignalStateChange(state_change_t state);
   uint32_t version;
 
-  void SetStringProperty(const char* path,const char* value);
+  bool SetStringProperty(const char* path,const char* value);
   void SetIntProperty(const char* path,int32_t value);
   void SetLongProperty(const char* path,uint64_t value);
   void SetPinNoProperty(const char* path,gpio_num_t value);
@@ -178,8 +182,6 @@ public:
   bool IsSta();
   cJSON* GetPropertyHolder(cJSON* prop);
 protected:
-  static const char *SDPATH;
-  static const char *SPIFFPATH;
 
   cJSON* GetJSONProperty(cJSON* json,const char* path, bool createWhenMissing);
   cJSON* GetJSONProperty(const char* path);
@@ -192,7 +194,6 @@ protected:
   EventGroupHandle_t eg;
   const char* filePath;
   AppConfig* root = NULL;
-  const char* activeStorage;
   SemaphoreHandle_t sema;
 };
 
@@ -202,17 +203,19 @@ bool startsWith(const char* str,const char* key);
 void sampleBatteryVoltage();
 float getBatteryVoltage();
 bool moveFile(const char* src, const char* dest);
-bool initSDCard();
-bool initSDCard(bool);
-bool deinitSDCard();
-bool deinitSDCard(bool);
+uint8_t initStorage();
+uint8_t initStorage(bool);
+bool deinitStorage(uint8_t);
+bool deinitSpiff(bool);
+bool initSpiff(bool);
+bool initSPISDCard(bool);
+bool deinitSPISDCard(bool);
 bool initSDMMCSDCard();
 char* indexOf(const char* str, const char* key);
 char* lastIndexOf(const char* str, const char* key);
 bool endsWith(const char* str,const char* val) ;
 bool stringContains(const char* str,const char* val) ;
 
-void commitTripToDisk(void* param);
 int64_t getSleepTime();
 int64_t getUpTime();
 uint32_t GetNumOpenFiles();
@@ -220,5 +223,5 @@ bool rmDashFR(const char* folderName);
 bool deleteFile(const char* fileName);
 void DisplayMemInfo();
 const char *getErrorMsg(int32_t errCode);
-
+FILE *	fopenCd (const char *__restrict _name, const char *__restrict _type, bool notSure);
 #endif

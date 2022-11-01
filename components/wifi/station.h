@@ -8,6 +8,7 @@
 #include "esp_wifi.h"
 #include "eventmgr.h"
 #include "cJSON.h"
+#include "../../main/utils.h"
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_SCANING_BIT BIT1
@@ -66,6 +67,7 @@ public:
     tcpip_adapter_ip_info_t staIp;
 
 protected:
+    static const char* WIFI_BASE;
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     EventHandlerDescriptor* BuildHandlerDescriptors();
 
@@ -76,7 +78,6 @@ protected:
     Aper *clients[MAX_NUM_CLIENTS];
     wifi_config_t wifi_config;
     char* name;
-    cJSON* status;
 private:
     int RefreshApMembers(AppConfig* state);
     void InferPassword(const char *sid, char *pwd);
@@ -84,12 +85,12 @@ private:
     void generateSidConfig(wifi_config_t *wc, bool hasGps);
     void ProcessScannedAPs();
     bool isSidManaged(const char *sid, bool isTracker);
-    Aper *GetAper(uint8_t *mac);
+    Aper *GetAperByMac(uint8_t *mac);
+    Aper *GetAperByIp(esp_ip4_addr_t ip);
     
     EventGroupHandle_t              s_app_eg;
     esp_event_handler_instance_t wifiEvtHandler;
     esp_event_handler_instance_t ipEvtHandler;
-    uint32_t healthCheckCount;
 };
 
 #endif

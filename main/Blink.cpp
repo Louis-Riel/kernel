@@ -27,14 +27,20 @@
 #include <esp_event.h>
 #include "mdctor/ulp.h"
 #include "../components/wifi/station.h"
-#include "../components/esp_littlefs/include/esp_littlefs.h"
+#include "esp_littlefs.h"
 #include "bootloader_random.h"
 #include "eventmgr.h"
-#include "rest.h"
 #include "route.h"
 #include "../components/pins/pins.h"
 #include "mfile.h"
 #include "../components/IR/ir.h"
+#include "../components/bluetooth/bt.h"
+#include "../components/servo/servo.h"
+#include "../components/apa102/apa102.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#include "nvs_flash.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -69,7 +75,6 @@ RTC_DATA_ATTR uint8_t lastRate = 0;
 RTC_DATA_ATTR char tripFName[35];
 RTC_DATA_ATTR bool hibernate = false;
 RTC_DATA_ATTR time_t lastDpTs;
-RTC_DATA_ATTR poiState_t lastPoiState;
 bool gpsto = false;
 bool sgpsto = false;
 bool buto = false;
@@ -81,22 +86,6 @@ float batLvls[NUM_VOLT_CYCLE];
 uint8_t batSmplCnt = NUM_VOLT_CYCLE + 1;
 bool balFullSet = false;
 uint64_t sleepTime = 0;
-
-static const char *pmpt1 = "    <Placemark>\n\
-      <styleUrl>#SpeedPlacemark</styleUrl>\n\
-      <Point>\n\
-        <coordinates>";
-static const char *pmpt2 = "</coordinates>\n\
-      </Point>\n\
-      <description>";
-static const char *pmpt3 = "km/h\n\
-RAM:";
-static const char *pmpt4 = "\nBattery:";
-static const char *pmpt5 = "</description>\n\
-    </Placemark>\n\
-";
-extern const uint8_t trip_kml_start[] asm("_binary_trip_kml_start");
-extern const uint8_t trip_kml_end[] asm("_binary_trip_kml_end");
 
 TinyGPSPlus *gps = NULL;
 esp_adc_cal_characteristics_t characteristics;
@@ -162,329 +151,6 @@ float getBatteryVoltage()
   return uloop > 0 ? voltage / uloop : 0;
 }
 
-bool bakeKml(char *cvsFileName, char *kmlFileName)
-{
-  if (strlen(cvsFileName) > 1)
-  {
-    ESP_LOGD(__FUNCTION__, "Getting Facts from %s for %s", cvsFileName, kmlFileName);
-    FILE *trp = fOpenCd(cvsFileName, "r", true);
-    if (trp == NULL)
-    {
-      ESP_LOGE(__FUNCTION__, "Cannot open source");
-      return false;
-    }
-    int fc = 0;
-    int bc = 0;
-    uint32_t lineCount = 0;
-    uint32_t firstLinePos = 0;
-    uint32_t pos = 0;
-    while ((fc = fgetc(trp)) != EOF)
-    {
-      if ((lineCount == 1) &&
-          (firstLinePos == 0) &&
-          (fc != 10) && (fc != 13))
-      {
-        firstLinePos = pos;
-      }
-      if ((fc == 10) || (fc == 13))
-      {
-        if ((bc != 10) && (bc != 13))
-        {
-          lineCount++;
-        }
-      }
-      bc = fc;
-      pos++;
-    }
-    lineCount--;
-
-    if (lineCount <= 0)
-    {
-      ESP_LOGE(__FUNCTION__, "Nothing in this trip");
-      fClose(trp);
-      return true;
-    }
-    ESP_LOGD(__FUNCTION__, "Baking KML from %s %d lines %d chars", kmlFileName, lineCount, pos);
-    FILE *kml = fOpenCd(kmlFileName, "w", true);
-    if (kml == NULL)
-    {
-      ESP_LOGE(__FUNCTION__, "Cannot open %s", kmlFileName);
-      return false;
-    }
-    ESP_LOGV(__FUNCTION__, "Opened %s", kmlFileName);
-    uint8_t chr = 0;
-    uint8_t *bkeyPos = NULL;
-    uint8_t *bvalPos = NULL;
-    uint8_t *evalPos = NULL;
-    uint8_t prevChr = 0;
-    char keyName[100];
-    uint8_t *cchr = (uint8_t *)trip_kml_start;
-    while (cchr < trip_kml_end)
-    {
-      chr = *cchr++;
-      if ((bkeyPos == NULL) && (chr == '%'))
-      {
-        bkeyPos = cchr - 1;
-        ESP_LOGV(__FUNCTION__, "bkey:%ul", (uint32_t)bkeyPos);
-      }
-      else
-      {
-        if (bkeyPos != NULL)
-        {
-          if ((prevChr == '^') ^ (chr == '^'))
-          {
-            if (chr == '%')
-            {
-              ESP_LOGV(__FUNCTION__, "ekey:NULL");
-              bkeyPos = NULL;
-              if ((bvalPos == NULL) && (evalPos == NULL))
-              {
-                bvalPos = cchr;
-                ESP_LOGV(__FUNCTION__, "bval:%ul", (uint32_t)bvalPos);
-              }
-              else if ((bvalPos != NULL) && (evalPos == NULL))
-              {
-                evalPos = cchr - 4;
-                ESP_LOGV(__FUNCTION__, "eval:%ul", (uint32_t)evalPos);
-                if (evalPos > bvalPos)
-                {
-                  memcpy(keyName, bvalPos, evalPos - bvalPos + 1);
-                  keyName[evalPos - bvalPos + 1] = 0;
-                  ESP_LOGV(__FUNCTION__, "key:%s", keyName);
-                  if (strcmp(keyName, "tripDate") == 0)
-                  {
-                    fprintf(kml, "%s", &cvsFileName[8]);
-                    ESP_LOGV(__FUNCTION__, "val:%s", &cvsFileName[8]);
-                  }
-                  else if (strcmp(keyName, "tripNumNodes") == 0)
-                  {
-                    fprintf(kml, "%d", lineCount);
-                    ESP_LOGV(__FUNCTION__, "val:%d", lineCount);
-                  }
-                  else if (strcmp(keyName, "tripPlacemarks") == 0)
-                  {
-                    lineCount = 0;
-                    pos = 0;
-                    uint8_t fldNo = 1;
-                    fseek(trp, firstLinePos, SEEK_SET);
-                    char ts[30];
-                    char speed[10];
-                    memset(speed, 0, 10);
-                    memset(ts, 0, 30);
-                    speed[0] = 0;
-                    uint8_t speedLen = 0;
-                    uint8_t tsLen = 0;
-                    ts[0] = 0;
-                    while ((fc = fgetc(trp)) != EOF)
-                    {
-                      if ((fc == 10) || (fc == 13))
-                      {
-                        if ((bc != 10) && (bc != 13))
-                        {
-                          lineCount++;
-                          fldNo = 1;
-                          tsLen = 0;
-                          ts[0] = 0;
-                          speedLen = 0;
-                          speed[0] = 0;
-                        }
-                      }
-                      if (fc == ',')
-                      //fprintf(f, "timestamp,longitude,latitude,speed,altitude,course,RAM,Battery,Bumps\n");
-                      {
-                        if (fldNo == 1)
-                        {
-                          fprintf(kml, pmpt1);
-                          ts[tsLen] = 0;
-                        }
-                        if ((fldNo >= 2) && (fldNo <= 3))
-                        {
-                          fputc(fc, kml);
-                        }
-
-                        if (fldNo == 4)
-                        {
-                          fprintf(kml, "%s%s\nSpeed:%f%s", pmpt2, ts, 1.852 * atoi(speed) / 100.0, pmpt3);
-                          speed[speedLen] = 0;
-                        }
-                        if (fldNo == 7)
-                        {
-                          fprintf(kml, pmpt4);
-                        }
-                        if (fldNo == 8)
-                        {
-                          fprintf(kml, pmpt5);
-                        }
-                        fldNo++;
-                      }
-                      else
-                      {
-                        if (fldNo == 1)
-                        {
-                          ts[tsLen++] = fc;
-                        }
-                        if ((fldNo >= 2) && (fldNo <= 4))
-                        {
-                          fputc(fc, kml);
-                        }
-                        if ((fldNo >= 7) && (fldNo <= 8))
-                        {
-                          fputc(fc, kml);
-                        }
-                        if (fldNo == 4)
-                        {
-                          speed[speedLen++] = fc;
-                        }
-                      }
-                      bc = fc;
-                      pos++;
-                    }
-                  }
-                  else if (strcmp(keyName, "tripPoints") == 0)
-                  {
-                    lineCount = 0;
-                    pos = 0;
-                    uint8_t fldNo = 1;
-                    fseek(trp, firstLinePos, SEEK_SET);
-                    while ((fc = fgetc(trp)) != EOF)
-                    {
-                      if ((fc == 10) || (fc == 13))
-                      {
-                        if ((bc != 10) && (bc != 13))
-                        {
-                          lineCount++;
-                          fldNo = 1;
-                          fputc(fc, kml);
-                        }
-                      }
-                      if ((fldNo >= 2) && (fldNo <= 3))
-                      {
-                        if ((fldNo < 3) || (fc != ','))
-                        {
-                          fputc(fc, kml);
-                        }
-                      }
-                      if (fc == ',')
-                      {
-                        fldNo++;
-                      }
-                      bc = fc;
-                      pos++;
-                    }
-                  }
-                }
-                else
-                {
-                  ESP_LOGV(__FUNCTION__, "bad eval pos bval:%ul eval:%ul", (uint32_t)bvalPos, (uint32_t)evalPos);
-                }
-                bvalPos = NULL;
-                evalPos = NULL;
-                bkeyPos = NULL;
-              }
-              else
-              {
-                ESP_LOGV(__FUNCTION__, "closing key bval:%ul eval:%ul", (uint32_t)bvalPos, (uint32_t)evalPos);
-                bvalPos = NULL;
-                evalPos = NULL;
-                bkeyPos = NULL;
-              }
-            }
-            else
-            {
-              bkeyPos++;
-            }
-          }
-          else
-          {
-            bkeyPos = NULL;
-            bvalPos = NULL;
-            evalPos = NULL;
-          }
-        }
-        else if (bvalPos == NULL)
-        {
-          if (chr > 0)
-          {
-            fputc(chr, kml);
-          }
-        }
-      }
-      prevChr = chr;
-    }
-    fClose(kml);
-    fClose(trp);
-    ESP_LOGV(__FUNCTION__, "Done baking KML");
-    return true;
-  }
-  return false;
-}
-
-void parseFolderForCSV(const char *folder)
-{
-  ESP_LOGV(__FUNCTION__, "Opening folder %s", folder);
-  DIR *theFolder;
-  struct dirent *fi;
-  if ((theFolder = openDir(folder)) != NULL)
-  {
-    char *kFName = (char *)dmalloc(300);
-    char *cFName = (char *)dmalloc(300);
-    while ((fi = readDir(theFolder)) != NULL)
-    {
-      if (strlen(fi->d_name) == 0)
-      {
-        continue;
-      }
-      if (fi->d_type == DT_REG)
-      {
-        sprintf(cFName, "%s/%s", folder, fi->d_name);
-        sprintf(kFName, "%s/kml/%s/%s.kml", AppConfig::GetActiveStorage(), indexOf(folder, "csv") + 4, fi->d_name);
-        if (bakeKml(cFName, kFName))
-        {
-          sprintf(kFName, "%s/converted/%s", AppConfig::GetActiveStorage(), fi->d_name);
-          if (moveFile(cFName, kFName))
-          {
-            ESP_LOGD(__FUNCTION__, "Moved %s to %s", cFName, kFName);
-          }
-          else
-          {
-            ESP_LOGE(__FUNCTION__, "Failed moving %s to %s", cFName, kFName);
-          }
-        }
-        else
-        {
-          ESP_LOGD(__FUNCTION__, "Failed in baking %s", cFName);
-        }
-      }
-      else if (fi->d_type == DT_DIR)
-      {
-        sprintf(cFName, "%s/%s", folder, fi->d_name);
-        parseFolderForCSV(cFName);
-      }
-    }
-    ldfree(kFName);
-    ldfree(cFName);
-    closeDir(theFolder);
-  }
-  else
-  {
-    ESP_LOGE(__FUNCTION__, "Failed to %s for cvss", folder);
-  }
-}
-
-void commitTripToDisk(void *param)
-{
-  EventGroupHandle_t app_eg = getAppEG();
-  if (initSDCard())
-  {
-    xEventGroupSetBits(app_eg, app_bits_t::COMMITTING_TRIPS);
-    parseFolderForCSV("/lfs/csv");
-    parseFolderForCSV("/sdcard/csv");
-    deinitSDCard();
-  }
-  xEventGroupSetBits(app_eg, app_bits_t::TRIPS_COMMITTED);
-  xEventGroupClearBits(app_eg, app_bits_t::COMMITTING_TRIPS);
-}
-
 void doHibernate(void *param)
 {
   ESP_LOGV(__FUNCTION__, "Deep Sleeping %d", bumpCnt);
@@ -496,7 +162,7 @@ void doHibernate(void *param)
   for (int idx = 0; idx < numWakePins; idx++)
   {
     curLvl = gpio_get_level(wakePins[idx]);
-    ESP_LOGD(__FUNCTION__, "Pin %d is %d", wakePins[idx], curLvl);
+    ESP_LOGI(__FUNCTION__, "Pin %d is %d", wakePins[idx], curLvl);
     if (curLvl == 0)
     {
       ESP_ERROR_CHECK(rtc_gpio_pulldown_en(wakePins[idx]));
@@ -526,7 +192,6 @@ void doHibernate(void *param)
     lastDpTs = gps->time.value();
     bumpCnt = 0;
     lastRate = 0;
-    lastPoiState = poiState_t::unknown;
     gpio_set_level(BLINK_GPIO, 1);
     gpio_set_level(gps->enPin(), 0);
     gpio_hold_dis(gps->enPin());
@@ -550,9 +215,9 @@ void doHibernate(void *param)
     delete TheWifi::GetInstance();
   }
 
-  ESP_LOGD(__FUNCTION__, "Waiting for sleepers");
+  ESP_LOGI(__FUNCTION__, "Waiting for sleepers");
   WaitToSleepExceptFor("doHibernate");
-  ESP_LOGD(__FUNCTION__, "Hybernating");
+  ESP_LOGI(__FUNCTION__, "Hybernating");
   gpio_set_level(BLINK_GPIO, 1);
   esp_deep_sleep_start();
 }
@@ -580,7 +245,7 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     switch (id)
     {
     case TinyGPSPlus::gpsEvent::locationChanged:
-      ESP_LOGD(__FUNCTION__, "Location: %3.6f, %3.6f, speed: %3.6f, Altitude:%4.2f, Course:%4.2f Bat:%f diff:%.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters(), gps->course.deg(), getBatteryVoltage(), *((double *)event_data));
+      ESP_LOGI(__FUNCTION__, "Location: %3.6f, %3.6f, speed: %3.6f, Altitude:%4.2f, Course:%4.2f Bat:%f diff:%.2f", gps->location.lat(), gps->location.lng(), gps->speed.kmph(), gps->altitude.meters(), gps->course.deg(), getBatteryVoltage(), *((double *)event_data));
       if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
         ctmp = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig("gps"));
         ESP_LOGV(__FUNCTION__,"The j:%s",ctmp);
@@ -604,93 +269,25 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
       ESP_LOGI(__FUNCTION__, "System Time: %s diff:%ld", strftime_buf, *(long*)event_data);
       break;
     case TinyGPSPlus::gpsEvent::significantDistanceChange:
-      ESP_LOGD(__FUNCTION__, "Distance Diff: %f", *((double *)event_data));
+      ESP_LOGI(__FUNCTION__, "Distance Diff: %f", *((double *)event_data));
       lastSLocTs = now;
       sgpsto = false;
       break;
     case TinyGPSPlus::gpsEvent::significantSpeedChange:
-      ESP_LOGD(__FUNCTION__, "Speed Diff: %f %f", gps->speed.kmph(), *((double *)event_data));
+      ESP_LOGI(__FUNCTION__, "Speed Diff: %f %f", gps->speed.kmph(), *((double *)event_data));
       lastSLocTs = now;
       sgpsto = false;
       break;
     case TinyGPSPlus::gpsEvent::significantCourseChange:
       lastSLocTs = now;
       sgpsto = false;
-      ESP_LOGD(__FUNCTION__, "Course Diff: %f %f", gps->course.deg(), *((double *)event_data));
+      ESP_LOGI(__FUNCTION__, "Course Diff: %f %f", gps->course.deg(), *((double *)event_data));
       break;
     case TinyGPSPlus::gpsEvent::rateChanged:
-      ESP_LOGD(__FUNCTION__, "Rate Changed to %d", *((uint8_t *)event_data));
+      ESP_LOGI(__FUNCTION__, "Rate Changed to %d", *((uint8_t *)event_data));
       break;
     case TinyGPSPlus::gpsEvent::msg:
       ESP_LOGV(__FUNCTION__, "msg:%s", (char *)event_data);
-      boto = ((now-startTs) > timeoutMicro);
-      ESP_LOGV(__FUNCTION__,"%d = ((%" PRId64 "-%" PRId64 ") > %" PRId64 ")",boto, now, startTs, timeoutMicro);
-      ESP_LOGV(__FUNCTION__,"if ((%" PRId64 " > 0) && (%" PRId64 " - %" PRId64 " > %" PRId64 "))",lastLocTs,now,lastLocTs,timeoutMicro);
-      if ((lastLocTs > 0) && (now - lastLocTs > timeoutMicro))
-      {
-        if (!gpsto)
-        {
-          gpsto = true;
-          ESP_LOGD(__FUNCTION__, "Timeout on GPS Location");
-        }
-      }
-      if ((lastSLocTs > 0) && ((now - lastSLocTs) > timeoutMicro))
-      {
-        if (!sgpsto)
-        {
-          sgpsto = true;
-          ESP_LOGD(__FUNCTION__, "Timeout on GPS Significant Change");
-        }
-      }
-      if (((lastMovement > 0) && (now - lastMovement > timeoutMicro)) || ((lastMovement == 0) && boto))
-      {
-        if (!buto)
-        {
-          buto = true;
-          ESP_LOGD(__FUNCTION__, "Timeout on bumps");
-        }
-      }
-      else
-      {
-        if (buto)
-        {
-          buto = false;
-          ESP_LOGD(__FUNCTION__, "Resumed bumps");
-        }
-      }
-      if (boto && (lastLocTs == 0))
-      {
-        if (!sito)
-        {
-          sito = true;
-          ESP_LOGD(__FUNCTION__, "Timeout on signal");
-        }
-      }
-      else
-      {
-        sito = false;
-      }
-
-      if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
-        char ccctmp[70];
-        sprintf(ccctmp, "gps:%d sig change:%d bump:%d signal:%d boto:%d dto:%d", gpsto, sgpsto, buto, sito, boto, dto);
-        if (strcmp(ccctmp, cctmp) != 0)
-        {
-          ESP_LOGV(__FUNCTION__, "States: %s lastSLocTs:%" PRIx64 " now - lastSLocTs:%" PRIx64 " timeout:%d", ccctmp, lastSLocTs, now - lastSLocTs, timeout);
-          ESP_LOGV(__FUNCTION__, "Bumps:%d, lastMovement:%" PRIx64 " state:%s", bumpCnt, lastMovement, ccctmp);
-          strcpy(cctmp, ccctmp);
-        }
-      }
-
-      if ((gpsto || sito || sgpsto) && buto)
-      {
-        if (hybernator != NULL)
-        {
-          return;
-        }
-        ESP_LOGD(__FUNCTION__, "Lost GPS Signal and no bumps gps:%d sig:%d", gpsto, sito);
-        xEventGroupSetBits(getAppEG(), app_bits_t::HIBERNATE);
-      }
       break;
     case TinyGPSPlus::gpsEvent::wakingup:
       sleepTime += (esp_timer_get_time() - tv_sleep);
@@ -702,11 +299,11 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
       tv_sleep = esp_timer_get_time();
       break;
     case TinyGPSPlus::gpsEvent::go:
-      ESP_LOGD(__FUNCTION__, "Go");
+      ESP_LOGI(__FUNCTION__, "Go");
       isStopped = false;
       break;
     case TinyGPSPlus::gpsEvent::stop:
-      ESP_LOGD(__FUNCTION__, "Stop");
+      ESP_LOGI(__FUNCTION__, "Stop");
       isStopped = true;
       break;
     case TinyGPSPlus::gpsEvent::gpsPaused:
@@ -716,10 +313,10 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
       ESP_LOGV(__FUNCTION__, "BatteryR %f", getBatteryVoltage());
       break;
     case TinyGPSPlus::gpsEvent::atSyncPoint:
-      ESP_LOGD(__FUNCTION__, "atSyncPoint");
+      ESP_LOGI(__FUNCTION__, "atSyncPoint");
       break;
     case TinyGPSPlus::gpsEvent::outSyncPoint:
-      ESP_LOGD(__FUNCTION__, "Leaving Synching");
+      ESP_LOGI(__FUNCTION__, "Leaving Synching");
       break;
     default:
       break;
@@ -786,7 +383,7 @@ void configureMotionDetector()
   io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
   gpio_config(&io_conf);
   ESP_LOGV(__FUNCTION__, "Pins configured");
-  xTaskCreate(pollWakePins, "pollWakePins", 2048, NULL, tskIDLE_PRIORITY, NULL);
+  //xTaskCreate(pollWakePins, "pollWakePins", 2048, NULL, tskIDLE_PRIORITY, NULL);
   ESP_LOGV(__FUNCTION__, "ISR Service Started");
 
   for (int idx = 0; idx < numWakePins; idx++)
@@ -797,7 +394,7 @@ void configureMotionDetector()
   }
   ESP_LOGV(__FUNCTION__, "Pin %d: RTC:%d", GPIO_NUM_13, rtc_gpio_is_valid_gpio(GPIO_NUM_13));
   ESP_LOGV(__FUNCTION__, "Pin %d: Level:%d", GPIO_NUM_13, gpio_get_level(GPIO_NUM_13));
-  ESP_LOGD(__FUNCTION__, "Motion Detection Ready");
+  ESP_LOGI(__FUNCTION__, "Motion Detection Ready");
 }
 
 void print_wakeup_reason()
@@ -807,37 +404,37 @@ void print_wakeup_reason()
   switch (reset_reason)
   {
   case ESP_RST_UNKNOWN:
-    ESP_LOGD(__FUNCTION__, "Reset reason can not be determined");
+    ESP_LOGI(__FUNCTION__, "Reset reason can not be determined");
     break;
   case ESP_RST_POWERON:
-    ESP_LOGD(__FUNCTION__, "Reset due to power-on event");
+    ESP_LOGI(__FUNCTION__, "Reset due to power-on event");
     break;
   case ESP_RST_EXT:
-    ESP_LOGD(__FUNCTION__, "Reset by external pin (not applicable for ESP32)");
+    ESP_LOGI(__FUNCTION__, "Reset by external pin (not applicable for ESP32)");
     break;
   case ESP_RST_SW:
-    ESP_LOGD(__FUNCTION__, "Software reset via esp_restart");
+    ESP_LOGI(__FUNCTION__, "Software reset via esp_restart");
     break;
   case ESP_RST_PANIC:
-    ESP_LOGD(__FUNCTION__, "Software reset due to exception/panic");
+    ESP_LOGI(__FUNCTION__, "Software reset due to exception/panic");
     break;
   case ESP_RST_INT_WDT:
-    ESP_LOGD(__FUNCTION__, "Reset (software or hardware) due to interrupt watchdog");
+    ESP_LOGI(__FUNCTION__, "Reset (software or hardware) due to interrupt watchdog");
     break;
   case ESP_RST_TASK_WDT:
-    ESP_LOGD(__FUNCTION__, "Reset due to task watchdog");
+    ESP_LOGI(__FUNCTION__, "Reset due to task watchdog");
     break;
   case ESP_RST_WDT:
-    ESP_LOGD(__FUNCTION__, "Reset due to other watchdogs");
+    ESP_LOGI(__FUNCTION__, "Reset due to other watchdogs");
     break;
   case ESP_RST_DEEPSLEEP:
-    ESP_LOGD(__FUNCTION__, "Reset after exiting deep sleep mode");
+    ESP_LOGI(__FUNCTION__, "Reset after exiting deep sleep mode");
     break;
   case ESP_RST_BROWNOUT:
-    ESP_LOGD(__FUNCTION__, "Brownout reset (software or hardware)");
+    ESP_LOGI(__FUNCTION__, "Brownout reset (software or hardware)");
     break;
   case ESP_RST_SDIO:
-    ESP_LOGD(__FUNCTION__, "Reset over SDIO");
+    ESP_LOGI(__FUNCTION__, "Reset over SDIO");
     break;
   }
 
@@ -848,54 +445,54 @@ void print_wakeup_reason()
     switch (wakeup_reason)
     {
     case ESP_SLEEP_WAKEUP_UNDEFINED:
-      ESP_LOGD(__FUNCTION__, "In case of deep sleep: reset was not caused by exit from deep sleep");
+      ESP_LOGI(__FUNCTION__, "In case of deep sleep: reset was not caused by exit from deep sleep");
       break;
     case ESP_SLEEP_WAKEUP_ALL:
-      ESP_LOGD(__FUNCTION__, "Not a wakeup cause: used to disable all wakeup sources with esp_sleep_disable_wakeup_source");
+      ESP_LOGI(__FUNCTION__, "Not a wakeup cause: used to disable all wakeup sources with esp_sleep_disable_wakeup_source");
       break;
     case ESP_SLEEP_WAKEUP_EXT0:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by external signal using RTC_IO");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by external signal using RTC_IO");
       break;
     case ESP_SLEEP_WAKEUP_EXT1:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by external signal using RTC_CNTL");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by external signal using RTC_CNTL");
       wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
       if (wakeup_pin_mask != 0)
       {
         int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
-        ESP_LOGD(__FUNCTION__, "Wake up from GPIO %d\n", pin);
-        ESP_LOGD(__FUNCTION__, "level %d\n", gpio_get_level((gpio_num_t)pin));
+        ESP_LOGI(__FUNCTION__, "Wake up from GPIO %d\n", pin);
+        ESP_LOGI(__FUNCTION__, "level %d\n", gpio_get_level((gpio_num_t)pin));
       }
       else
       {
-        ESP_LOGD(__FUNCTION__, "Wake up from GPIO\n");
+        ESP_LOGI(__FUNCTION__, "Wake up from GPIO\n");
       }
       break;
     case ESP_SLEEP_WAKEUP_TIMER:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by timer");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by timer");
       break;
     case ESP_SLEEP_WAKEUP_TOUCHPAD:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by touchpad");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by touchpad");
       break;
     case ESP_SLEEP_WAKEUP_ULP:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by ULP program");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by ULP program");
       break;
     case ESP_SLEEP_WAKEUP_GPIO:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by GPIO (light sleep only)");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by GPIO (light sleep only)");
       break;
     case ESP_SLEEP_WAKEUP_UART:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by UART (light sleep only)");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by UART (light sleep only)");
       break;
     case ESP_SLEEP_WAKEUP_COCPU:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by ESP_SLEEP_WAKEUP_COCPU");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by ESP_SLEEP_WAKEUP_COCPU");
       break;
     case ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG");
       break;
     case ESP_SLEEP_WAKEUP_BT:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by BT");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by BT");
       break;
     case ESP_SLEEP_WAKEUP_WIFI:
-      ESP_LOGD(__FUNCTION__, "Wakeup caused by Wifi");
+      ESP_LOGI(__FUNCTION__, "Wakeup caused by Wifi");
       break;
     }
   } 
@@ -926,6 +523,40 @@ void ConfigurePins(AppConfig *cfg)
       ESP_LOGV(__FUNCTION__, "Configuring pin %d", pinNo);
       new Pin(cpin);
       numPins++;
+    }
+    ldfree(cpin);
+  }
+  cJSON_ArrayForEach(pin, cfg->GetJSONConfig("AnalogPins"))
+  {
+    AppConfig *cpin = new AppConfig(pin, cfg);
+    gpio_num_t pinNo = cpin->GetPinNoProperty("pinNo");
+    if (pinNo > 0)
+    {
+      ESP_LOGV(__FUNCTION__, "Configuring pin %d", pinNo);
+      new AnalogPin(cpin);
+    }
+    ldfree(cpin);
+  }
+  cJSON_ArrayForEach(pin, cfg->GetJSONConfig("Servos"))
+  {
+    AppConfig *cpin = new AppConfig(pin, cfg);
+    gpio_num_t pinNo = cpin->GetPinNoProperty("pinNo");
+    if (pinNo > 0)
+    {
+      ESP_LOGV(__FUNCTION__, "Configuring pin %d", pinNo);
+      new Servo(cpin);
+    }
+    ldfree(cpin);
+  }
+
+  cJSON_ArrayForEach(pin, cfg->GetJSONConfig("dotstars"))
+  {
+    AppConfig *cpin = new AppConfig(pin, cfg);
+    gpio_num_t pinNo = cpin->GetPinNoProperty("pwrPin");
+    if (pinNo > 0)
+    {
+      ESP_LOGV(__FUNCTION__, "Configuring pin %d", pinNo);
+      new Apa102(cpin);
     }
     ldfree(cpin);
   }
@@ -975,7 +606,7 @@ static void serviceLoop(void *param)
 {
   EventBits_t serviceBits;
   EventBits_t waitMask = APP_SERVICE_BITS;
-  char *bits = (char *)malloc(app_bits_t::MAX_APP_BITS + 1);
+  char *bits = (char *)dmalloc(app_bits_t::MAX_APP_BITS + 1);
   memset(bits, 0, app_bits_t::MAX_APP_BITS + 1);
   for (int idx = 0; idx < app_bits_t::MAX_APP_BITS; idx++)
   {
@@ -984,7 +615,8 @@ static void serviceLoop(void *param)
   ESP_LOGV(__FUNCTION__, "wait:%s", bits);
   EventGroupHandle_t app_eg = getAppEG();
   AppConfig *appCfg = AppConfig::GetAppConfig();
-  ESP_LOGV(__FUNCTION__, "ServiceLoop started");
+  ESP_LOGI(__FUNCTION__, "ServiceLoop started");
+  TaskHandle_t gpsTask = NULL;
   while (true)
   {
     serviceBits = (APP_SERVICE_BITS & xEventGroupWaitBits(app_eg, waitMask, pdFALSE, pdFALSE, portMAX_DELAY));
@@ -1000,25 +632,25 @@ static void serviceLoop(void *param)
     } 
     if (serviceBits & app_bits_t::WIFI_ON && !TheWifi::GetInstance())
     {
-      CreateForegroundTask(wifiSallyForth, "WifiSallyForth", NULL);
+      CreateBackgroundTask(wifiSallyForth, "WifiSallyForth", 8192, NULL, tskIDLE_PRIORITY, NULL);
     }
     else if ((serviceBits & app_bits_t::WIFI_OFF) && TheWifi::GetInstance())
     {
-      ESP_LOGD(__FUNCTION__,"Turning Wifi Off");
+      ESP_LOGI(__FUNCTION__,"Turning Wifi Off");
       if (TheWifi *theWifi = TheWifi::GetInstance())
       {
         delete theWifi;
       }
     }
     ESP_LOGV(__FUNCTION__,"app_bits_t::REST:%d app_bits_t::WIFI_ON %d",serviceBits & app_bits_t::REST, serviceBits & app_bits_t::WIFI_ON);
-    if (((serviceBits & (app_bits_t::REST | app_bits_t::WIFI_ON)) == (app_bits_t::REST | app_bits_t::WIFI_ON)) && !TheRest::GetServer())
+    if ((serviceBits & app_bits_t::REST) && !TheRest::GetServer())
     {
-      ESP_LOGV(__FUNCTION__,"Turning Rest On");
-      CreateForegroundTask(restSallyForth, "restSallyForth", TheWifi::GetEventGroup());
+      CreateBackgroundTask(restSallyForth, "restSallyForth", 8192, TheWifi::GetEventGroup(),tskIDLE_PRIORITY,NULL);
+      //restSallyForth(TheWifi::GetEventGroup());
     }
-    else if (((serviceBits & (app_bits_t::REST | app_bits_t::WIFI_OFF)) == (app_bits_t::REST | app_bits_t::WIFI_OFF)) && TheRest::GetServer())
+    if ((serviceBits & (app_bits_t::REST_OFF)) && TheRest::GetServer())
     {
-      ESP_LOGD(__FUNCTION__,"Turning Rest Off if on %d",TheRest::GetServer()!=NULL);
+      ESP_LOGI(__FUNCTION__,"Turning Rest Off if on %d",TheRest::GetServer()!=NULL);
       if (TheRest *theRest = TheRest::GetServer())
       {
         delete theRest;
@@ -1032,12 +664,14 @@ static void serviceLoop(void *param)
       doHibernate(NULL);
     }
     ESP_LOGV(__FUNCTION__,"Checking GPS");
-    if (serviceBits & app_bits_t::GPS_ON)
+    if (serviceBits & app_bits_t::GPS_ON && !gpsTask)
     {
       if ((TinyGPSPlus::runningInstance() == NULL) && (appCfg->HasProperty("/gps/rxPin") && appCfg->GetIntProperty("/gps/rxPin")))
       {
-          ESP_LOGV(__FUNCTION__, "Starting GPS");
-          CreateBackgroundTask(gpsSallyForth, "gpsSallyForth", 8196, appCfg, tskIDLE_PRIORITY, NULL);
+          ESP_LOGI(__FUNCTION__, "Starting GPS");
+          CreateBackgroundTask(gpsSallyForth, "gpsSallyForth", 8196, appCfg, tskIDLE_PRIORITY, &gpsTask);
+          //gpsSallyForth(appCfg);
+          ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, gpsEvent, NULL, NULL));
           ESP_LOGV(__FUNCTION__, "Started GPS");
       } else {
         ESP_LOGV(__FUNCTION__,"Cannot start GPS. Already running:%d has rx pin:%d",TinyGPSPlus::runningInstance()!=NULL,appCfg->HasProperty("/gps/rxPin"));
@@ -1050,6 +684,7 @@ static void serviceLoop(void *param)
       {
         ESP_LOGI(__FUNCTION__, "Stopping GPS");
         delete gps;
+        gpsTask = NULL;
       }
     }
     waitMask = (APP_SERVICE_BITS ^ serviceBits);
@@ -1091,12 +726,12 @@ bool CleanupEmptyDirs(char* path) {
   bool retVal = false;
   int retCode = 0;
 
-  if ((theFolder = openDir(path)) != NULL) {
-    while ((fi = readDir(theFolder)) != NULL) {
+  if ((theFolder = opendir(path)) != NULL) {
+    while ((fi = readdir(theFolder)) != NULL) {
       if (fi->d_type == DT_DIR) {
         sprintf(cpath,"%s/%s",path,fi->d_name);
         if (!CleanupEmptyDirs(cpath)) {
-          ESP_LOGD(__FUNCTION__,"%s is empty, deleting",cpath);
+          ESP_LOGI(__FUNCTION__,"%s is empty, deleting",cpath);
           if ((retCode = rmdir(cpath)) != 0) {
             ESP_LOGE(__FUNCTION__, "failed in deleting %s %s(%d)", cpath, getErrorMsg(retCode), retCode);
             retVal=true;
@@ -1107,26 +742,48 @@ bool CleanupEmptyDirs(char* path) {
       } else {
         ESP_LOGV(__FUNCTION__,"%s has %s, not deleting",path,fi->d_name);
         ldfree(cpath);
-        closeDir(theFolder);
+        closedir(theFolder);
         return true;
       }
     }
-    closeDir(theFolder);
+    closedir(theFolder);
   } else {
-    ESP_LOGD(__FUNCTION__,"Cannot open %s",path);
+    ESP_LOGI(__FUNCTION__,"Cannot open %s",path);
   }
 
   ldfree(cpath);
   return retVal;
 }
 
+void* jmalloc(size_t size)
+{
+  return dmalloc(size);
+}
+
+void jfree(void* ptr)
+{
+  dbgfree("jmalloc", ptr);
+}
+
 void app_main(void)
 {
   cJSON_Hooks memoryHook;
-  memoryHook.malloc_fn = spimalloc;
-  memoryHook.free_fn = free;
+  memoryHook.malloc_fn = jmalloc;
+  memoryHook.free_fn = jfree;
   cJSON_InitHooks(&memoryHook);
   startTs = esp_timer_get_time();
+
+  esp_pm_config_esp32_t pm_config;
+  pm_config.max_freq_mhz = 240;
+  pm_config.min_freq_mhz = 80;
+  pm_config.light_sleep_enable = false;
+
+  esp_err_t ret;
+  if ((ret = esp_pm_configure(&pm_config)) != ESP_OK)
+  {
+      ESP_LOGE(__FUNCTION__, "pm config error %s\n",
+                ret == ESP_ERR_INVALID_ARG ? "ESP_ERR_INVALID_ARG" : "ESP_ERR_NOT_SUPPORTED");
+  }
 
   if (setupLittlefs() == ESP_OK)
   {
@@ -1134,6 +791,12 @@ void app_main(void)
 
     AppConfig *appcfg = new AppConfig(CFG_PATH);
     AppConfig *appstat = AppConfig::GetAppStatus();
+
+    if (initSPISDCard(true)) {
+      ESP_LOGI(__FUNCTION__, "SPI SD card initialized");
+    } else {
+      ESP_LOGI(__FUNCTION__, "No SPI SD present");
+    }
 
     if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
       char* ctmp = cJSON_Print(appcfg->GetJSONConfig(NULL));
@@ -1144,7 +807,7 @@ void app_main(void)
     char bo[50];
     const esp_app_desc_t *ad = esp_ota_get_app_description();
     sprintf(bo, "%s %s", ad->date, ad->time);
-    ESP_LOGD(__FUNCTION__, "Starting %s v%s %s", ad->project_name, ad->version, bo);
+    ESP_LOGI(__FUNCTION__, "Starting %s v%s %s", ad->project_name, ad->version, bo);
     appstat->SetStringProperty("/build/date", bo);
     appstat->SetStringProperty("/build/ver", ad->version);
 
@@ -1157,11 +820,7 @@ void app_main(void)
     print_char_val_type(val_type);
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     nvs_flash_init();
-
-    initSDCard();
-    CleanupEmptyDirs("/lfs");
-    CleanupEmptyDirs("/sdcard");
-    deinitSDCard();
+    initLog();
 
     bool firstRun = false;
 
@@ -1172,24 +831,15 @@ void app_main(void)
       uint32_t did;
       appcfg->SetIntProperty("deviceid", (did = GenerateDevId()));
       char* ctmp = cJSON_Print(appcfg->GetJSONConfig(NULL));
-      ESP_LOGD(__FUNCTION__, "Seeding device id to %d/%d %s",did,appcfg->GetIntProperty("deviceid"),ctmp);
+      ESP_LOGI(__FUNCTION__, "Seeding device id to %d/%d %s",did,appcfg->GetIntProperty("deviceid"),ctmp);
       ldfree(ctmp);
     }
+
+    sampleBatteryVoltage();
     if (appcfg->GetIntProperty("deviceid") > 0)
     {
-      ESP_LOGD(__FUNCTION__, "Device Id %d", appcfg->GetIntProperty("deviceid"));
+      ESP_LOGI(__FUNCTION__, "Device Id %d", appcfg->GetIntProperty("deviceid"));
     }
-    //Register event managers
-    new BufferedFile();
-
-    initLog();
-    sampleBatteryVoltage();
-    UpgradeFirmware();
-    //initSDCard();
-
-    gpio_reset_pin(BLINK_GPIO);
-    gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
-    gpio_set_level(BLINK_GPIO, 1);
 
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED)
     {
@@ -1202,40 +852,44 @@ void app_main(void)
       lastSpeed = 0;
       lastRate = 0;
       bumpCnt = 0;
-      lastPoiState = poiState_t::unknown;
     }
     else
     {
-      ESP_LOGD(__FUNCTION__, "Lat:%d %d Lng:%d %d", lastLatDeg, lastLatBil, lastLngDeg, lastLatBil);
+      ESP_LOGI(__FUNCTION__, "Lat:%d %d Lng:%d %d", lastLatDeg, lastLatBil, lastLngDeg, lastLatBil);
     }
     print_wakeup_reason();
 
     bool isTracker = appcfg->HasProperty("clienttype") && strcasecmp(appcfg->GetStringProperty("clienttype"),"tracker")==0;
     ConfigurePins(appcfg);
     EventGroupHandle_t app_eg = getAppEG();
-    ESP_LOGV(__FUNCTION__,"gps rx pin:%d",appcfg->GetIntProperty("/gps/rxPin"));
+    ESP_LOGI(__FUNCTION__,"gps rx pin:%d",appcfg->GetIntProperty("/gps/rxPin"));
     if (appcfg->GetIntProperty("/gps/rxPin")){
       xEventGroupSetBits(app_eg, app_bits_t::GPS_ON);
-      ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, gpsEvent, NULL, NULL));
     }
     if (appcfg->IsAp() || firstRun || !isTracker)
     {
+      ESP_LOGI(__FUNCTION__,"Turning wifi on");
       xEventGroupSetBits(app_eg, app_bits_t::WIFI_ON);
       xEventGroupClearBits(app_eg, app_bits_t::WIFI_OFF);
     }
 
     if (appcfg->HasProperty("/IR/pinNo")) {
-      ESP_LOGD(__FUNCTION__,"Starting IR");
+      ESP_LOGI(__FUNCTION__,"Starting IR");
       xEventGroupSetBits(app_eg, app_bits_t::IR);
     } else {
       ESP_LOGV(__FUNCTION__,"No IR");
     }
-    
+
+    ESP_LOGI(__FUNCTION__,"Starting service loop");
     CreateBackgroundTask(serviceLoop, "ServiceLoop", 8192, NULL, tskIDLE_PRIORITY, NULL);
   }
   if (!heap_caps_check_integrity_all(true))
   {
     ESP_LOGE(__FUNCTION__, "caps integrity error");
   }
-  ESP_LOGD(__FUNCTION__, "Battery: %f", getBatteryVoltage());
+  ESP_LOGI(__FUNCTION__, "Battery: %f", getBatteryVoltage());
+  //new Bt();
+
+  //Register event managers
+  //new BufferedFile();
 }

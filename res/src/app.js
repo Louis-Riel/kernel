@@ -1,58 +1,5 @@
 var app=null;
 
-function wfetch(requestInfo, params) {
-  return new Promise((resolve,reject) => {
-    var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "browser");
-    var inSpot = getInSpot(anims, "browser");
-    var reqAnim = inSpot;
-
-    if (inSpot) {
-      inSpot.weight++;
-    } else {
-      app.anims.push((reqAnim={
-          type:"post",
-          from: "browser",
-          weight: 1,
-          lineColor: '#00ffff',
-          shadowColor: '#00ffff',
-          startY: 5,
-          renderer: app.drawSprite
-      }));
-    }
-
-    try{
-      fetch(requestInfo,params).then(resp => {
-        var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
-        var inSpot = getInSpot(anims, "chip");
-  
-        if (inSpot) {
-          inSpot.weight++;
-        } else {
-          app.anims.push({
-              type:"post",
-              from: "chip",
-              weight: 1,
-              lineColor: '#00ffff',
-              shadowColor: '#00ffff',
-              startY: 25,
-              renderer: app.drawSprite
-          });
-        }
-        resolve(resp);
-      })
-      .catch(err => {
-        reqAnim.color="red";
-        reqAnim.lineColor="red";
-        reject(err);
-      });
-    } catch(e) {
-      reqAnim.color="red";
-      reqAnim.lineColor="red";
-      reject(err);
-    }
-  })
-}
-
 class MainApp extends React.Component {
   constructor(props) {
     super(props);
@@ -66,11 +13,14 @@ class MainApp extends React.Component {
         Storage: {active: true}, 
         Status:  {active: false}, 
         Config:  {active: false}, 
+        System:  {active: false},
         Logs:    {active: false},
         Events:  {active: false}
         },
         autoRefresh: (httpPrefix||window.location.hostname) ? true : false
       };
+    this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
+
     if (!httpPrefix && !window.location.hostname){
       this.lookForDevs();
     }
@@ -79,10 +29,6 @@ class MainApp extends React.Component {
     }
   }
   
-  componentDidUpdate(prevProps, prevState, snapshot) {
-    //this.mountWidget();
-  }
-
   componentDidMount() {
     app=this;
     this.mountWidget();
@@ -95,16 +41,62 @@ class MainApp extends React.Component {
 
 //#region Control Pannel
   lookForDevs() {
-    this.state.lanDevices = [];
-    for (var idx = 254; idx > 0; idx--) {
-      this.state.lanDevices.push(`192.168.1.${idx}`);
-    }
-    this.state.lanDevices=this.state.lanDevices.sort( () => .5 - Math.random() );
-    var foundDevices=[];
-    for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
-        if (this.state.lanDevices.length) {
-            this.scanForDevices(this.state.lanDevices,foundDevices);
+    var RTCPeerConnection = /*window.RTCPeerConnection ||*/ window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+    if (RTCPeerConnection)(() => {  
+      var rtc = new RTCPeerConnection({  
+          iceServers: []  
+      });  
+      if (1 || window.mozRTCPeerConnection) {  
+          rtc.createDataChannel('', {  
+              reliable: false  
+          });  
+      };  
+      rtc.onicecandidate = (evt) => {  
+          if (evt.candidate) parseLine.bind(this)("a=" + evt.candidate.candidate);  
+      };  
+      rtc.createOffer(function (offerDesc) {  
+        offerDesc.sdp.split('\r\n').forEach(parseLine.bind(this));
+        rtc.setLocalDescription(offerDesc);  
+      }.bind(this),(e) => {  
+          console.warn("offer failed", e);  
+      });  
+      var addrs = Object.create(null);  
+      addrs["0.0.0.0"] = false;  
+
+      function parseLine(line) {
+        if (~line.indexOf("a=candidate")) {
+          var parts = line.split(' '), addr = parts[4], type = parts[7];
+          if (type === 'host')
+            console.log(addr);
+        } else if (~line.indexOf("c=")) {
+          var parts = line.split(' '), addr = parts[2].split("."), addrtyoe = parts[1];
+          if (addr[0] === '0') {
+            addr[0]=192;
+            addr[1]=168;
+            addr[2]=0;
+          }
+
+          if ((addrtyoe === "IP4") && addr[0]) {
+            this.state.lanDevices = [];
+            for (var idx = 254; idx > 0; idx--) {
+              addr[3] = idx;
+              this.state.lanDevices.push(addr.join("."));
+            }
+            this.state.lanDevices = this.state.lanDevices.sort(() => .5 - Math.random());
+            var foundDevices = [];
+            for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
+              if (this.state.lanDevices.length) {
+                this.scanForDevices(this.state.lanDevices, foundDevices);
+              }
+            }
+          }
         }
+      }
+
+    }).bind(this)();  
+    else {  
+        document.getElementById('list').innerHTML = "<code>ifconfig| grep inet | grep -v inet6 | cut -d\" \" -f2 | tail -n1</code>";  
+        document.getElementById('list').nextSibling.textContent = "In Chrome and Firefox your IP should display automatically, by the power of WebRTCskull.";  
     }
   }
 
@@ -126,19 +118,23 @@ class MainApp extends React.Component {
               if (inSpot) {
                 inSpot.weight++;
               } else {
-                  this.anims.push({
-                      type:"ping",
-                      from: "chip",
-                      weight: 1,
-                      lineColor: '#00ffff',
-                      shadowColor: '#00ffff',
-                      startY: 30,
-                      renderer: this.drawSprite
-                  })
+                this.anims.push({
+                    type:"ping",
+                    from: "chip",
+                    weight: 1,
+                    lineColor: '#00ffff',
+                    shadowColor: '#000000',
+                    fillColor: '#000000',
+                    textColor: '#00ffff',
+                    startY: 30,
+                    renderer: this.drawSprite
+                })
+                window.requestAnimationFrame(this.drawDidget.bind(this));
               }
+              dev.ip=device;
               foundDevices.push(dev);
               if (!httpPrefix){
-                httpPrefix=`http://${foundDevices[0].devName}`
+                httpPrefix=`http://${foundDevices[0].ip}`
                 this.state.autoRefresh=true;
                 if (!this.state.connecting && !this.state.connected){
                   this.openWs();
@@ -178,7 +174,8 @@ class MainApp extends React.Component {
         this.state.autoRefresh=false;
         this.ws.close();
         this.ws = null;
-    }
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+      }
   }
 
   openWs() {
@@ -190,49 +187,79 @@ class MainApp extends React.Component {
     }
     this.state.connecting=true;
     this.state.running=false;
-    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false}, 3000);
-    ws.onmessage = (event) => {
-        clearTimeout(stopItWithThatShit);
-        if (!this.state.running || this.state.timeout) {
-            this.state.running= true;
-            this.state.error= null;
-            this.state.timeout= null;
-        }
+    this.startWs();
+  }
 
-        if (event && event.data) {
-            if (event.data[0] == "{") {
-                if (event.data.startsWith('{"eventBase"')) {
-                    this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
-                } else {
-                    this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
-                }
-            } else if (event.data.match(/.*\) ([^:]*)/g)) {
-                this.AddLogLine(event.data);
-            }
-        }
-        stopItWithThatShit = setTimeout(() => { this.state.timeout="Message"; ws.close();console.log("Message timeout")},3000)
+  startWs() {
+    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
+    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
+    ws.onmessage = (event) => {
+      stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
     };
     ws.onopen = () => {
-      clearTimeout(stopItWithThatShit);
-        this.state.connected=true;
-        this.state.connecting=false;
-        ws.send("Connected");
-        stopItWithThatShit = setTimeout(() => { this.state.timeout="Connect"; ws.close();console.log("Connect timeout")},3000)
+      stopItWithThatShit = this.wsOpen(stopItWithThatShit, ws);
     };
     ws.onerror = (err) => {
-        console.error(err);
-        clearTimeout(stopItWithThatShit);
-        this.state.error= err;
-        ws.close();
+      this.wsError(err, stopItWithThatShit, ws);
     };
     ws.onclose = (evt => {
-        clearTimeout(stopItWithThatShit);
-        this.state.connected=false;
-        this.state.connecting=false;
-        if (this.state.autoRefresh)
-          this.openWs();
+      this.wsClose(stopItWithThatShit);
     });
+  }
+
+  wsClose(stopItWithThatShit) {
+    clearTimeout(stopItWithThatShit);
+    this.state.connected = false;
+    this.state.connecting = false;
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    if (this.state.autoRefresh)
+      this.openWs();
+  }
+
+  wsError(err, stopItWithThatShit, ws) {
+    console.error(err);
+    clearTimeout(stopItWithThatShit);
+    this.state.error = err;
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    ws.close();
+  }
+
+  wsOpen(stopItWithThatShit, ws) {
+    clearTimeout(stopItWithThatShit);
+    this.state.connected = true;
+    this.state.connecting = false;
+    ws.send("Connected");
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3500);
+    return stopItWithThatShit;
+  }
+
+  processMessage(stopItWithThatShit, event, ws) {
+    clearTimeout(stopItWithThatShit);
+    if (!this.state.running || this.state.timeout) {
+      this.state.running = true;
+      this.state.error = null;
+      this.state.timeout = null;
+    }
+
+    if (event && event.data) {
+      if (event.data[0] == "{") {
+        try {
+          if (event.data.startsWith('{"eventBase"')) {
+            this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
+          } else {
+            this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
+          }
+        } catch (e) {
+        }
+      } else if (event.data.match(/.*\) ([^:]*)/g)) {
+        this.AddLogLine(event.data);
+      }
+    } else {
+      this.ProcessEvent(undefined);
+    }
+    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 4000);
+    return stopItWithThatShit;
   }
 
   drawDidget(){
@@ -251,15 +278,14 @@ class MainApp extends React.Component {
             return pv
         },{});
         for (var agn in animGroups) {
-            canvas.beginPath();
             animGroups[agn].forEach(anim => {
                 this.drawSprite(anim, canvas);
             });
         }
 
         this.anims = this.anims.filter(anim => anim.state != 2);
-    }
-    window.requestAnimationFrame(this.drawDidget.bind(this));
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+      }
   }
 
   drawSprite(anim, canvas) {
@@ -269,40 +295,35 @@ class MainApp extends React.Component {
         anim.endX = anim.from == "chip" ? this.browserX : this.chipX;
         anim.direction=anim.from=="browser"?1:-1;
         anim.y = anim.startY;
+        anim.tripLen = 1600.0;
+        anim.startWindow = performance.now();
+        anim.endWindow = anim.startWindow + anim.tripLen;
     } else {
-        anim.x += (anim.direction)*(2);
+        anim.x += (anim.direction*((performance.now() - anim.startWindow))/anim.tripLen);
     }
     var width=Math.min(15,4 + (anim.weight));
     if ((anim.y-(width/2)) <= 0) {
       anim.y = width;
     }
+    canvas.beginPath();
+    canvas.lineWidth = 2;
+    canvas.shadowBlur = 2;
     canvas.strokeStyle = anim.lineColor;
-    canvas.lineWidth = 1;
-    canvas.shadowBlur = 1;
-    canvas.shadowColor = anim.shadowColor;
-    canvas.fillStyle = anim.color;
+    canvas.shadowColor = anim.fillColor;
+    canvas.fillStyle = anim.fillColor;
     canvas.moveTo(anim.x+width, anim.y);
     canvas.arc(anim.x, anim.y, width, 0, 2 * Math.PI);
-
-    if ((anim.from == "browser") || (anim.type == "log"))
-      canvas.fill();
+    canvas.fill();
+    canvas.stroke();
 
     if (anim.weight > 1) {
       var today = ""+anim.weight
       canvas.font = Math.min(20,8+anim.weight)+"px Helvetica";
       var txtbx = canvas.measureText(today);
-      if ((anim.from == "browser") || (anim.type == "log")){
-        canvas.strokeStyle = "black";
-        canvas.fillStyle = "black"
-      }
+      canvas.fillStyle=anim.textColor;
+      canvas.strokeStyle = anim.textColor;
       canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
-      if ((anim.from == "browser") || (anim.type == "log")){
-        canvas.strokeStyle=anim.lineColor;
-        canvas.fillStyle=anim.color;
-      }
     }    
-
-    canvas.stroke();
     
     if (anim.direction==1?(anim.x > anim.endX):(anim.x < anim.endX)) {
         anim.state = 2;
@@ -316,7 +337,7 @@ class MainApp extends React.Component {
     canvas.strokeStyle = '#00ffff';
     canvas.lineWidth = 2;
     canvas.shadowBlur = 2;
-    canvas.shadowColor = '#00ffff';
+    canvas.shadowColor = '#002222';
     canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#0396966b") : "#000000"
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
     canvas.fill();
@@ -337,7 +358,7 @@ class MainApp extends React.Component {
     canvas.strokeStyle = '#00ffff';
     canvas.lineWidth = 2;
     canvas.shadowBlur = 2;
-    canvas.shadowColor = '#00ffff';
+    canvas.shadowColor = '#000000';
     canvas.fillStyle = "#00ffff";
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
 
@@ -373,17 +394,21 @@ class MainApp extends React.Component {
     if (inSpot) {
       inSpot.weight++;
     } else {
-        this.anims.push({
+      var msg = ln.match(/^[^IDVEW]*(.+)/)[1];
+      var lvl = msg.substr(0, 1);
+      this.anims.push({
             type:"log",
             from: "chip",
-            level:ln[0],
-            color:ln[0] == 'D' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+            level:lvl,
             weight: 1,
-            lineColor: '#00ffff',
-            shadowColor: '#00ffff',
+            lineColor: lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+            shadowColor: '#000000',
+            fillColor: '#000000',
+            textColor: lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
             startY: 25,
             renderer: this.drawSprite
         })
+        window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.logCBFn.forEach(logCBFn=>logCBFn(ln));
   }
@@ -397,13 +422,15 @@ class MainApp extends React.Component {
       this.anims.push({
         type:"state",
         from: "chip",
-        color:"#00ffff",
         weight: 1,
         lineColor: '#00ffff',
-        shadowColor: '#00ffff',
+        shadowColor: '#000000',
+        fillColor: '#000000',
+        textColor: '#00ffff',
         startY: 5,
         renderer: this.drawSprite
       });
+      window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.stateCBFn.forEach(stateCBFn=>stateCBFn(state));
   }
@@ -417,14 +444,16 @@ class MainApp extends React.Component {
       this.anims.push({
           type:"event",
           from: "chip",
-          eventBase: event.eventBase,
-          color:"#7fffd4",
+          eventBase: event ? event.eventBase : undefined,
           weight: 1,
           lineColor: '#00ffff',
-          shadowColor: '#00ffff',
+          shadowColor: '#000000',
+          fillColor: '#000000',
+          textColor: '#7fffd4',
           startY: 15,
           renderer: this.drawSprite
       });
+      window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn.fn(event));
   }
@@ -455,13 +484,6 @@ class MainApp extends React.Component {
         link.classList.add("active")
         if (section)
           section.classList.add("active")
-        if ((ttab == "Config") || (ttab == "Status") || (ttab == "Events")){
-          document.getElementById("controls").classList.remove("hidden");
-          document.querySelector("div.slides").classList.remove("expanded");
-        } else {
-          document.getElementById("controls").classList.add("hidden");
-          document.querySelector("div.slides").classList.add("expanded");
-        }
       } else{
         link.classList.remove("active")
         section.classList.remove("active")
@@ -506,8 +528,11 @@ class MainApp extends React.Component {
     if (name == "Config") {
       return e(ConfigPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Config"].active });
     }
+    if (name == "System") {
+      return e(SystemPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["System"].active });
+    }
     if (name == "Logs") {
-      return e(SystemPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Logs"].active, registerLogCallback:this.registerLogCallback.bind(this) });
+      return e(LogLines, { key: "logLines", registerLogCallback:this.registerLogCallback.bind(this), active: this.state.tabs["System"].active })
     }
     if (name == "Events") {
       return e(EventsPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Events"].active, registerEventCallback:this.registerEventCallback.bind(this) });
@@ -520,7 +545,6 @@ class MainApp extends React.Component {
   }
 
   render() {
-    this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
     return e("div",{key:genUUID(),className:"mainApp"}, [
       Object.keys(this.state.tabs).map(tab => 
         e("details",{key:genUUID(),id:tab, className:"appPage slides", open: this.state.tabs[tab].active, onClick:elem=>{
@@ -552,7 +576,7 @@ class MainApp extends React.Component {
               },this.state.OnLineDevices.map(lanDev=>e("option",{
                   key:genUUID(),
                   className: "landevice"
-              },lanDev.devName))
+              },lanDev.ip))
             ):null,
         e(DeviceList, {
             key: genUUID(),
@@ -565,13 +589,18 @@ class MainApp extends React.Component {
   }
 }
 
-ReactDOM.render(
-  e(MainApp, {
-    key: genUUID(),
-    className: "slider"
-  }),
-  document.querySelector(".slider")
-);
+// ReactDOM.render(
+//   e(MainApp, {
+//     key: genUUID(),
+//     className: "slider"
+//   }),
+//   document.querySelector(".slider")
+// );
+
+ReactDOM.createRoot(document.querySelector(".slider")).render(e(MainApp, {
+  key: genUUID(),
+  className: "slider"
+}));
 function getInSpot(anims, origin) {
   return anims
         .filter(anim => anim.from == origin)

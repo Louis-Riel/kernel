@@ -56,7 +56,7 @@ bool EventManager::ValidateConfig(){
             eventInterpretors[idx++] = new EventInterpretor(event,programs);
         }
     }
-    ESP_LOGD(__FUNCTION__,"We have %d Events",idx);
+    ESP_LOGI(__FUNCTION__,"We have %d Events",idx);
     if (eventQueue == NULL) {
         ESP_LOGE(__FUNCTION__,"Event Queue not set");
         isValid=false;
@@ -83,15 +83,15 @@ void EventManager::EventPoller(void* param){
     memset(postedEvent,0,sizeof(postedEvent_t));
     EventManager* mgr = (EventManager*)param;
     EventGroupHandle_t appEg = getAppEG();
+    ESP_LOGV(__FUNCTION__,"Event Poller Running");
     while(!(xEventGroupGetBits(appEg) & app_bits_t::HIBERNATE) && xQueueReceive(mgr->eventQueue,postedEvent,portMAX_DELAY)){
-        ESP_LOGV(__FUNCTION__,"Processing Event %s %d",postedEvent->base, postedEvent->id);
-        ProcessEvent(postedEvent);
-        memset(postedEvent,0,sizeof(postedEvent_t));
+        ESP_LOGV(__FUNCTION__,"Processing Event %s %d %" PRIXPTR "",postedEvent->base, postedEvent->id, (uintptr_t)postedEvent->event_data);
+        ProcessEvent(NULL, postedEvent);
     }
     ldfree(postedEvent);
 }
 
-void EventManager::ProcessEvent(postedEvent_t* postedEvent){
+void EventManager::ProcessEvent(ManagedDevice* device, postedEvent_t* postedEvent){
     if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
         EventDescriptor_t* desc = EventHandlerDescriptor::GetEventDescriptor(postedEvent->base,postedEvent->id);
         if (desc) {
@@ -115,24 +115,20 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
             switch (postedEvent->eventDataType)
             {
             case event_data_type_tp::JSON:
-                jpl = cJSON_Parse((const char*)postedEvent->event_data);
-                if (jpl) {
-                    cJSON_AddItemToObject(jevt,"data",jpl);
-                } else if (cJSON_IsInvalid((cJSON*)postedEvent->event_data)) {
-                    ESP_LOGW(__FUNCTION__,"Cannot jsonify data for %s %s %s",edesc->baseName,edesc->eventName, (char*)postedEvent->event_data);
-                } else {
-                    cJSON_AddItemReferenceToObject(jevt,"data",(cJSON*)postedEvent->event_data);
-                }
+                cJSON_AddStringToObject(jevt,"dataType","JSON");
+                cJSON_AddItemReferenceToObject(jevt,"data",(cJSON*)postedEvent->event_data);
                 break;
             case event_data_type_tp::String:
+                cJSON_AddStringToObject(jevt,"dataType","String");
                 cJSON_AddStringToObject(jevt,"data",(char*)postedEvent->event_data);
                 break;
             case event_data_type_tp::Number:
+                cJSON_AddStringToObject(jevt,"dataType","Number");
                 ESP_LOGV(__FUNCTION__,"Got %s(%d) %d",postedEvent->base,postedEvent->id ,(int)postedEvent->event_data);
-                cJSON_AddNumberToObject(jevt,"data",(int)postedEvent->event_data);
+                cJSON_AddNumberToObject(jevt,"data",*((int*)postedEvent->event_data));
                 break;
             default:
-                ESP_LOGW(__FUNCTION__,"Unknown event data type for %s-%s",edesc->baseName,edesc->eventName);
+                ESP_LOGV(__FUNCTION__,"Unknown event data type for %s-%s",edesc->baseName,edesc->eventName);
                 break;
             }
             if (cJSON_PrintPreallocated(jevt,evtMgr->eventBuffer,JSON_BUFFER_SIZE,false)){
@@ -144,6 +140,26 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
         ldfree(evtMgr->eventBuffer);
         evtMgr->eventBuffer = NULL;
     }
+
+    uint32_t numDevs = ManagedDevice::GetNumRunningInstances();
+    if (numDevs) {
+        ManagedDevice** runningInstances = ManagedDevice::GetRunningInstances();
+        for (uint32_t idx = 0; idx < numDevs; idx++ ) {
+            if (runningInstances[idx]) {
+                ESP_LOGV(__FUNCTION__,"Checking %s:%d with %s(%d) equal:%d",postedEvent->base,postedEvent->id, runningInstances[idx]->eventBase,runningInstances[idx]->processEventFnc==NULL ,strcmp(runningInstances[idx]->eventBase, postedEvent->base));
+            }
+            if (runningInstances[idx] && 
+                runningInstances[idx]->status && 
+                (strcmp(runningInstances[idx]->eventBase, postedEvent->base) == 0) && 
+                (runningInstances[idx] != device) &&
+                 runningInstances[idx]->processEventFnc
+                ) {
+                ESP_LOGV(__FUNCTION__,"Triggering %s:%d evd:%" PRIXPTR "",postedEvent->base,postedEvent->id, (uintptr_t)postedEvent->event_data);
+                runningInstances[idx]->processEventFnc(runningInstances[idx], postedEvent);
+            }
+        }
+    }
+
     EventInterpretor* interpretor;
     uint8_t idx =0;
     while ((idx < MAX_NUM_EVENTS) && 
@@ -158,8 +174,7 @@ void EventManager::ProcessEvent(postedEvent_t* postedEvent){
             }
         }
     }
-    if ((postedEvent->eventDataType == event_data_type_tp::JSON) ||
-        (postedEvent->eventDataType == event_data_type_tp::String)){
+    if ((postedEvent->eventDataType == event_data_type_tp::String)){
         ldfree(postedEvent->event_data);
     }
 }
@@ -175,28 +190,29 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
     if (!ed) {
         ESP_LOGV(__FUNCTION__,"No desciptor for %s %d", base, id);
     } else {
-        postedEvent_t* postedEvent = (postedEvent_t*)dmalloc(sizeof(postedEvent_t));
-        postedEvent->base=base;
-        postedEvent->id=id;
-        postedEvent->eventDataType=ed->dataType;
-        ESP_LOGV(__FUNCTION__,"type for %s %s(%d) is %d", postedEvent->base, ed->eventName, postedEvent->id, (int)ed->dataType);
+        postedEvent_t postedEvent;
+        postedEvent.base=base;
+        postedEvent.id=id;
+        postedEvent.eventDataType=ed->dataType;
+        ESP_LOGV(__FUNCTION__,"type for %s %s(%d) is %d", postedEvent.base, ed->eventName, postedEvent.id, (int)ed->dataType);
         switch (ed->dataType)
         {
         case event_data_type_tp::String:
-        case event_data_type_tp::JSON:
-            postedEvent->event_data=dmalloc(strlen((char*)event_data)+1);
-            strcpy((char*)postedEvent->event_data,(char*)event_data);
-            ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent->event_data);
-            break;
-        case event_data_type_tp::Number:
-            postedEvent->event_data=(void*)*(int*)event_data;
-            //printf("\nevtproc %s(%d):%d\n",postedEvent->base,postedEvent->id, (int)postedEvent->event_data);
+            postedEvent.event_data=dmalloc(strlen((char*)event_data)+1);
+            strcpy((char*)postedEvent.event_data,(char*)event_data);
+            ESP_LOGV(__FUNCTION__,"json (%s)", (char*)postedEvent.event_data);
             break;
         default:
+            ESP_LOGV(__FUNCTION__,"ptr1:%" PRIXPTR "",(uintptr_t)event_data);
+            if (event_data){
+                postedEvent.event_data = (void*)*((cJSON**)event_data);
+                ESP_LOGV(__FUNCTION__,"ptr2:%" PRIXPTR "",(uintptr_t)postedEvent.event_data);
+            } else {
+                postedEvent.event_data = event_data;
+            }
             break;
         }
-        xQueueSendFromISR(mgr->eventQueue, postedEvent, NULL);
-        ldfree(postedEvent);
+        xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
     }
 }
 

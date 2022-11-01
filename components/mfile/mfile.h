@@ -33,7 +33,7 @@ enum fileEventIds {
 class MFile:ManagedDevice {
 public:
     MFile();
-    MFile(const char* fileName);
+    explicit MFile(const char* fileName);
     ~MFile();
 
     enum mfile_state_t {
@@ -49,25 +49,22 @@ public:
     void Open(const char* mode);
     void Close();
     void Write(uint8_t* data, uint32_t len);
-    bool IsOpen();
+    bool IsOpen() const;
     const char* GetFilename();
     esp_event_base_t GetEventBase();
     static const char* MFILE_BASE;
     static esp_event_handler_instance_t *handlerInstance;
-
+    cJSON* status;
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
 protected:
 
     EventHandlerDescriptor* BuildHandlerDescriptors();
-    static cJSON *BuildStatus(void *instance);
 
-    cJSON* status;
     cJSON* hasContent;
     cJSON* bytesWritten;
     static QueueHandle_t eventQueue;
     static MFile* openFiles[MAX_OPEN_FILES];
     static uint8_t numOpenFiles;
-    const char* fileName;
 private:
     FILE *file;
 };
@@ -75,7 +72,7 @@ private:
 class BufferedFile:MFile {
 public:
     BufferedFile();
-    BufferedFile(const char* fileName);
+    explicit BufferedFile(const char* fileName);
     ~BufferedFile();
     static BufferedFile* GetFile(const char* fileName);
     static BufferedFile* GetOpenedFile(const char* fileName);
@@ -87,10 +84,9 @@ public:
     static void CloseAll();
     static void ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data);
     const char* GetFilename();
-protected:
-    cJSON* bytesCached;
 
 private:
+    cJSON* bytesCached;
     static void waitingWrites(void* params);
     bool isNewOrEmpty;
     uint8_t* buf = NULL;

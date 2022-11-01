@@ -1,4 +1,9 @@
 class FirmwareUpdater extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {};
+    }
+
     UploadFirmware(form) {
         form.preventDefault();
         this.setState({ loaded: `Sending ${this.state.len} firmware bytes` })
@@ -38,7 +43,7 @@ class FirmwareUpdater extends React.Component {
             var reader = new FileReader();
             reader.onload = () => {
                 var res = reader.resultString || reader.result;
-                var md5 = CryptoJS.algo.MD5.create();
+                var md5 = CryptoJS.algo.SHA256.create();
                 md5.update(CryptoJS.enc.Latin1.parse(reader.result));
                 this.state.fwdata = new Uint8Array(this.state.firmware.size);
                 for (var i = 0; i < res.length; i++) {
@@ -50,6 +55,7 @@ class FirmwareUpdater extends React.Component {
                     fwdata: this.state.fwdata,
                     len: this.state.firmware.size
                 });
+                console.log(JSON.stringify(this.state.md5));
             };
             reader.onprogress = (evt) => this.setState({
                 loaded: `${((this.state.firmware.size * 1.0) / (evt.loaded * 1.0)) * 100.0}% loaded`

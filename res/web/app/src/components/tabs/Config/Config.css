@@ -1,0 +1,93 @@
+.config-cards {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    justify-content: flex-start;
+    align-items: flex-start;
+}
+
+.MuiCardHeader-content {
+    background: linear-gradient(to bottom, #040404, #3a4a38);
+    color: aquamarine;
+}
+
+.MuiCardHeader-subheader {
+    color: cyan !important;
+}
+
+.popuperror>.MuiPaper-root {
+    background: linear-gradient(to bottom, #cac8c8, #aaa7a7) !important;
+}
+
+button.MuiButtonBase-root.MuiTab-root.MuiTab-textColorPrimary {
+    color: aqua;
+}
+
+.control-editor>button {
+    position: relative;
+    right: 145px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.control-editor {
+    display: flex;
+    flex-direction: row;
+}
+
+.MuiPaper-root,
+.MuiCardContent-root {
+    background: linear-gradient(to bottom, #040404, #3a4a38) !important;
+    color: aquamarine;
+}
+
+.control-editor>button {
+    position: relative;
+    right: 155px;
+    margin: 0;
+    cursor: pointer;
+}
+
+.button-bar {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-content: flex-start;
+    align-items: flex-start;
+}
+
+label.MuiFormControlLabel-root {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: flex-start;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.control-editor button.MuiButton-text {
+    color: #ccfca3;
+    border-radius: 20px;
+    padding: 5px;
+    padding-bottom: 5px;
+    height: fit-content;
+    margin: 5px 5px;
+    border: none
+}
+
+div.edior-pannel>button.MuiButton-root {
+    border: none;
+    background:transparent
+}
+
+li>label {
+    position: absolute !important;
+    left: 0px;
+    top: 0px;
+    transform: translate(26px, 0px) scale(0.75);
+}
+
+div.MuiListItemIcon-root>svg {
+    color: aquamarine;
+}

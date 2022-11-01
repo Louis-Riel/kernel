@@ -1,0 +1,9 @@
+menu "Kernel"
+
+    config ENABLE_VALIDATED_REQUESTS
+        bool "Enable Validated Requests"
+        default y
+        help
+            Enable Validated Requests.
+
+endmenu

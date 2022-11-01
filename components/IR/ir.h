@@ -30,6 +30,7 @@ protected:
     gpio_num_t pinNo;
     rmt_channel_t channelNo;
     EventHandlerDescriptor* BuildHandlerDescriptors();
+    static const char* IRDECODER_BASE;
 
     int8_t available();
     uint32_t read(rmt_item32_t* item, size_t length);
@@ -60,7 +61,6 @@ private:
     uint16_t _margin_us = 80;
     std::vector<uint8_t> _preferred;
     rmt_timing_t _timing;
-    char* buf;
 
     static rmt_timing_t timing_groups[];
     bool rx_check_in_range(int duration_ticks, int target_us);

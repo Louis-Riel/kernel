@@ -6,11 +6,11 @@
 #include <string.h>
 #include "cJSON.h"
 
-//#define DEBUG_MALLOC
+#define DEBUG_MALLOC
 
 #ifdef DEBUG_MALLOC
 cJSON* getMemoryStats();
-typedef struct mallocdbg
+struct mallocdbg
 {
     char* name=0;
     int32_t hitCount=0;

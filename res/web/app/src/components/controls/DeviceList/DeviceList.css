@@ -1,0 +1,10 @@
+.scanProgress {
+    color: #7fffd4;
+    font-size: small;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: space-between;
+    justify-content: space-between;
+    align-items: stretch;
+}

@@ -1,9 +1,65 @@
 'use strict';
 
 const e = React.createElement;
-var httpPrefix = "";//"http://tracer";
+var httpPrefix = "";//"http://localhost:81";
 
-//#region SHA-1
+function wfetch(requestInfo, params) {
+    return new Promise((resolve,reject) => {
+      var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "browser");
+      var inSpot = getInSpot(anims, "browser");
+      var reqAnim = inSpot;
+  
+      if (inSpot) {
+        inSpot.weight++;
+      } else {
+        app.anims.push((reqAnim={
+            type:"post",
+            from: "browser",
+            weight: 1,
+            lineColor: '#00ffff',
+            textColor: '#00ffff',
+            shadowColor: '#000000',
+            fillColor: '#004444',
+            startY: 5,
+            renderer: app.drawSprite
+        }));
+      }
+  
+      try{
+        fetch(requestInfo,params).then(resp => {
+          var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
+          var inSpot = getInSpot(anims, "chip");
+    
+          if (inSpot) {
+            inSpot.weight++;
+          } else {
+            app.anims.push({
+                type:"post",
+                from: "chip",
+                weight: 1,
+                lineColor: '#00ffff',
+                textColor: '#00ffff',
+                shadowColor: '#000000',
+                fillColor: '#004444',
+                startY: 25,
+                renderer: app.drawSprite
+            });
+          }
+          resolve(resp);
+        })
+        .catch(err => {
+          reqAnim.color="red";
+          reqAnim.lineColor="red";
+          reject(err);
+        });
+      } catch(e) {
+        reqAnim.color="red";
+        reqAnim.lineColor="red";
+        reject(err);
+      }
+    })
+  }
+  //#region SHA-1
 /*
  * A JavaScript implementation of the Secure Hash Algorithm, SHA-1, as defined
  * in FIPS 180-1
@@ -231,10 +287,10 @@ function fromPlainToVersionned(obj, vobj, level = "") {
     return ret;
 }
 
-const getCellValue = (tr, idx) => tr.children[idx].innerText || tr.children[idx].textContent;
+const getCellValue = (tr, idx) => tr.children[idx]?.innerText || tr.children[idx]?.textContent;
 
 const comparer = (idx, asc) => (a, b) => ((v1, v2) =>
-    v1 !== '' && v2 !== '' && !isNaN(v1) && !isNaN(v2) ? v1 - v2 : v1.toString().localeCompare(v2)
+    v1 !== '' && v2 !== '' && !isNaN(v1) && !isNaN(v2) ? v1 - v2 : v1?.toString()?.localeCompare(v2)
 )(getCellValue(asc ? a : b, idx), getCellValue(asc ? b : a, idx));
 class BoolInput extends React.Component {
     constructor(props) {
@@ -264,17 +320,60 @@ class BoolInput extends React.Component {
     }
 }
 class CmdButton extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            param1: this.props.param1,
+            param2: this.props.param2,
+            param3: this.props.param3,
+            param4: this.props.param4,
+            param5: this.props.param5,
+            param6: this.props.param6
+        };
+    }
     runIt() {
         wfetch(`${httpPrefix}/status/cmd`, {
             method: this.props.HTTP_METHOD,
-            body: JSON.stringify({command: this.props.command,name: this.props.name, param1: this.props.param1, param2: this.props.param2})
+            body: JSON.stringify({command: this.props.command, className: this.props.className ,name: this.props.name, ...this.state})
         }).then(data => data.text())
           .then(this.props.onSuccess ? this.props.onSuccess : console.log)
           .catch(this.props.onError ? this.props.onError : console.error);
     }
 
+    simpleCommand() {
+        return e("button", { key: "simpleCommand", onClick: this.runIt.bind(this) }, this.props.caption)
+    }
+
+    GetPropertyEditor(param) {
+        return e( MaterialUI.FormControl,{key: param},[
+                e(MaterialUI.InputLabel,{
+                    key: "label",
+                    className: "label",
+                    id: `${param}-label`
+                },this.props[`${param}_label`]||param),
+                e(MaterialUI.Input,{
+                    key:"input",
+                    id: `${param}-input`,
+                    type: typeof this.state[param] === "number" || !isNaN(this.state[param]) ? 'number' : 'text',
+                    label: param,
+                    value: this.state[param],
+                    onChange: elem => {this.state[param] = elem.target.type === 'number' ? parseInt(elem.target.value) : elem.target.value; this.setState(this.state)}
+                })]);
+    }
+
+    complexCommand() {
+        return e("div",{key: "complexCommand", className: "complex-command"},[Object.keys(this.props)
+                                                                                   .filter(k => k.startsWith("param") && this.props[k+"_editable"])
+                                                                                   .map(k => this.GetPropertyEditor(k)),
+               e("button", { key: genUUID(), onClick: this.runIt.bind(this) }, this.props.caption)]);
+    }
+
+    hasComplexCommand() {
+        return Object.keys(this.props).filter(k => k.endsWith("_editable") && this.props[k]).length > 0
+    }
+
     render() {
-        return e("button", { key: genUUID(), onClick: this.runIt.bind(this) }, this.props.caption)
+        return this.hasComplexCommand() ? this.complexCommand() : this.simpleCommand()
     }
 }
 class DeviceList extends React.Component {
@@ -330,15 +429,11 @@ class IntInput extends React.Component {
 class StateCommands extends React.Component {
     render() {
         return e("div",{key:'commands',name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
-            key:genUUID(),
-            caption:cmd.caption || cmd.command,
-            command:cmd.command,
+            key: `${cmd.command}-${cmd.param1}`,
             name:this.props.name,
             onSuccess:this.props.onSuccess,
             onError:this.props.onError,
-            param1:cmd.param1,
-            param2:cmd.param2,
-            HTTP_METHOD:cmd.HTTP_METHOD
+            ...cmd
         })));
     }
 }
@@ -383,16 +478,14 @@ class EditableLabel extends React.Component {
     }
 }
 
-class JSONEditor extends React.Component {
+class LocalJSONEditor extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            value:props.json,
-            class: props.json?.class,
-            name: props.json?.name
+            json: props.json
         };
-        if (this.props.registerEventInstanceCallback && this.state.class && this.state.name) {
-            this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.state.class}-${this.state.name}`);
+        if (this.props.registerEventInstanceCallback && this.props.name) {
+            this.props.registerEventInstanceCallback(this.ProcessEvent.bind(this),`${this.props.class}-${this.props.name}`);
         }
     }
 
@@ -404,25 +497,30 @@ class JSONEditor extends React.Component {
         this.mounted=true;
     }
 
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps && prevProps.json && (prevProps.json != this.props.json)){
+            this.setState({json: this.props.json});
+        }
+    }
+
     ProcessEvent(evt) {
         if (this.mounted && evt?.data){
-            if ((evt.data?.class == this.state.class) && (evt.data?.name == this.state.name)){
-                this.setState({value: evt.data});
+            if (evt.data?.name == this.props.name){
+                this.setState({json: evt.data});
             }
         }
     }
 
     removeField(fld){
-        delete this.state.value[fld];
-        this.setState({value:this.state.value});
+        delete this.state.json[fld];
+        this.setState({value:this.state.json});
     }
 
     changeLabel(newLabel, oldLabel) {
         if (newLabel !== oldLabel) {
-            Object.defineProperty(this.state.value, newLabel,
-                Object.getOwnPropertyDescriptor(this.state.value, oldLabel));
-            delete this.state.value[oldLabel];
-            this.setState(this.state);
+            Object.defineProperty(this.state.json, newLabel,
+                Object.getOwnPropertyDescriptor(this.state.json, oldLabel));
+            delete this.state.json[oldLabel];
         }
     }
 
@@ -442,45 +540,9 @@ class JSONEditor extends React.Component {
     Parse(json) {
         if ((json !== undefined) && (json != null)) {
             if ((typeof json == "object") && (json.version === undefined)){
-                return e("div",{key: `jsonobject`,className:"statusclass jsonNodes"},this.getSortedProperties(json).map(fld => {
-                    if (Array.isArray(json[fld])) {
-                        if (fld == "commands"){
-                            return {fld:fld,element:e(StateCommands,{key:`jofieldcmds`,name:json["name"],commands:json[fld],onSuccess:this.props.updateAppStatus})};
-                        }
-                        return {fld:fld,element:e(Table, { key: `Table-Object-${this.props.path}/${fld}`, 
-                                                           name: fld, 
-                                                           path: `${this.props.path}/${fld}`,
-                                                           label: fld, 
-                                                           json: json[fld], 
-                                                           registerEventInstanceCallback: this.props.registerEventInstanceCallback, 
-                                                           editable: this.props.editable, 
-                                                           sortable: this.props.sortable })};
-                    } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
-                        return {fld:fld,element:e(JSONEditor, { 
-                            key: `JE-${this.props.path}/${fld}`,
-                            path: `${this.props.path}/${fld}`,
-                            name: fld, 
-                            label: fld, 
-                            editable: this.props.editable,
-                            json: json[fld],
-                            updateAppStatus:this.props.updateAppStatus,
-                            registerEventInstanceCallback: this.props.registerEventInstanceCallback })};
-                    } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
-                        return {
-                            fld:fld,
-                            element: this.props.editable ?
-                                    e("label",{key:`${fld}label`},[
-                                        this.fieldControlPannel(fld),
-                                        e("input",{key:`input`,defaultValue:json[fld].value === undefined ?  json[fld] : json[fld].value ,onChange: this.processUpdate.bind(this)})]):
-                                    e(ROProp, { 
-                                        key: `rofld${fld}`, 
-                                        value: json[fld], 
-                                        name: fld, 
-                                        label: fld 
-                                    })
-                        };
-                    }
-                }).reduce((pv,cv)=>{
+                return e("div",{key: `jsonobject`,className:"statusclass jsonNodes"},this.getSortedProperties(json)
+                                                                                         .map(fld => this.renderField(json, fld))
+                                                                                         .reduce((pv,cv)=>{
                     if (cv){
                         var fc = this.getFieldClass(json,cv.fld);
                         var item = pv.find(it=>it.fclass == fc);
@@ -491,31 +553,100 @@ class JSONEditor extends React.Component {
                         }
                     }
                     return pv;
-                },[]).map((item,idx) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
+                },[]).map((item) =>e("div",{key: `fg-${item.fclass}`,className: `fieldgroup ${item.fclass}`},item.elements)))
             } else {
-                return (json.version !== undefined) || (this.props.editable && (typeof json != "object")) ?
-                            e("input",{key:`input`,defaultValue:json.value === undefined?json:json.value,onChange: this.processUpdate.bind(this)}):
-                            e(ROProp, { 
-                                key: 'rofield', 
-                                value: json, 
-                                name: "" 
-                            });
+                return this.renderVersioned(json);
             }
         } else {
             return null;
         }
     }
 
+    renderField(json, fld) {
+        if (Array.isArray(json[fld])) {
+            if (fld == "commands"){
+                return this.renderCommands(fld, json);
+            }
+            return this.renderArray(fld, json);
+        } else if (json[fld] && (typeof json[fld] == 'object') && (json[fld].version === undefined)) {
+            return this.renderObject(fld, json);
+        } else if ((fld != "class") && !((fld == "name") && (json["name"] == json["class"])) ) {
+            return this.renderFieldValue(fld, json);
+        }
+    }
+
+    renderFieldValue(fld, json) {
+        return {
+            fld: fld,
+            element: this.props.editable ?
+                e("label", { key: `${fld}label` }, [
+                    this.fieldControlPannel(fld),
+                    e("input", { key: `input`, defaultValue: json[fld].value === undefined ? json[fld] : json[fld].value, onChange: this.processUpdate.bind(this) })
+                ]) :
+                e(ROProp, {
+                    key: `rofld${fld}`,
+                    value: json[fld],
+                    name: fld,
+                    label: fld
+                })
+        };
+    }
+
+    renderObject(fld, json) {
+        return {
+            fld: fld, element: e(LocalJSONEditor, {
+                key: `JE-${this.props.path}/${fld}`,
+                path: `${this.props.path}/${fld}`,
+                name: fld,
+                label: fld,
+                editable: this.props.editable,
+                sortable: this.props.sortable,
+                json: json[fld],
+                updateAppStatus: this.props.updateAppStatus,
+                registerEventInstanceCallback: this.props.registerEventInstanceCallback
+            })
+        };
+    }
+
+    renderArray(fld, json) {
+        return {
+            fld: fld, element: e(Table, {
+                key: `Table-Object-${this.props.path}/${fld}`,
+                name: fld,
+                path: `${this.props.path}/${fld}`,
+                label: fld,
+                json: json[fld],
+                registerEventInstanceCallback: this.props.registerEventInstanceCallback,
+                editable: this.props.editable,
+                sortable: this.props.sortable
+            })
+        };
+    }
+
+    renderCommands(fld, json) {
+        return { fld: fld, element: e(StateCommands, { key: `${fld}cmds`, name: json["name"], commands: json[fld], onSuccess: this.props.updateAppStatus }) };
+    }
+
+    renderVersioned(json) {
+        return (json.version !== undefined) || (this.props.editable && (typeof json != "object")) ?
+            e("input", { key: `input`, defaultValue: json.value === undefined ? json : json.value, onChange: this.processUpdate.bind(this) }) :
+            e(ROProp, {
+                key: 'rofield',
+                value: json,
+                name: ""
+            });
+    }
+
     processUpdate(elem,fld) {
         if (fld) {
-            if (this.state.value[fld] === undefined) {
-                this.state.value[fld]={version:-1};
+            if (this.state.json[fld] === undefined) {
+                this.state.json[fld]={version:-1};
             }
-            this.state.value[fld].value=elem.target.value;
-            this.state.value[fld].version++;
+            this.state.json[fld].value=elem.target.value;
+            this.state.json[fld].version++;
         } else {
-            this.state.value.value=elem.target.value;
-            this.state.value.version++;
+            this.state.json.value=elem.target.value;
+            this.state.json.version++;
         }
     }
 
@@ -546,8 +677,8 @@ class JSONEditor extends React.Component {
     }
 
     addNewProperty(){
-        this.state.value[`prop${Object.keys(this.state.value).filter(prop => prop.match(/^prop.*/)).length+1}`]=null;
-        this.setState({value:this.state.value});
+        this.state.json[`prop${Object.keys(this.state.json).filter(prop => prop.match(/^prop.*/)).length+1}`]=null;
+        this.setState({value:this.state.json});
     }
 
     objectControlPannel(){
@@ -560,15 +691,15 @@ class JSONEditor extends React.Component {
     }
 
     render() {
-        if (this.state === null || this.state === undefined) {
-            return e("div", { id: `loading${this.id}` }, "Loading...");
+        if (this.state.json === null || this.state.json === undefined) {
+            return e("div", { id: `loading${this.id}` });
         } else if (this.props.label != null) {
             return e("fieldset", { id: `fs${this.props.label}`,className:"jsonNodes" }, [
                 e("legend", { key: 'legend' }, this.objectControlPannel()),
-                this.Parse(this.state.value)
+                this.Parse(this.state.json)
             ]);
         } else {
-            return this.Parse(this.props.json);
+            return this.Parse(this.state.json);
         }
     }
 }class ROProp extends React.Component {
@@ -590,72 +721,59 @@ class JSONEditor extends React.Component {
 
     getValue(fld,val) {
         if (val?.value !== undefined) {
-            return this.getValue(fld,val.value);
-        } else {
-            if (IsNumberValue(val)) {
-                if (isFloat(val)) {
-                    if ((this.props.name.toLowerCase() != "lattitude") &&
-                        (this.props.name.toLowerCase() != "longitude") &&
-                        (this.props.name != "lat") && (this.props.name != "lng")) {
-                        val = parseFloat(val).toFixed(2);
-                    } else {
-                        val = parseFloat(val).toFixed(8);
-                    }
-                }
-            }
-            if (IsBooleanValue(val)) {
-                val = ((val == "true") || (val == "yes") || (val === true)) ? "Y" : "N"
-            }
-
-            if ((this.props.name == "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-                return e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
-            }
-
-            return val;
+            val = this.getValue(fld,val.value);
         }
+        
+        if (IsNumberValue(val) && isFloat(val)) {
+            val =  parseFloat(val).toFixed(this.isGeoField() ? 8 : 2).replace(/0+$/,'');
+        }
+        
+        if (IsBooleanValue(val)) {
+            val = ((val === "true") || (val === "yes") || (val === true)) ? "Y" : "N"
+        }
+        
+        if ((this.props.name === "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
+            val = e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
+        }
+        return val;
     }
 
+    isGeoField() {
+        return (this.props.name.toLowerCase() === "lattitude") ||
+            (this.props.name.toLowerCase() === "longitude") ||
+            (this.props.name === "lat") || 
+            (this.props.name === "lng");
+    }
+
+    componentDidMount() {
+        if (IsDatetimeValue(this.props.name)) {
+            this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
+        }
+    }
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (IsDatetimeValue(this.props.name)) {
             this.renderTime(document.getElementById(`vel${this.id}`), this.props.name, this.getValue(this.props.name,this.props.value));
         }
         if (this.state?.lastStates && (this.props.value !== prevProps?.value)) {
-            this.state.lastStates.push({
-                value:this.props.value,
+            this.setState({lastStates: [...this.getActiveLastStates(), {
+                value: this.getValue(this.props.name,this.props.value),
                 ts: Date.now()
-            });
-            while (this.state.lastStates.length > this.state.maxLastStates) {
-                this.state.lastStates.pop();
-            }
+            }]});
         }
+    }
+
+    getActiveLastStates() {
+        if (this.state.lastStates.length > (this.state.maxLastStates - 1)) {
+            return this.state.lastStates.splice(this.state.lastStates.length - this.state.maxLastStates);
+        }
+        return this.state.lastStates;
     }
 
     renderTime(input, fld, val) {
         if (input == null) {
             return;
         }
-        var now = fld.endsWith("_us") ? new Date(val / 1000) : fld.endsWith("_sec") ? new Date(val*1000) : new Date(val);
-
-        if (now.getFullYear() <= 1970) 
-            now.setTime(now.getTime() + now.getTimezoneOffset() * 60 * 1000);
-            
-        var today = now.toLocaleDateString('en-US',{dateStyle:"short"});
-        var time = now.toLocaleTimeString('en-US',{hour12:false});
-        var hrs = now.getHours();
-        var min = now.getMinutes();
-        var sec = now.getSeconds();
-        var mil = now.getMilliseconds();
-        var smoothsec = sec + (mil / 1000);
-        var smoothmin = min + (smoothsec / 60);
-
-        if (now.getFullYear() <= 1970) {
-            today =  (now.getDate()-1) + ' Days';
-            if (hrs == 0)
-                time = (min ? min + ":" : "") + ('0'+sec).slice(-2) + "." + mil;
-            else
-                time = ('0'+hrs).slice(-2) + ":" + ('0'+min).slice(-2) + ":" + ('0'+sec).slice(-2);
-        }
-
+        var { hrs, smoothmin, today, time } = this.getTimeComponents(fld, val);
 
         var canvas = input.querySelector(`canvas`) || input.appendChild(document.createElement("canvas"));
         canvas.height = 100;
@@ -669,24 +787,40 @@ class JSONEditor extends React.Component {
         rect.height = canvas.height;
         rect.width = canvas.width;
 
-        //Background
-        var gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
-        gradient.addColorStop(0, "#03303a");
-        gradient.addColorStop(1, "black");
-        ctx.fillStyle = gradient;
-        ctx.clearRect(0, 0, rect.width, rect.height);
+        this.drawBackground(ctx, rect, hrs, smoothmin);
+        this.drawClock(ctx, today, rect, time);
+    }
 
-        ctx.beginPath();
-        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad(270+((hrs>12?hrs-12:hrs)*30)));
-        ctx.stroke();
+    getTimeComponents(fld, val) {
+        var now = fld.endsWith("_us") ? new Date(val / 1000) : fld.endsWith("_sec") ? new Date(val * 1000) : new Date(val);
 
-        ctx.beginPath();
-        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad(270+(smoothmin * 6)));
-        ctx.stroke();
+        if (now.getFullYear() <= 1970)
+            now.setTime(now.getTime() + now.getTimezoneOffset() * 60 * 1000);
 
+        var today = now.toLocaleDateString('en-US', { dateStyle: "short" });
+        var time = now.toLocaleTimeString('en-US', { hour12: false });
+        var hrs = now.getHours();
+        var min = now.getMinutes();
+        var sec = now.getSeconds();
+        var mil = now.getMilliseconds();
+        var smoothsec = sec + (mil / 1000);
+        var smoothmin = min + (smoothsec / 60);
+
+        if (now.getFullYear() <= 1970) {
+            today = (now.getDate() - 1) + ' Days';
+            if (hrs == 0)
+                time = (min ? min + ":" : "") + ('0' + sec).slice(-2) + "." + mil;
+
+            else
+                time = ('0' + hrs).slice(-2) + ":" + ('0' + min).slice(-2) + ":" + ('0' + sec).slice(-2);
+        }
+        return { hrs, smoothmin, today, time };
+    }
+
+    drawClock(ctx, today, rect, time) {
         //Date
         ctx.font = "12px Helvetica";
-        ctx.fillStyle = 'rgba(00, 255, 255, 1)'
+        ctx.fillStyle = 'rgba(00, 255, 255, 1)';
         var txtbx = ctx.measureText(today);
         ctx.fillText(today, (rect.width / 2) - txtbx.width / 2, rect.height * .65);
 
@@ -697,23 +831,96 @@ class JSONEditor extends React.Component {
         ctx.fillText(time, (rect.width * 0.50) - txtbx.width / 2, rect.height * 0.45);
     }
 
-    render() {
-        if (this.props.label) {
-            return e('label', { className: "readonly", id: `lbl${this.id}`, key: this.id }, [
-                e("div", { key: 'label', className: "label", id: `dlbl${this.id}` }, this.props.label),
-                e("div", { key: 'value', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value))
-            ]);
-        } else {
-            return e("div", { key: 'timevalue', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name,this.props.value));
+    drawBackground(ctx, rect, hrs, smoothmin) {
+        var gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
+        gradient.addColorStop(0, "#03303a");
+        gradient.addColorStop(1, "black");
+        ctx.fillStyle = gradient;
+        ctx.clearRect(0, 0, rect.width, rect.height);
+
+        ctx.beginPath();
+        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.44, degToRad(270), degToRad(270 + ((hrs > 12 ? hrs - 12 : hrs) * 30)));
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(rect.width / 2, rect.height / 2, rect.height * 0.38, degToRad(270), degToRad(270 + (smoothmin * 6)));
+        ctx.stroke();
+    }
+
+    getGraphButton() {
+        var ret = null;
+        if (this.hasStats()) {
+            ret = e(MaterialUI.Tooltip,{
+                      className: "graphtooltip",
+                      key:"tooltip",
+                      width: "200",
+                      height: "100",
+                      title: this.state.graph ? "Close" : this.getReport(true)
+                    },e('i',{className: "reportbtn fa fa-line-chart", key: "graphbtn", onClick: elem=>this.setState({"graph":this.state.graph?false:true})})
+                  );
         }
+        return ret;
+    }
+
+    hasStats() {
+        return !IsDatetimeValue(this.props.name) &&
+            IsNumberValue(this.props.value) &&
+            this.state?.lastStates &&
+            this.state.lastStates.reduce((ret, state) => ret.find(it => it === state.value) ? ret : [state.value, ...ret], []).length > 2;
+    }
+
+    getReport(summary) {
+        return [ !summary && this.state?.lastStates?.length ? e('i',{className: "reportbtn fa fa-eraser", key: "clear data", onClick: elem=>this.setState({"lastStates":[],"graph":false})}) : null,
+                e(Recharts.ResponsiveContainer,{key:"chartcontainer", className: "chartcontainer"},
+                e(Recharts.LineChart,{key:"chart", data: this.state.lastStates, className: "chart", margin: {left:20}},[
+                    e(Recharts.Line, {key:"line", dot: !summary, type:"monotone", dataKey:"value", stroke:"#8884d8", isAnimationActive: false}),
+                    summary?null:e(Recharts.CartesianGrid, {key:"grid", hide:summary, strokeDasharray:"5 5", stroke:"#ccc"}),
+                    e(Recharts.XAxis, {key:"thexs", hide:summary, dataKey:"ts",type: 'number', domain: ['auto', 'auto'],name: 'Time', tickFormatter: (unixTime) => new Date(unixTime).toLocaleTimeString(), type: "number"}),
+                    e(Recharts.YAxis, {key:"theys", hide:summary, dataKey:"value", domain: ['auto', 'auto']}),
+                    e(Recharts.Tooltip, {key:"tooltip", contentStyle: {backgroundColor: "black"}, labelStyle: {backgroundColor: "black"}, className:"tooltip", labelFormatter: t => new Date(t).toLocaleString()})]))];
+    }
+
+    getLabeledField() {
+        return e('label', { className: `readonly ${ this.state?.graph ? 'graph' : '' }`, id: `lbl${this.id}`, key: this.id }, [
+            e("div", { key: 'label', className: "label", id: `dlbl${this.id}` }, [this.props.label, this.getGraphButton()]),
+            e("div", { key: 'value', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : this.getValue(this.props.name, this.props.value)),
+            this.state?.graph && this.hasStats() ? this.getReport(false) : null
+        ]);
+    }
+
+    getTableField() {
+        return e("div", { key: 'timevalue', className: "value", id: `vel${this.id}` }, IsDatetimeValue(this.props.name) ? "" : [this.getValue(this.props.name, this.props.value),this.getGraphButton()]);
+    }
+
+    render() {
+        return this.props.label ? this.getLabeledField() : this.getTableField();
     }
 }
 class Table extends React.Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
-        this.state = {json:this.props.json};
+        this.state = {
+            keyColumn: this.getKeyColumn()
+        }
     }
+
+    componentDidUpdate(prevProps, prevState) {
+        var keycol = this.getKeyColumn();
+        if (this.state.keyColumn != keycol){
+            this.setState({keyColumn:keycol});
+        }
+    }
+    getKeyColumn() {
+        if (this.props.json && this.props.json.length > 0) {
+            if (typeof this.props.json[0] === "object") {
+                var keyCol = Object.keys(this.props.json[0])[0]
+                return this.props.json.reduce((acc, cur) => acc.find(row=>row[keyCol] === cur[keyCol]) ? acc : [...acc,cur],[]).length === this.props.json.length ? keyCol : null;
+            }
+        }
+        return undefined;
+    }
+
     SortTable(th) {
         if (this.props.sortable){
             var table,tbody;
@@ -724,20 +931,23 @@ class Table extends React.Component {
     }
 
     BuildHeaderField(fld) {
-        return fld;
+        return e("th", { 
+            key: `header-col-${fld}`,
+            onClick: this.SortTable.bind(this)
+        }, fld);
     }
 
     addRow(e){
         e.stopPropagation();
         e.preventDefault();
-        if ((this.state.json.length == 0) || (typeof this.state.json[0] == "object")){
-            this.state.json.push({});
-        } else if (Array.isArray(this.state.json[0])) {
-            this.state.json.push([]);
+        if ((this.props.json.length == 0) || (typeof this.props.json[0] == "object")){
+            this.props.json.push({});
+        } else if (Array.isArray(this.props.json[0])) {
+            this.props.json.push([]);
         } else {
-            this.state.json.push("");
+            this.props.json.push("");
         }
-        this.setState({json:this.state.json});
+        this.setState({json:this.props.json});
     }
 
     BuildTablePannel(){
@@ -755,34 +965,13 @@ class Table extends React.Component {
                     e("div",{key:`label`,className:"jsonlabel"},this.props.label)
                    ]);
         }
-        return e("caption", { key: 'caption' }, this.props.label);
-    }
-
-    BuildHead(json) {
-        if (json) {
-            this.cols=[];
-            return [e("thead", { key: `head`, onClick: this.SortTable.bind(this) }, 
-                      e("tr", { key: `headrow` },
-                        [this.props.editable?e("th", { key: `header` }):null,
-                         ...json.flatMap(row => Object.keys(row))
-                            .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
-                            .map(fld => {
-                                if (!this.cols.some(col => fld == col)) {
-                                    this.cols.push(fld);
-                                    var val = this.getValue(fld,json[0][fld]);
-                                    if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
-                                        this.sortedOn = fld;
-                                    }
-                                }
-                                return e("th", { key: `header-col-${fld}` }, this.BuildHeaderField(fld));
-                            })]
-                        )), this.props.label !== undefined ? this.BuildCaption():null];
-        } else {
-            return null;
-        }
+        return e("caption", { key: 'caption' }, `${this.props.label} - ${this.state.keyColumn}`);
     }
 
     getValue(fld, val) {
+        if (fld === undefined || val === undefined) {
+            return "";
+        }
         if (val?.value !== undefined) {
             return val.value;
         } else {
@@ -810,31 +999,18 @@ class Table extends React.Component {
         }
     }
 
-    BuildBody(json) {
-        if (json) {
-            return e("tbody", { key: 'body' },
-                this.props.sortable ? 
-                    json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
-                        .map(this.BuildLine.bind(this)):
-                    json.map(this.BuildLine.bind(this))
-                )
-        } else {
-            return null;
-        }
-    }
-
     DeleteLine(line,e) {
         e.stopPropagation();
         e.preventDefault();
-        this.state.json.splice(line,1);
-        this.setState({json:this.state.json});
+        this.props.json.splice(line,1);
+        this.setState({json:this.props.json});
     }
 
     DuplicateLine(line,e) {
         e.stopPropagation();
         e.preventDefault();
-        this.state.json.push(this.state.json[line]);
-        this.setState({json:this.state.json});
+        this.props.json.push(this.props.json[line]);
+        this.setState({json:this.props.json});
     }
 
     BuildLinePannel(idx){
@@ -850,22 +1026,26 @@ class Table extends React.Component {
     }
 
     BuildLine(line,idx) {
-        return e("tr", { key: `row-${idx}` },[
+        return e("tr", { key: this.getRowKey(line, idx) },[
             [
-                this.props.editable?e("td", { key: `row-${idx}-panel`, className: "readonly" },this.BuildLinePannel(idx)):null,
-                this.cols.map(fld => e("td", { key: `row-${idx}-${fld}-cell-panel`, className: "readonly" },this.BuildCell(line, fld)))
+                this.props.editable?e("td", { key: `${this.getRowKey(line, idx)}-panel`, className: "readonly" },this.BuildLinePannel(idx)):null,
+                this.cols.map(fld => e("td", { key: `${this.getRowKey(line, idx)}-${fld}-cell-panel`, className: "readonly" },this.BuildCell(line, fld)))
             ]
         ]);
     }
 
+    getRowKey(line, idx) {
+        return `row-${this.state.keyColumn ? line[this.state.keyColumn] : idx}`;
+    }
+
     addString(line,fld) {
         line[fld] = {value:"",version:0};
-        this.setState({json:this.state.json});
+        this.setState({json:this.props.json});
     }
 
     clearCell(line,fld) {
         line[fld].value?line[fld].value=null:line[fld]=null;
-        this.setState({json:this.state.json});
+        this.setState({json:this.props.json});
     }
 
     BuildCellControlPannel(line,fld){
@@ -891,9 +1071,10 @@ class Table extends React.Component {
                                    name: fld 
                                  }) : 
                         null :
-                e(JSONEditor, { key: `JE-${this.props.path}/${fld}`, 
+                e(LocalJSONEditor, { key: `JE-${this.props.path}/${fld}`, 
                                 path: `${this.props.path}/${fld}`,
                                 editable: this.props.editable, 
+                                sortable: this.props.sortable,
                                 json: line[fld], 
                                 name: fld, 
                                 registerEventInstanceCallback: this.props.registerEventInstanceCallback 
@@ -903,22 +1084,708 @@ class Table extends React.Component {
     }
 
     render() {
-        if (this.state.json === undefined) {
+        if (this.props.json === undefined) {
             return null;
         }
-
+        this.cols=[];
         return e("label", { key: `label`, id: this.id, className: "table" }, 
                 e("table", { key: `table`, className: "greyGridTable" }, [
-                    this.BuildHead(this.state.json), 
-                    this.BuildBody(this.state.json)
+                    [e("thead", { key: `head` }, 
+                        e("tr", { key: `headrow` },
+                        [this.props.editable?e("th", { key: `header` }):null,
+                            ...this.props.json.flatMap(row => Object.keys(row))
+                            .filter((val, idx, arr) => (val !== undefined) && (arr.indexOf(val) === idx))
+                            .map(fld => {
+                                if (!this.cols.some(col => fld == col)) {
+                                    this.cols.push(fld);
+                                    var val = this.getValue(fld,this.props.json[0][fld]);
+                                    if (!this.sortedOn && !Array.isArray(val) && typeof val != 'object' && isNaN(this.getValue(fld,val))) {
+                                        this.sortedOn = fld;
+                                    }
+                                }
+                                return this.BuildHeaderField(fld);
+                            })]
+                        )), this.props.label !== undefined ? this.BuildCaption():null], 
+                    e("tbody", { key: 'body' },
+                        this.props.sortable ? 
+                        this.props.json.sort((e1,e2)=>(this.getValue(this.sortedOn,e1[this.sortedOn])+"").localeCompare((this.getValue(this.sortedOn,e2[this.sortedOn])+"")))
+                            .map(this.BuildLine.bind(this)):
+                        this.props.json.map(this.BuildLine.bind(this)))
                 ])
-               );
+            );
     }
 }
-class StatusPage extends React.Component {
+class AnalogPinConfig extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {pin: props.item,errors:[]};
+        this.state.pin.channel = this.state.pin.channel ? this.state.pin.channel : this.pinNoToChannel(this.state.pin.pinNo);
+        this.state.pin.channel_width = this.state.pin.channel_width ? this.state.pin.channel_width : 9;
+        this.state.pin.channel_atten = this.state.pin.channel_atten ? this.state.pin.channel_atten : 0.0;
+        this.state.pin.waitTime = this.state.pin.waitTime ? this.state.pin.waitTime : 10000;
+        this.state.pin.minValue = this.state.pin.minValue ? this.state.pin.minValue : 0;
+        this.state.pin.maxValue = this.state.pin.maxValue ? this.state.pin.maxValue : 4096;
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if ((this.state != prevState) && this.props.onChange) {
+            this.props.onChange(this.state);
+        }
+        
+        if (prevProps?.item != this.props?.item) {
+            this.setState({pin: this.props.item});
+        }
+    }
+
+    getErrors() {
+        return this.state.errors.map((val,idx) => e(MaterialUI.Snackbar,{
+            key:`error${idx}`, 
+            className:"popuperror", 
+            anchorOrigin: {vertical: "top", horizontal: "right"}, 
+            autoHideDuration: 3000,
+            onClose: (event, reason) => {val.visible=false; this.setState(this.state);},
+            open: val.visible},e(MaterialUI.Alert,{key:`error${idx}`, severity: "error"}, val.error)));
+    }
+
+    onChange(name, value) {
+        this.state.pin[name] = name == "name" ? value : name == "channel_atten" ? parseFloat(value) : parseInt(value); 
+        if (name == "pinNo") {
+            this.state.pin.channel = this.pinNoToChannel(this.state.pin.pinNo);
+        }
+        this.setState(this.state);
+        if ((this.state.pin.channel_width < 9) || (this.state.pin.channel_width > 12)) {
+            setTimeout(() => {this.state.errors.push({visible:true, error:`Invalid channel width for ${this.state.pin.name}, needs to bebetween 9 and 12`});this.setState(this.state)}, 300);
+        }
+    }
+
+    pinNoToChannel(pinNo) {
+        switch(pinNo) {
+            case 32:
+                return 4;
+            case 33:
+                return 5;
+            case 34:
+                return 6;
+            case 35:
+                return 7;
+            case 36:
+                return 0;
+            case 37:
+                return 1;
+            case 38:
+                return 2;
+            case 39:
+                return 3;
+            default:
+                this.state.errors.push({visible:true, error:`Invalid pin number, ${pinNo} cannot be an analog pin`});
+                setTimeout(() => {this.state.errors.push({visible:true, error:`Invalid pin number, ${pinNo} cannot be an analog pin`});this.setState(this.state)}, 300);
+                return -1;
+        }
+    }
+
+    render() {
+        return e( MaterialUI.Card, { key: this.state.pin.pinName, className: "pin-config" },[
+            e( MaterialUI.CardHeader, {key:"header", title: this.state.pin.name }),
+            e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"},
+                [
+                    e( MaterialUI.ListItem, { key: "pinName" },  
+                        e( MaterialUI.TextField, { key: "pinName", autoFocus:true, value: this.state.pin.name, label: "Name", type: "text", onChange: event => this.onChange("name", event.target.value)})),
+                    e( MaterialUI.ListItem, { key: "pinNo" },  
+                        e( MaterialUI.TextField, { key:"pinNo", value: this.state.pin.pinNo, label: "PinNo", type: "number", onChange: event => this.onChange("pinNo", parseInt(event.target.value) )})),
+                    e( MaterialUI.ListItem, { key: "channel" },  
+                        e( MaterialUI.TextField, { key:"channel", inputProps:{ readOnly: true },value: this.state.pin.channel, label: "Channel", type: "number", onChange: event => this.onChange("channel", parseInt(event.target.value)) })),
+                    e( MaterialUI.ListItem, { key: "channel_width" },  
+                        e( MaterialUI.TextField, { key:"channel_width", value: this.state.pin.channel_width, label: "Channel Width", type: "number", min:9, max:12, onChange: event => this.onChange("channel_width", parseInt(event.target.value)) })),
+                    e( MaterialUI.ListItem, { key: "channel_atten" },
+                        [
+                            e(MaterialUI.InputLabel,{key:"attenLabel", id:"channel_atten_label", className: "ctrllabel"}, "Channel Attennuation"),
+                            e(MaterialUI.Select,{key:"attenSelect", value: this.state.pin.channel_atten, label: "Channel Attennuation", onChange: event => this.onChange("channel_atten", parseFloat(event.target.value))},[
+                                e(MaterialUI.MenuItem,{key:"atten0", value: 0.0}, "0 dB - 100 mV ~ 950 mV"),
+                                e(MaterialUI.MenuItem,{key:"atten1", value: 2.5}, "2.5 dB - 100 mV ~ 1250 mV"),
+                                e(MaterialUI.MenuItem,{key:"atten2", value: 6.0}, "6.0 dB - 100 mV ~ 1750 mV"),
+                                e(MaterialUI.MenuItem,{key:"atten3", value: 11.0}, "11.0 dB - 100 mV ~ 2450 mV"),
+                            ])
+                        ]),
+                    e( MaterialUI.ListItem, { key: "waitTime" },  
+                        e( MaterialUI.TextField, { key:"waitTime", value: this.state.pin.waitTime , label: "Wait Time", type: "number", onChange: event => this.onChange("waitTime", parseInt(event.target.value) )})),
+                    e( MaterialUI.ListItem, { key: "min" },  
+                        e( MaterialUI.TextField, { key:"min", value: this.state.pin.minValue , label: "Minimum", type: "number", onChange: event => this.onChange("minValue", parseInt(event.target.value) )})),
+                    e( MaterialUI.ListItem, { key: "max" },  
+                        e( MaterialUI.TextField, { key:"max", value: this.state.pin.maxValue , label: "Maximum", type: "number", onChange: event => this.onChange("maxValue", parseInt(event.target.value) )})),
+                ]
+            )),
+            this.getErrors()
+        ]);
+    }
+}class ConfigGroup extends React.Component {
+    constructor(props) {
+        super(props);
+        this.supportedTypes = {
+            analogPins:{
+                caption:"Analog Pins",
+                class: "AnalogPin",
+                component: AnalogPinConfig
+            },pins:{
+                caption:"Digital Pins",
+                class: "Pin",
+                component: DigitalPinConfig
+            }
+        };
+        this.state = {
+            currentTab: undefined
+        };
+        wfetch(`${httpPrefix}/templates/config`,{
+            method: 'post'
+        }).then(data => data.json())
+          .then(this.updateConfigTemplates.bind(this))
+          .catch(console.error);
+    }
+
+    updateConfigTemplates(configTemplates) {
+        this.setState({ 
+            configTemplates: configTemplates,
+            currentTab: configTemplates[0].collectionName
+        });
+    }
+
+    render() {
+        if (this.props.config && this.state.configTemplates) {
+            return this.renderArrayTypes();
+        } else {
+            return e("div", {key: "loading"}, "Loading...");
+        }
+    }
+
+    renderArrayTypes() {
+        var tabs = this.state.configTemplates
+            .filter(configTemplate => configTemplate.isArray);
+        return [
+            e(MaterialUI.Tabs, {
+                value: this.state.currentTab,
+                onChange: (_, v) => { this.setState({ currentTab: v }); },
+                key: "ConfigTypes"
+            }, [...tabs.map(this.renderTypeTab.bind(this)),
+            e(MaterialUI.Tab, { key: "full-config", label: "Configuration", value: "Configuration" })]),
+            tabs.map(this.renderConfigType.bind(this))
+        ];
+    }
+
+    renderTypeTab(key) {
+        return key.isArray ? 
+                e( MaterialUI.Tab, { key: key.collectionName, label: this.supportedTypes[key.collectionName]?.caption || key.collectionName, value: key.collectionName }):
+                e( MaterialUI.Tab, { key: key.class, label: this.supportedTypes[key.class]?.caption || key.class, value: key.class });
+    }
+
+    renderConfigType(key) {
+        return e("div",{key:`${key.class}-control-panel`,className:`edior-pannel ${this.state.currentTab === key.collectionName ? "":"hidden"}`},[
+            e("button", { key: "add", onClick: evt=> {this.props.config[key.collectionName] ? this.props.config[key.collectionName].push({}) : this.props.config[key.collectionName] = [{}]; this.props.onChange()} }, e("i",{key:"add", className:"fa fa-plus-square"})),
+            e("div",{key:"items", className:`config-cards`}, this.props.config[key.collectionName] ? Object.keys(this.props.config[key.collectionName]).map(idx =>
+                this.renderEditor(key,this.props.config[key.collectionName],idx)) : null)
+        ]);
+    }
+
+    renderConfigItemTab(key, item, idx) {
+        return e( MaterialUI.Tab, { key: item, label: idx+1, value: key });
+    }
+
+    renderEditor(key, item, idx) {
+        return  e("div",{key:`${key.collectionName}-${idx}-control-editor`,className:`control-editor`},[
+                    e( this.supportedTypes[key.collectionName]?.component || ConfigItem, { key: key.collectionName + idx, value: key, role: "tabpanel", item: item[idx], onChange: this.props.onChange}),
+                    e("button", { key: "dup", onClick: evt=> {this.props.config[key.collectionName].push(JSON.parse(JSON.stringify(this.props.config[key.collectionName][idx]))); this.props.onChange()} }, e("i",{key:"copy", className:"fa fa-clone"})),
+                    e("button", { key: "delete", onClick: evt=> {this.props.config[key.collectionName].splice(idx,1); this.props.onChange()} }, e("i",{key:"copy", className:"fa fa-trash-o"})),
+                ]);
+    }
+
+    isSupported(key) {
+        return Object.keys(this.supportedTypes).indexOf(key)>-1;
+    }
+}class ConfigItem extends React.Component {
+    constructor(props) {
+        super(props);
+        if (JSON.stringify(props.item) === "{}") {
+            Object.keys(props.value)
+                  .filter(fld => !['collectionName','class','isArray'].find(val=>val===fld))
+                  .forEach(fld => props.item[fld] = props.value[fld]);
+        }
+        this.state = { instance: props.item };
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if ((this.state != prevState) && this.props.onChange) {
+            this.props.onChange(this.state.instance);
+        }
+    }
+
+    getFieldType(name) {
+        var obj = this.props.item[name];
+        if (obj !== undefined) {
+            if (typeof(obj) === 'boolean') {
+                return "boolean";
+            }
+            if (isNaN(obj)) {
+                return "text";
+            }
+            return "number";
+        }
+        return "text";
+    }
+
+    parseFieldValue(value) {
+        if (value !== undefined) {
+            if (isNaN(value)) {
+                return value;
+            }
+            if (typeof value === "string") {
+                if (value.indexOf(".") != -1) {
+                    return parseFloat(value);
+                }
+                return parseInt(value);
+            }
+        }
+        return value;
+    }
+
+    onChange(name, value) {
+        this.props.item[name] = this.parseFieldValue(value); 
+        this.setState(this.state);
+    }
+
+    getFieldWeight(field) {
+        if (field == this.props.nameField) {
+            return 100;
+        }
+
+        switch(this.getFieldType(field, this.props.item[field])) {
+            case "text":
+                return 75;
+            case "number":
+                return 50;
+            default:
+                return 25;
+        }
+    }
+
+    render() {
+        return e( MaterialUI.Card, { key: this.props.item[this.props.nameField], className: "config-item" },[
+            e( MaterialUI.CardHeader, {key:"header", title: this.props.item[this.props.nameField] }),
+            e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"},
+                Object.keys(JSON.stringify(this.props.item) === "{}" ? this.props.value : this.props.item)
+                      .filter(fld => !['collectionName','class','isArray'].find(val=>val===fld))
+                      .sort((a,b) => {
+                        var wa = this.getFieldWeight(a);
+                        var wb = this.getFieldWeight(b);
+                        if (wa == wb) {
+                            return a.localeCompare(b);
+                        }
+                        return wb - wa;
+                    }).map(this.getEditor.bind(this))
+            ))
+        ]);
+    }
+
+    getEditor(key) {
+        var tp = this.getFieldType(key);
+        return e(MaterialUI.ListItem, { key: key },
+            tp === "boolean" ? 
+            e(MaterialUI.FormControlLabel,{
+                key:"label",
+                label: key,
+                control:e(MaterialUI.Checkbox, {
+                    key: "ctrl",
+                    checked: this.parseFieldValue(this.props.item[key]),
+                    onChange: event => this.onChange(key, event.target.checked)
+                })
+            }):
+            e(MaterialUI.TextField, {
+                key: key,
+                autoFocus: tp == "text",
+                value: this.parseFieldValue(this.props.item[key]),
+                label: key,
+                type: tp,
+                onChange: event => this.onChange(key, event.target.value)
+            })
+        );
+    }
+}class DigitalPinConfig extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {pin: props.item};
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if ((this.state != prevState) && this.props.onChange) {
+            this.props.onChange(this.state);
+        }
+        
+        if (prevProps?.item != this.props?.item) {
+            this.setState({pin: this.props.item});
+        }
+    }
+
+    onChange(name, value) {
+        this.state.pin[name] = name == "pinName" ? value : parseInt(value); 
+        this.setState(this.state);
+    }
+
+    render() {
+        return e( MaterialUI.Card, { key: this.state.pin.pinName, className: "pin-config" },[
+            e( MaterialUI.CardHeader, {key:"header", title: this.state.pin.pinName }),
+            e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"},
+                [
+                    e( MaterialUI.ListItem, { key: "pinName" },  
+                        e( MaterialUI.TextField, { key: "pinName", autoFocus:true, value: this.state.pin.pinName, label: "Name", type: "text", onChange: event => this.onChange("pinName", event.target.value)})),
+                    e( MaterialUI.ListItem, { key: "pinNo" },  
+                        e( MaterialUI.TextField, { key:"pinNo", value: this.state.pin.pinNo, label: "PinNo", type: "number", onChange: event => this.onChange("pinNo", event.target.value) })),
+                    e( PinDriverFlags, { key: "driverFlags", autoFocus:true, value: this.state.pin.driverFlags, onChange: val => this.onChange("driverFlags", val) }),
+                ]
+            ))
+        ]);
+    }
+}class IRReceiver extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      ...props.config
+    };
+    if (!this.state.timing_groups) {
+      this.state.timing_groups = this.getDefaultTimingGroup();
+    }
+  }
+
+  buildTimingGroup(
+    tag,
+    carrier_freq_hz,
+    duty_cycle,
+    bit_length,
+    invert,
+    header_mark_us,
+    header_space_us,
+    one_mark_us,
+    one_space_us,
+    zero_mark_us,
+    zero_space_us
+  ) {
+    return {
+      tag: tag,
+      carrier_freq_hz: carrier_freq_hz,
+      duty_cycle: duty_cycle,
+      bit_length: bit_length,
+      invert: invert,
+      header_mark_us: header_mark_us,
+      header_space_us: header_space_us,
+      one_mark_us: one_mark_us,
+      one_space_us: one_space_us,
+      zero_mark_us: zero_mark_us,
+      zero_space_us: zero_space_us,
+    };
+  }
+
+  getDefaultTimingGroup() {
+    return [
+      this.buildTimingGroup(
+        "HiSense",
+        38000,
+        33,
+        28,
+        0,
+        9000,
+        4200,
+        650,
+        1600,
+        650,
+        450
+      ),
+      this.buildTimingGroup(
+        "NEC",
+        38000,
+        33,
+        32,
+        0,
+        9000,
+        4250,
+        560,
+        1690,
+        560,
+        560
+      ),
+      this.buildTimingGroup(
+        "LG",
+        38000,
+        33,
+        28,
+        0,
+        9000,
+        4200,
+        550,
+        1500,
+        550,
+        550
+      ),
+      this.buildTimingGroup(
+        "samsung",
+        38000,
+        33,
+        32,
+        0,
+        4600,
+        4400,
+        650,
+        1500,
+        553,
+        453
+      ),
+      this.buildTimingGroup(
+        "LG32",
+        38000,
+        33,
+        32,
+        0,
+        4500,
+        4500,
+        500,
+        1750,
+        500,
+        560
+      ),
+    ];
+  }
+
+  getTimingGroupTableHeader() {
+    return e(
+      MaterialUI.TableHead,
+      { key: "IRTrackerTableHeader" },
+      e(
+        MaterialUI.TableRow,
+        { key: "IRTrackerTableRow" },
+        Object.keys(this.state.timing_groups[0]).map((key) =>
+          e(MaterialUI.TableCell, { key: key }, key)
+        )
+      )
+    );
+  }
+  updateTableProperty(event, record, field) {
+    if (isNaN(event.target.value)) {
+        record[field] = event.target.value;
+    } else {
+        record[field] = parseInt(event.target.value);
+    }
+    console.log(this.state);
+  }
+
+  getTimingGroupTableBody() {
+    return e(
+      MaterialUI.TableBody,
+      { key: "IRTrackerTableBody" },
+      this.state.timing_groups.map((group,idx) =>
+        e(
+          MaterialUI.TableRow,
+          { key: group.tag + idx },
+          Object.keys(group).map((key) =>
+            e(MaterialUI.TableCell, { key: key },
+                e(MaterialUI.TextField, {
+                key: key,
+                onChange: evt => this.updateTableProperty(evt, group, key),
+                defaultValue: group[key]
+            })
+          )
+        )
+      )
+    ));
+  }
+
+  getTimingGroupTable() {
+    return e(
+      MaterialUI.TableContainer,
+      { key: "IRTrackerTableContainer" },
+      e(MaterialUI.Table, { key: "IRTrackerTable" }, [
+        this.getTimingGroupTableHeader(),
+        this.getTimingGroupTableBody()
+      ])
+    );
+  }
+
+  updateProperty(event) {
+    if (isNaN(event.target.value)) {
+        this.state[event.target.labels[0].outerText] = event.target.value;
+    } else {
+        this.state[event.target.labels[0].outerText] = parseInt(event.target.value);
+    }
+  }
+
+  Apply() {
+    Object.keys(this.state).forEach((key) => {
+        this.props.config[key] = this.state[key]
+    });
+    this.props.saveChanges();
+  }
+
+  render() {
+    return e(
+      MaterialUI.Card,
+      { key: "IRTracker", variant: "outlined" },
+      e(MaterialUI.CardContent, { key: "IRTrackerContent" }, [
+        e(
+          MaterialUI.Typography,
+          { key: "IRTrackerTitle", variant: "h5" },
+          e("span", { key: "IRTrackerTitleText" }, "IR Receiver"),
+          e("span", { key: "filler", className:"filler" }),
+          e(MaterialUI.Button, {key:"Apply", variant:"outlined", onClick: this.Apply.bind(this)}, "Apply")
+        ),
+        e(
+          MaterialUI.Typography,
+          { key: "IRTrackerSubtitle", variant: "body1" },
+          "Configure the IR Receiver"
+        ),
+        e(MaterialUI.Divider, { key: "IRTrackerDivider" }),
+        e(MaterialUI.CardContent, { key: "IRTrackerContent" }, [
+          e(
+            MaterialUI.Box,
+            { key: "IRTrackerStack", className: "config-fields" },
+            [
+              Object.keys(this.state)
+                    .filter((key) => !Array.isArray(this.state[key]))
+                    .filter((key) => typeof this.state[key] !== "object")
+                    .map((key) => {
+                return e(MaterialUI.TextField, {
+                  key: key,
+                  label: key,
+                  type: "number",
+                  onChange: this.updateProperty.bind(this),
+                  defaultValue: this.state[key],
+                });
+              }),
+            ]
+          ),
+          e(
+            MaterialUI.Box,
+            { key: "IRTrackerStackTimingGroups", className: "timing-groups" },
+            this.getTimingGroupTable()
+          ),
+        ]),
+      ])
+    );
+  }
+}
+class PinDriverFlags extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            digital_in: { value: props.value &  0b00000001 ? true : false, errors:[] },
+            digital_out: { value: props.value & 0b00000010 ? true : false, errors:[] },
+            pullup: { value: props.value &      0b00000100 ? true : false, errors:[] },
+            pulldown: { value: props.value &    0b00001000 ? true : false, errors:[] },
+            touch: { value: props.value &       0b00010000 ? true : false, errors:[] },
+            wakeonhigh: { value: props.value &  0b00100000 ? true : false, errors:[] },
+            wakeonlow: { value: props.value &   0b01000000 ? true : false, errors:[] }
+        };
+    }
+
+    getValue(state) {
+        return state.digital_in.value | 
+               state.digital_out.value << 1 | 
+               state.pullup.value << 2 | 
+               state.pulldown.value << 3 | 
+               state.touch.value << 4 | 
+               state.wakeonhigh.value << 5 | 
+               state.wakeonlow.value << 6;
+    }
+
+    getFlagNames(value) {
+        return [
+            value &  0b00000001 ? "digital_in" : "",
+            value & 0b00000010 ? "digital_out" : "",
+            value &      0b00000100 ? "pullup" : "",
+            value &    0b00001000 ? "pulldown" : "",
+            value &       0b00010000 ? "touch" : "",
+            value &  0b00100000 ? "wakeonhigh" : "",
+            value &   0b01000000 ? "wakeonlow" : ""
+        ].filter(x => x.length > 0).join(", ");
+    }
+
+    componentDidUpdate(prevProps, prevState) {
+        if (this.props.value != this.getValue(this.state)) {
+            this.props.onChange(this.getValue(this.state));
+        }
+    }
+
+    isValidChange(name, value) {
+        var newState =  JSON.parse(JSON.stringify(this.state));
+        newState[name].value = value;
+        if ((name == "digital_in" || name == "digital_out") && value) {
+            if ((name == "digital_in") && newState.digital_out.value) {
+                this.state.digital_out.value = false;
+            }
+            if ((name == "digital_out") && newState.digital_in.value) {
+                this.state.digital_in.value = false;
+                this.state.pullup.value = false;
+                this.state.pulldown.value = false;
+                this.state.touch.value = false;
+                this.state.wakeonhigh.value = false;
+                this.state.wakeonlow.value = false;
+            }
+        }
+        if (newState.digital_out.value && this.getValue(newState) & 0b01111100) {
+            this.state[name].errors.push({visible: true, error: "Can't set " + this.getFlagNames(this.getValue(newState) & 0b01111100) + " option for output pins"});
+            new Promise((resolve,reject) => resolve(this.setState(this.state)));
+            return false;
+        }
+
+        if (newState.touch.value && (this.getValue(newState) & 0b00001100)) {
+            this.state[name].errors.push({visible: true, error: "Can't set " + this.getFlagNames(this.getValue(newState) & 0b00001100) + " option for touch pins"});
+            new Promise((resolve,reject) => resolve(this.setState(this.state)));
+            return false;
+        }
+        return true;
+    }
+
+    onChange(name, value) {
+        if (this.isValidChange(name, value)) {
+            this.state[name].value = value;
+            this.props.onChange(this.getValue(this.state));
+            return true;
+        }
+        return false;
+    }
+
+    getErrors(value) {
+        return value.errors.map((val,idx) => e(MaterialUI.Snackbar,{
+            key:`error${idx}`, 
+            className:"popuperror", 
+            anchorOrigin: {vertical: "top", horizontal: "right"}, 
+            autoHideDuration: 3000,
+            onClose: (event, reason) => {val.visible=false; this.setState(this.state);},
+            open: val.visible},e(MaterialUI.Alert,{key:`error${idx}`, severity: "error"}, val.error)));
+    }
+
+    renderOption(name, value) {    
+        return [
+            e(MaterialUI.FormControlLabel,{
+                key:name,
+                className:"driverflag",
+                label: name,
+                control:e(MaterialUI.Checkbox, {
+                    key: "ctrl",
+                    checked: value.value,
+                    onChange: event => this.onChange(name, event.target.checked)
+                })
+            }),
+            ...this.getErrors(value)
+        ];
+    }
+
+    render() {
+        return e( MaterialUI.Card, { key: "driver-flags", className: "driver-flags" },[
+            e( MaterialUI.CardHeader, {key:"header", subheader: "Flags" }),
+            e( MaterialUI.CardContent, {key:"details"},  e(MaterialUI.List,{key: "items"}, Object.keys(this.state).map(name => this.renderOption(name, this.state[name]))))
+        ]);
+    }
+}class StatusPage extends React.Component {
     constructor(props) {
         super(props);
         this.mounted=false;
+        this.state={
+            refreshRate:"Manual"
+        }
     }
 
     componentWillUnmount() {
@@ -933,8 +1800,27 @@ class StatusPage extends React.Component {
         }
     }
 
+    getRefreshRate() {
+        if (this.state.refreshRate.indexOf("secs")>0) {
+            return Number(this.state.refreshRate.replace(/([0-9]+).*/,"$1"))*1000
+        } 
+        return Number(this.state.refreshRate.replace(/([0-9]+).*/,"$1"))*60000
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.state.refreshRate !== prevState.refreshRate) {
+            if (this.refreshTimer) {
+                clearInterval(this.refreshTimer);
+            }
+
+            if (this.state.refreshRate !== "Manual"){
+                this.refreshTimer = setInterval(()=>{this.updateAppStatus()},this.getRefreshRate());
+            }
+        }
+    }
+
     updateAppStatus() {
-        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }], {});
+        this.updateStatuses([{ url: "/status/" }, { url: "/status/app" }, { url: "/status/tasks", path: "tasks" }, { url: "/status/mallocs", path: "mallocs" }, { url: "/status/repeating_tasks", path: "repeating_tasks" }], {});
     }
 
     refreshStatus(stat) {
@@ -963,45 +1849,27 @@ class StatusPage extends React.Component {
     updateStatuses(requests, newState) {
         if (window.location.host || httpPrefix){
             var abort = new AbortController()
-            var timer = setTimeout(() => abort.abort(), 4000);
+            var timer = setTimeout(() => abort.abort(), 8000);
             if (this.props.selectedDeviceId == "current") {
-                Promise.all(requests.map(request => {
-                    return new Promise((resolve, reject) => {
-                        wfetch(`${httpPrefix}${request.url}`, {
-                            method: 'post',
-                            signal: abort.signal
-                        }).then(data => data.json())
-                          .then(this.filterProperties.bind(this))
-                          .then(jstats => {
-                                requests = requests.filter(req => req != request);
-                                if (request.path) {
-                                    newState[request.path] = Object.values(jstats);
-                                } else {
-                                    Object.assign(newState, jstats);
-                                }
-                                resolve({ path: request.path, stat: jstats });
-                            }).catch(err => {
-                                request.retryCnt = (request.retryCnt | 0) + 1;
-                                request.waitFor = 1000;
-                                request.error = err;
-                                reject(err);
-                            });
-                    });
-                })).then(results => {
+                this.updateStatus(requests.pop(), abort, newState).then(res => {
                     clearTimeout(timer);
                     document.getElementById("Status").style.opacity = 1;
                     if (this.mounted){
-                        this.setState({
-                            error: null,
-                            status: this.orderResults(newState)
-                        });
-                    }
+                        if (requests.length > 0) {
+                            this.updateStatuses(requests, newState);
+                        } else {
+                            this.setState({
+                                error: null,
+                                status: this.orderResults(newState)
+                            });                        }
+                        }
                 }).catch(err => {
+                    document.getElementById("Status").style.opacity = 0.5
                     clearTimeout(timer);
                     if (err.code != 20) {
                         var errors = requests.filter(req => req.error);
                         document.getElementById("Status").style.opacity = 0.5
-                        if (errors[0].waitFor) {
+                        if (errors[0]?.waitFor) {
                             setTimeout(() => {
                                 if (err.message != "Failed to wfetch")
                                     console.error(err);
@@ -1025,6 +1893,27 @@ class StatusPage extends React.Component {
         }
     }
 
+    updateStatus(request, abort, newState) {
+        return new Promise((resolve, reject) => wfetch(`${httpPrefix}${request.url}`, {
+            method: 'post',
+            signal: abort.signal
+        }).then(data => data.json())
+            .then(this.filterProperties.bind(this))
+            .then(jstats => {
+                if (request.path) {
+                    newState[request.path] = Object.values(jstats);
+                } else {
+                    Object.assign(newState, jstats);
+                }
+                resolve({ path: request.path, stat: jstats });
+            }).catch(err => {
+                request.retryCnt = (request.retryCnt | 0) + 1;
+                request.waitFor = 1000;
+                request.error = err;
+                reject(err);
+            }));
+    }
+
     orderResults(res) {
         var ret = {};
         Object.keys(res).filter(fld => (typeof res[fld] != 'object') && !Array.isArray(res[fld])).sort((a, b) => a.localeCompare(b)).forEach(fld => ret[fld] = res[fld]);
@@ -1036,12 +1925,30 @@ class StatusPage extends React.Component {
     render() {
         if (this.state?.status){
             return [
-                e("button", { key: genUUID(), onClick: elem => this.updateAppStatus() }, "Refresh"),
-                e(JSONEditor, {
+                e("div",{key: "buttonbar", className: "buttonbar"},[
+                    e("button", { key: "refresh", onClick: elem => this.updateAppStatus() }, "Refresh"),
+                    e( MaterialUI.FormControl,{key: "refreshRate"},[
+                        e(MaterialUI.InputLabel,{
+                            key: "label",
+                            className: "label",
+                            id: "stat-refresh-label"
+                        },"Refresh Rate"),
+                        e(MaterialUI.Select,{
+                            key:"options",
+                            id: "stat-refresh",
+                            labelId:"stat-refresh-label", 
+                            label: "Refresh Rate",
+                            value: this.state.refreshRate,
+                            onChange: elem => this.setState({refreshRate:elem.target.value})
+                        },["Manual", "2 secs", "5 secs", "10 secs","30 secs","1 mins","5 mins","10 mins","30 mins","60 mins"].map((term,idx)=>e(MaterialUI.MenuItem,{key:idx,value:term},term)))
+                    ])
+                ]),
+                e(LocalJSONEditor, {
                     key: 'StateViewer', 
                     path: '/',
                     json: this.state.status, 
                     editable: false,
+                    sortable: true,
                     selectedDeviceId: this.props.selectedDeviceId,
                     registerStateCallback: this.props.registerStateCallback,
                     registerEventInstanceCallback: this.props.registerEventInstanceCallback
@@ -1054,47 +1961,94 @@ class StatusPage extends React.Component {
 }
 class ConfigPage extends React.Component {
     componentDidMount() {
-        if (window.location.host || httpPrefix){
+        if (this.isConnected()) {
             var abort = new AbortController()
-            var timer = setTimeout(() => abort.abort(), 4000);
+            var timer = setTimeout(() => abort.abort(), 8000);
             wfetch(`${httpPrefix}/config/${this.props.selectedDeviceId=="current"?"":this.props.selectedDeviceId+".json"}`, {
-                method: 'post',
-                signal: abort.signal
-            }).then(resp => resp.json())
-              .then(this.orderResults)
-              .then(config=>{
-                clearTimeout(timer);
-                this.setState({config: config});
+                    method: 'post',
+                    signal: abort.signal
+                }).then(resp => resp.json())
+                .then(config => {
+                    clearTimeout(timer);
+                    this.setState({
+                        config: fromVersionedToPlain(config),
+                        newconfig: fromVersionedToPlain(config),
+                        original: config
+                    });
+                });
+        }
+    }
+
+    buildEditor() {
+        try {
+            if (!this.jsoneditor) {
+                this.jsoneditor = new JSONEditor(this.container, {
+                    onChangeJSON: json => this.state.newconfig = json
+                }, this.state.config);
+            } else {
+                this.jsoneditor.set(this.state.config);
+            }
+        } catch (err) {
+            this.nativejsoneditor = e(LocalJSONEditor, {
+                key: 'ConfigEditor',
+                path: '/',
+                json: this.state.config,
+                selectedDeviceId: this.props.selectedDeviceId,
+                editable: true
             });
         }
     }
 
-    orderResults(res) {
-        var ret = {};
-        Object.keys(res).filter(fld => (typeof res[fld] != 'object') && !Array.isArray(res[fld])).sort((a, b) => a.localeCompare(b)).forEach(fld => ret[fld] = res[fld]);
-        Object.keys(res).filter(fld => (typeof res[fld] == 'object') && !Array.isArray(res[fld])).sort((a, b) => a.localeCompare(b)).forEach(fld => ret[fld] = res[fld]);
-        Object.keys(res).filter(fld => Array.isArray(res[fld])).forEach(fld => ret[fld] = res[fld]);
-        return ret;
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.state?.config && !this.nativejsoneditor && !this.jsoneditor) {
+            this.buildEditor();
+        }
+    }
+
+    getEditor() {
+        return [
+            e("div", { key: 'fancy-editor', ref: (elem) => this.container = elem, id: `${this.props.id || genUUID()}`, "data-theme": "spectre" }),
+            this.nativejsoneditor
+        ]
+    }
+
+    getEditorGroups() {
+        return e(ConfigGroup, { key: "configGroups", config: this.state?.newconfig, onChange: (_) => {this.jsoneditor.set(this.state.newconfig); this.setState(this.state) } });
+    }
+
+    saveChanges() {
+        var abort = new AbortController()
+        var timer = setTimeout(() => abort.abort(), 8000);
+        wfetch(`${httpPrefix}/config`, {
+                method: 'put',
+                signal: abort.signal,
+                body: JSON.stringify(fromPlainToVersionned(this.state.newconfig, this.state.original))
+            }).then(resp => resp.json())
+            .then(fromVersionedToPlain)
+            .then(config => {
+                clearTimeout(timer);
+                this.setState({ config: config });
+            }).catch(console.err);
     }
 
     render() {
-        if (this.state?.config){
-            return [
-                e("button", { key: genUUID(), onClick: elem => this.componentDidMount() }, "Refresh"),
-                e(JSONEditor, {
-                    key: 'ConfigEditor', 
-                    path: '/',
-                    json: this.state.config, 
-                    selectedDeviceId: this.props.selectedDeviceId,
-                    editable: true
-                })
-            ];
+        if (this.isConnected() && this.state?.config) {
+            return [e("div", { key: 'button-bar', className: "button-bar" }, [
+                        e("button", { key: "refresh", onClick: elem => this.componentDidMount() }, "Refresh"),
+                        e("button", { key: "save", onClick: this.saveChanges.bind(this) }, "Save"),
+                    ]),
+                    this.getEditorGroups(),
+                    this.getEditor()
+                   ];
         } else {
-            return e("div",{key:genUUID()},"Loading....");
+            return e("div", { key: genUUID() }, "Loading....");
         }
     }
-}
-class TypedField extends React.Component {
+
+    isConnected() {
+        return window.location.host || httpPrefix;
+    }
+}class TypedField extends React.Component {
     render(){
         return [
             e("div",{key: genUUID(),className:this.props.type},this.props.type),
@@ -1178,34 +2132,34 @@ class Event extends React.Component {
         if (this.props?.event?.dataType) {
             return this.renderComponent(this.props.event);
         } else {
-            return e("summary",{key: genUUID() ,className: "liveEvent"},
-                    e("div",{key: genUUID() ,className: "description"},[
-                        e("div",{key: genUUID() ,className: "eventBase"},"Loading"),
-                        e("div",{key: genUUID() ,className: "eventId"},"...")
+            return e("summary",{key: "summary" ,className: "liveEvent"},
+                    e("div",{key: "description" ,className: "description"},[
+                        e("div",{key: "base" ,className: "eventBase"},"Loading"),
+                        e("div",{key: "id" ,className: "eventId"},"...")
                     ]));
         }
     }
 
     renderComponent(event) {
-        return e("summary",{key: genUUID() ,className: "liveEvent"},[
-            e("div",{key: genUUID() ,className: "description"},[
-                e("div",{key: genUUID() ,className: "eventBase"},event.eventBase),
-                e("div",{key: genUUID() ,className: "eventId"},event.eventId)
-            ]), event.data ? e("details",{key: genUUID() ,className: "data"},this.parseData(event)): null
+        return e("summary",{key: "event" ,className: "liveEvent"},[
+            e("div",{key: "description" ,className: "description"},[
+                e("div",{key: "base" ,className: "eventBase"},event.eventBase),
+                e("div",{key: "id" ,className: "eventId"},event.eventId)
+            ]), event.data ? e("details",{key: "details" ,className: "data"},this.parseData(event)): null
         ]);
     }
 
     parseData(props) {
         if (props.dataType == "Number") {
-            return e("div", { key: genUUID(), className: "description" }, 
-                        e("div", { key: genUUID(), className: "propNumber" }, props.data)
+            return e("div", { key: props.data.name, className: "description" }, 
+                        e("div", { key: "data", className: "propNumber" }, props.data)
                     );
         }
         return Object.keys(props.data)
             .filter(prop => typeof props.data[prop] != 'object' && !Array.isArray(props.data[prop]))
-            .map(prop => e("div", { key: genUUID(), className: "description" }, [
-                e("div", { key: genUUID(), className: "propName" }, prop),
-                e("div", { key: genUUID(), className: prop }, props.data[prop])
+            .map(prop => e("div", { key: prop, className: "description" }, [
+                e("div", { key: "name", className: "propName" }, prop),
+                e("div", { key: "data", className: prop }, props.data[prop])
             ]));
     }
 }
@@ -1219,6 +2173,7 @@ class LiveEventPannel extends React.Component {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
         this.mounted=false;
+        this.state = {filters:{}};
     }
 
     componentDidMount() {
@@ -1230,13 +2185,37 @@ class LiveEventPannel extends React.Component {
     }
 
     ProcessEvent(evt) {
-        if (this.mounted){
-            var lastEvents = this.state?.lastEvents||[];
+        if (evt && this.mounted && this.isEventVisible(evt)) {
+            var lastEvents = (this.state?.lastEvents||[]).concat(evt);
             while (lastEvents.length > 100) {
                 lastEvents.shift();
             }
-            this.setState({lastEvents:lastEvents.concat(evt)});
+            this.setState({
+                filters: this.updateFilters(lastEvents),
+                lastEvents: lastEvents
+            });
         }
+    }
+
+    updateFilters(lastEvents) {
+        var curFilters = Object.entries(lastEvents
+            .filter(evt => evt && evt.eventBase && evt.eventId)
+            .reduce((ret, evt) => {
+                if (!ret[evt.eventBase]) {
+                    ret[evt.eventBase] = { visible: true, eventIds: [{ visible: true, eventId: evt.eventId }] };
+                } else if (!ret[evt.eventBase].eventIds.find(vevt => vevt.eventId === evt.eventId)) {
+                    ret[evt.eventBase].eventIds.push({ visible: true, eventId: evt.eventId });
+                }
+                return ret;
+            }, {}));
+        Object.values(curFilters).forEach(filter => {
+            if (!this.state.filters[filter[0]]) {
+                this.state.filters[filter[0]] = filter[1];
+            } else if (filter[1].eventIds.find(newEvt => !this.state.filters[filter[0]].eventIds.find(eventId => eventId.eventId === newEvt.eventId))) {
+                this.state.filters[filter[0]].eventIds = this.state.filters[filter[0]].eventIds.concat(filter[1].eventIds.filter(eventId => !this.state.filters[filter[0]].eventIds.find(eventId2 => eventId.eventId === eventId2.eventId)));
+            }
+        });
+        return this.state.filters;
     }
 
     parseEvent(event) {
@@ -1264,7 +2243,7 @@ class LiveEventPannel extends React.Component {
                 resolve({dataType:eventType.dataType,...event});
             } else {
                 var toControler = new AbortController();
-                const timer = setTimeout(() => toControler.abort(), 3000);
+                const timer = setTimeout(() => toControler.abort(), 8000);
                 wfetch(`${httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
                     method: 'post',
                     signal: toControler.signal
@@ -1286,13 +2265,76 @@ class LiveEventPannel extends React.Component {
         })
     }
 
+    updateEventIdFilter(eventId, enabled) {
+        eventId.visible = enabled;
+        this.setState({filters: this.state.filters});
+    }
+
+    updateEventBaseFilter(eventBase, enabled) {
+        eventBase.visible = enabled;
+        this.setState({filters: this.state.filters});
+    }
+
+    filterPanel() {
+        return e("div",{key: "filterPanel", className:"filterPanel"},[
+                e("div",{key:"filters",className:"filters"},[
+                    e("div",{ key: "label", className:"header"}, `Filters`),
+                    e("div",{key:"filterlist",className:"filterlist"},Object.entries(this.state.filters).map(this.renderFilter.bind(this)))
+                ]),
+                e("div", { key: "control", className:"control" }, [
+                    this.state?.lastEvents ? e("div",{ key: "label", className:"header"}, `${this.state.lastEvents.length}/${this.state.lastEvents.filter(this.isEventVisible.bind(this)).length} event${this.state?.lastEvents?.length?'s':''}`) : "No events",
+                    e("button",{ key: "clearbtn", onClick: elem => this.setState({lastEvents:[]})},"Clear")
+                ])
+               ]);
+    }
+
+    renderFilter(filter) {
+        return e('div', { key: filter[0], className: `filter ${filter[0]}` },
+            e("div",{key:"evbfiltered",className:"evbfiltered"},
+                e(MaterialUI.FormControlLabel,{
+                    key:"visible",
+                    className:"ebfiltered",
+                    label: filter[0],
+                    control:e(MaterialUI.Checkbox, {
+                        key: "ctrl",
+                        checked: filter[1].visible,
+                        onChange: event => this.updateEventIdFilter(filter[1], event.target.checked)
+                    })})
+            ),
+            e("div", { key: "filterList", className: `eventIds` }, filter[1].eventIds.map(eventId => e("div", { key: eventId.eventId, className: `filteritem ${eventId.eventId}` }, [
+                e("div",{key:"evifiltered",className:"evifiltered"},
+                    e(MaterialUI.FormControlLabel,{
+                        key:eventId.eventId,
+                        className:"eifiltered",
+                        label: eventId.eventId,
+                        control:e(MaterialUI.Checkbox, {
+                            key: "ctrl",
+                            checked: eventId.visible,
+                            onChange: event => this.updateEventIdFilter(eventId, event.target.checked),
+                        })}
+                    )
+                )
+            ]))));
+    }
+
+    isEventVisible(event) {
+        return event && ((Object.keys(this.state.filters).length === 0) || !this.state.filters[event.eventBase]?.eventIds?.some(eventId=> eventId.eventId === event.eventId)) || 
+               (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
+               Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
+                                                                  this.state.filters[eventBase].eventIds
+                                                                    .some(eventId=> eventId.eventId === event.eventId && eventId.visible)));
+    }
+
+    getFilteredEvents() {
+        return e("div", { key: "eventList", className: "eventList" }, 
+                this.state?.lastEvents?.filter(this.isEventVisible.bind(this))
+                           .map((event, idx) => e(LiveEvent, { key: idx, event: this.parseEvent(event) })).reverse());
+    }
+
     render() {
-        return  e("div", { key: genUUID() ,className: "eventPanel" }, [
-            e("div", { key: genUUID(), className:"control" }, [
-                e("div",{ key: genUUID()}, `${this.state?.lastEvents?.length || "Waiting on "} event${this.state?.lastEvents?.length?'s':''}`),
-                e("button",{ key: genUUID(), onClick: elem => this.setState({lastEvents:[]})},"Clear")
-            ]),
-            e("div",{ key: genUUID(), className:"eventList"},this.state?.lastEvents?.map(event => e(LiveEvent,{ key: genUUID(), event:this.parseEvent(event)})).reverse())
+        return  e("div", { key: "eventPanel" ,className: "eventPanel" }, [
+            this.filterPanel(),
+            this.getFilteredEvents()
         ])
 
     }
@@ -1313,7 +2355,7 @@ class EventsPage extends React.Component {
     getJsonConfig() {
         return new Promise((resolve, reject) => {
             if (window.location.hostname || httpPrefix){
-                const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
+                const timer = setTimeout(() => this.props.pageControler.abort(), 8000);
                 wfetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
                     method: 'post',
                     signal: this.props.pageControler.signal
@@ -1334,26 +2376,19 @@ class EventsPage extends React.Component {
     render() {
         if (this.state?.events){
             return [
-                e("div", { key: genUUID() ,className: "designer" },[
-                    e("details",{ key: genUUID() ,className: "configuredEvents", onClick:elem=>elem.target.parentElement.nextSibling.removeAttribute("open"), open:true}, [
-                        e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), 
-                        e("div",{key:genUUID(),className:"content"},
-                            this.state.events?.map(event => e(Event,{ key: genUUID(),...event})))
-                    ]),
-                    e("details",{ key: genUUID() ,className: "programs", onClick:elem=>elem.target.parentElement.previousSibling.removeAttribute("open")},[
-                        e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), 
-                        e("div",{key:genUUID(),className:"content"},
-                            this.state.programs?.map(program => e(Program,{ key: genUUID(),...program})))
-                    ])
-                ]),
-                e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
+                e(LiveEventPannel,{ key: "eventpannel",registerEventCallback:this.props.registerEventCallback})
             ];
         } else {
-            return e("div",{key: genUUID()},"Loading.....");
+            return e("div",{key: "loading"},"Loading.....");
         }
     }
 }
 class FirmwareUpdater extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {};
+    }
+
     UploadFirmware(form) {
         form.preventDefault();
         this.setState({ loaded: `Sending ${this.state.len} firmware bytes` })
@@ -1393,7 +2428,7 @@ class FirmwareUpdater extends React.Component {
             var reader = new FileReader();
             reader.onload = () => {
                 var res = reader.resultString || reader.result;
-                var md5 = CryptoJS.algo.MD5.create();
+                var md5 = CryptoJS.algo.SHA256.create();
                 md5.update(CryptoJS.enc.Latin1.parse(reader.result));
                 this.state.fwdata = new Uint8Array(this.state.firmware.size);
                 for (var i = 0; i < res.length; i++) {
@@ -1405,6 +2440,7 @@ class FirmwareUpdater extends React.Component {
                     fwdata: this.state.fwdata,
                     len: this.state.firmware.size
                 });
+                console.log(JSON.stringify(this.state.md5));
             };
             reader.onprogress = (evt) => this.setState({
                 loaded: `${((this.state.firmware.size * 1.0) / (evt.loaded * 1.0)) * 100.0}% loaded`
@@ -1473,16 +2509,16 @@ class Program extends React.Component {
     }
 
     getIcon() {
-        return e("svg", { key: genUUID(), xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64",onClick:elem=>this.setState({viewer:"trip"}) }, [
-            e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M17.993 56h20v6h-20zm-4.849-18.151c4.1 4.1 9.475 6.149 14.85 6.149 5.062 0 10.11-1.842 14.107-5.478l.035.035 1.414-1.414-.035-.035c7.496-8.241 7.289-20.996-.672-28.957A20.943 20.943 0 0 0 27.992 2a20.927 20.927 0 0 0-14.106 5.477l-.035-.035-1.414 1.414.035.035c-7.496 8.243-7.289 20.997.672 28.958zM27.992 4.001c5.076 0 9.848 1.976 13.437 5.563 7.17 7.17 7.379 18.678.671 26.129L15.299 8.892c3.493-3.149 7.954-4.891 12.693-4.891zm12.696 33.106c-3.493 3.149-7.954 4.892-12.694 4.892a18.876 18.876 0 0 1-13.435-5.563c-7.17-7.17-7.379-18.678-.671-26.129l26.8 26.8z" }),
-            e("path", { key: genUUID(), style: { fill: this.getIconColor() }, d: "M48.499 2.494l-2.828 2.828c4.722 4.721 7.322 10.999 7.322 17.678s-2.601 12.957-7.322 17.678S34.673 48 27.993 48s-12.957-2.601-17.678-7.322l-2.828 2.828C12.962 48.983 20.245 52 27.993 52s15.031-3.017 20.506-8.494c5.478-5.477 8.494-12.759 8.494-20.506S53.977 7.97 48.499 2.494z" })
+        return e("svg", { key: "svg", xmlns: "http://www.w3.org/2000/svg", viewBox: "0 0 64 64",onClick:elem=>this.setState({viewer:"trip"}) }, [
+            e("path", { key: "path1", style: { fill: this.getIconColor() }, d: "M17.993 56h20v6h-20zm-4.849-18.151c4.1 4.1 9.475 6.149 14.85 6.149 5.062 0 10.11-1.842 14.107-5.478l.035.035 1.414-1.414-.035-.035c7.496-8.241 7.289-20.996-.672-28.957A20.943 20.943 0 0 0 27.992 2a20.927 20.927 0 0 0-14.106 5.477l-.035-.035-1.414 1.414.035.035c-7.496 8.243-7.289 20.997.672 28.958zM27.992 4.001c5.076 0 9.848 1.976 13.437 5.563 7.17 7.17 7.379 18.678.671 26.129L15.299 8.892c3.493-3.149 7.954-4.891 12.693-4.891zm12.696 33.106c-3.493 3.149-7.954 4.892-12.694 4.892a18.876 18.876 0 0 1-13.435-5.563c-7.17-7.17-7.379-18.678-.671-26.129l26.8 26.8z" }),
+            e("path", { key: "path2", style: { fill: this.getIconColor() }, d: "M48.499 2.494l-2.828 2.828c4.722 4.721 7.322 10.999 7.322 17.678s-2.601 12.957-7.322 17.678S34.673 48 27.993 48s-12.957-2.601-17.678-7.322l-2.828 2.828C12.962 48.983 20.245 52 27.993 52s15.031-3.017 20.506-8.494c5.478-5.477 8.494-12.759 8.494-20.506S53.977 7.97 48.499 2.494z" })
         ]);
     }
 
     render() {
-        return e("div",{key:genUUID(),className:"rendered trip"},[
+        return e("div",{key:"renderedtrip",className:"rendered trip"},[
             this.getIcon(),
-            this.state?.viewer == "trip"?e(TripViewer,{key:genUUID(),points:this.props.points,cache:this.props.cache}):null
+            this.state?.viewer == "trip"?e(TripViewer,{key:"tripviewer",points:this.props.points,cache:this.props.cache,onClose:()=>this.setState({"viewer":""})}):null
         ]
         );
     }
@@ -1490,68 +2526,96 @@ class Program extends React.Component {
 class FileViewer extends React.Component {
     constructor(props) {
         super(props);
-        this.buildRenderers(0);
+        this.state = {
+            renderers: []
+        }
+    }
+
+    componentDidMount() {
+        if (this.props.registerFileWork) {
+            this.props.registerFileWork(this.buildRenderers(0));
+        }
     }
 
     buildRenderers(retryCount) {
-        if (this.props.name.endsWith(".csv") && !this.state?.renderes?.some("trip")){
-            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+        return new Promise((resolve, reject) => {
+            if (this.props.name.endsWith(".csv") && !this.state?.renderers?.some("trip")){
+                this.setState({renderers:[{name:"loading"}]});
+                this.parseCsv(resolve, retryCount, reject);
+            } else if (this.props.name.endsWith(".log") && !this.state?.renderers?.some("trip")){
+                this.setState({renderers:[{name:"loading"}]});
+                this.parseLog(resolve, retryCount, reject);
+            } else {
+                resolve();
+            }
+        });
+    }
+
+    parseLog(resolve, retryCount, reject) {
+        wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
             .then(resp => resp.text())
-            .then(content =>{
-                var cols=content.split(/\n|\r\n/)[0].split(",");
-                this.setState({
-                    renderes:[{
-                        name:"trip", 
-                        points:content.split(/\n|\r\n/)
-                                        .splice(1).map(ln => {
-                                            var ret={};
-                                        ln.split(",").forEach((it,idx) => ret[cols[idx]] = isNaN(it)?it:parseFloat(it));
-                                        return ret;
-                                        }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
-                    }]
-                })
-            }).catch(err =>{
-                if (retryCount++ < 3){
-                    this.buildRenderers(retryCount++);
+            .then(content => resolve(this.setState({
+                renderers: [{
+                    name: "trip",
+                    points: content.split("\n")
+                        .filter(ln => ln.match(/[ID] \([0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}\).* Location:.*/))
+                        .map(ln => ln.match(/[ID] \((?<timestamp>.*)\).*Location:\s*(?<latitude>[0-9.-]+),\s*(?<longitude>[0-9.-]+).*speed:\s*(?<speed>[0-9.]+).*altitude:\s*(?<altitude>[0-9.]+).*course:\s*(?<course>[0-9.]+).*bat:\s*(?<Battery>[0-9.]+)/i)?.groups)
+                        .filter(point => point)
+                        .map(point => {
+                            Object.keys(point).forEach(fld => point[fld] = isNaN(point[fld]) ? point[fld] : parseFloat(point[fld]));
+                            point.timestamp = `1970-01-01 ${point.timestamp}`;
+                            point.altitude *= 100;
+                            point.speed *= 100;
+                            return point;
+                        })
+                }]
+            }))
+            ).catch(err => {
+                if (retryCount++ < 3) {
+                    this.buildRenderers(retryCount);
+                } else {
+                    reject(err);
                 }
             });
-        }
-        if (this.props.name.endsWith(".log") && !this.state?.renderes?.some("trip")){
-            wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
-                .then(resp => resp.text())
-                .then(content =>this.setState({
-                            renderes:[{
-                                name:"trip", 
-                                points: content.split("\n")
-                                               .filter(ln => ln.match(/[ID] \([0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}\).* Location:.*/))
-                                               .map(ln => ln.match(/[ID] \((?<timestamp>.*)\).*Location:\s*(?<latitude>[0-9.-]+),\s*(?<longitude>[0-9.-]+).*speed:\s*(?<speed>[0-9.]+).*altitude:\s*(?<altitude>[0-9.]+).*course:\s*(?<course>[0-9.]+).*bat:\s*(?<Battery>[0-9.]+)/i)?.groups)
-                                               .filter(point => point)
-                                               .map(point => {
-                                                   Object.keys(point).forEach(fld => point[fld] = isNaN(point[fld]) ? point[fld] : parseFloat(point[fld]));
-                                                   point.timestamp = `1970-01-01 ${point.timestamp}`;
-                                                   point.altitude*=100;
-                                                   point.speed*=100;
-                                                   return point;
-                                                })
-                            }]
-                        })
-                    ).catch(err =>{
-                        if (retryCount++ < 3){
-                            this.buildRenderers(retryCount++);
-                        }
-                    });
+    }
+
+    parseCsv(resolve, retryCount, reject) {
+        wfetch(`${httpPrefix}${this.props.folder}/${this.props.name}`)
+            .then(resp => resp.text())
+            .then(content => {
+                var cols = content.split(/\n|\r\n/)[0].split(",");
+                resolve(this.setState({
+                    renderers: [{
+                        name: "trip",
+                        points: content.split(/\n|\r\n/)
+                            .splice(1).map(ln => {
+                                var ret = {};
+                                ln.split(",").forEach((it, idx) => ret[cols[idx]] = isNaN(it) ? it : parseFloat(it));
+                                return ret;
+                            }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
+                    }]
+                }));
+            }).catch(err => {
+                if (retryCount++ < 3) {
+                    this.buildRenderers(retryCount);
+                } else {
+                    reject(err);
                 }
+            });
     }
 
     getRenderers() {
-        if (!this.state?.renderes || !this.state.renderes.length) {
+        if (!this.state?.renderers || !this.state.renderers.length) {
             return null;
         }
-        return this.state.renderes.map(renderer => {
+        return this.state.renderers.map(renderer => {
             switch (renderer.name) {
                 case "trip":
-                    return renderer.points.length?e(TripWithin,{key:genUUID(),points:renderer.points,cache:this.props.cache}):null;
-            
+                    return renderer.points.length?e(TripWithin,{key:"tripwithin",points:renderer.points,cache:this.props.cache}):null;
+
+                case "loading":
+                    return e('i',{className: "rendered reportbtn fa fa-spinner", key: "graphbtn", })
+    
                 default:
                     return null;
             }
@@ -1559,21 +2623,21 @@ class FileViewer extends React.Component {
     }
 
     render() {
-        return [e("a", { key:genUUID(), href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]),this.getRenderers()];
+        return [e("a", { key:"filelink", href: `${httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]),this.getRenderers()];
     }
 }
 
 class SFile extends React.Component {
     render() {
-        return  e("tr", { key: genUUID(), className: this.props.file.ftype }, [
-            e("td", { key: genUUID() }, this.getLink(this.props.file)),
-            e("td", { key: genUUID() }, this.props.file.ftype != "file" ? "" : this.props.file.size),
-            e("td", { key: genUUID() }, this.getDeleteLink())]);
+        return  e("tr", { key: "tr", className: this.props.file.ftype }, [
+            e("td", { key: "link" }, this.getLink(this.props.file)),
+            e("td", { key: "size" }, this.props.file.ftype != "file" ? "" : this.props.file.size),
+            e("td", { key: "delete" }, this.getDeleteLink())]);
     }
 
     getDeleteLink() {
         return this.props.path == "/" || this.props.file.name == ".." ? null : e("a", {
-            key: genUUID(),
+            key: "delete",
             href: "#",
             onClick: () => {
                 wfetch(`${httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
@@ -1593,12 +2657,12 @@ class SFile extends React.Component {
     getLink(file) {
         if (file.ftype == "folder") {
             return e("a", {
-                key: genUUID(),
+                key: file.name,
                 href: "#",
                 onClick: () => this.props.onChangeFolder ? this.props.onChangeFolder(`${file.folder || "/"}${file.name == ".." ? "" : "/" + file.name}`.replaceAll("//", "/")):null
             }, file.name);
         } else {
-            return e(FileViewer,{cache:this.props.cache,key:genUUID(),...file});
+            return e(FileViewer,{key:file.name,cache:this.props.cache,registerFileWork:this.props.registerFileWork,...file});
         }
     }
 }
@@ -1609,9 +2673,10 @@ class StorageViewer extends React.Component {
         this.state = { 
             loaded: false, 
             path: "/", 
+            files: null,
             cache:{images:{}},
-            files: null };
-        this.id = this.props.id || genUUID();
+            fileWork: [] 
+        };
     }
 
     getSystemFolders() {
@@ -1626,36 +2691,32 @@ class StorageViewer extends React.Component {
     }
 
     GetFileStat(fileStatsToFetch) {
-        if (fileStatsToFetch.length) {
-            var fileToFetch = fileStatsToFetch.pop()
-            var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
-            wfetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
-                method: 'post',
-                signal: this.props.pageControler.signal
-            }).then(data => {
-                clearTimeout(quitItNow);
-                data.json().then(jdata => {
-                    fileToFetch.size = jdata.size;
-                    if (this.mounted)
-                        this.setState({ loaded: true, files: this.state.files, total: this.state?.total + jdata.size });
-                });
-                if (fileStatsToFetch.length && !this.props.pageControler.signal.aborted) {
-                    if (this.mounted)
-                        this.GetFileStat(fileStatsToFetch);
-                }        
-            }).catch(ex => {
-                clearTimeout(quitItNow);
-                console.err(ex);
+        if (this.mounted){
+            fileStatsToFetch.forEach(fileToFetch => {
+                this.registerFileWork(new Promise((resolve, reject) => {
+                    wfetch(`${httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
+                        method: 'post'
+                    }).then(data => {
+                        data.json().then(jdata => {
+                            fileToFetch.size = jdata.size;
+                            resolve(this.setState({ loaded: true, files: this.state.files, total: this.state?.total + jdata.size }));
+                        });
+                    }).catch(ex => {
+                        reject(ex);
+                    });
+                }));
             });
         }
     }
 
     fetchFiles() {
         if (window.location.host || httpPrefix){
-            var quitItNow = setTimeout(() => this.props.pageControler.abort(), 3000);
+            var abort = new AbortController();
+        
+            var quitItNow = setTimeout(() => abort.abort(), 8000);
             wfetch(`${httpPrefix}/files` + this.state.path, {
                 method: 'post',
-                signal: this.props.pageControler.signal
+                signal: abort.signal
             }).then(data => {
                 clearInterval(quitItNow);
                 data.json()
@@ -1708,32 +2769,37 @@ class StorageViewer extends React.Component {
                 }
 
     getTableHeader() {
-        return e("thead", { key: genUUID() }, e("tr", { key: genUUID() }, ["Name", "Size"].map(col => e("th", { key: genUUID(), onClick: this.SortTable.bind(this) }, col)).concat(e("th", { key: genUUID() }, "Op"))));
+        return e("thead", { key: "head" }, e("tr", { key: "row" }, ["Name", "Size"].map(col => e("th", { key: col, onClick: this.SortTable.bind(this) }, col)).concat(e("th", { key: "op" }, "Op"))));
+    }
+
+    registerFileWork(fn) {
+        this.setState({ fileWork: [...this.state.fileWork,fn] });
     }
 
     render() {
         if (!this.state?.files) {
-            return e("div", { key: genUUID() }, "Loading......");
+            return e("div", { key: "Loading" }, "Loading......");
         } else {
-            return e("div", { key: genUUID(), 
-                id: this.id, 
+            return e("div", { key: "Files", 
                 className: `file-table ${this.state.loaded?"":"loading"}` }, 
-                    e("table", { key: genUUID(), className: "greyGridTable" }, [
-                        e("caption", { key: genUUID() }, this.state.path),
+                    e("table", { key: "table", className: "greyGridTable" }, [
+                        e("caption", { key: "caption" }, this.state.path),
                         this.getTableHeader(),
-                        e("tbody", { key: genUUID() }, 
-                            this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => e(SFile,{ 
-                                key: genUUID(), 
-                                file:file, 
-                                path:this.state.path,
-                                cache:this.state.cache,
-                                onChangeFolder: (folder) => this.setState({path:folder}),
-                                OnDelete: ()=>this.fetchFiles()
-                            }))
+                        e("tbody", { key: "body" }, 
+                            this.getSystemFolders().concat(this.state.files).filter(file => file).map(file => 
+                                e(SFile,{ 
+                                    key: file.name, 
+                                    file:file, 
+                                    cache: this.state.cache,
+                                    path:this.state.path,
+                                    registerFileWork: this.registerFileWork.bind(this),
+                                    onChangeFolder: (folder) => this.setState({path:folder, files:[]}),
+                                    OnDelete: ()=>this.fetchFiles()
+                                }))
                             ),
-                        e("tfoot", { key: genUUID() }, e("tr", { key: genUUID() }, [
-                            e("td", { key: genUUID() }, "Total"), 
-                            e("td", { key: genUUID() }, this.state.total)
+                        e("tfoot", { key: "tfoot" }, e("tr", { key: "trow" }, [
+                            e("td", { key: "totallbl" }, "Total"), 
+                            e("td", { key: "total" }, this.state.total)
                         ]))
                     ]));
         }
@@ -1753,13 +2819,13 @@ class LogLine extends React.Component {
         var msg = this.props.logln.match(/^[^IDVEW]*(.+)/)[1];
         var lvl = msg.substr(0, 1);
         var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
-        var logLn = this.props.logln.substr(this.props.logln.indexOf(func) + func.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/.\[..\n$/g, "");
+        var logLn = this.props.logln.substr(this.props.logln.indexOf(func) + func.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/[^0-9a-zA-Z ]\[..\n.*/g, "");
 
-        return e("div", { key: genUUID() , className: `log LOG${lvl}` }, [
-            e("div", { key: genUUID(), ref: ref => this.logdiv = ref, className: "LOGLEVEL" }, lvl),
-            e("div", { key: genUUID(), className: "LOGDATE" }, msg.substr(3, 12)),
-            e("div", { key: genUUID(), className: "LOGFUNCTION" }, func),
-            e("div", { key: genUUID(), className: "LOGLINE" }, logLn)
+        return e("div", { key: "logLine" , className: `log LOG${lvl}` }, [
+            e("div", { key: "level", ref: ref => this.logdiv = ref, className: "LOGLEVEL" }, lvl),
+            e("div", { key: "date", className: "LOGDATE" }, msg.substr(3, 12)),
+            e("div", { key: "source", className: "LOGFUNCTION" }, func),
+            e("div", { key: "message", className: "LOGLINE" }, logLn)
         ]);
     }
 }
@@ -1767,26 +2833,127 @@ class LogLine extends React.Component {
 class LogLines extends React.Component {
     constructor(props) {
         super(props);
-        this.mounted=false;
-        this.state={logLines:[]};
-    }
-
-    componentDidMount() {
-        this.mounted=true;
-    }
-
-    AddLogLine(logln) {
-        if (this.mounted){
-            this.setState({ logLines: [...(this.state?.logLines||[]),logln]});
-        }
-    }
-
-    render() {
+        this.state={logLines:[],logLevels:{}};
         if (this.props.registerLogCallback) {
             this.props.registerLogCallback(this.AddLogLine.bind(this));
         }
-        return e("div", { key: genUUID(), className: "logContainer" },
-                    e("div", { key: genUUID(), className: "loglines" }, this.state?.logLines ? this.state.logLines.map(logln => e(LogLine,{ key: genUUID(), logln:logln})):null));
+    }
+
+    AddLogLine(logln) {
+        if (this.state.logLines.some(clogln => clogln === logln)) {
+            return;
+        }
+
+        var recIdx=-1;
+        var msg = logln.match(/^[^IDVEW]*(.+)/)[1];
+        var lvl = msg.substr(0, 1);
+        var ts = msg.substr(3, 12);
+        var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
+
+        if (this.state.logLines.some((clogln,idx) => {
+            var nmsg = clogln.match(/^[^IDVEW]*(.+)/)[1];
+            var nlvl = nmsg.substr(0, 1);
+            var nts = nmsg.substr(3, 12);
+            var nfunc = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
+            return nlvl == lvl && nts == ts && nfunc == func;
+        })) {
+            recIdx=this.state.logLines.length;
+        }
+        while (this.state.logLines.length > 500) {
+            this.state.logLines.shift();
+        }
+
+        if (this.state.logLevels[lvl] === undefined) {
+            this.state.logLevels[lvl] = {visible:true};
+        }
+
+        if (this.state.logLevels[lvl][func] === undefined) {
+            this.state.logLevels[lvl][func] = true;
+        }
+
+        if (recIdx >= 0) {
+            this.state.logLines[recIdx] = logln;
+        } else {
+            this.state.logLines= [...(this.state?.logLines||[]),logln];
+        }
+        this.setState(this.state);
+    }
+
+    renderLogFunctionFilter(lvl,func,logLines) {    
+        return e(MaterialUI.FormControlLabel,{
+            key:"ffiltered" + lvl + func,
+            className:"effiltered",
+            label: `${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") == func).length})`,
+            control:e(MaterialUI.Checkbox, {
+                key: "ctrl",
+                checked: this.state.logLevels[lvl][func],
+                onChange: event => {this.state.logLevels[lvl][func] = event.target.checked; this.setState(this.state);}
+            })});
+    }
+
+    renderLogLevelFilterControl(lvl,logLines) {   
+        return e(MaterialUI.FormControlLabel,{
+            key:"lfiltered" + lvl,
+            className:"elfiltered",
+            label: `Log Level ${lvl}(${logLines.length})`,
+            control:e(MaterialUI.Checkbox, {
+                key: "ctrl",
+                checked: this.state.logLevels[lvl].visible,
+                onChange: event => {this.state.logLevels[lvl].visible = event.target.checked; this.setState(this.state);}
+            })});
+    }
+
+    renderLogFunctionFilters(lvl, logLines) {
+        return Object.keys(this.state.logLevels[lvl])
+                     .filter(func => func !== "visible")
+                     .map(func => {
+            return this.renderLogFunctionFilter(lvl,func,logLines)
+        })
+    }
+
+    renderLogLevelFilter(lvl,logLines) {
+        return e("div", { key: "logLevelFilter" + lvl, className: "logLevelFilter" }, [
+            e("div", { key: "logLevelFilterTitle" + lvl, className: "logLevelFilterTitle" }, this.renderLogLevelFilterControl(lvl,logLines)), 
+            e("div", { key: "logLevelFilterContent" + lvl, className: "logLevelFilterContent" }, 
+                this.renderLogFunctionFilters(lvl, logLines))
+        ]);
+    }
+
+    renderLogLevelFilters() {
+        return Object.keys(this.state.logLevels).map(lvl => {
+            return this.renderLogLevelFilter(lvl,this.state.logLines.filter(logln => logln.match(/^[^IDVEW]*(.+)/)[1].substr(0, 1) == lvl))
+        })
+    }
+
+    renderFilterPannel() {
+        return e("div", { key: "filterPannel", className: "filterPannel" }, [
+            e("div", { key: "filterPannelTitle",className: "filterPannelTitle" }, "Filters"),
+            e("div", { key: "filterPannelContent",className: "filterPannelContent" }, this.renderLogLevelFilters())
+        ]);
+    }
+
+    renderControlPannel() {
+        return e("div", { key: "logControlPannel", className: "logControlPannel" }, [
+            e("button", { key: "clear", onClick: elem => this.setState({ logLines: [] }) }, "Clear Logs"),
+            this.renderFilterPannel()
+        ]);
+    }
+
+    isLogVisible(logLine) {
+        var msg = logLine.match(/^[^IDVEW]*(.+)/)[1];
+        var lvl = msg.substr(0, 1);
+        var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
+        if (this.state.logLevels[lvl].visible && this.state.logLevels[lvl][func]) {
+            return true;
+        }
+        return false;
+    }
+
+    render() {
+        return e("div", { key: "logContainer", className: "logContainer" },[
+            this.renderControlPannel(),
+            e("div", { key: "logLines", className: "loglines" }, this.state?.logLines ? this.state.logLines.filter(this.isLogVisible.bind(this)).map((logln,idx) => e(LogLine,{ key: idx, logln:logln})):null)            
+        ]);
     }
 }
 
@@ -1802,14 +2969,11 @@ class SystemPage extends React.Component {
 
     render() {
         return [
-            e("div", { key: genUUID(), className: "logpannel" }, [
-                e("button", { key: genUUID(), onClick: elem => this.setState({ logLines: [] }) }, "Clear Logs"),
-                e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'reboot' }) }, "Reboot"),
-                e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'parseFiles' }) }, "Parse Files"),
-                e("button", { key: genUUID(), onClick: elem => this.SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
-                e(FirmwareUpdater, { key: genUUID() })
+            e("div", { key: "logpannel", className: "logpannel" }, [
+                e("button", { key: "reboot", onClick: elem => this.SendCommand({ 'command': 'reboot' }) }, "Reboot"),
+                e("button", { key: "factoryReset", onClick: elem => this.SendCommand({ 'command': 'factoryReset' }) }, "Factory Reset"),
+                e(FirmwareUpdater, { key: "firmwareUpdater" })
             ]),
-            e(LogLines, { key: genUUID(), registerLogCallback:this.props.registerLogCallback })
         ];
     }
 }
@@ -1818,164 +2982,230 @@ class TripViewer extends React.Component {
         super(props);
         this.state={
             cache:this.props.cache,
-            zoomlevel:15
+            zoomlevel:15,
+            latitude:0,
+            longitude:0
         };
+        this.testing = false;
     }
+
     componentDidMount() {
-        this.mounted=true;
-        this.needsRefresh=true;
-        this.canvas = this.widget.getContext("2d");                    
-        this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
         this.getTripTiles();
-        window.requestAnimationFrame(this.drawMap.bind(this));
+        this.firstRender = true;
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        this.canvas = this.widget.getContext("2d");                    
-        this.widget.addEventListener("mousemove", this.mouseEvent.bind(this));
-        this.getTripTiles();
-        this.needsRefresh=true;
+        if (!prevProps.points || !prevProps.points.length || !prevProps.points.length || prevProps.points.length != this.props.points.length){
+            this.firstRender=true;
+        }
+        this.mapCanvas = this.mapWidget.getContext("2d");                    
+        this.tripCanvas = this.tripWidget.getContext("2d");                    
+        this.popupCanvas = this.popupWidget.getContext("2d");                    
+        this.popupWidget.addEventListener("mousemove", this.mouseEvent.bind(this));
+        window.requestAnimationFrame(this.drawMap.bind(this));
     }
 
     drawMap() {
-        if (this.needsRefresh){
-            this.needsRefresh=false;
-            if (!this.mounted || !this.widget || !this.props.points || !this.props.points.length){
-                return;
-            } else {
-                this.drawTripTiles()
-                    .then(this.drawTrip.bind(this))
-                    .then(this.drawPointPopup.bind(this))
-                    .then(ret=>window.requestAnimationFrame(this.drawMap.bind(this)))
-                    .catch(err => {
-                        console.error(err);
-                        window.requestAnimationFrame(this.drawMap.bind(this));
-                    });
-            }
+        if (!this.mapWidget || !this.props.points || !this.props.points.length || this.state.closed){
+            return;
         } else {
-            window.requestAnimationFrame(this.drawMap.bind(this));
+            this.drawTripVisibleTiles();
+            this.drawTrip();
+            this.drawPointPopup();
         }
     }
    
     getTripTiles() {
-        var points = this.props.points.map(this.pointToCartesian.bind(this));
-        this.tiles= {
-            points:points,
-            trip:{
-                leftTile: points.reduce((a,b)=>a<b.tileX?a:b.tileX,99999),
-                rightTile: points.reduce((a,b)=>a>b.tileX?a:b.tileX,0),
-                bottomTile: points.reduce((a,b)=>a<b.tileY?a:b.tileY,99999),
-                topTile: points.reduce((a,b)=>a>b.tileY?a:b.tileY,0)
-            },
-            maxXTiles: Math.ceil(window.innerWidth/256)+1,
-            maxYTiles: Math.ceil(window.innerHeight/256)+1
-        }
-        this.tiles.trip.XTiles = this.tiles.trip.rightTile-this.tiles.trip.leftTile+1;
-        this.tiles.trip.YTiles = this.tiles.trip.bottomTile-this.tiles.trip.bottomTile+1;
-        this.tiles.margin = {
-            left: this.tiles.maxXTiles>this.tiles.trip.XTiles?Math.floor((this.tiles.maxXTiles-this.tiles.trip.XTiles)/2):0,
-            bottom: this.tiles.maxYTiles>this.tiles.trip.YTiles?Math.floor((this.tiles.maxYTiles-this.tiles.trip.YTiles)/2):0
+        var lastPoint=undefined;
+        this.state.points=this.props.points.map(this.pointToCartesian.bind(this))
+                              .filter(point => point.latitude && point.longitude)
+                              .filter(point => point.latitude > -90 && point.latitude < 90)
+                              .filter(point => point.longitude > -180 && point.longitude < 180)
+                              .filter(point => {
+                                  if (lastPoint === undefined) {
+                                      lastPoint = point;
+                                      return true;
+                                  }
+                                  if (Math.abs(lastPoint.longitude - point.longitude) > 1.0) {
+                                      return false;
+                                  }
+                                  lastPoint = point;
+                                  return true;
+                              });
+        this.state.trip={
+                leftTile: this.state.points.reduce((a,b)=>a<b.tileX?a:b.tileX,99999),
+                rightTile: this.state.points.reduce((a,b)=>a>b.tileX?a:b.tileX,-99999),
+                bottomTile: this.state.points.reduce((a,b)=>a<b.tileY?a:b.tileY,99999),
+                topTile: this.state.points.reduce((a,b)=>a>b.tileY?a:b.tileY,-99999)
         };
-        this.tiles.margin.right=this.tiles.maxXTiles>this.tiles.trip.XTiles?this.tiles.maxXTiles-this.tiles.trip.XTiles-this.tiles.margin.left:0;
-        this.tiles.margin.top= this.tiles.maxYTiles>this.tiles.trip.YTiles?this.tiles.maxYTiles-this.tiles.trip.YTiles-this.tiles.margin.bottom:0;
-        this.tiles.leftTile=Math.max(0,this.tiles.trip.leftTile-this.tiles.margin.left);
-        this.tiles.rightTile=this.tiles.trip.rightTile+this.tiles.margin.right;
-        this.tiles.bottomTile=Math.max(0,this.tiles.trip.bottomTile-this.tiles.margin.bottom);
-        this.tiles.topTile=this.tiles.trip.topTile + this.tiles.margin.top;
-    }
-
-    drawTripTiles() {
-        this.widget.width=(this.tiles.rightTile-this.tiles.leftTile)*256;
-        this.widget.height=(this.tiles.topTile-this.tiles.bottomTile)*256;
-        this.canvas.fillStyle = "black";
-        this.canvas.fillRect(0,0,window.innerWidth,window.innerHeight);
-        var tiles=[];
-        for (var tileX = this.tiles.leftTile; tileX <= this.tiles.rightTile; tileX++) {
-            for (var tileY = this.tiles.bottomTile; tileY <= this.tiles.topTile; tileY++) {
-                tiles.unshift({tileX:tileX, tileY:tileY});
+        this.state.maxXTiles= Math.ceil(window.innerWidth/256)+1;
+        this.state.maxYTiles= Math.ceil(window.innerHeight/256)+1;
+        this.state.trip.XTiles = this.state.trip.rightTile-this.state.trip.leftTile+1;
+        this.state.trip.YTiles = this.state.trip.topTile-this.state.trip.bottomTile+1;
+        this.state.margin = {
+            left: this.state.maxXTiles>this.state.trip.XTiles?Math.floor((this.state.maxXTiles-this.state.trip.XTiles)/2):0,
+            bottom: this.state.maxYTiles>this.state.trip.YTiles?Math.floor((this.state.maxYTiles-this.state.trip.YTiles)/2):0
+        };
+        this.state.margin.right=this.state.maxXTiles>this.state.trip.XTiles?this.state.maxXTiles-this.state.trip.XTiles-this.state.margin.left:0;
+        this.state.margin.top= this.state.maxYTiles>this.state.trip.YTiles?this.state.maxYTiles-this.state.trip.YTiles-this.state.margin.bottom:0;
+        this.state.leftTile=Math.max(0,this.state.trip.leftTile-this.state.margin.left);
+        this.state.rightTile=this.state.trip.rightTile+this.state.margin.right;
+        this.state.bottomTile=Math.max(0,this.state.trip.bottomTile-this.state.margin.bottom);
+        this.state.topTile=this.state.trip.topTile + this.state.margin.top;
+        this.state.leftlatitude = this.state.points.reduce((a,b)=>a<b.latitude?a:b.latitude,99999);
+        this.state.rightlatitude = this.state.points.reduce((a,b)=>a>b.latitude?a:b.latitude,-99999);
+        this.state.toplongitude = this.state.points.reduce((a,b)=>a<b.longitude?a:b.longitude,99999);
+        this.state.bottomlongitude = this.state.points.reduce((a,b)=>a>b.longitude?a:b.longitude,-99999);
+        this.state.latitude= this.state.leftlatitude+(this.state.rightlatitude-this.state.leftlatitude)/2;
+        this.state.longitude= this.state.toplongitude+(this.state.bottomlongitude-this.state.toplongitude)/2;
+        this.state.windowTiles = {
+            center: {
+                tileX: this.lon2tile(this.state.longitude, this.state.zoomlevel),
+                tileY: this.lat2tile(this.state.latitude, this.state.zoomlevel),
             }
         }
-        return Promise.all(Array.from(Array(Math.min(3,tiles.length)).keys()).map(unused => this.drawTile(tiles)));
+        this.state.windowTiles.leftTile = this.state.windowTiles.center.tileX - Math.floor(this.state.maxXTiles/2);
+        this.state.windowTiles.rightTile = this.state.windowTiles.center.tileX + Math.floor(this.state.maxXTiles/2);
+        this.state.windowTiles.bottomTile = this.state.windowTiles.center.tileY - Math.floor(this.state.maxYTiles/2);
+        this.state.windowTiles.topTile = this.state.windowTiles.center.tileY + Math.floor(this.state.maxYTiles/2);
+        this.state.windowTiles.XTiles = this.state.windowTiles.rightTile-this.state.windowTiles.leftTile+1;
+        this.state.windowTiles.YTiles = this.state.windowTiles.topTile-this.state.windowTiles.bottomTile+1;
+        this.setState(this.state);
+    }
+
+    drawTripVisibleTiles() {
+        return new Promise(async (resolve,reject)=>{
+            this.popupWidget.width=(this.state.rightTile-this.state.leftTile)*256;
+            this.popupWidget.height=(this.state.topTile-this.state.bottomTile)*256;
+            this.mapWidget.width=(this.state.rightTile-this.state.leftTile)*256;
+            this.mapWidget.height=(this.state.topTile-this.state.bottomTile)*256;
+            this.tripWidget.width=(this.state.rightTile-this.state.leftTile)*256;
+            this.tripWidget.height=(this.state.topTile-this.state.bottomTile)*256;
+
+            this.mapCanvas.fillStyle = "black";
+            this.mapCanvas.fillRect(0,0,window.innerWidth,window.innerHeight);
+            var wasFirstRender=this.firstRender;
+            
+            if (this.firstRender) {
+                this.firstRender=false;
+                const elementRect = this.mapWidget.getBoundingClientRect();
+                this.mapWidget.parentElement.scrollTo((elementRect.width/2)-512, (elementRect.height/2)-256);
+            }
+
+            for (var tileX = this.state.windowTiles.leftTile; tileX <= this.state.windowTiles.rightTile; tileX++) {
+                for (var tileY = this.state.windowTiles.bottomTile; tileY <= this.state.windowTiles.topTile; tileY++) {
+                    if (!this.props.cache.images[this.state.zoomlevel] ||
+                        !this.props.cache.images[this.state.zoomlevel][tileX] || 
+                        !this.props.cache.images[this.state.zoomlevel][tileX][tileY]){
+                        await this.addTileToCache(tileX, tileY).catch(reject);
+                    } else {
+                        await this.getTileFromCache(tileX, tileY).catch(reject);
+                    }        
+                }
+            }
+            if (wasFirstRender) {
+                new Promise((resolve,reject)=>{
+                    for (var tileX = this.state.trip.leftTile; tileX <= this.state.trip.rightTile; tileX++) {
+                        for (var tileY = this.state.trip.bottomTile; tileY <= this.state.trip.topTile; tileY++) {
+                            if (!this.props.cache.images[this.state.zoomlevel] ||
+                                !this.props.cache.images[this.state.zoomlevel][tileX] || 
+                                !this.props.cache.images[this.state.zoomlevel][tileX][tileY]){
+                                this.addTileToCache(tileX, tileY).catch(reject);
+                            }        
+                        }
+                    }
+                    resolve();
+                });
+            }
+            resolve();
+        });
     }
 
     drawPointPopup(){
         if (this.focused) {
-            this.canvas.font = "12px Helvetica";
-            var txtSz = this.canvas.measureText(new Date(`${this.focused.timestamp} UTC`).toLocaleString());
+            this.popupCanvas.clearRect(0,0,this.popupWidget.width,this.popupWidget.height);
+            this.popupCanvas.fillStyle = "transparent";
+            this.popupCanvas.fillRect(0,0,window.innerWidth,window.innerHeight);
+    
+            this.popupCanvas.font = "12px Helvetica";
+            var txtSz = this.popupCanvas.measureText(new Date(`${this.focused.timestamp} UTC`).toLocaleString());
             var props =  Object.keys(this.focused)
                                .filter(prop => prop != "timestamp" && !prop.match(/.*tile.*/i));
 
             var boxHeight=50 + (9*props.length);
             var boxWidth=txtSz.width+10;
-            this.canvas.strokeStyle = 'green';
-            this.canvas.shadowColor = '#00ffff';
-            this.canvas.fillStyle = "#000000";
-            this.canvas.lineWidth = 1;
-            this.canvas.shadowBlur = 2;
-            this.canvas.beginPath();
-            this.canvas.rect(this.getClientX(this.focused),this.getClientY(this.focused)-boxHeight,boxWidth,boxHeight);
-            this.canvas.fill();
-            this.canvas.stroke();
+            this.popupCanvas.strokeStyle = 'green';
+            this.popupCanvas.shadowColor = '#00ffff';
+            this.popupCanvas.fillStyle = "#000000";
+            this.popupCanvas.lineWidth = 1;
+            this.popupCanvas.shadowBlur = 2;
+            this.popupCanvas.beginPath();
+            this.popupCanvas.rect(this.getClientX(this.focused),this.getClientY(this.focused)-boxHeight,boxWidth,boxHeight);
+            this.popupCanvas.fill();
+            this.popupCanvas.stroke();
 
-            this.canvas.fillStyle = 'rgba(00, 0, 0, 1)';
-            this.canvas.strokeStyle = '#000000';
+            this.popupCanvas.fillStyle = 'rgba(00, 0, 0, 1)';
+            this.popupCanvas.strokeStyle = '#000000';
 
-            this.canvas.beginPath();
+            this.popupCanvas.beginPath();
             var ypos = this.getClientY(this.focused)-boxHeight+txtSz.actualBoundingBoxAscent+3;
             var xpos = this.getClientX(this.focused)+3;
 
-            this.canvas.strokeStyle = '#97ea44';
-            this.canvas.shadowColor = '#ffffff';
-            this.canvas.fillStyle = "#97ea44";
-            this.canvas.lineWidth = 1;
-            this.canvas.shadowBlur = 2;
-            this.canvas.fillText(new Date(`${this.focused.timestamp} UTC`).toLocaleString(),xpos,ypos);
+            this.popupCanvas.strokeStyle = '#97ea44';
+            this.popupCanvas.shadowColor = '#ffffff';
+            this.popupCanvas.fillStyle = "#97ea44";
+            this.popupCanvas.lineWidth = 1;
+            this.popupCanvas.shadowBlur = 2;
+            this.popupCanvas.fillText(new Date(`${this.focused.timestamp} UTC`).toLocaleString(),xpos,ypos);
             ypos+=5;
 
             ypos+=txtSz.actualBoundingBoxAscent+3;
             props.forEach(prop => {
                 var propVal = this.getPropValue(prop,this.focused[prop]);
-                this.canvas.strokeStyle = 'aquamarine';
-                this.canvas.shadowColor = '#ffffff';
-                this.canvas.fillStyle = "aquamarine";
-                this.canvas.fillText(`${prop}: `,xpos,ypos);
-                txtSz = this.canvas.measureText(propVal);
-                this.canvas.strokeStyle = '#97ea44';
-                this.canvas.shadowColor = '#ffffff';
-                this.canvas.fillStyle = "#97ea44";
-                this.canvas.fillText(propVal,(xpos+(boxWidth-txtSz.width)-5),ypos);
+                this.popupCanvas.strokeStyle = 'aquamarine';
+                this.popupCanvas.shadowColor = '#ffffff';
+                this.popupCanvas.fillStyle = "aquamarine";
+                this.popupCanvas.fillText(`${prop}: `,xpos,ypos);
+                txtSz = this.popupCanvas.measureText(propVal);
+                this.popupCanvas.strokeStyle = '#97ea44';
+                this.popupCanvas.shadowColor = '#ffffff';
+                this.popupCanvas.fillStyle = "#97ea44";
+                this.popupCanvas.fillText(propVal,(xpos+(boxWidth-txtSz.width)-5),ypos);
                 ypos+=txtSz.actualBoundingBoxAscent+3;
             });
 
-            this.canvas.stroke();
+            this.popupCanvas.stroke();
         }
     }
 
     drawTrip() {
         return new Promise((resolve,reject)=>{
-            var firstPoint = this.tiles.points[0];
+            var firstPoint = this.state.points[0];
             if (firstPoint){
-                this.canvas.strokeStyle = '#00ffff';
-                this.canvas.shadowColor = '#00ffff';
-                this.canvas.fillStyle = "#00ffff";
-                this.canvas.lineWidth = 2;
-                this.canvas.shadowBlur = 2;
+                this.tripCanvas.fillStyle = "transparent";
+                this.tripCanvas.fillRect(0,0,window.innerWidth,window.innerHeight);
+    
+                this.tripCanvas.strokeStyle = '#00ffff';
+                this.tripCanvas.shadowColor = '#00ffff';
+                this.tripCanvas.fillStyle = "#00ffff";
+                this.tripCanvas.lineWidth = 2;
+                this.tripCanvas.shadowBlur = 2;
         
-                this.canvas.beginPath();
-                this.canvas.moveTo(this.getClientX(firstPoint), this.getClientY(firstPoint));
-                this.tiles.points.forEach(point => {
-                    this.canvas.lineTo(this.getClientX(point), this.getClientY(point));
+                this.tripCanvas.beginPath();
+                this.tripCanvas.moveTo(this.getClientX(firstPoint), this.getClientY(firstPoint));
+                this.state.points.forEach(point => {
+                    this.tripCanvas.lineTo(this.getClientX(point), this.getClientY(point));
                 });
-                this.canvas.stroke();
-                this.canvas.strokeStyle = '#0000ff';
-                this.canvas.shadowColor = '#0000ff';
-                this.canvas.fillStyle = "#0000ff";
-                this.tiles.points.forEach(point => {
-                    this.canvas.beginPath();
-                    this.canvas.arc(((point.tileX - this.tiles.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - this.tiles.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
-                    this.canvas.stroke();
+                this.tripCanvas.stroke();
+                this.tripCanvas.strokeStyle = '#0000ff';
+                this.tripCanvas.shadowColor = '#0000ff';
+                this.tripCanvas.fillStyle = "#0000ff";
+                this.state.points.forEach(point => {
+                    this.tripCanvas.beginPath();
+                    this.tripCanvas.arc(((point.tileX - this.state.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - this.state.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
+                    this.tripCanvas.stroke();
                 });
-                resolve(this.tiles);
+                resolve(this.state);
             } else {
                 reject({error:"no points"});
             }
@@ -1984,13 +3214,15 @@ class TripViewer extends React.Component {
 
     mouseEvent(event) {
         var margin = 10;
-        var focused = this.tiles.points.find(point => 
+        var focused = this.state.points.find(point => 
             (this.getClientX(point) >= (event.offsetX - margin)) &&
             (this.getClientX(point) <= (event.offsetX + margin)) &&
             (this.getClientY(point) >= (event.offsetY - margin)) &&
             (this.getClientY(point) <= (event.offsetY + margin)));
-        this.needsRefresh = focused != this.focused;
-        this.focused=focused;
+        if (focused != this.focused){
+            this.focused=focused;
+            window.requestAnimationFrame(this.drawPointPopup.bind(this));
+        }
     }
 
     getPropValue(name,val) {
@@ -2006,52 +3238,36 @@ class TripViewer extends React.Component {
         return Math.round(val);
     }
 
-    drawTile(tiles) {
+    addTileToCache(tileX,tileY) {
         return new Promise((resolve,reject) => {
-            var curTile = tiles.pop();
-            if (curTile){
-                if (!this.state.cache.images[this.state.zoomlevel] ||
-                    !this.state.cache.images[this.state.zoomlevel][curTile.tileX] || 
-                    !this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]){
-                    this.getTile(curTile.tileX,curTile.tileY,0)
-                        .then(imgData => {
-                            var tileImage = new Image();
-                            tileImage.posX = curTile.tileX - this.tiles.leftTile;
-                            tileImage.posY = curTile.tileY - this.tiles.bottomTile;
-                            tileImage.src = (window.URL || window.webkitURL).createObjectURL(imgData);
-                            if (!this.state.cache.images[this.state.zoomlevel]) {
-                                this.state.cache.images[this.state.zoomlevel]={};
-                            } 
-                            if (!this.state.cache.images[this.state.zoomlevel][curTile.tileX]) {
-                                this.state.cache.images[this.state.zoomlevel][curTile.tileX]={};
-                            } 
-                            this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]=tileImage;
-
-                            tileImage.onload = (elem) => {
-                                this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
-                                if (tiles.length) {
-                                    resolve(this.drawTile(tiles));
-                                } else {
-                                    resolve({});
-                                }
-                            };
-                        }).catch(reject);
-                } else {
-                    var tileImage = this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY];
-                    try {
-                        this.canvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height);
-                        if (tiles.length) {
-                            resolve(this.drawTile(tiles));
-                        } else {
-                            resolve({});
-                        }
-                    } catch (err) {
-                        this.state.cache.images[this.state.zoomlevel][curTile.tileX][curTile.tileY]=null;
-                        resolve(this.drawTile(tiles));
-                    }
+            this.getTile(tileX, tileY, 0).then(imgData => {
+                var tileImage = new Image();
+                tileImage.posX = tileX - this.state.leftTile;
+                tileImage.posY = tileY - this.state.bottomTile;
+                tileImage.src = (window.URL || window.webkitURL).createObjectURL(imgData);
+                if (!this.props.cache.images[this.state.zoomlevel]) {
+                    this.props.cache.images[this.state.zoomlevel] = {};
                 }
-            } else {
-                resolve({});
+                if (!this.props.cache.images[this.state.zoomlevel][tileX]) {
+                    this.props.cache.images[this.state.zoomlevel][tileX] = {};
+                }
+                this.props.cache.images[this.state.zoomlevel][tileX][tileY] = tileImage;
+
+                tileImage.onload = (elem) => {
+                    resolve(this.mapCanvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height));
+                };
+            }).catch(reject);
+        });
+    }
+
+    getTileFromCache(tileX,tileY) {
+        return new Promise((resolve,reject) => {
+            var tileImage = this.props.cache.images[this.state.zoomlevel][tileX][tileY];
+            try {
+                resolve(this.mapCanvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height));
+            } catch (err) {
+                this.props.cache.images[this.state.zoomlevel][tileX][tileY] = null;
+                reject(err);
             }
         });
     }
@@ -2064,20 +3280,28 @@ class TripViewer extends React.Component {
                 .then(imgData => wfetch(`${httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
                     method: 'put',
                     body: (newImg=imgData)
-                }).then(resolve(newImg)))
+                }).then(resolve(newImg)).catch(resolve(newImg)))
                   .catch(reject);
+        })
+    }
+
+    drawWatermark(tileX,tileY) {
+        return new Promise((resolve,reject) => {
+            return this.mapWidget.toBlob(resolve);
         })
     }
 
     getTile(tileX,tileY, retryCount) {
         return new Promise((resolve,reject)=>{
+            if (this.testing) {
+                return resolve(this.drawWatermark(tileX,tileY));
+            }
             wfetch(`${httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
                 .then(resp => resolve(resp.status >= 300? this.downloadTile(tileX,tileY):resp.blob()))
                 .catch(err => {
                     if (retryCount > 3) {
                         reject({error:`Error in downloading ${this.state.zoomlevel}/${tileX}/${tileY}`});
                     } else {
-                        console.log(`retrying ${this.state.zoomlevel}/${tileX}/${tileY}`);
                         resolve(this.getTile(tileX,tileY,retryCount++));
                     }
                 });
@@ -2085,11 +3309,11 @@ class TripViewer extends React.Component {
     }
 
     getClientY(firstPoint) {
-        return ((firstPoint.tileY - this.tiles.bottomTile) * 256) + (256 * firstPoint.posTileY);
+        return ((firstPoint.tileY - this.state.bottomTile) * 256) + (256 * firstPoint.posTileY);
     }
 
     getClientX(firstPoint) {
-        return ((firstPoint.tileX - this.tiles.leftTile) * 256) + (256 * firstPoint.posTileX);
+        return ((firstPoint.tileX - this.state.leftTile) * 256) + (256 * firstPoint.posTileX);
     }
 
     lon2tile(lon) { 
@@ -2129,87 +3353,50 @@ class TripViewer extends React.Component {
 
     closeIt(){
         this.setState({closed:true});
+        if (this.props.onClose) {
+            this.props.onClose();
+        }
     }
 
     render(){
-        return e("div",{key:genUUID(),className:`lightbox ${this.state?.closed?"closed":"opened"}`},[
-            e("div",{key:genUUID()},[
-                e("div",{key:genUUID(),className:"tripHeader"},[
+        return e("div",{key:"trip",className:`lightbox ${this.state?.closed?"closed":"opened"}`},[
+            e("div",{key:"control"},[
+                e("div",{key:"tripHeader",className:"tripHeader"},[
                     `Trip with ${this.props.points.length} points`,
-                    e("br",{key:genUUID()}),
+                    e("br",{key:"daterange"}),
                     `From ${new Date(`${this.props.points[0].timestamp} UTC`).toLocaleString()} `,
                     `To ${new Date(`${this.props.points[this.props.points.length-1].timestamp} UTC`).toLocaleString()} Zoom:`,
                     e("select",{
-                        key:genUUID(),
+                        key:"zoom",
                         onChange: elem=>this.setState({zoomlevel:elem.target.value}),
                         value: this.state.zoomlevel
                     },
-                        Array.from(Array(18).keys()).map(zoom => e("option",{key:genUUID()},zoom+1))
+                        Array.from(Array(18).keys()).map(zoom => e("option",{key:zoom},zoom+1))
                     )
                 ]),
-                e("span",{key:genUUID(),className:"close",onClick:this.closeIt.bind(this)},"X")
+                e("span",{key:"close",className:"close",onClick:this.closeIt.bind(this)},"X")
             ]),
-            e("div",{key:genUUID(),className:"trip"},e("canvas",{
-                key:genUUID(),
-                ref: (elem) => this.widget = elem
-            }))
+            e("div",{key:"map",className:"trip"},[
+                e("canvas",{
+                    key:"mapWidget",
+                    className:"mapCanvas",
+                    ref: (elem) => this.mapWidget = elem
+                }),
+                e("canvas",{
+                    key:"tripWidget",
+                    className:"mapCanvas",
+                    ref: (elem) => this.tripWidget = elem
+                }),
+                e("canvas",{
+                    key:"popupWidget",
+                    className:"mapCanvas",
+                    ref: (elem) => this.popupWidget = elem
+                })
+            ])
         ]);
     }
 }
 var app=null;
-
-function wfetch(requestInfo, params) {
-  return new Promise((resolve,reject) => {
-    var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "browser");
-    var inSpot = getInSpot(anims, "browser");
-    var reqAnim = inSpot;
-
-    if (inSpot) {
-      inSpot.weight++;
-    } else {
-      app.anims.push((reqAnim={
-          type:"post",
-          from: "browser",
-          weight: 1,
-          lineColor: '#00ffff',
-          shadowColor: '#00ffff',
-          startY: 5,
-          renderer: app.drawSprite
-      }));
-    }
-
-    try{
-      fetch(requestInfo,params).then(resp => {
-        var anims = app.anims.filter(anim => anim.type == "post" && anim.from == "chip");
-        var inSpot = getInSpot(anims, "chip");
-  
-        if (inSpot) {
-          inSpot.weight++;
-        } else {
-          app.anims.push({
-              type:"post",
-              from: "chip",
-              weight: 1,
-              lineColor: '#00ffff',
-              shadowColor: '#00ffff',
-              startY: 25,
-              renderer: app.drawSprite
-          });
-        }
-        resolve(resp);
-      })
-      .catch(err => {
-        reqAnim.color="red";
-        reqAnim.lineColor="red";
-        reject(err);
-      });
-    } catch(e) {
-      reqAnim.color="red";
-      reqAnim.lineColor="red";
-      reject(err);
-    }
-  })
-}
 
 class MainApp extends React.Component {
   constructor(props) {
@@ -2224,11 +3411,14 @@ class MainApp extends React.Component {
         Storage: {active: true}, 
         Status:  {active: false}, 
         Config:  {active: false}, 
+        System:  {active: false},
         Logs:    {active: false},
         Events:  {active: false}
         },
         autoRefresh: (httpPrefix||window.location.hostname) ? true : false
       };
+    this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
+
     if (!httpPrefix && !window.location.hostname){
       this.lookForDevs();
     }
@@ -2237,10 +3427,6 @@ class MainApp extends React.Component {
     }
   }
   
-  componentDidUpdate(prevProps, prevState, snapshot) {
-    //this.mountWidget();
-  }
-
   componentDidMount() {
     app=this;
     this.mountWidget();
@@ -2253,16 +3439,62 @@ class MainApp extends React.Component {
 
 //#region Control Pannel
   lookForDevs() {
-    this.state.lanDevices = [];
-    for (var idx = 254; idx > 0; idx--) {
-      this.state.lanDevices.push(`192.168.1.${idx}`);
-    }
-    this.state.lanDevices=this.state.lanDevices.sort( () => .5 - Math.random() );
-    var foundDevices=[];
-    for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
-        if (this.state.lanDevices.length) {
-            this.scanForDevices(this.state.lanDevices,foundDevices);
+    var RTCPeerConnection = /*window.RTCPeerConnection ||*/ window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+    if (RTCPeerConnection)(() => {  
+      var rtc = new RTCPeerConnection({  
+          iceServers: []  
+      });  
+      if (1 || window.mozRTCPeerConnection) {  
+          rtc.createDataChannel('', {  
+              reliable: false  
+          });  
+      };  
+      rtc.onicecandidate = (evt) => {  
+          if (evt.candidate) parseLine.bind(this)("a=" + evt.candidate.candidate);  
+      };  
+      rtc.createOffer(function (offerDesc) {  
+        offerDesc.sdp.split('\r\n').forEach(parseLine.bind(this));
+        rtc.setLocalDescription(offerDesc);  
+      }.bind(this),(e) => {  
+          console.warn("offer failed", e);  
+      });  
+      var addrs = Object.create(null);  
+      addrs["0.0.0.0"] = false;  
+
+      function parseLine(line) {
+        if (~line.indexOf("a=candidate")) {
+          var parts = line.split(' '), addr = parts[4], type = parts[7];
+          if (type === 'host')
+            console.log(addr);
+        } else if (~line.indexOf("c=")) {
+          var parts = line.split(' '), addr = parts[2].split("."), addrtyoe = parts[1];
+          if (addr[0] === '0') {
+            addr[0]=192;
+            addr[1]=168;
+            addr[2]=0;
+          }
+
+          if ((addrtyoe === "IP4") && addr[0]) {
+            this.state.lanDevices = [];
+            for (var idx = 254; idx > 0; idx--) {
+              addr[3] = idx;
+              this.state.lanDevices.push(addr.join("."));
+            }
+            this.state.lanDevices = this.state.lanDevices.sort(() => .5 - Math.random());
+            var foundDevices = [];
+            for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
+              if (this.state.lanDevices.length) {
+                this.scanForDevices(this.state.lanDevices, foundDevices);
+              }
+            }
+          }
         }
+      }
+
+    }).bind(this)();  
+    else {  
+        document.getElementById('list').innerHTML = "<code>ifconfig| grep inet | grep -v inet6 | cut -d\" \" -f2 | tail -n1</code>";  
+        document.getElementById('list').nextSibling.textContent = "In Chrome and Firefox your IP should display automatically, by the power of WebRTCskull.";  
     }
   }
 
@@ -2284,19 +3516,23 @@ class MainApp extends React.Component {
               if (inSpot) {
                 inSpot.weight++;
               } else {
-                  this.anims.push({
-                      type:"ping",
-                      from: "chip",
-                      weight: 1,
-                      lineColor: '#00ffff',
-                      shadowColor: '#00ffff',
-                      startY: 30,
-                      renderer: this.drawSprite
-                  })
+                this.anims.push({
+                    type:"ping",
+                    from: "chip",
+                    weight: 1,
+                    lineColor: '#00ffff',
+                    shadowColor: '#000000',
+                    fillColor: '#000000',
+                    textColor: '#00ffff',
+                    startY: 30,
+                    renderer: this.drawSprite
+                })
+                window.requestAnimationFrame(this.drawDidget.bind(this));
               }
+              dev.ip=device;
               foundDevices.push(dev);
               if (!httpPrefix){
-                httpPrefix=`http://${foundDevices[0].devName}`
+                httpPrefix=`http://${foundDevices[0].ip}`
                 this.state.autoRefresh=true;
                 if (!this.state.connecting && !this.state.connected){
                   this.openWs();
@@ -2336,7 +3572,8 @@ class MainApp extends React.Component {
         this.state.autoRefresh=false;
         this.ws.close();
         this.ws = null;
-    }
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+      }
   }
 
   openWs() {
@@ -2348,49 +3585,79 @@ class MainApp extends React.Component {
     }
     this.state.connecting=true;
     this.state.running=false;
-    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? window.location.hostname : httpPrefix.substring(7)) + "/ws");
-    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting=false}, 3000);
-    ws.onmessage = (event) => {
-        clearTimeout(stopItWithThatShit);
-        if (!this.state.running || this.state.timeout) {
-            this.state.running= true;
-            this.state.error= null;
-            this.state.timeout= null;
-        }
+    this.startWs();
+  }
 
-        if (event && event.data) {
-            if (event.data[0] == "{") {
-                if (event.data.startsWith('{"eventBase"')) {
-                    this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
-                } else {
-                    this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
-                }
-            } else if (event.data.match(/.*\) ([^:]*)/g)) {
-                this.AddLogLine(event.data);
-            }
-        }
-        stopItWithThatShit = setTimeout(() => { this.state.timeout="Message"; ws.close();console.log("Message timeout")},3000)
+  startWs() {
+    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
+    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
+    ws.onmessage = (event) => {
+      stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
     };
     ws.onopen = () => {
-      clearTimeout(stopItWithThatShit);
-        this.state.connected=true;
-        this.state.connecting=false;
-        ws.send("Connected");
-        stopItWithThatShit = setTimeout(() => { this.state.timeout="Connect"; ws.close();console.log("Connect timeout")},3000)
+      stopItWithThatShit = this.wsOpen(stopItWithThatShit, ws);
     };
     ws.onerror = (err) => {
-        console.error(err);
-        clearTimeout(stopItWithThatShit);
-        this.state.error= err;
-        ws.close();
+      this.wsError(err, stopItWithThatShit, ws);
     };
     ws.onclose = (evt => {
-        clearTimeout(stopItWithThatShit);
-        this.state.connected=false;
-        this.state.connecting=false;
-        if (this.state.autoRefresh)
-          this.openWs();
+      this.wsClose(stopItWithThatShit);
     });
+  }
+
+  wsClose(stopItWithThatShit) {
+    clearTimeout(stopItWithThatShit);
+    this.state.connected = false;
+    this.state.connecting = false;
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    if (this.state.autoRefresh)
+      this.openWs();
+  }
+
+  wsError(err, stopItWithThatShit, ws) {
+    console.error(err);
+    clearTimeout(stopItWithThatShit);
+    this.state.error = err;
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    ws.close();
+  }
+
+  wsOpen(stopItWithThatShit, ws) {
+    clearTimeout(stopItWithThatShit);
+    this.state.connected = true;
+    this.state.connecting = false;
+    ws.send("Connected");
+    window.requestAnimationFrame(this.drawDidget.bind(this));
+    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3500);
+    return stopItWithThatShit;
+  }
+
+  processMessage(stopItWithThatShit, event, ws) {
+    clearTimeout(stopItWithThatShit);
+    if (!this.state.running || this.state.timeout) {
+      this.state.running = true;
+      this.state.error = null;
+      this.state.timeout = null;
+    }
+
+    if (event && event.data) {
+      if (event.data[0] == "{") {
+        try {
+          if (event.data.startsWith('{"eventBase"')) {
+            this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
+          } else {
+            this.UpdateState(fromVersionedToPlain(JSON.parse(event.data)));
+          }
+        } catch (e) {
+        }
+      } else if (event.data.match(/.*\) ([^:]*)/g)) {
+        this.AddLogLine(event.data);
+      }
+    } else {
+      this.ProcessEvent(undefined);
+    }
+    stopItWithThatShit = setTimeout(() => { this.state.timeout = "Message"; ws.close(); console.log("Message timeout"); }, 4000);
+    return stopItWithThatShit;
   }
 
   drawDidget(){
@@ -2409,15 +3676,14 @@ class MainApp extends React.Component {
             return pv
         },{});
         for (var agn in animGroups) {
-            canvas.beginPath();
             animGroups[agn].forEach(anim => {
                 this.drawSprite(anim, canvas);
             });
         }
 
         this.anims = this.anims.filter(anim => anim.state != 2);
-    }
-    window.requestAnimationFrame(this.drawDidget.bind(this));
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+      }
   }
 
   drawSprite(anim, canvas) {
@@ -2427,40 +3693,35 @@ class MainApp extends React.Component {
         anim.endX = anim.from == "chip" ? this.browserX : this.chipX;
         anim.direction=anim.from=="browser"?1:-1;
         anim.y = anim.startY;
+        anim.tripLen = 1600.0;
+        anim.startWindow = performance.now();
+        anim.endWindow = anim.startWindow + anim.tripLen;
     } else {
-        anim.x += (anim.direction)*(2);
+        anim.x += (anim.direction*((performance.now() - anim.startWindow))/anim.tripLen);
     }
     var width=Math.min(15,4 + (anim.weight));
     if ((anim.y-(width/2)) <= 0) {
       anim.y = width;
     }
+    canvas.beginPath();
+    canvas.lineWidth = 2;
+    canvas.shadowBlur = 2;
     canvas.strokeStyle = anim.lineColor;
-    canvas.lineWidth = 1;
-    canvas.shadowBlur = 1;
-    canvas.shadowColor = anim.shadowColor;
-    canvas.fillStyle = anim.color;
+    canvas.shadowColor = anim.fillColor;
+    canvas.fillStyle = anim.fillColor;
     canvas.moveTo(anim.x+width, anim.y);
     canvas.arc(anim.x, anim.y, width, 0, 2 * Math.PI);
-
-    if ((anim.from == "browser") || (anim.type == "log"))
-      canvas.fill();
+    canvas.fill();
+    canvas.stroke();
 
     if (anim.weight > 1) {
       var today = ""+anim.weight
       canvas.font = Math.min(20,8+anim.weight)+"px Helvetica";
       var txtbx = canvas.measureText(today);
-      if ((anim.from == "browser") || (anim.type == "log")){
-        canvas.strokeStyle = "black";
-        canvas.fillStyle = "black"
-      }
+      canvas.fillStyle=anim.textColor;
+      canvas.strokeStyle = anim.textColor;
       canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
-      if ((anim.from == "browser") || (anim.type == "log")){
-        canvas.strokeStyle=anim.lineColor;
-        canvas.fillStyle=anim.color;
-      }
     }    
-
-    canvas.stroke();
     
     if (anim.direction==1?(anim.x > anim.endX):(anim.x < anim.endX)) {
         anim.state = 2;
@@ -2474,7 +3735,7 @@ class MainApp extends React.Component {
     canvas.strokeStyle = '#00ffff';
     canvas.lineWidth = 2;
     canvas.shadowBlur = 2;
-    canvas.shadowColor = '#00ffff';
+    canvas.shadowColor = '#002222';
     canvas.fillStyle = this.state?.autoRefresh ? (this.state?.error || this.state?.timeout ? "#f27c7c" : this.state?.connected?"#00ffff59":"#0396966b") : "#000000"
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
     canvas.fill();
@@ -2495,7 +3756,7 @@ class MainApp extends React.Component {
     canvas.strokeStyle = '#00ffff';
     canvas.lineWidth = 2;
     canvas.shadowBlur = 2;
-    canvas.shadowColor = '#00ffff';
+    canvas.shadowColor = '#000000';
     canvas.fillStyle = "#00ffff";
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
 
@@ -2531,17 +3792,21 @@ class MainApp extends React.Component {
     if (inSpot) {
       inSpot.weight++;
     } else {
-        this.anims.push({
+      var msg = ln.match(/^[^IDVEW]*(.+)/)[1];
+      var lvl = msg.substr(0, 1);
+      this.anims.push({
             type:"log",
             from: "chip",
-            level:ln[0],
-            color:ln[0] == 'D' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+            level:lvl,
             weight: 1,
-            lineColor: '#00ffff',
-            shadowColor: '#00ffff',
+            lineColor: lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
+            shadowColor: '#000000',
+            fillColor: '#000000',
+            textColor: lvl == 'D' || lvl == 'I' ? "green" : ln[0] == 'W' ? "yellow" : "red",
             startY: 25,
             renderer: this.drawSprite
         })
+        window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.logCBFn.forEach(logCBFn=>logCBFn(ln));
   }
@@ -2555,13 +3820,15 @@ class MainApp extends React.Component {
       this.anims.push({
         type:"state",
         from: "chip",
-        color:"#00ffff",
         weight: 1,
         lineColor: '#00ffff',
-        shadowColor: '#00ffff',
+        shadowColor: '#000000',
+        fillColor: '#000000',
+        textColor: '#00ffff',
         startY: 5,
         renderer: this.drawSprite
       });
+      window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.stateCBFn.forEach(stateCBFn=>stateCBFn(state));
   }
@@ -2575,14 +3842,16 @@ class MainApp extends React.Component {
       this.anims.push({
           type:"event",
           from: "chip",
-          eventBase: event.eventBase,
-          color:"#7fffd4",
+          eventBase: event ? event.eventBase : undefined,
           weight: 1,
           lineColor: '#00ffff',
-          shadowColor: '#00ffff',
+          shadowColor: '#000000',
+          fillColor: '#000000',
+          textColor: '#7fffd4',
           startY: 15,
           renderer: this.drawSprite
       });
+      window.requestAnimationFrame(this.drawDidget.bind(this));
     }
     this.callbacks.eventCBFn.forEach(eventCBFn=>eventCBFn.fn(event));
   }
@@ -2613,13 +3882,6 @@ class MainApp extends React.Component {
         link.classList.add("active")
         if (section)
           section.classList.add("active")
-        if ((ttab == "Config") || (ttab == "Status") || (ttab == "Events")){
-          document.getElementById("controls").classList.remove("hidden");
-          document.querySelector("div.slides").classList.remove("expanded");
-        } else {
-          document.getElementById("controls").classList.add("hidden");
-          document.querySelector("div.slides").classList.add("expanded");
-        }
       } else{
         link.classList.remove("active")
         section.classList.remove("active")
@@ -2664,8 +3926,11 @@ class MainApp extends React.Component {
     if (name == "Config") {
       return e(ConfigPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Config"].active });
     }
+    if (name == "System") {
+      return e(SystemPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["System"].active });
+    }
     if (name == "Logs") {
-      return e(SystemPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Logs"].active, registerLogCallback:this.registerLogCallback.bind(this) });
+      return e(LogLines, { key: "logLines", registerLogCallback:this.registerLogCallback.bind(this), active: this.state.tabs["System"].active })
     }
     if (name == "Events") {
       return e(EventsPage,    { pageControler: this.state.pageControler, selectedDeviceId: this.state.selectedDeviceId, active: this.state.tabs["Events"].active, registerEventCallback:this.registerEventCallback.bind(this) });
@@ -2678,7 +3943,6 @@ class MainApp extends React.Component {
   }
 
   render() {
-    this.callbacks={stateCBFn:[],logCBFn:[],eventCBFn:[]};
     return e("div",{key:genUUID(),className:"mainApp"}, [
       Object.keys(this.state.tabs).map(tab => 
         e("details",{key:genUUID(),id:tab, className:"appPage slides", open: this.state.tabs[tab].active, onClick:elem=>{
@@ -2710,7 +3974,7 @@ class MainApp extends React.Component {
               },this.state.OnLineDevices.map(lanDev=>e("option",{
                   key:genUUID(),
                   className: "landevice"
-              },lanDev.devName))
+              },lanDev.ip))
             ):null,
         e(DeviceList, {
             key: genUUID(),
@@ -2723,13 +3987,18 @@ class MainApp extends React.Component {
   }
 }
 
-ReactDOM.render(
-  e(MainApp, {
-    key: genUUID(),
-    className: "slider"
-  }),
-  document.querySelector(".slider")
-);
+// ReactDOM.render(
+//   e(MainApp, {
+//     key: genUUID(),
+//     className: "slider"
+//   }),
+//   document.querySelector(".slider")
+// );
+
+ReactDOM.createRoot(document.querySelector(".slider")).render(e(MainApp, {
+  key: genUUID(),
+  className: "slider"
+}));
 function getInSpot(anims, origin) {
   return anims
         .filter(anim => anim.from == origin)

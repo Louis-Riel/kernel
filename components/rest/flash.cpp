@@ -1,28 +1,28 @@
 #include "route.h"
+#include "mbedtls/md.h"
 
 bool TheRest::GetLocalMD5(char* ccmd5) {
     FILE *fw = NULL;
-    esp_err_t ret;
     bool retVal=false;
-    ESP_LOGD(__FUNCTION__, "Reading MD5 RAM:%d...", esp_get_free_heap_size());
-    if ((fw = fOpenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
+    ESP_LOGI(__FUNCTION__, "Reading MD5 RAM:%d...", esp_get_free_heap_size());
+    if ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != NULL)
     {
         uint32_t len = 0;
-        if ((len = fRead((void *)ccmd5, 1, 33, fw)) > 0)
+        if ((len = fread((void *)ccmd5, 1, 33, fw)) > 0)
         {
             ccmd5[32] = 0;
-            ESP_LOGD(__FUNCTION__, "Local MD5:%s", ccmd5);
+            ESP_LOGI(__FUNCTION__, "Local MD5:%s", ccmd5);
             retVal=true;
         }
         else
         {
             ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d", len);
         }
-        fClose(fw);
+        fclose(fw);
     }
     else
     {
-        ESP_LOGE(__FUNCTION__, "Failed in opeing md5");
+        ESP_LOGE(__FUNCTION__, "Failed in opeing md5.");
     }
     return retVal;
 }
@@ -36,41 +36,48 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
     if (fwFile && (cJSON_HasObjectItem(fwFile, "size")))
     {
         size_t fwLen = cJSON_GetNumberValue(cJSON_GetObjectItem(fwFile, "size"));
-        ESP_LOGD(__FUNCTION__,"Firmware len:%d", fwLen);
+        ESP_LOGI(__FUNCTION__,"Firmware len:%d", fwLen);
         char *newFw = (char*) dmalloc(fwLen);
         sprintf(url, "http://%s/lfs/firmware/current.bin", gwAddr);
         plen = fwLen;
         SendRequest(url,HTTP_METHOD_GET,&plen,newFw);
         if (newFw && (plen == fwLen))
         {
-            MD5Context md5_context;
-            uint8_t srvmd[16];
-            char ssrvmd[33];
-            MD5Init(&md5_context);
-            MD5Update(&md5_context, (uint8_t *)newFw, plen);
-            MD5Final(srvmd, &md5_context);
-            for (uint8_t i = 0; i < 16; ++i)
+            uint8_t srvmd[32];
+            char ssrvmd[70];
+
+            mbedtls_md_context_t ctx;
+            mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
+
+            mbedtls_md_init(&ctx);
+            mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
+            mbedtls_md_starts(&ctx);
+            mbedtls_md_update(&ctx, (uint8_t *)newFw, plen);
+            uint8_t shaResult[32];
+            mbedtls_md_finish(&ctx, shaResult);
+            mbedtls_md_free(&ctx);
+            for (uint8_t i = 0; i < sizeof(shaResult); ++i)
             {
                 sprintf(&ssrvmd[i * 2], "%02x", (unsigned int)srvmd[i]);
             }
 
             if (strcmp(srvMd5, ssrvmd) == 0)
             {
-                ESP_LOGD(__FUNCTION__, "MD5 matched, writing FW");
+                ESP_LOGI(__FUNCTION__, "MD5 matched, writing FW");
                 sprintf(url, "/lfs/firmware/current.bin");
-                FILE *newFWf = fOpen(url, "w");
+                FILE *newFWf = fopen(url, "w");
                 if (newFWf)
                 {
-                    if (fWrite(newFw, sizeof(uint8_t), plen, newFWf) == plen)
+                    if (fwrite(newFw, sizeof(uint8_t), plen, newFWf) == plen)
                     {
-                        fClose(newFWf);
+                        fclose(newFWf);
                         sprintf(url, "/lfs/firmware/tobe.bin.md5");
-                        FILE *toBeMd5 = fOpen(url, "w");
+                        FILE *toBeMd5 = fopen(url, "w");
                         if (toBeMd5)
                         {
-                            if (fWrite(srvMd5, sizeof(uint8_t), 32, toBeMd5) == 32)
+                            if (fwrite(srvMd5, sizeof(uint8_t), 32, toBeMd5) == 32)
                             {
-                                fClose(toBeMd5);
+                                fclose(toBeMd5);
                                 ESP_LOGI(__FUNCTION__, "Updated Firmware File");
                                 return true;
                             }
@@ -78,7 +85,7 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
                             {
                                 ESP_LOGE(__FUNCTION__, "Error openeing to be md5");
                             }
-                            fClose(toBeMd5);
+                            fclose(toBeMd5);
                         }
                         else
                         {
@@ -89,7 +96,7 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
                     {
                         ESP_LOGE(__FUNCTION__, "Failed to write firmware");
                     }
-                    fClose(newFWf);
+                    fclose(newFWf);
                 }
             }
             else
@@ -114,22 +121,22 @@ bool TheRest::DownloadFirmware(char* srvMd5) {
 }
 
 void TheRest::CheckUpgrade(void* param){
-    ESP_LOGD(__FUNCTION__,"Checking firmware");
-    char localMd5[33];
-    char serverMd5[33];
+    ESP_LOGI(__FUNCTION__,"Checking firmware");
+    char localMd5[70];
+    char serverMd5[70];
     char* url =(char*)dmalloc(266);
     bool needsUpgrade = false;
-    memset(localMd5,0,33);
-    memset(serverMd5,0,33);
+    memset(localMd5,0,70);
+    memset(serverMd5,0,70);
     size_t len;
     TheRest* restInstance = TheRest::GetServer();
 
     if (restInstance->GetLocalMD5(localMd5)) {
-        len=33;
+        len=70;
         sprintf(url,"http://%s/ota/getmd5",restInstance->gwAddr);
         restInstance->SendRequest(url,HTTP_METHOD_POST,&len,serverMd5);
         if (strlen(serverMd5) == strlen(localMd5)) {
-            ESP_LOGD(__FUNCTION__,"local:%s server:%s",localMd5,serverMd5);
+            ESP_LOGI(__FUNCTION__,"local:%s server:%s",localMd5,serverMd5);
             needsUpgrade = strcmp(localMd5,serverMd5)!=0;
         } else {
             ESP_LOGW(__FUNCTION__,"Weird MD5s, local:%s server:%s",localMd5,serverMd5);

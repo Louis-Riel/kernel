@@ -1,4 +1,5 @@
 #include "eventmgr.h"
+#include "../../main/utils.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -68,33 +69,6 @@ bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName
 
 char* EventHandlerDescriptor::GetName(){
     return this->name;
-}
-
-cJSON* EventHandlerDescriptor::GetEventBaseEvents(esp_event_base_t base, const char* filter) {
-    cJSON* ret = cJSON_CreateArray();
-    for (int idx = 0; idx < numCacheEntries; idx++) {
-        EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
-        if ((ei != NULL) || 
-            (filter == NULL) || 
-            (strlen(filter) == 0) || 
-            ((indexOf(ei->baseName,base) != NULL) && (indexOf(ei->eventName,filter) != NULL))) {
-            cJSON* curItem = NULL;
-            cJSON_ArrayForEach(curItem,ret) {
-                if ((strcmp(cJSON_GetObjectItem(curItem,"baseName")->valuestring,ei->baseName) == 0) && 
-                    (strcmp(cJSON_GetObjectItem(curItem,"eventName")->valuestring,ei->eventName) == 0)) {
-                    break;
-                }
-            };
-            if (curItem == NULL){
-                cJSON* item = cJSON_CreateObject();
-                cJSON_AddStringToObject(item,"baseName",ei->baseName);
-                cJSON_AddStringToObject(item,"eventName",ei->eventName);
-                cJSON_AddNumberToObject(item,"eventId",ei->id);
-                cJSON_AddItemToArray(ret,item);
-            }
-        }
-    }
-    return ret;
 }
 
 EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(esp_event_base_t base,const char* eventName) {
@@ -269,7 +243,7 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
                         }
                     }
                 } else {
-                    ESP_LOGD(__FUNCTION__,"Cannot find %s in %s", termName, tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
+                    ESP_LOGI(__FUNCTION__,"Cannot find %s in %s", termName, tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
                 }
             }
             break;

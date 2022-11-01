@@ -3,34 +3,34 @@ class LiveEvent extends React.Component {
         if (this.props?.event?.dataType) {
             return this.renderComponent(this.props.event);
         } else {
-            return e("summary",{key: genUUID() ,className: "liveEvent"},
-                    e("div",{key: genUUID() ,className: "description"},[
-                        e("div",{key: genUUID() ,className: "eventBase"},"Loading"),
-                        e("div",{key: genUUID() ,className: "eventId"},"...")
+            return e("summary",{key: "summary" ,className: "liveEvent"},
+                    e("div",{key: "description" ,className: "description"},[
+                        e("div",{key: "base" ,className: "eventBase"},"Loading"),
+                        e("div",{key: "id" ,className: "eventId"},"...")
                     ]));
         }
     }
 
     renderComponent(event) {
-        return e("summary",{key: genUUID() ,className: "liveEvent"},[
-            e("div",{key: genUUID() ,className: "description"},[
-                e("div",{key: genUUID() ,className: "eventBase"},event.eventBase),
-                e("div",{key: genUUID() ,className: "eventId"},event.eventId)
-            ]), event.data ? e("details",{key: genUUID() ,className: "data"},this.parseData(event)): null
+        return e("summary",{key: "event" ,className: "liveEvent"},[
+            e("div",{key: "description" ,className: "description"},[
+                e("div",{key: "base" ,className: "eventBase"},event.eventBase),
+                e("div",{key: "id" ,className: "eventId"},event.eventId)
+            ]), event.data ? e("details",{key: "details" ,className: "data"},this.parseData(event)): null
         ]);
     }
 
     parseData(props) {
         if (props.dataType == "Number") {
-            return e("div", { key: genUUID(), className: "description" }, 
-                        e("div", { key: genUUID(), className: "propNumber" }, props.data)
+            return e("div", { key: props.data.name, className: "description" }, 
+                        e("div", { key: "data", className: "propNumber" }, props.data)
                     );
         }
         return Object.keys(props.data)
             .filter(prop => typeof props.data[prop] != 'object' && !Array.isArray(props.data[prop]))
-            .map(prop => e("div", { key: genUUID(), className: "description" }, [
-                e("div", { key: genUUID(), className: "propName" }, prop),
-                e("div", { key: genUUID(), className: prop }, props.data[prop])
+            .map(prop => e("div", { key: prop, className: "description" }, [
+                e("div", { key: "name", className: "propName" }, prop),
+                e("div", { key: "data", className: prop }, props.data[prop])
             ]));
     }
 }
@@ -44,6 +44,7 @@ class LiveEventPannel extends React.Component {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
         this.mounted=false;
+        this.state = {filters:{}};
     }
 
     componentDidMount() {
@@ -55,13 +56,37 @@ class LiveEventPannel extends React.Component {
     }
 
     ProcessEvent(evt) {
-        if (this.mounted){
-            var lastEvents = this.state?.lastEvents||[];
+        if (evt && this.mounted && this.isEventVisible(evt)) {
+            var lastEvents = (this.state?.lastEvents||[]).concat(evt);
             while (lastEvents.length > 100) {
                 lastEvents.shift();
             }
-            this.setState({lastEvents:lastEvents.concat(evt)});
+            this.setState({
+                filters: this.updateFilters(lastEvents),
+                lastEvents: lastEvents
+            });
         }
+    }
+
+    updateFilters(lastEvents) {
+        var curFilters = Object.entries(lastEvents
+            .filter(evt => evt && evt.eventBase && evt.eventId)
+            .reduce((ret, evt) => {
+                if (!ret[evt.eventBase]) {
+                    ret[evt.eventBase] = { visible: true, eventIds: [{ visible: true, eventId: evt.eventId }] };
+                } else if (!ret[evt.eventBase].eventIds.find(vevt => vevt.eventId === evt.eventId)) {
+                    ret[evt.eventBase].eventIds.push({ visible: true, eventId: evt.eventId });
+                }
+                return ret;
+            }, {}));
+        Object.values(curFilters).forEach(filter => {
+            if (!this.state.filters[filter[0]]) {
+                this.state.filters[filter[0]] = filter[1];
+            } else if (filter[1].eventIds.find(newEvt => !this.state.filters[filter[0]].eventIds.find(eventId => eventId.eventId === newEvt.eventId))) {
+                this.state.filters[filter[0]].eventIds = this.state.filters[filter[0]].eventIds.concat(filter[1].eventIds.filter(eventId => !this.state.filters[filter[0]].eventIds.find(eventId2 => eventId.eventId === eventId2.eventId)));
+            }
+        });
+        return this.state.filters;
     }
 
     parseEvent(event) {
@@ -89,7 +114,7 @@ class LiveEventPannel extends React.Component {
                 resolve({dataType:eventType.dataType,...event});
             } else {
                 var toControler = new AbortController();
-                const timer = setTimeout(() => toControler.abort(), 3000);
+                const timer = setTimeout(() => toControler.abort(), 8000);
                 wfetch(`${httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
                     method: 'post',
                     signal: toControler.signal
@@ -111,13 +136,76 @@ class LiveEventPannel extends React.Component {
         })
     }
 
+    updateEventIdFilter(eventId, enabled) {
+        eventId.visible = enabled;
+        this.setState({filters: this.state.filters});
+    }
+
+    updateEventBaseFilter(eventBase, enabled) {
+        eventBase.visible = enabled;
+        this.setState({filters: this.state.filters});
+    }
+
+    filterPanel() {
+        return e("div",{key: "filterPanel", className:"filterPanel"},[
+                e("div",{key:"filters",className:"filters"},[
+                    e("div",{ key: "label", className:"header"}, `Filters`),
+                    e("div",{key:"filterlist",className:"filterlist"},Object.entries(this.state.filters).map(this.renderFilter.bind(this)))
+                ]),
+                e("div", { key: "control", className:"control" }, [
+                    this.state?.lastEvents ? e("div",{ key: "label", className:"header"}, `${this.state.lastEvents.length}/${this.state.lastEvents.filter(this.isEventVisible.bind(this)).length} event${this.state?.lastEvents?.length?'s':''}`) : "No events",
+                    e("button",{ key: "clearbtn", onClick: elem => this.setState({lastEvents:[]})},"Clear")
+                ])
+               ]);
+    }
+
+    renderFilter(filter) {
+        return e('div', { key: filter[0], className: `filter ${filter[0]}` },
+            e("div",{key:"evbfiltered",className:"evbfiltered"},
+                e(MaterialUI.FormControlLabel,{
+                    key:"visible",
+                    className:"ebfiltered",
+                    label: filter[0],
+                    control:e(MaterialUI.Checkbox, {
+                        key: "ctrl",
+                        checked: filter[1].visible,
+                        onChange: event => this.updateEventIdFilter(filter[1], event.target.checked)
+                    })})
+            ),
+            e("div", { key: "filterList", className: `eventIds` }, filter[1].eventIds.map(eventId => e("div", { key: eventId.eventId, className: `filteritem ${eventId.eventId}` }, [
+                e("div",{key:"evifiltered",className:"evifiltered"},
+                    e(MaterialUI.FormControlLabel,{
+                        key:eventId.eventId,
+                        className:"eifiltered",
+                        label: eventId.eventId,
+                        control:e(MaterialUI.Checkbox, {
+                            key: "ctrl",
+                            checked: eventId.visible,
+                            onChange: event => this.updateEventIdFilter(eventId, event.target.checked),
+                        })}
+                    )
+                )
+            ]))));
+    }
+
+    isEventVisible(event) {
+        return event && ((Object.keys(this.state.filters).length === 0) || !this.state.filters[event.eventBase]?.eventIds?.some(eventId=> eventId.eventId === event.eventId)) || 
+               (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
+               Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && 
+                                                                  this.state.filters[eventBase].eventIds
+                                                                    .some(eventId=> eventId.eventId === event.eventId && eventId.visible)));
+    }
+
+    getFilteredEvents() {
+        return e("div", { key: "eventList", className: "eventList" }, 
+                this.state?.lastEvents?.filter(this.isEventVisible.bind(this))
+                           .map((event, idx) => e(LiveEvent, { key: idx, event: this.parseEvent(event) })).reverse());
+    }
+
     render() {
-        return  e("div", { key: genUUID() ,className: "eventPanel" }, [
-            e("div", { key: genUUID(), className:"control" }, [
-                e("div",{ key: genUUID()}, `${this.state?.lastEvents?.length || "Waiting on "} event${this.state?.lastEvents?.length?'s':''}`),
-                e("button",{ key: genUUID(), onClick: elem => this.setState({lastEvents:[]})},"Clear")
-            ]),
-            e("div",{ key: genUUID(), className:"eventList"},this.state?.lastEvents?.map(event => e(LiveEvent,{ key: genUUID(), event:this.parseEvent(event)})).reverse())
+        return  e("div", { key: "eventPanel" ,className: "eventPanel" }, [
+            this.filterPanel(),
+            this.getFilteredEvents()
         ])
 
     }
@@ -138,7 +226,7 @@ class EventsPage extends React.Component {
     getJsonConfig() {
         return new Promise((resolve, reject) => {
             if (window.location.hostname || httpPrefix){
-                const timer = setTimeout(() => this.props.pageControler.abort(), 3000);
+                const timer = setTimeout(() => this.props.pageControler.abort(), 8000);
                 wfetch(`${httpPrefix}/config${this.props.selectedDeviceId == "current"?"":`/${this.props.selectedDeviceId}`}`, {
                     method: 'post',
                     signal: this.props.pageControler.signal
@@ -159,22 +247,10 @@ class EventsPage extends React.Component {
     render() {
         if (this.state?.events){
             return [
-                e("div", { key: genUUID() ,className: "designer" },[
-                    e("details",{ key: genUUID() ,className: "configuredEvents", onClick:elem=>elem.target.parentElement.nextSibling.removeAttribute("open"), open:true}, [
-                        e("summary",{ key: genUUID()},`${this.state.events?.length} Events`), 
-                        e("div",{key:genUUID(),className:"content"},
-                            this.state.events?.map(event => e(Event,{ key: genUUID(),...event})))
-                    ]),
-                    e("details",{ key: genUUID() ,className: "programs", onClick:elem=>elem.target.parentElement.previousSibling.removeAttribute("open")},[
-                        e("summary",{ key: genUUID()},`${this.state.programs?.length} Programs`), 
-                        e("div",{key:genUUID(),className:"content"},
-                            this.state.programs?.map(program => e(Program,{ key: genUUID(),...program})))
-                    ])
-                ]),
-                e(LiveEventPannel,{ key: genUUID(),registerEventCallback:this.props.registerEventCallback})
+                e(LiveEventPannel,{ key: "eventpannel",registerEventCallback:this.props.registerEventCallback})
             ];
         } else {
-            return e("div",{key: genUUID()},"Loading.....");
+            return e("div",{key: "loading"},"Loading.....");
         }
     }
 }
