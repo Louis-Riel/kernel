@@ -816,7 +816,7 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                     ret = httpd_resp_send_408(req);
                 }
             }
-            else
+            else if (restInstance)
             {
                 char *path = restInstance->postData+1024;
                 strcpy(path, fname);

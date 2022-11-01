@@ -393,7 +393,7 @@ esp_err_t setupLittlefs()
   esp_err_t ret = esp_vfs_littlefs_register(&conf);
   AppConfig *appState = AppConfig::GetAppStatus();
   ESP_LOGI(__FUNCTION__, "lfs mounted %d", ret);
-  AppConfig *spiffState = appState->GetConfig("/lfs");
+  AppConfig *spiffState = appState->GetConfig("lfs");
   if (ret != ESP_OK)
   {
     spiffState->SetStateProperty("state", item_state_t::ERROR);
