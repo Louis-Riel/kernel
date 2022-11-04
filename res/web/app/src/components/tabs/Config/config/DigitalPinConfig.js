@@ -12,10 +12,6 @@ export default class DigitalPinConfig extends Component {
         if ((this.state !== prevState) && this.props.onChange) {
             this.props.onChange(this.state);
         }
-        
-        if (prevProps?.item !== this.props?.item) {
-            this.setState({pin: this.props.item});
-        }
     }
 
     onChange(name, value) {

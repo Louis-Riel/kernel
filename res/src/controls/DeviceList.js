@@ -6,7 +6,7 @@ class DeviceList extends React.Component {
             .then(data => data.json())
             .then(json => json.filter(fentry => fentry.ftype == "file"))
             .then(devFiles => {
-                var devices = devFiles.map(devFile=> devFile.name.substr(0,devFile.name.indexOf(".")));
+                let devices = devFiles.map(devFile=> devFile.name.substr(0,devFile.name.indexOf(".")));
                 this.setState({ devices: devices, httpPrefix:httpPrefix });
                 if (this.props?.onGotDevices)
                     this.props.onGotDevices(devices);

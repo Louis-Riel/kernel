@@ -1,5 +1,5 @@
 import { Component, Suspense, lazy } from 'react';
-import {wfetch, fromVersionedToPlain } from '../../../utils/utils';
+import { wfetch } from '../../../utils/utils';
 import { Button, FormControl, InputLabel, Select, MenuItem, List, ListItemButton, ListItemIcon, ListItemText, Collapse  } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
@@ -27,7 +27,7 @@ export default class StatusPage extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:"",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
             refreshRate:"Manual",
             componentOpenState:{},
             status:{
@@ -67,14 +67,13 @@ export default class StatusPage extends Component {
         if (this.props.registerStateCallback) {
             this.props.registerStateCallback(this.refreshStatus.bind(this));
         }
-        this.props?.registerControlPanel(this.renderControlPannel.bind(this));
     }
 
     getRefreshRate() {
         if (this.state.refreshRate.indexOf("secs")>0) {
-            return Number(this.state.refreshRate.replace(/([0-9]+).*/,"$1"))*1000
+            return Number(this.state.refreshRate.replace(/(\d+).*/,"$1"))*1000
         } 
-        return Number(this.state.refreshRate.replace(/([0-9]+).*/,"$1"))*60000
+        return Number(this.state.refreshRate.replace(/(\d+).*/,"$1"))*60000
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
@@ -124,9 +123,7 @@ export default class StatusPage extends Component {
     }
 
     filterProperties(props) {
-        return new Promise((resolve,reject)=>{
-            resolve(Object.keys(props).filter(fld=> !fld.match(/^MALLOC_.*/) || props[fld]!==0).reduce((ret,fld)=>{ret[fld]=props[fld];return ret},{}));
-        });
+        return Promise.resolve(Object.keys(props).filter(fld=> !fld.match(/^MALLOC_.*/) || props[fld]!==0).reduce((ret,fld)=>{ret[fld]=props[fld];return ret},{}));
     }
 
     updateStatuses(requests, newState) {
@@ -156,7 +153,7 @@ export default class StatusPage extends Component {
             document.getElementById("Status").style.opacity = 0.5
             //clearTimeout(timer);
             if (err.code !== 20) {
-                var errors = requests.filter(req => req.error);
+                let errors = requests.filter(req => req.error);
                 document.getElementById("Status").style.opacity = 0.5
                 if (errors[0]?.waitFor) {
                     setTimeout(() => {
@@ -197,7 +194,7 @@ export default class StatusPage extends Component {
 
     orderResults(res) {
         if (res){
-            var ret = {};
+            let ret = {};
             Object.keys(res).filter(fld => (typeof res[fld] !== 'object') && !Array.isArray(res[fld])).sort((a, b) => a.localeCompare(b)).forEach(fld => ret[fld] = res[fld]);
             Object.keys(res).filter(fld => (typeof res[fld] === 'object') && !Array.isArray(res[fld])).sort((a, b) => a.localeCompare(b)).forEach(fld => ret[fld] = res[fld]);
             Object.keys(res).filter(fld => Array.isArray(res[fld])).forEach(fld => ret[fld] = res[fld]);
@@ -217,6 +214,7 @@ export default class StatusPage extends Component {
 
     render() {
         return <div>
+                {this.renderControlPannel()}
                 {this.renderEditors()}
             </div>
     }

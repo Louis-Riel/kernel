@@ -11,7 +11,7 @@ export default class StorageViewer extends Component {
     constructor(props) {
         super(props);
         this.state = { 
-            httpPrefix:"",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
             loaded: false, 
             files: null,
             cache:{images:{}},
@@ -50,9 +50,9 @@ export default class StorageViewer extends Component {
     }
 
     fetchFiles() {
-        var abort = new AbortController();
+        let abort = new AbortController();
     
-        var quitItNow = setTimeout(() => abort.abort(), 8000);
+        let quitItNow = setTimeout(() => abort.abort(), 8000);
         wfetch(`${this.state.httpPrefix}/files` + this.props.path, {
             method: 'post',
             signal: abort.signal
@@ -67,8 +67,8 @@ export default class StorageViewer extends Component {
                 })).then(files => {
                     if (this.mounted){
                         this.setState({ loaded: true, files: files, total: files.reduce((e1,e2) => e1 + e2.size,0) });
-                        var fileStatsToFetch = files.filter(file => file.ftype === "file" && !file.size);
-                        for (var idx = 0; idx < Math.min(3, fileStatsToFetch.length); idx++) {
+                        let fileStatsToFetch = files.filter(file => file.ftype === "file" && !file.size);
+                        for (let idx = 0; idx < Math.min(3, fileStatsToFetch.length); idx++) {
                             if (fileStatsToFetch.length) {
                                 this.GetFileStat(fileStatsToFetch);
                             }
@@ -115,7 +115,7 @@ export default class StorageViewer extends Component {
     }
 
     SortTable(th) {
-        var tbody;
+        let tbody;
         Array.from((tbody=(th.target.closest("div.file-table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n+2)'))
                  .sort(comparer(Array.from(th.target.parentNode.children).indexOf(th.target), this.asc = !this.asc))
                  .forEach(tr => tbody.appendChild(tr));

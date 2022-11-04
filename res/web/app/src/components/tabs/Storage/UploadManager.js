@@ -1,8 +1,7 @@
 import { createRef, Component} from 'react';
 import { Button, ClickAwayListener, Tooltip, Zoom } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faFolderPlus } from '@fortawesome/free-solid-svg-icons'
-import { faFileArrowDown } from '@fortawesome/free-solid-svg-icons'
+import { faFolderPlus, faFileArrowDown } from '@fortawesome/free-solid-svg-icons'
 
 import { wfetch } from '../../../utils/utils'
 
@@ -10,7 +9,7 @@ export default class UploadManager extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:"",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
             files: [],
             processed: [],
             failed: [],
@@ -21,9 +20,9 @@ export default class UploadManager extends Component {
     }
 
     uploadIt(event) {
-        var files=Array.from(event.target.files).map(file => 
+        let files=Array.from(event.target.files).map(file => 
             new Promise((resolve,reject)=>{
-                var reader = new FileReader();
+                let reader = new FileReader();
                 reader.readAsArrayBuffer(file);
                 reader.onerror = reject;
                 reader.onload = data => resolve({

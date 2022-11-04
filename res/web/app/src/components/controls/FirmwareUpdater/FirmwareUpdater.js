@@ -8,7 +8,7 @@ export default class FirmwareUpdater extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            httpPrefix:"",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
         };
     }
 
@@ -24,8 +24,8 @@ export default class FirmwareUpdater extends Component {
     }
 
     waitForDevFlashing() {
-        var abort = new AbortController();
-        var stopAbort = setTimeout(() => { abort.abort() }, 1000);
+        let abort = new AbortController();
+        let stopAbort = setTimeout(() => { abort.abort() }, 1000);
         wfetch(`${this.state.httpPrefix}/status/app`, {
             method: 'post',
             signal: abort.signal
@@ -55,13 +55,13 @@ export default class FirmwareUpdater extends Component {
 
         if (this.state.firmware && !this.state.md5) {
             this.setState({md5 : "loading"});
-            var reader = new FileReader();
+            let reader = new FileReader();
             reader.onload = () => {
-                var res = reader.resultString || reader.result;
-                var md5 = CryptoJS.algo.SHA256.create();
+                let res = reader.resultString || reader.result;
+                let md5 = CryptoJS.algo.SHA256.create();
                 md5.update(CryptoJS.enc.Latin1.parse(reader.result));
-                var fwdata = new Uint8Array(this.state.firmware.size);
-                for (var i = 0; i < res.length; i++) {
+                let fwdata = new Uint8Array(this.state.firmware.size);
+                for (let i = 0; i < res.length; i++) {
                     fwdata[i] = res.charCodeAt(i);
                 }
 
@@ -94,7 +94,7 @@ export default class FirmwareUpdater extends Component {
             <div className="firmware_updater">
                 <label for="firmware-upload" class="custom-file-upload">
                  <Button onClick={_=>this.HandleClick()}>
-                    {this.state.fwdata?`Upload${this.state?.loaded?`(${this.state.loaded})`:``}`:"Update Firmware"}
+                    {this.state.fwdata?`Upload ${this.state.loaded}`:"Update Firmware"}
                  </Button>
                 </label>
                 <input id="firmware-upload" type= "file" name="firmware" multiple onChange={event => this.setState({ firmware: event.target.files[0] }) }></input>

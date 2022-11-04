@@ -1,5 +1,5 @@
 import {createElement as e, Component} from 'react';
-import {Snackbar,Alert,FormControlLabel,Checkbox,Card,CardHeader,CardContent,List} from '@mui/material';
+import {Snackbar,Alert,Card,CardHeader,CardContent,List, Chip} from '@mui/material';
 
 export default class PinDriverFlags extends Component {
     constructor(props) {
@@ -44,7 +44,7 @@ export default class PinDriverFlags extends Component {
     }
 
     isValidChange(name, value) {
-        var newState =  JSON.parse(JSON.stringify(this.state));
+        let newState =  JSON.parse(JSON.stringify(this.state));
         newState[name].value = value;
         if ((name === "digital_in" || name === "digital_out") && value) {
             if ((name === "digital_in") && newState.digital_out.value) {
@@ -61,13 +61,13 @@ export default class PinDriverFlags extends Component {
         }
         if (newState.digital_out.value && this.getValue(newState) & 0b01111100) {
             this.state[name].errors.push({visible: true, error: "Can't set " + this.getFlagNames(this.getValue(newState) & 0b01111100) + " option for output pins"});
-            new Promise((resolve,reject) => resolve(this.setState(this.state)));
+            Promise.resolve(this.setState(this.state));
             return false;
         }
 
         if (newState.touch.value && (this.getValue(newState) & 0b00001100)) {
             this.state[name].errors.push({visible: true, error: "Can't set " + this.getFlagNames(this.getValue(newState) & 0b00001100) + " option for touch pins"});
-            new Promise((resolve,reject) => resolve(this.setState(this.state)));
+            Promise.resolve(this.setState(this.state));
             return false;
         }
         return true;
@@ -94,16 +94,17 @@ export default class PinDriverFlags extends Component {
 
     renderOption(name, value) {    
         return [
-            e(FormControlLabel,{
-                key:name,
-                className:"driverflag",
-                label: name,
-                control:e(Checkbox, {
-                    key: "ctrl",
-                    checked: value.value,
-                    onChange: event => this.onChange(name, event.target.checked)
-                })
-            }),
+            // e(FormControlLabel,{
+            //     key:name,
+            //     className:"driverflag",
+            //     label: name,
+            //     control:e(Checkbox, {
+            //         key: "ctrl",
+            //         checked: value.value,
+            //         onChange: event => this.onChange(name, event.target.checked)
+            //     })
+            // }),
+            <Chip label={name} className={this.state[name]?.value ? "selected" : "available"} onClick={_ => this.onChange(name, !this.state[name].value)}/>,
             ...this.getErrors(value)
         ];
     }

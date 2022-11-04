@@ -3,9 +3,7 @@ import { Tabs, Tab, Button } from '@mui/material';
 import { wfetch } from '../../../../utils/utils';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
-import { faPlusSquare } from '@fortawesome/free-solid-svg-icons'
-import { faClone } from '@fortawesome/free-solid-svg-icons'
-import { faTrashCan } from '@fortawesome/free-solid-svg-icons'
+import { faPlusSquare, faClone, faTrashCan } from '@fortawesome/free-solid-svg-icons'
 
 
 const AnalogPinConfig = lazy(() => import('./AnalogPinConfig'));
@@ -27,7 +25,7 @@ export default class ConfigGroup extends Component {
             }
         };
         this.state = {
-            httpPrefix:"",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
             currentTab: undefined
         };
         wfetch(`${this.state.httpPrefix}/templates/config`,{
@@ -44,6 +42,13 @@ export default class ConfigGroup extends Component {
             } else {
                 this.setState({httpPrefix:""});
             }
+        }
+        if (prevState?.httpPrefix !== this.state.httpPrefix) {
+            wfetch(`${this.state.httpPrefix}/templates/config`,{
+                method: 'post'
+            }).then(data => data.json())
+              .then(this.updateConfigTemplates.bind(this))
+              .catch(console.error);
         }
     }
 
@@ -63,7 +68,7 @@ export default class ConfigGroup extends Component {
     }
 
     renderArrayTypes() {
-        var tabs = this.state.configTemplates
+        let tabs = this.state.configTemplates
             .filter(configTemplate => configTemplate.isArray);
         return [
             e(Tabs, {
@@ -89,10 +94,6 @@ export default class ConfigGroup extends Component {
         ]);
     }
 
-    renderConfigItemTab(key, item, idx) {
-        return e( Tab, { key: item, label: idx+1, value: key });
-    }
-
     renderEditor(key, item, idx) {
         return  e("div",{key:`${key.collectionName}-${idx}-control-editor`,className:`control-editor`},[
                     <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
@@ -101,9 +102,5 @@ export default class ConfigGroup extends Component {
                     e(Button, { key: "dup", onClick: evt=> {this.props.config[key.collectionName].push(JSON.parse(JSON.stringify(this.props.config[key.collectionName][idx]))); this.props.onChange()} }, <FontAwesomeIcon icon={faClone} />),
                     e(Button, { key: "delete", onClick: evt=> {this.props.config[key.collectionName].splice(idx,1); this.props.onChange()} }, <FontAwesomeIcon icon={faTrashCan} />),
                 ]);
-    }
-
-    isSupported(key) {
-        return Object.keys(this.supportedTypes).indexOf(key)>-1;
     }
 }

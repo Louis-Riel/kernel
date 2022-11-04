@@ -1,5 +1,5 @@
-import {fromVersionedToPlain, wfetch } from '../../../utils/utils'
-import {createElement as e, Component} from 'react';
+import { wfetch } from '../../../utils/utils'
+import { Component} from 'react';
 import { Button, MenuItem, Select, CircularProgress } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons'
@@ -13,10 +13,9 @@ export default class DeviceList extends Component {
         }
 
         this.getLocalConfig()
-            .then(fromVersionedToPlain)
             .then(config => {
-                var dev;
-                this.setState({config:config, devices: [(dev={config:config,state:"online" })]});
+                let dev ={config:config,state:"online" };
+                this.setState({config:config, devices: [dev]});
                 this.props.onSet && this.props.onSet(dev);
             }).catch(console.error);
     }
@@ -24,14 +23,25 @@ export default class DeviceList extends Component {
     getDevices() {
         this.setState({scanning:true,scanProgress:1});
 
-        return new Promise((resolve,reject) => {
-            var devices = [];
-            var srcDevices = Array.from(Array(253).keys()).map(num=>{return {
-                                                                                ip: `192.168.1.${num+1}`,
-                                                                                state: "unscanned"
-                                                                            }}).sort((a,b)=>(1-(Math.random()*2)));
+        new Promise((resolve,reject) => {
+            let devices = [];
+            let srcDevices = Array.from(Array(253).keys()).sort((a,b)=>{
+                    let ah = Math.floor(a/100);
+                    let bh = Math.floor(b/100);
+                    if (ah !== bh) {
+                        if ((ah === 1) && (bh !== 1)) {
+                            return -1;
+                        } else if ((bh === 1) && (ah !== 1)) {
+                            return 1;
+                        }
+                    }
+                    return a > b ? 1 : (a < b ? -1 : 0);
+                }).map(num=>{return {
+                    ip: `192.168.0.${num+1}`,
+                    state: "unscanned"
+                }}).reverse();
             Array.from(Array(5).keys()).map(idx => this.processDevice(srcDevices.pop(),srcDevices,devices,srcDevices.length,resolve));
-        });
+        }).finally(() => this.setState({scanning:false}));
     }
 
     processDevice(device, srcDevices, destDevices, totDevices,resolve) {
@@ -47,17 +57,15 @@ export default class DeviceList extends Component {
             }).catch(err=>err)
               .finally(()=>{
                 this.setState({scanProgress:((srcDevices.length*1.0)/(totDevices*1.0))})
-                if (srcDevices.length) {
-                    resolve(this.processDevice(srcDevices.pop(),srcDevices,destDevices, totDevices));
-                } else {
-                    resolve(destDevices);
+                if (srcDevices.length && this.state.scanning) {
+                    this.processDevice(srcDevices.pop(),srcDevices,destDevices, totDevices);
                 }
               });
     }
 
     getLocalConfig() {
-        var abort = new AbortController();
-        var timer = setTimeout(()=>abort.abort(),4000);
+        let abort = new AbortController();
+        let timer = setTimeout(()=>abort.abort(),4000);
         return new Promise((resolve,reject) => wfetch(`/config/`, {
             method: 'post',
             signal: abort.signal
@@ -72,13 +80,12 @@ export default class DeviceList extends Component {
     }
 
     getDevice(device) {
-        var abort = new AbortController();
-        var timer = setTimeout(()=>abort.abort(),2000);
+        let abort = new AbortController();
+        let timer = setTimeout(()=>abort.abort(),2000);
         return new Promise((resolve,reject) => wfetch(`http://${device.ip}/config/`, {
             method: 'post',
             signal: abort.signal
         }).then(data => data.json())
-          .then(fromVersionedToPlain)
           .then(config => {
               clearTimeout(timer);
               device.config = config;
@@ -93,18 +100,17 @@ export default class DeviceList extends Component {
 
     render() {
         return <div className="scanProgress">
-            {this.state?.devices?.filter(device => device.state === "online")?.length > 1 ?
+            {this.state?.devices?.filter(device => device.state === "online")?.length > 0 ?
             <Select
                 key= "devices"
-                value= {this.props.selectedDevice?.config?.deviceid ? this.state.devices.find(device => device.config.deviceid === this.props.selectedDevice.config.deviceid) : 
-                                                                      this.state.devices.find(device => device.config.deviceid === this.state.config.deviceid)}
+                value= {this.props.selectedDeviceId ? this.state.devices.find(device => device.config.deviceid.value === this.props.selectedDeviceId) : undefined}
                 onChange= {(event) => this.props.onSet(event.target.value)}>
-             {(this.state?.devices||this.props.devices)
+                {this.state?.devices
                     .filter(device => device.state === "online")
-                    .map(device => <MenuItem value={device}>{`${device.config.devName}(${device.config.deviceid})${device.ip ? ` - ${device.ip}`:''}`}</MenuItem>)}
-            </Select>:null}
-            {this.state.scanning ? <CircularProgress variant="determinate" value={this.state.scanProgress*100}>33</CircularProgress > : 
+                    .map(device => <MenuItem value={device}>{`${device.config.devName.value}(${device.config.deviceid.value})`}</MenuItem>)}
+            </Select>:undefined}
+            {this.state.scanning ? <CircularProgress variant="determinate" onClick={_evt => this.setState({scanning:false})} value={this.state.scanProgress*100}>33</CircularProgress > : 
                                    <Button onClick={_evt=>this.getDevices()}><FontAwesomeIcon icon={faMagnifyingGlass}></FontAwesomeIcon></Button>}
         </div>;
     }
-}
+} 

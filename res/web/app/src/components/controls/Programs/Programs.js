@@ -1,6 +1,6 @@
 import './Programs.css';
 
-import {useState, lazy, Suspense} from 'react';
+import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { Collapse,List,ListItem,ListItemButton,ListItemIcon,ListItemText, MenuItem, Select, TextField } from '@mui/material';
 import { faChevronDown, faChevronUp, faComputer, faSquarePen, faTasks } from '@fortawesome/free-solid-svg-icons';
@@ -74,7 +74,7 @@ export function InLineThread(props) {
 
     return <ListItem className='inLineThread'>
         <ListItemButton onClick={_ => setState(!state) }>
-        <ListItemIcon>
+            <ListItemIcon>
                 {thread.program ? <FontAwesomeIcon icon={faComputer}></FontAwesomeIcon> : <FontAwesomeIcon icon={faTasks}></FontAwesomeIcon>}
             </ListItemIcon>
             <ListItemText primary={thread.method ? getMethodSummary(thread) : getProgramSummary(thread)} />
@@ -83,7 +83,7 @@ export function InLineThread(props) {
         </ListItemButton>
         <Collapse in={state} timeout="auto">
             {thread.program ? 
-                Program(thread, props, setThread):
+                Program(thread):
                 Method(thread, props, setThread)
             }
         </Collapse>

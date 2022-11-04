@@ -1,9 +1,8 @@
-import {createElement as e, Component} from 'react';
+import { createElement as e, Component, Suspense } from 'react';
 import { Button,Collapse,ListItemButton,ListItemIcon,ListItemText } from '@mui/material';
 import {wfetch, fromVersionedToPlain,fromPlainToVersionned} from '../../../utils/utils'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
-import { Suspense } from 'react';
 import { faGears } from '@fortawesome/free-solid-svg-icons'
 import { faChevronDown } from '@fortawesome/free-solid-svg-icons/faChevronDown'
 import { faChevronUp } from '@fortawesome/free-solid-svg-icons/faChevronUp'
@@ -22,11 +21,11 @@ export default class ConfigPage extends Component {
     }
 
     fetchConfig() {
-        wfetch(`${this.state.httpPrefix}/config/${!this.props.selectedDevice?.config?.deviceid?"":this.props.selectedDevice.config.deviceid+".json"}`, {
+        wfetch(`${this.state.httpPrefix}/config/${!this.props.selectedDevice?.config?.deviceid?.value?"":this.props.selectedDevice.config.deviceid.value+".json"}`, {
                 method: 'post',
                 //signal: abort.signal
             }).then(resp => resp.json())
-            .then(config => {
+              .then(config => {
                 //clearTimeout(timer);
                 this.props.selectedDevice.config = config;
                 this.setState({
@@ -38,12 +37,12 @@ export default class ConfigPage extends Component {
     }
 
     getEditorGroups() {
-        return e(ConfigGroup, { key: "configGroups", selectedDevice:this.props.selectedDevice, config: this.state?.newconfig, onChange: (_) => {this.jsoneditor?.set(this.state.newconfig); this.setState(this.state) } });
+        return e(ConfigGroup, { key: "configGroups", selectedDevice:this.props.selectedDevice, config: this.state?.newconfig, onChange: (_) => {this.jsoneditor?.update(this.state.newconfig); this.setState({newconfig: this.state.newconfig}) } });
     }
 
     saveChanges() {
-        var abort = new AbortController()
-        var timer = setTimeout(() => abort.abort(), 8000);
+        let abort = new AbortController()
+        let timer = setTimeout(() => abort.abort(), 8000);
         wfetch(`${this.state.httpPrefix}/config`, {
                 method: 'put',
                 signal: abort.signal,
@@ -86,22 +85,22 @@ export default class ConfigPage extends Component {
             }
         }
 
-        if (this.state["Full Configuration"]?.opened && !this.jsoneditor) {
-            this.jsoneditor = import('jsoneditor');
-            this.jsoneditor.then(({default: JSONEditor})=> {
+        if (this.jsoneditor) {
+            if (this.state.newconfig && (this.jsoneditor.get() !== this.state.newconfig)) {
+                this.jsoneditor.update(this.state.newconfig)
+            } else if (this.state.config && (this.jsoneditor.get() !== this.state.config)) {
+                this.jsoneditor.update(this.state.config)
+            }
+        }
+
+        if (this.state["Full Configuration"]?.opened && !this.jsoneditor && this.container) {
+            import('jsoneditor').then(({default: JSONEditor})=> {
                 this.jsoneditor = new JSONEditor(this.container, {
                     onChangeJSON: json => this.setState({newconfig: json})
                 }, this.state.config);
             });    
         }
 
-        if (this.jsoneditor) {
-            if (this.state.newconfig && (prevState.newconfig !== this.state.newconfig)) {
-                this.jsoneditor.set(this.state.newconfig)
-            } else if (this.state.config && (prevState.config !== this.state.config)) {
-                this.jsoneditor.set(this.state.config)
-            }
-        }
         if (prevState.httpPrefix !== this.state.httpPrefix) {
             this.fetchConfig();
         }

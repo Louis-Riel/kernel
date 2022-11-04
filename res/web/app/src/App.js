@@ -56,9 +56,8 @@ export default function BasicTabs() {
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <DeviceList
               selectedDevice= {selectedDevice}
-              onSet= {val => updateSelectedDevice(val)}></DeviceList>
+              onSet= {updateSelectedDevice}></DeviceList>
         </Suspense>
-        {tabStates[value].controlPanel ? tabStates[value].controlPanel() : undefined}
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <WebSocketManager
             enabled={window.location.pathname.indexOf("sdcard") === -1}
@@ -98,9 +97,6 @@ export default function BasicTabs() {
             registerStateCallback={registerStateCallback}
             unRegisterEventInstanceCallback={unRegisterEventInstanceCallback}
             unRegisterStateCallback={unRegisterStateCallback}
-            registerControlPanel={(ctrlPanel)=>{
-              tabStates[1].controlPanel=ctrlPanel;
-            }}
           ></StatusPage>
         </Suspense>
         </div>
@@ -151,7 +147,7 @@ export default function BasicTabs() {
   }
 
   function unRegisterStateCallback(stateCBFn) {
-    var idx = stateCBFns.findIndex(fn => fn.name === stateCBFn.name);
+    let idx = stateCBFns.findIndex(fn => fn.name === stateCBFn.name);
     if (idx >= 0) {
       stateCBFns.slice(idx,1);
       updateStateCallbacks(stateCBFns);
@@ -164,7 +160,7 @@ export default function BasicTabs() {
   }
 
   function unRegisterLogCallback(logCBFn) {
-    var idx = logCBFns.findIndex(fn => fn.name === logCBFn.name);
+    let idx = logCBFns.findIndex(fn => fn.name === logCBFn.name);
     if (idx >= 0) {
       logCBFns.splice(idx,1);
       updateLogCallbacks(logCBFns);
@@ -178,7 +174,7 @@ export default function BasicTabs() {
   }  
 
   function unRegisterEventInstanceCallback(eventCBFn,instance) {
-    var idx = eventCBFns.findIndex(fn => fn.fn.name === eventCBFn.name && fn.instance === instance);
+    let idx = eventCBFns.findIndex(fn => fn.fn.name === eventCBFn.name && fn.instance === instance);
     if (idx >= 0) {
       logCBFns.splice(idx,1);
       updateEventCallbacks(eventCBFns);

@@ -6,7 +6,7 @@ export class FileViewer extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            httpPrefix:"",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
             renderers: []
         };
     }
@@ -48,7 +48,7 @@ export class FileViewer extends Component {
                 renderers: [{
                     name: "trip",
                     points: content.split("\n")
-                        .filter(ln => ln.match(/[ID] \([0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}\).* Location:.*/))
+                        .filter(ln => ln.match(/[ID] \(\d{2}:\d{2}:\d{2}[.]\d{3}\).* Location:.*/))
                         .map(ln => ln.match(/[ID] \((?<timestamp>.*)\).*Location:\s*(?<latitude>[0-9.-]+),\s*(?<longitude>[0-9.-]+).*speed:\s*(?<speed>[0-9.]+).*altitude:\s*(?<altitude>[0-9.]+).*course:\s*(?<course>[0-9.]+).*bat:\s*(?<Battery>[0-9.]+)/i)?.groups)
                         .filter(point => point)
                         .map(point => {
@@ -73,16 +73,16 @@ export class FileViewer extends Component {
         wfetch(`${this.state.httpPrefix}${this.props.folder}/${this.props.name}`)
             .then(resp => resp.text())
             .then(content => {
-                var cols = content.split(/\n|\r\n/)[0].split(",");
+                let cols = content.split(/\n|\r\n/)[0].split(",");
                 resolve(this.setState({
                     renderers: [{
                         name: "trip",
                         points: content.split(/\n|\r\n/)
                             .splice(1).map(ln => {
-                                var ret = {};
+                                let ret = {};
                                 ln.split(",").forEach((it, idx) => ret[cols[idx]] = isNaN(it) ? it : parseFloat(it));
                                 return ret;
-                            }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
+                            }).filter(item => item.timestamp && item.timestamp.match(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/))
                     }]
                 }));
             }).catch(err => {

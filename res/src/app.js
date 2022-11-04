@@ -1,4 +1,4 @@
-var app=null;
+let app=null;
 
 class MainApp extends React.Component {
   constructor(props) {
@@ -41,16 +41,16 @@ class MainApp extends React.Component {
 
 //#region Control Pannel
   lookForDevs() {
-    var RTCPeerConnection = /*window.RTCPeerConnection ||*/ window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+    let RTCPeerConnection = /*window.RTCPeerConnection ||*/ window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
     if (RTCPeerConnection)(() => {  
-      var rtc = new RTCPeerConnection({  
+      let rtc = new RTCPeerConnection({  
           iceServers: []  
       });  
       if (1 || window.mozRTCPeerConnection) {  
           rtc.createDataChannel('', {  
               reliable: false  
           });  
-      };  
+      }
       rtc.onicecandidate = (evt) => {  
           if (evt.candidate) parseLine.bind(this)("a=" + evt.candidate.candidate);  
       };  
@@ -60,16 +60,16 @@ class MainApp extends React.Component {
       }.bind(this),(e) => {  
           console.warn("offer failed", e);  
       });  
-      var addrs = Object.create(null);  
+      let addrs = Object.create(null);  
       addrs["0.0.0.0"] = false;  
 
       function parseLine(line) {
         if (~line.indexOf("a=candidate")) {
-          var parts = line.split(' '), addr = parts[4], type = parts[7];
+          let parts = line.split(' '), addr = parts[4], type = parts[7];
           if (type === 'host')
             console.log(addr);
         } else if (~line.indexOf("c=")) {
-          var parts = line.split(' '), addr = parts[2].split("."), addrtyoe = parts[1];
+          let parts = line.split(' '), addr = parts[2].split("."), addrtyoe = parts[1];
           if (addr[0] === '0') {
             addr[0]=192;
             addr[1]=168;
@@ -78,13 +78,13 @@ class MainApp extends React.Component {
 
           if ((addrtyoe === "IP4") && addr[0]) {
             this.state.lanDevices = [];
-            for (var idx = 254; idx > 0; idx--) {
+            for (let idx = 254; idx > 0; idx--) {
               addr[3] = idx;
               this.state.lanDevices.push(addr.join("."));
             }
             this.state.lanDevices = this.state.lanDevices.sort(() => .5 - Math.random());
-            var foundDevices = [];
-            for (var idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
+            let foundDevices = [];
+            for (let idx = 0; idx < Math.min(10, this.state.lanDevices.length); idx++) {
               if (this.state.lanDevices.length) {
                 this.scanForDevices(this.state.lanDevices, foundDevices);
               }
@@ -102,19 +102,18 @@ class MainApp extends React.Component {
 
   scanForDevices(devices,foundDevices) {
     if (devices.length) {
-      var device = devices.pop();
-      var abort = new AbortController()
-      var timer = setTimeout(() => abort.abort(), 1000);
-      var onLine=false;
+      let device = devices.pop();
+      let abort = new AbortController()
+      let timer = setTimeout(() => abort.abort(), 1000);
       wfetch(`http://${device}/config/`, {
           method: 'post',
           signal: abort.signal
-      }).then(data => {clearTimeout(timer); onLine=true; return data.json()})
+      }).then(data => {clearTimeout(timer); return data.json()})
         .then(fromVersionedToPlain)
         .then(dev => {
             if (dev?.deviceid) {
-              var anims = this.anims.filter(anim => anim.type == "ping" && anim.from=="chip");
-              var inSpot = getInSpot(anims, "chip");
+              let anims = this.anims.filter(anim => anim.type == "ping" && anim.from=="chip");
+              let inSpot = getInSpot(anims, "chip");
               if (inSpot) {
                 inSpot.weight++;
               } else {
@@ -133,12 +132,9 @@ class MainApp extends React.Component {
               }
               dev.ip=device;
               foundDevices.push(dev);
-              if (!httpPrefix){
-                httpPrefix=`http://${foundDevices[0].ip}`
-                this.state.autoRefresh=true;
-                if (!this.state.connecting && !this.state.connected){
-                  this.openWs();
-                }
+              this.state.autoRefresh=true;
+              if (!this.state.connecting && !this.state.connected){
+                this.openWs();
               }
               this.setState({OnLineDevices: foundDevices});
             }
@@ -191,8 +187,8 @@ class MainApp extends React.Component {
   }
 
   startWs() {
-    var ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
-    var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
+    let ws = this.ws = new WebSocket("ws://" + (httpPrefix == "" ? `${window.location.hostname}:${window.location.port}` : httpPrefix.substring(7)) + "/ws");
+    let stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3500);
     ws.onmessage = (event) => {
       stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
     };
@@ -266,18 +262,18 @@ class MainApp extends React.Component {
     if (!this.widget)
         return;
         
-    var canvas = this.widget.getContext("2d");
+    let canvas = this.widget.getContext("2d");
     canvas.clearRect(0,0,100,40);
 
     this.browser(canvas, 2, 2, 30, 30, 10);
     this.chip(canvas, 70, 2, 20, 30, 5);
 
     if (this.anims.length){
-        var animGroups = this.anims.reduce((pv,cv)=>{
+        let animGroups = this.anims.reduce((pv,cv)=>{
             (pv[cv.type]=pv[cv.type]||[]).push(cv);
             return pv
         },{});
-        for (var agn in animGroups) {
+        for (let agn in animGroups) {
             animGroups[agn].forEach(anim => {
                 this.drawSprite(anim, canvas);
             });
@@ -299,9 +295,9 @@ class MainApp extends React.Component {
         anim.startWindow = performance.now();
         anim.endWindow = anim.startWindow + anim.tripLen;
     } else {
-        anim.x += (anim.direction*((performance.now() - anim.startWindow))/anim.tripLen);
+        anim.x += (anim.direction*(performance.now() - anim.startWindow)/anim.tripLen);
     }
-    var width=Math.min(15,4 + (anim.weight));
+    let width=Math.min(15,4 + (anim.weight));
     if ((anim.y-(width/2)) <= 0) {
       anim.y = width;
     }
@@ -317,9 +313,9 @@ class MainApp extends React.Component {
     canvas.stroke();
 
     if (anim.weight > 1) {
-      var today = ""+anim.weight
+      let today = ""+anim.weight
       canvas.font = Math.min(20,8+anim.weight)+"px Helvetica";
-      var txtbx = canvas.measureText(today);
+      let txtbx = canvas.measureText(today);
       canvas.fillStyle=anim.textColor;
       canvas.strokeStyle = anim.textColor;
       canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
@@ -362,7 +358,7 @@ class MainApp extends React.Component {
     canvas.fillStyle = "#00ffff";
     this.roundedRectagle(canvas, startX, startY, boxWidht, boxHeight, cornerSize);
 
-    for (var idx = 0; idx < pinVCount; idx++) {
+    for (let idx = 0; idx < pinVCount; idx++) {
         canvas.moveTo(startX,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
         canvas.lineTo(startX-pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
         canvas.lineTo(startX-pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
@@ -389,13 +385,13 @@ class MainApp extends React.Component {
   }
 
   AddLogLine(ln) {
-    var anims = this.anims.filter(anim => anim.type == "log" && anim.level == ln[0]);
-    var inSpot = getInSpot(anims, "chip");
+    let anims = this.anims.filter(anim => anim.type == "log" && anim.level == ln[0]);
+    let inSpot = getInSpot(anims, "chip");
     if (inSpot) {
       inSpot.weight++;
     } else {
-      var msg = ln.match(/^[^IDVEW]*(.+)/)[1];
-      var lvl = msg.substr(0, 1);
+      let msg = ln.match(/^[^IDVEW]*(.+)/)[1];
+      let lvl = msg.substr(0, 1);
       this.anims.push({
             type:"log",
             from: "chip",
@@ -414,8 +410,8 @@ class MainApp extends React.Component {
   }
 
   UpdateState(state) {
-    var anims = this.anims.filter(anim => anim.type == "state");
-    var inSpot = getInSpot(anims, "chip");
+    let anims = this.anims.filter(anim => anim.type == "state");
+    let inSpot = getInSpot(anims, "chip");
     if (inSpot) {
       inSpot.weight++;
     } else {
@@ -436,8 +432,8 @@ class MainApp extends React.Component {
   }
 
   ProcessEvent(event) {
-    var anims = this.anims.filter(anim => anim.type == "event");
-    var inSpot = getInSpot(anims, "chip");
+    let anims = this.anims.filter(anim => anim.type == "event");
+    let inSpot = getInSpot(anims, "chip");
     if (inSpot) {
       inSpot.weight++;
     } else {
@@ -461,7 +457,7 @@ class MainApp extends React.Component {
 
 //#region Page Tabulation
   GetPageControler() {
-    var ret = new AbortController();
+    let ret = new AbortController();
     ret.onabort = this.OnAbort;
     return ret;
   }
@@ -478,8 +474,8 @@ class MainApp extends React.Component {
   
   refreshActiveTab() {
     Object.keys(this.state.tabs).forEach(ttab => {
-      var section = document.getElementById(`${ttab}`);
-      var link = document.getElementById(`a${ttab}`);
+      let section = document.getElementById(`${ttab}`);
+      let link = document.getElementById(`a${ttab}`);
       if (this.state.tabs[ttab].active){
         link.classList.add("active")
         if (section)
@@ -504,7 +500,7 @@ class MainApp extends React.Component {
   }
 
   registerEventInstanceCallback(eventCBFn,instance) {
-    var cur = null;
+    let cur = null;
     if (!(cur=this.callbacks.eventCBFn.find(fn => fn.fn.name == eventCBFn.name && fn.instance === instance)))
       this.callbacks.eventCBFn.push({fn:eventCBFn,instance:instance});
     else {
@@ -572,7 +568,7 @@ class MainApp extends React.Component {
               key: genUUID(),
               className: "landevices",
               value: httpPrefix.substring(7),
-              onChange: elem=>{httpPrefix=`http://${elem.target.value}`;this.state?.httpPrefix!=httpPrefix?this.setState({httpPrefix:httpPrefix}):null;this.ws?.close();}
+              onChange: elem=>{this.setState({httpPrefix:`http://${elem.target.value}`});this.ws?.close();}
               },this.state.OnLineDevices.map(lanDev=>e("option",{
                   key:genUUID(),
                   className: "landevice"
@@ -582,20 +578,12 @@ class MainApp extends React.Component {
             key: genUUID(),
             selectedDeviceId: this.state.selectedDeviceId,
             httpPrefix: httpPrefix,
-            onSet: val=>this.state?.selectedDeviceId!=val?this.setState({selectedDeviceId:val}):null
+            onSet: val=>this.state?.selectedDeviceId!==val.config.deviceid?this.setState({selectedDeviceId:val.config.deviceid.value}):null
         })
       ])
     ]);
   }
 }
-
-// ReactDOM.render(
-//   e(MainApp, {
-//     key: genUUID(),
-//     className: "slider"
-//   }),
-//   document.querySelector(".slider")
-// );
 
 ReactDOM.createRoot(document.querySelector(".slider")).render(e(MainApp, {
   key: genUUID(),
