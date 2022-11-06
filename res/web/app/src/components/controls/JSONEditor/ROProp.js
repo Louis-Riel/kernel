@@ -2,13 +2,11 @@ import {createElement as e, Component, lazy, Suspense} from 'react';
 import {Tooltip} from '@mui/material';
 import { IsNumberValue, isFloat, genUUID, IsBooleanValue, IsDatetimeValue, degToRad} from '../../../utils/utils';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEraser } from '@fortawesome/free-solid-svg-icons';
-import { faSpinner } from '@fortawesome/free-solid-svg-icons';
-import { faLineChart } from '@fortawesome/free-solid-svg-icons';
+import { faEraser, faLineChart } from '@fortawesome/free-solid-svg-icons';
 import * as Recharts from "recharts";
 
 
-var httpPrefix = "";
+let httpPrefix = "";
 
 export default class ROProp extends Component {
     constructor(props) {
@@ -81,17 +79,17 @@ export default class ROProp extends Component {
         if (input === null) {
             return;
         }
-        var { hrs, smoothmin, today, time } = this.getTimeComponents(fld, val);
+        let { hrs, smoothmin, today, time } = this.getTimeComponents(fld, val);
 
-        var canvas = input.querySelector(`canvas`) || input.appendChild(document.createElement("canvas"));
+        let canvas = input.querySelector(`canvas`) || input.appendChild(document.createElement("canvas"));
         canvas.height = 100;
         canvas.width = 110;
-        var ctx = canvas.getContext("2d");
+        let ctx = canvas.getContext("2d");
         ctx.strokeStyle = '#00ffff';
         ctx.lineWidth = 4;
         ctx.shadowBlur = 2;
         ctx.shadowColor = '#00ffff'
-        var rect = input.getBoundingClientRect();
+        let rect = input.getBoundingClientRect();
         rect.height = canvas.height;
         rect.width = canvas.width;
 
@@ -100,19 +98,20 @@ export default class ROProp extends Component {
     }
 
     getTimeComponents(fld, val) {
-        var now = fld.endsWith("_us") ? new Date(val / 1000) : fld.endsWith("_sec") ? new Date(val * 1000) : new Date(val);
+        const secDate = fld.endsWith("_sec") ? new Date(val * 1000) : new Date(val);
+        let now = fld.endsWith("_us") ? new Date(val / 1000) : secDate;
 
         if (now.getFullYear() <= 1970)
             now.setTime(now.getTime() + now.getTimezoneOffset() * 60 * 1000);
 
-        var today = now.toLocaleDateString('en-US', { dateStyle: "short" });
-        var time = now.toLocaleTimeString('en-US', { hour12: false });
-        var hrs = now.getHours();
-        var min = now.getMinutes();
-        var sec = now.getSeconds();
-        var mil = now.getMilliseconds();
-        var smoothsec = sec + (mil / 1000);
-        var smoothmin = min + (smoothsec / 60);
+        let today = now.toLocaleDateString('en-US', { dateStyle: "short" });
+        let time = now.toLocaleTimeString('en-US', { hour12: false });
+        let hrs = now.getHours();
+        let min = now.getMinutes();
+        let sec = now.getSeconds();
+        let mil = now.getMilliseconds();
+        let smoothsec = sec + (mil / 1000);
+        let smoothmin = min + (smoothsec / 60);
 
         if (now.getFullYear() <= 1970) {
             today = (now.getDate() - 1) + ' Days';
@@ -129,7 +128,7 @@ export default class ROProp extends Component {
         //Date
         ctx.font = "12px Helvetica";
         ctx.fillStyle = 'rgba(00, 255, 255, 1)';
-        var txtbx = ctx.measureText(today);
+        let txtbx = ctx.measureText(today);
         ctx.fillText(today, (rect.width / 2) - txtbx.width / 2, rect.height * .65);
 
         //Time
@@ -140,7 +139,7 @@ export default class ROProp extends Component {
     }
 
     drawBackground(ctx, rect, hrs, smoothmin) {
-        var gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
+        let gradient = ctx.createRadialGradient(rect.width / 2, rect.height / 2, 5, rect.width / 2, rect.height / 2, rect.height + 5);
         gradient.addColorStop(0, "#03303a");
         gradient.addColorStop(1, "black");
         ctx.fillStyle = gradient;
@@ -156,7 +155,7 @@ export default class ROProp extends Component {
     }
 
     getGraphButton() {
-        var ret = null;
+        let ret = null;
         if (this.hasStats()) {
             ret = e(Tooltip,{
                       className: "graphtooltip",

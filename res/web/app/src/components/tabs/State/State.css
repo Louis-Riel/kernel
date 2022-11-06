@@ -45,3 +45,55 @@ ul.MuiMenu-list >li:hover {
 div.subitem>div>svg {
     margin-right: 20px;
 }
+
+.tooltip-content {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: stretch;
+    background-color: black;
+    padding: 5px;
+}
+
+.tooltip-header {font-size: medium;display: flex;flex-direction: column;flex-wrap: nowrap;align-content: center;align-items: center;justify-content: center;border-bottom: solid 1px;}
+
+ul.threads {
+    margin: 0px;
+    padding: 0px;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: stretch;
+    font-size: small;
+}
+
+.thread {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: space-between;
+    align-items: center;
+    column-gap: 5px;
+}
+
+.thread-value {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+    font-size: smaller;
+    color: aquamarine;
+    column-gap: 3px;
+}
+
+.thread-summary {
+    font-size: x-small;
+    color: aqua;
+}

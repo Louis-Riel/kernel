@@ -1,5 +1,3 @@
-'use strict';
-
 //#region utility functions
 export function genUUID() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {

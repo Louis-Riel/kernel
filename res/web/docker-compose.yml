@@ -8,7 +8,7 @@ services:
     volumes:
       - ./logs/webapp:/usr/local/openresty/nginx/logs
       - ./front-gate/web:/etc/nginx/conf.d
-      - ./front-gate/signit.lua:/usr/local/openresty/nginx/signit.lua
+      - ./front-gate/luas/signit.lua:/usr/local/openresty/nginx/signit.lua
       - ./app/build:/usr/share/nginx/html
     networks:
       - keys
@@ -27,24 +27,9 @@ services:
       - ./gate-keeper/luas/bake-key.lua:/usr/local/openresty/nginx/bake-key.lua
     networks:
       - keys
-      - zuul
-
-  redis-cache:
-    build: ./gate-keeper/cache
-    restart: always
-    env_file:
-      - ./gate-keeper/.env
-    ports:
-      - 6379:6379
-    volumes: 
-      - redis-cache:/data
-      - ./gate-keeper/cache/redis.conf:/etc/redis/redis-templ.conf
-    networks:
-      - zuul
 
 volumes:
   redis-cache:
 
 networks:
   keys:
-  zuul:

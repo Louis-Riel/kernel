@@ -1,4 +1,5 @@
 import {createElement as e, Component} from 'react';
+import { genUUID } from '../../../utils/utils';
 
 export default class BoolInput extends Component {
     constructor(props) {
@@ -13,9 +14,11 @@ export default class BoolInput extends Component {
     }
 
     toggleChange = (elem) => {
-        elem.target.checked ?
-            this.props.onOn ? this.props.onOn(elem.target) : null :
-            this.props.onOff ? this.props.onOff(elem.target) : null;
+        if (elem.target.checked && this.props.onOn) { 
+            this.props.onOn(elem.target);
+        } else if (!elem.target.checked && this.props.onOff) {
+            this.props.onOff(elem.target);
+        }
         if (this.props.onChange) {
             this.props.onChange(elem.target.checked);
         }

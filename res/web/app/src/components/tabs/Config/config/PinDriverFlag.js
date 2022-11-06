@@ -1,5 +1,5 @@
 import {createElement as e, Component} from 'react';
-import {Snackbar,Alert,Card,CardHeader,CardContent,List, Chip} from '@mui/material';
+import {Snackbar,Alert,Card,CardHeader,CardContent,List, Chip, Divider, Paper, Typography} from '@mui/material';
 
 export default class PinDriverFlags extends Component {
     constructor(props) {
@@ -39,7 +39,15 @@ export default class PinDriverFlags extends Component {
 
     componentDidUpdate(prevProps, prevState) {
         if (this.props.value !== this.getValue(this.state)) {
-            this.props.onChange(this.getValue(this.state));
+            this.setState({
+                digital_in: { value: this.props.value &  0b00000001 ? true : false, errors:[] },
+                digital_out: { value: this.props.value & 0b00000010 ? true : false, errors:[] },
+                pullup: { value: this.props.value &      0b00000100 ? true : false, errors:[] },
+                pulldown: { value: this.props.value &    0b00001000 ? true : false, errors:[] },
+                touch: { value: this.props.value &       0b00010000 ? true : false, errors:[] },
+                wakeonhigh: { value: this.props.value &  0b00100000 ? true : false, errors:[] },
+                wakeonlow: { value: this.props.value &   0b01000000 ? true : false, errors:[] }
+            });
         }
     }
 
@@ -94,25 +102,14 @@ export default class PinDriverFlags extends Component {
 
     renderOption(name, value) {    
         return [
-            // e(FormControlLabel,{
-            //     key:name,
-            //     className:"driverflag",
-            //     label: name,
-            //     control:e(Checkbox, {
-            //         key: "ctrl",
-            //         checked: value.value,
-            //         onChange: event => this.onChange(name, event.target.checked)
-            //     })
-            // }),
             <Chip label={name} className={this.state[name]?.value ? "selected" : "available"} onClick={_ => this.onChange(name, !this.state[name].value)}/>,
             ...this.getErrors(value)
         ];
     }
 
     render() {
-        return e( Card, { key: "driver-flags", className: "driver-flags" },[
-            e( CardHeader, {key:"header", subheader: "Flags" }),
-            e( CardContent, {key:"details"},  e(List,{key: "items"}, Object.keys(this.state).map(name => this.renderOption(name, this.state[name]))))
-        ]);
+        return <Paper className="driver-flags" elevation={3}>
+            {Object.keys(this.state).map(name => this.renderOption(name, this.state[name]))}
+            </Paper>
     }
 }

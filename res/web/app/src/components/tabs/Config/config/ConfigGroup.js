@@ -97,7 +97,7 @@ export default class ConfigGroup extends Component {
     renderEditor(key, item, idx) {
         return  e("div",{key:`${key.collectionName}-${idx}-control-editor`,className:`control-editor`},[
                     <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
-                        {e( this.supportedTypes[key.collectionName]?.component || ConfigItem, { key: key.collectionName + idx, value: key, role: "tabpanel", item: item[idx], onChange: this.props.onChange})}
+                        {e( this.supportedTypes[key.collectionName]?.component || ConfigItem, { key: key.collectionName + idx, value: key, role: "tabpanel", item: item[idx], nameField: "name", onChange: this.props.onChange})}
                     </Suspense>,
                     e(Button, { key: "dup", onClick: evt=> {this.props.config[key.collectionName].push(JSON.parse(JSON.stringify(this.props.config[key.collectionName][idx]))); this.props.onChange()} }, <FontAwesomeIcon icon={faClone} />),
                     e(Button, { key: "delete", onClick: evt=> {this.props.config[key.collectionName].splice(idx,1); this.props.onChange()} }, <FontAwesomeIcon icon={faTrashCan} />),

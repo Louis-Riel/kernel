@@ -19,6 +19,7 @@
 
 .popuperror>.MuiPaper-root {
     background: linear-gradient(to bottom, #474242, #353434) !important;
+    color: inherit;
 }
 
 button.MuiButtonBase-root.MuiTab-root.MuiTab-textColorPrimary {
@@ -100,4 +101,19 @@ div.MuiListItemIcon-root>svg {
 
 .MuiChip-root.available {
     padding: 1px;
+}
+
+.config-content {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: baseline;
+    row-gap: 15px;
+}
+
+.config-header {
+    padding-bottom: 20px;
+    padding-left: 10px;
 }
