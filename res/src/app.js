@@ -111,43 +111,47 @@ class MainApp extends React.Component {
       }).then(data => {clearTimeout(timer); return data.json()})
         .then(fromVersionedToPlain)
         .then(dev => {
-            if (dev?.deviceid) {
-              let anims = this.anims.filter(anim => anim.type == "ping" && anim.from=="chip");
-              let inSpot = getInSpot(anims, "chip");
-              if (inSpot) {
-                inSpot.weight++;
-              } else {
-                this.anims.push({
-                    type:"ping",
-                    from: "chip",
-                    weight: 1,
-                    lineColor: '#00ffff',
-                    shadowColor: '#000000',
-                    fillColor: '#000000',
-                    textColor: '#00ffff',
-                    startY: 30,
-                    renderer: this.drawSprite
-                })
-                window.requestAnimationFrame(this.drawDidget.bind(this));
-              }
-              dev.ip=device;
-              foundDevices.push(dev);
-              this.state.autoRefresh=true;
-              if (!this.state.connecting && !this.state.connected){
-                this.openWs();
-              }
-              this.setState({OnLineDevices: foundDevices});
-            }
-
-            if (devices.length) {
-              this.scanForDevices(devices,foundDevices);
-            }
+            this.processScannedDevice(dev, device, foundDevices, devices);
           })
         .catch(err => {
           if (devices.length) {
               this.scanForDevices(devices,foundDevices);
           }
         });
+    }
+  }
+
+  processScannedDevice(dev, device, foundDevices, devices) {
+    if (dev?.deviceid) {
+      let anims = this.anims.filter(anim => anim.type == "ping" && anim.from == "chip");
+      let inSpot = getInSpot(anims, "chip");
+      if (inSpot) {
+        inSpot.weight++;
+      } else {
+        this.anims.push({
+          type: "ping",
+          from: "chip",
+          weight: 1,
+          lineColor: '#00ffff',
+          shadowColor: '#000000',
+          fillColor: '#000000',
+          textColor: '#00ffff',
+          startY: 30,
+          renderer: this.drawSprite
+        });
+        window.requestAnimationFrame(this.drawDidget.bind(this));
+      }
+      dev.ip = device;
+      foundDevices.push(dev);
+      this.state.autoRefresh = true;
+      if (!this.state.connecting && !this.state.connected) {
+        this.openWs();
+      }
+      this.setState({ OnLineDevices: foundDevices });
+    }
+
+    if (devices.length) {
+      this.scanForDevices(devices, foundDevices);
     }
   }
 
@@ -270,7 +274,8 @@ class MainApp extends React.Component {
 
     if (this.anims.length){
         let animGroups = this.anims.reduce((pv,cv)=>{
-            (pv[cv.type]=pv[cv.type]||[]).push(cv);
+            pv[cv.type]=pv[cv.type]||[];
+            pv[cv.type].push(cv);
             return pv
         },{});
         for (let agn in animGroups) {
@@ -500,8 +505,8 @@ class MainApp extends React.Component {
   }
 
   registerEventInstanceCallback(eventCBFn,instance) {
-    let cur = null;
-    if (!(cur=this.callbacks.eventCBFn.find(fn => fn.fn.name == eventCBFn.name && fn.instance === instance)))
+    let cur = this.callbacks.eventCBFn.find(fn => fn.fn.name == eventCBFn.name && fn.instance === instance);
+    if (!cur)
       this.callbacks.eventCBFn.push({fn:eventCBFn,instance:instance});
     else {
       cur.fn=eventCBFn;
