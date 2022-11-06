@@ -25,14 +25,14 @@ esp_err_t TheRest::checkTheSum(httpd_req_t *req) {
             //     Serial.printf("%02x", digest[i]);
             // }
         } else {
-            //ret=ESP_FAIL;
+            ret=ESP_FAIL;
             ESP_LOGE(__FUNCTION__,"%s got bad hash:%d",req->uri, hlen);
-            //httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
+            httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
         }
         ldfree(theHash);
     } else {
         //ret=ESP_FAIL;
-        //ESP_LOGW(__FUNCTION__,"%s got no hash",req->uri);
+        ESP_LOGW(__FUNCTION__,"%s got no hash",req->uri);
         //httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
     }
 #endif
