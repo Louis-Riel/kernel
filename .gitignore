@@ -1,6 +1,7 @@
 .pioenvs
 .piolibdeps
-build
+build*
+remote*
 .vscode
 *.kml
 *.tar
