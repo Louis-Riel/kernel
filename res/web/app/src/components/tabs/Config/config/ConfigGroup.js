@@ -25,7 +25,7 @@ export default class ConfigGroup extends Component {
             }
         };
         this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : ".",
             currentTab: undefined
         };
         wfetch(`${this.state.httpPrefix}/templates/config`,{
@@ -40,7 +40,7 @@ export default class ConfigGroup extends Component {
             if (this.props.selectedDevice?.ip) {
                 this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
             } else {
-                this.setState({httpPrefix:""});
+                this.setState({httpPrefix:"."});
             }
         }
         if (prevState?.httpPrefix !== this.state.httpPrefix) {

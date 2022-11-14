@@ -28,7 +28,7 @@ export default class StatusPage extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : ".",
             refreshRate:"Manual",
             componentOpenState:{},
             threads:[],
@@ -93,7 +93,7 @@ export default class StatusPage extends Component {
             if (this.props.selectedDevice?.ip) {
                 this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
             } else {
-                this.setState({httpPrefix:""});
+                this.setState({httpPrefix:"."});
             }
         }
         if (prevState.httpPrefix !== this.state.httpPrefix) {

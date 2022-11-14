@@ -31,7 +31,7 @@ esp_vfs_fat_sdmmc_mount_config_t mount_config = {
     .format_if_mount_failed = true,
     .max_files = 5,
     .allocation_unit_size = 16 * 1024};
-sdmmc_card_t *card = NULL;
+sdmmc_card_t *card = nullptr;
 const char mount_point[] = "/sdcard";
 int8_t numSdCallers = -1;
 int8_t numSpiffCallers = -1;
@@ -350,8 +350,8 @@ void CleanupLFS(void* param) {
   struct stat fileStat;
   char* cpath = (char*)dmalloc(300);
 
-  if ((theFolder = opendir(files->curDir)) != NULL) {
-    while (((fi = readdir(theFolder)) != NULL) && (*files->bytesFree < 1782579)) {
+  if ((theFolder = opendir(files->curDir)) != nullptr) {
+    while (((fi = readdir(theFolder)) != nullptr) && (*files->bytesFree < 1782579)) {
       if (fi->d_type == DT_DIR) {
         dirFiles_t* cfiles = (dirFiles_t *)dmalloc(sizeof(dirFiles_t));
         cfiles->curDir = (char*)dmalloc(300);
@@ -434,13 +434,13 @@ esp_err_t setupLittlefs()
   xEventGroupSetBits(app_eg, SPIFF_MOUNTED);
 
   DIR *root = opendir("/lfs");
-  if (root == NULL)
+  if (root == nullptr)
   {
     ESP_LOGE(__FUNCTION__, "Cannot open lfs");
     return ESP_FAIL;
   }
 
-  while ((de = readdir(root)) != NULL)
+  while ((de = readdir(root)) != nullptr)
   {
     ESP_LOGV(__FUNCTION__, "%d %s", de->d_type, de->d_name);
     if (strcmp(de->d_name, "logs") == 0)
@@ -540,7 +540,7 @@ bool initSpiff(bool log) {
           dirFiles->root = dirFiles;
           dirFiles->bytesFree=(uint32_t*)dmalloc(sizeof(void*));
           *dirFiles->bytesFree = AppConfig::GetAppStatus()->GetIntProperty("/lfs/free");
-          CreateBackgroundTask(CleanupLFS,"CleanupLFS",4096,(void*)dirFiles,tskIDLE_PRIORITY,NULL);
+          CreateBackgroundTask(CleanupLFS,"CleanupLFS",4096,(void*)dirFiles,tskIDLE_PRIORITY,nullptr);
         }
       }
     }
@@ -697,9 +697,9 @@ bool rmDashFR(const char *folderName)
   char fileName[300];
   bool isABadDay = false;
 
-  if ((theFolder = opendir(folderName)) != NULL)
+  if ((theFolder = opendir(folderName)) != nullptr)
   {
-    while (!isABadDay && ((fi = readdir(theFolder)) != NULL))
+    while (!isABadDay && ((fi = readdir(theFolder)) != nullptr))
     {
       sprintf(fileName, "%s/%s", folderName, fi->d_name);
       if (fi->d_type == DT_DIR)
@@ -732,7 +732,7 @@ bool moveFile(const char *src, const char *dest)
   if (srcF != 0)
   {
     FILE *destF = fopenCd(dest, "w", true);
-    if (destF != NULL)
+    if (destF != nullptr)
     {
       int ch = 0;
       while ((ch = fgetc(srcF)) != EOF)
@@ -765,7 +765,7 @@ bool moveFile(const char *src, const char *dest)
 
 bool stringContains(const char *str, const char *val)
 {
-  if ((str == NULL) || (val == NULL))
+  if ((str == nullptr) || (val == nullptr))
     return false;
 
   uint32_t sl = strlen(str);
@@ -790,7 +790,7 @@ bool stringContains(const char *str, const char *val)
 
 bool endsWith(const char *str, const char *val)
 {
-  if ((str == NULL) || (val == NULL))
+  if ((str == nullptr) || (val == nullptr))
     return false;
 
   uint32_t sl = strlen(str);
@@ -810,20 +810,20 @@ bool endsWith(const char *str, const char *val)
 
 char *indexOf(const char *str, const char *key)
 {
-  if ((str == NULL) || (key == NULL) || (strlen(str) == 0) || (strlen(key) == 0))
+  if ((str == nullptr) || (key == nullptr) || (strlen(str) == 0) || (strlen(key) == 0))
   {
-    return NULL;
+    return nullptr;
   }
   uint32_t slen = strlen(str);
   uint32_t klen = strlen(key);
   uint32_t kidx = 0;
-  char *keyPos = NULL;
+  char *keyPos = nullptr;
 
   for (uint32_t idx = 0; idx < slen; idx++)
   {
     if (str[idx] == key[kidx])
     {
-      if (keyPos == NULL)
+      if (keyPos == nullptr)
       {
         keyPos = (char *)&str[idx];
       }
@@ -836,18 +836,18 @@ char *indexOf(const char *str, const char *key)
     else
     {
       kidx = 0;
-      keyPos = NULL;
+      keyPos = nullptr;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 char *lastIndexOf(const char *str, const char *key)
 {
-  if ((str == NULL) || (key == NULL) || (strlen(str) == 0) || (strlen(key) == 0))
+  if ((str == nullptr) || (key == nullptr) || (strlen(str) == 0) || (strlen(key) == 0))
   {
     ESP_LOGV(__FUNCTION__, "Missing source or key");
-    return NULL;
+    return nullptr;
   }
   uint32_t slen = strlen(str);
   ESP_LOGV(__FUNCTION__, "Looking for %s in %s(%d)", key, str, slen);
@@ -861,7 +861,7 @@ char *lastIndexOf(const char *str, const char *key)
     }
   }
   ESP_LOGV(__FUNCTION__, "%s not in %s(%d)", key, str, slen);
-  return NULL;
+  return nullptr;
 }
 
 uint32_t GetNumOpenFiles()
@@ -872,7 +872,7 @@ uint32_t GetNumOpenFiles()
 void flashTheThing(uint8_t *img, uint32_t totLen)
 {
   esp_ota_handle_t update_handle = 0;
-  const esp_partition_t *update_partition = NULL;
+  const esp_partition_t *update_partition = nullptr;
 
   const esp_partition_t *configured = esp_ota_get_boot_partition();
   const esp_partition_t *running = esp_ota_get_running_partition();
@@ -970,14 +970,14 @@ void UpgradeFirmware()
     memset(srvrmd5,0,70);
     memset(localmd5,0,70);
     FILE *fmd5 = fopen(md5fName, "r");
-    FILE *ffw = NULL;
+    FILE *ffw = nullptr;
     size_t chunckLen = 0, fwlen = 0;
     if (fmd5)
     {
       if (((md5len = fread(srvrmd5, sizeof(uint8_t), 33, fmd5)) >= 32) && (md5len <=33))
       {
         ESP_LOGI(__FUNCTION__, "FW MD5 %zu bits read", md5len);
-        if ((ffw = fopen(fwfName, "r")) != NULL)
+        if ((ffw = fopen(fwfName, "r")) != nullptr)
         {
           ESP_LOGI(__FUNCTION__, "FW %d bits to read", (int)fwSt.st_size);
           if (fwSt.st_size)
@@ -1058,7 +1058,7 @@ void DisplayMemInfo(){
   uint32_t totalRunTime;
   TaskStatus_t *statuses = (TaskStatus_t *)dmalloc(numTasks * sizeof(TaskStatus_t));
   numTasks = uxTaskGetSystemState(statuses, numTasks, &totalRunTime);
-  char* tname = pcTaskGetTaskName(NULL);
+  char* tname = pcTaskGetTaskName(nullptr);
 
   if (totalRunTime > 0)
   {
@@ -1084,7 +1084,7 @@ void DisplayMemInfo(){
 FILE *	fopenCd (const char *__restrict _name, const char *__restrict _type, bool notSure){
   char* name = strdup(_name);
   char* startPos = indexOf(name+1,"/");
-  char* endPos = startPos > name ? indexOf(startPos+1,"/"):NULL;
+  char* endPos = startPos > name ? indexOf(startPos+1,"/"):nullptr;
 
   while (startPos && endPos) {
     *endPos=0;
@@ -1092,7 +1092,7 @@ FILE *	fopenCd (const char *__restrict _name, const char *__restrict _type, bool
       ESP_LOGI(__FUNCTION__,"mkdir %s",name);
     *endPos='/';
     startPos = endPos+1;
-    endPos = startPos > endPos ? indexOf(startPos+1,"/"):NULL;
+    endPos = startPos > endPos ? indexOf(startPos+1,"/"):nullptr;
   }
   ldfree(name);
   return fopen(_name, _type);

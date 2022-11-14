@@ -159,7 +159,7 @@ private:
   cJSON* jBytesOut;
   cJSON* jScanning;
 
-  httpd_uri_t const restUris[12] =
+  httpd_uri_t restUris[12] =
       {
           {.uri = "/templates/config*",
            .method = HTTP_POST,
@@ -246,7 +246,7 @@ private:
            .handle_ws_control_frames = false,
            .supported_subprotocol = nullptr}};
 
-  const httpd_uri_t appUri = {
+  httpd_uri_t appUri = {
       .uri = "*",
       .method = HTTP_GET,
       .handler = app_handler,
@@ -255,7 +255,7 @@ private:
       .handle_ws_control_frames = false,
       .supported_subprotocol = nullptr};
 
-  const httpd_uri_t restPostUri = {
+  httpd_uri_t restPostUri = {
       .uri = "*",
       .method = HTTP_POST,
       .handler = rest_handler,
@@ -264,7 +264,7 @@ private:
       .handle_ws_control_frames = false,
       .supported_subprotocol = nullptr};
 
-  const httpd_uri_t restPutUri = {
+  httpd_uri_t restPutUri = {
       .uri = "*",
       .method = HTTP_PUT,
       .handler = rest_handler,
@@ -273,7 +273,7 @@ private:
       .handle_ws_control_frames = false,
       .supported_subprotocol = nullptr};
 
-  const httpd_uri_t wsUri = {
+  httpd_uri_t wsUri = {
       .uri = "/ws",
       .method = HTTP_GET,
       .handler = ws_handler,

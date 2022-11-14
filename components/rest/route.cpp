@@ -1,6 +1,7 @@
 #include "./route.h"
 #include "esp_debug_helpers.h"
 #include "eventmgr.h"
+#include "pwdmgr.h"
 #include <mbedtls/sha256.h>
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
@@ -29,13 +30,13 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       storageFlags(initStorage()),
       system_status(nullptr)
 {
+    auto* apin = new AppConfig(status,AppConfig::GetAppStatus());
     if (restInstance == nullptr)
     {
         deviceId = AppConfig::GetAppConfig()->GetIntProperty("deviceid");
         ESP_LOGI(__FUNCTION__, "First Rest for %d", deviceId);
         restInstance = this;
         ESP_LOGI(__FUNCTION__, "Getting Config for %d", deviceId);
-        auto* apin = new AppConfig(status,AppConfig::GetAppStatus());
         apin->SetIntProperty("numRequests",0);
         apin->SetIntProperty("processingTime_us",0);
         apin->SetIntProperty("BytesIn",0);
@@ -52,7 +53,6 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
         accessControlMaxAge=config && config->HasProperty("Access-Control-Max-Age") ? config->GetPropertyHolder("Access-Control-Max-Age") : nullptr;
         accessControlAllowMethods=config && config->HasProperty("Access-Control-Allow-Methods") ? config->GetPropertyHolder("Access-Control-Allow-Methods") : nullptr;
         accessControlAllowHeaders=config && config->HasProperty("Access-Control-Allow-Headers") ? config->GetPropertyHolder("Access-Control-Allow-Headers") : nullptr;
-        delete apin;
     }
     if (xEventGroupGetBits(eventGroup) & HTTP_SERVING)
     {
@@ -90,6 +90,30 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     if ((ret = httpd_start(&server, &restConfig)) == ESP_OK)
     {
         ESP_LOGV(__FUNCTION__, "Registering URI handlers");
+
+        if (config && config->HasProperty("KeyServer")) {
+            auto* uris = cJSON_AddObjectToObject(status,"Keys");
+            auto* urlName = (char*)dmalloc(255);
+            for (auto& uri : restUris) {
+                uri.user_ctx = dmalloc(sizeof(PasswordManager));
+                memset(uri.user_ctx,0,sizeof(PasswordManager));
+                sprintf(urlName,"%s-%s",PasswordEntry::GetMethodName(uri.method),uri.uri);
+                new(uri.user_ctx) PasswordManager(config, apin, new AppConfig(cJSON_AddObjectToObject(uris,urlName),AppConfig::GetAppStatus()),&uri);
+            }
+            wsUri.user_ctx = dmalloc(sizeof(PasswordManager));
+            memset(wsUri.user_ctx,0,sizeof(PasswordManager));
+            sprintf(urlName,"%s-%s",PasswordEntry::GetMethodName(wsUri.method),wsUri.uri);
+            new(wsUri.user_ctx) PasswordManager(config, apin, new AppConfig(cJSON_AddObjectToObject(uris,urlName),AppConfig::GetAppStatus()), &wsUri);
+
+            appUri.user_ctx = dmalloc(sizeof(PasswordManager));
+            memset(appUri.user_ctx,0,sizeof(PasswordManager));
+            sprintf(urlName,"%s-%s",PasswordEntry::GetMethodName(appUri.method),appUri.uri);
+            new(appUri.user_ctx) PasswordManager(config, apin, new AppConfig(cJSON_AddObjectToObject(uris,urlName),AppConfig::GetAppStatus()),  &appUri);
+            PasswordManager::InitializePasswordRefresher();
+            ldfree(urlName);
+        } else {
+            ESP_LOGW(__FUNCTION__,"This WebServer is not using key validation");
+        }
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &wsUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &restPostUri));
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &restPutUri));
@@ -103,6 +127,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
     {
         ESP_LOGE(__FUNCTION__, "Error starting server! %s", esp_err_to_name(ret));
     }
+    delete apin;
 }
 
 TheRest::~TheRest()
@@ -120,6 +145,11 @@ TheRest::~TheRest()
     ldfree(gwAddr);
     ldfree(postData);
     restInstance=nullptr;
+    ldfree(wsUri.user_ctx);
+    ldfree(appUri.user_ctx);
+    for (auto const& uri : restUris) {
+        ldfree(uri.user_ctx);
+    }
 }
 
 bool TheRest::routeHttpTraffic(const char *reference_uri, const char *uri_to_match, size_t match_upto)
@@ -491,10 +521,6 @@ esp_err_t TheRest::rest_handler(httpd_req_t *req)
 {
     ESP_LOGV(__FUNCTION__, "rest handling (%d)%s", req->method, req->uri);
 
-    if (checkTheSum(req) != ESP_OK) {
-        return ESP_FAIL;
-    }
-
     uint32_t idx = 0;
     char ipstr[INET6_ADDRSTRLEN] = {0};
 
@@ -524,6 +550,11 @@ esp_err_t TheRest::rest_handler(httpd_req_t *req)
         {
             ESP_LOGV(__FUNCTION__, "rest handled (%d)%s <- %s idx:%d", req->method, theUri.uri, req->uri, idx);
             time_t start = esp_timer_get_time();
+            req->user_ctx = theUri.user_ctx;
+            if (checkTheSum(req) != ESP_OK) {
+                return ESP_FAIL;
+            }
+
             esp_err_t ret = theUri.handler(req);
             restInstance->jprocessingTime_us->valuedouble = restInstance->jprocessingTime_us->valueint+=(esp_timer_get_time()-start);
             return ret;

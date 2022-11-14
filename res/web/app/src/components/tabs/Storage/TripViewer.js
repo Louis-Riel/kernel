@@ -5,7 +5,7 @@ export default class TripViewer extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : ".",
             cache:this.props.cache,
             zoomlevel:15,
             latitude:0,
@@ -24,7 +24,7 @@ export default class TripViewer extends Component {
             if (this.props.selectedDevice?.ip) {
                 this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
             } else {
-                this.setState({httpPrefix:""});
+                this.setState({httpPrefix:"."});
             }
         }
 

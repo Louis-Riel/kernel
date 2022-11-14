@@ -721,6 +721,7 @@ esp_err_t add_type(httpd_req_t *req, const char* fileName) {
 
 esp_err_t TheRest::app_handler(httpd_req_t *req)
 {
+    req->user_ctx = restInstance->appUri.user_ctx;
     if (checkTheSum(req) != ESP_OK) {
         return ESP_FAIL;
     }
@@ -1107,7 +1108,7 @@ esp_err_t TheRest::download_handler(httpd_req_t *req)
     dest->Close();
     delete dest;
     
-    ESP_LOGV(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
+    ESP_LOGI(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
     TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += 2;
 
     return httpd_resp_send(req, RESP_OK, 2);
@@ -1119,7 +1120,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
     {
         char *buf;
         size_t buf_len;
-        ESP_LOGI(__FUNCTION__, "OTA REQUEST!!!!! RAM:%d...", esp_get_free_heap_size());
+        ESP_LOGI(__FUNCTION__, "OTA REQUEST!!!!! RAM:%d.%s", esp_get_free_heap_size(), req->uri);
 
         buf_len = httpd_req_get_url_query_len(req) + 1;
         char md5[70];

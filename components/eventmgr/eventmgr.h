@@ -360,4 +360,8 @@ uint8_t CreateRepeatingTask(
     void *const pvParameters,
     const uint32_t repeatPeriod);
 
+void UpdateRepeatingTaskPeriod(
+    const uint32_t idx,
+    const uint32_t repeatPeriod);
+
 #endif

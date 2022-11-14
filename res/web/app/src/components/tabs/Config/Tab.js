@@ -15,7 +15,7 @@ export default class ConfigPage extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:""
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : ".",
         };
         this.fetchConfig();
     }
@@ -81,7 +81,7 @@ export default class ConfigPage extends Component {
             if (this.props.selectedDevice?.ip) {
                 this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
             } else {
-                this.setState({httpPrefix:""});
+                this.setState({httpPrefix:"."});
             }
         }
 

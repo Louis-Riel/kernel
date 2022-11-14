@@ -15,8 +15,8 @@
 
 #define MAX_REPEATING_TASKS 12
 static bool isRepeatingLooping = false;
-static struct repeating_task_t* repeating_tasks = NULL;
-static cJSON* repeatingTasks = NULL;
+static struct repeating_task_t* repeating_tasks = nullptr;
+static cJSON* repeatingTasks = nullptr;
 
 ManagedThreads::ManagedThreads()
         :managedThreadBits(xEventGroupCreate()) 
@@ -34,7 +34,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         for (uint8_t idx = 0; idx < 32; idx++)
         {
             mThread_t *thread = threads[idx];
-            ret += thread == NULL ? 0 : 1;
+            ret += thread == nullptr ? 0 : 1;
         }
         return ret;
     }
@@ -45,7 +45,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         for (uint8_t idx = 0; idx < 32; idx++)
         {
             mThread_t *thread = threads[idx];
-            ret += thread == NULL ? 1 : 0;
+            ret += thread == nullptr ? 1 : 0;
         }
         return ret;
     }
@@ -56,7 +56,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         for (uint8_t idx = 0; idx < 32; idx++)
         {
             mThread_t *thread = threads[idx];
-            ret += thread == NULL ? 0 : thread->isRunning ? 1
+            ret += thread == nullptr ? 0 : thread->isRunning ? 1
                                                           : 0;
         }
         return ret;
@@ -68,7 +68,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         for (uint8_t idx = 0; idx < 32; idx++)
         {
             mThread_t *thread = threads[idx];
-            ret += thread == NULL ? 0 : thread->started && !thread->isRunning ? 1
+            ret += thread == nullptr ? 0 : thread->started && !thread->isRunning ? 1
                                                                               : 0;
         }
         return ret;
@@ -223,7 +223,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
                 dumpTheLogs((void*)true);
                 esp_restart();
             }
-            if (pvCreatedTask != NULL)
+            if (pvCreatedTask != nullptr)
             {
                 *pvCreatedTask = thread->pvCreatedTask;
                 AppConfig::SignalStateChange(state_change_t::THREADS);
@@ -236,7 +236,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             ESP_LOGE(__FUNCTION__, "No more bits for %s", pcName);
             for (uint8_t idx = 0; idx < 32; idx++)
             {
-                if ((threads[idx] != NULL) && threads[idx]->isRunning) {
+                if ((threads[idx] != nullptr) && threads[idx]->isRunning) {
                     ESP_LOGI(__FUNCTION__,"%d-%s",idx,threads[idx]->pcName);
                 }
             }
@@ -363,10 +363,10 @@ uint8_t ManagedThreads::NumAllocatedThreads()
 
         if (thread->pcName) {
             ldfree(thread->pcName);
-            thread->pcName=NULL;
+            thread->pcName=nullptr;
         }
 
-        vTaskDelete(NULL);
+        vTaskDelete(nullptr);
     }
 
     ManagedThreads::mThread_t* ManagedThreads::GetThreadByName(const char *const pcName)
@@ -378,7 +378,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
                 return threads[idx];
             }
         }
-        return NULL;
+        return nullptr;
     }
 
     bool ManagedThreads::IsThreadRunning(const char *const pcName)
@@ -392,7 +392,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         uint32_t ret = 0;
         for (uint8_t idx = 0; idx < 32; idx++)
         {
-            if ((threads[idx] == NULL) || (threads[idx]->started && threads[idx]->isRunning))
+            if ((threads[idx] == nullptr) || (threads[idx]->started && threads[idx]->isRunning))
             {
                 ret |= (1 >> idx);
             }
@@ -408,7 +408,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         uint8_t ret = UINT8_MAX;
         for (uint8_t idx = 0; idx < 32; idx++)
         {
-            if ((threads[idx] == NULL) || !threads[idx]->allocated) {
+            if ((threads[idx] == nullptr) || !threads[idx]->allocated) {
                 unallocatedThread = idx;
                 break;
             } else {
@@ -426,12 +426,12 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             ESP_LOGW(__FUNCTION__,"%s already running", name);
         } else if (freeThread == UINT8_MAX) {
             if (unallocatedThread != UINT8_MAX){
-                ESP_LOGV(__FUNCTION__,"Allocating new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == NULL);
+                ESP_LOGV(__FUNCTION__,"Allocating new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == nullptr);
                 threads[unallocatedThread] = (mThread_t*)dmalloc(sizeof(mThread_t));
                 memset(threads[unallocatedThread],0,sizeof(mThread_t));
                 threads[unallocatedThread]->parent = this;
                 threads[unallocatedThread]->allocated = true;
-                ESP_LOGV(__FUNCTION__,"Allocated new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == NULL);
+                ESP_LOGV(__FUNCTION__,"Allocated new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == nullptr);
                 ret = unallocatedThread;
             } else {
                 ESP_LOGE(__FUNCTION__,"No more free slots");
@@ -518,12 +518,12 @@ void TheRepeatingLoop(void* param) {
             repeating_task_t* task = &repeating_tasks[idx];
             if (task->pvTaskCode && RTDue(task, now)) {
                 task->last_run = now;
-                task->next_run = now + pdMS_TO_TICKS(task->period);
                 task->last_run_delta = esp_timer_get_time();
                 task->pvTaskCode(task->pvParameters);
+                task->next_run = now + pdMS_TO_TICKS(task->period);
                 task->last_run_delta = esp_timer_get_time() - task->last_run_delta;
 
-                if (task->jName == NULL) {
+                if (task->jName == nullptr) {
                     cJSON* js = cJSON_CreateObject();
                     cJSON_AddItemToArray(repeatingTasks, js);
                     task->jName = cJSON_AddStringToObject(js, "name", task->pcName);
@@ -534,6 +534,7 @@ void TheRepeatingLoop(void* param) {
                     task->jNumRuns = cJSON_AddNumberToObject(js, "executions", 1);
                 } else {
                     cJSON_SetNumberValue(task->jLastRun, task->last_run);
+                    cJSON_SetNumberValue(task->jPeriod, task->period);
                     cJSON_SetNumberValue(task->jNextRun, task->next_run);
                     cJSON_SetNumberValue(task->jLastRunDelta, task->last_run_delta);
                     cJSON_SetNumberValue(task->jNumRuns, task->jNumRuns->valueint + 1);
@@ -565,23 +566,23 @@ void TheRepeatingLoop(void* param) {
     ESP_LOGI(__FUNCTION__, "Stopped repeating task loop");
     cJSON_free(repeatingTasks);
     ldfree(repeating_tasks);
-    repeating_tasks=NULL;
+    repeating_tasks=nullptr;
 }
 
 void RunRepeatingLoop() {
     if (!isRepeatingLooping) {
         isRepeatingLooping = true;
-        CreateBackgroundTask(TheRepeatingLoop, "RepeatingLoop", 8192, NULL, tskIDLE_PRIORITY, NULL);
+        CreateBackgroundTask(TheRepeatingLoop, "RepeatingLoop", 8192, nullptr, tskIDLE_PRIORITY, nullptr);
     }
 }
 
 uint8_t GetRepeatingIndex() {
-    if (repeating_tasks == NULL) {
+    if (repeating_tasks == nullptr) {
         repeating_tasks = (struct repeating_task_t*)dmalloc(sizeof(struct repeating_task_t)*MAX_REPEATING_TASKS);
         memset(repeating_tasks,0,sizeof(struct repeating_task_t)*MAX_REPEATING_TASKS);
     } 
     for (uint8_t idx = 0; idx < MAX_REPEATING_TASKS; idx++) {
-        if (repeating_tasks[idx].pvTaskCode == NULL) {
+        if (repeating_tasks[idx].pvTaskCode == nullptr) {
             return idx;
         }
     }
@@ -611,4 +612,12 @@ uint8_t CreateRepeatingTask(
         RunRepeatingLoop();
     }
     return idx;
+}
+
+void UpdateRepeatingTaskPeriod(
+    const uint32_t idx,
+    const uint32_t repeatPeriod) {
+    if (idx < UINT8_MAX) {
+        repeating_tasks[idx].period = repeatPeriod;
+    }
 }

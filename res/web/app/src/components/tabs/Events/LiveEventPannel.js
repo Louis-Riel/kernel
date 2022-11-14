@@ -12,7 +12,7 @@ export class LiveEventPannel extends Component {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
         this.state = { 
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : ".",
             filters: {} 
         };
     }
@@ -28,7 +28,7 @@ export class LiveEventPannel extends Component {
             if (this.props.selectedDevice?.ip) {
                 this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
             } else {
-                this.setState({httpPrefix:""});
+                this.setState({httpPrefix:"."});
             }
         }
     }

@@ -8,7 +8,7 @@ export default class FirmwareUpdater extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : "",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : ".",
         };
     }
 
@@ -45,7 +45,7 @@ export default class FirmwareUpdater extends Component {
             if (this.props.selectedDevice?.ip) {
                 this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
             } else {
-                this.setState({httpPrefix:""});
+                this.setState({httpPrefix:"."});
             }
         }
 

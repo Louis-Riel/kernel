@@ -21,7 +21,7 @@ static const double time_distribution[NUM_TIME_SLICES] = {
 bool Servo::isPwmInitialized = false;
 
 Servo::Servo(AppConfig* config)
-    :ManagedDevice(SERVO_BASE,config->GetStringProperty("name"),NULL,&ProcessCommand),
+    :ManagedDevice(SERVO_BASE,config->GetStringProperty("name"),nullptr,&ProcessCommand),
     config(config),
     pinNo(config->GetPinNoProperty("pinNo")),
     SERVO_MIN_PULSEWIDTH_US(config->GetIntProperty("SERVO_MIN_PULSEWIDTH_US")),
@@ -30,7 +30,7 @@ Servo::Servo(AppConfig* config)
     SERVO_PWM_FREQUENCY(config->GetIntProperty("SERVO_PWM_FREQUENCY")),
     isRunning(false)
 {
-    AppConfig* appstate = new AppConfig(status,AppConfig::GetAppStatus());
+    auto* appstate = new AppConfig(status,AppConfig::GetAppStatus());
     appstate->SetStringProperty("name",name);
     appstate->SetIntProperty("pinNo",pinNo);
     if ((SERVO_MIN_PULSEWIDTH_US != -1) &&
@@ -39,7 +39,7 @@ Servo::Servo(AppConfig* config)
         (SERVO_PWM_FREQUENCY != -1) &&
         (pinNo != -1)) {
 
-        cJSON* methods = cJSON_AddArrayToObject(appstate->GetJSONConfig(NULL),"commands");
+        cJSON* methods = cJSON_AddArrayToObject(appstate->GetJSONConfig(nullptr),"commands");
         cJSON* flush = cJSON_CreateObject();
         cJSON_AddItemToArray(methods,flush);
         cJSON_AddStringToObject(flush,"command","setTargetAngle");
@@ -115,7 +115,7 @@ void Servo::InitDevice(){
     }
 
     ESP_LOGI(__FUNCTION__,"Servo pin %d initialised",this->pinNo);
-    CreateBackgroundTask(servoThread,this->name, 4096, this, tskIDLE_PRIORITY, NULL);
+    CreateBackgroundTask(servoThread,this->name, 4096, this, tskIDLE_PRIORITY, nullptr);
 }
 
 bool Servo::ProcessCommand(ManagedDevice* servo, cJSON * parms) {
@@ -124,7 +124,7 @@ bool Servo::ProcessCommand(ManagedDevice* servo, cJSON * parms) {
         int angle = 0;
         int dur = -1;
         cJSON* jangle = cJSON_GetObjectItem(parms,"param1");
-        if (jangle->valuestring != NULL) {
+        if (jangle->valuestring != nullptr) {
             angle = std::stoi(jangle->valuestring);
         } else {
             angle = jangle->valueint;
@@ -140,7 +140,7 @@ bool Servo::ProcessCommand(ManagedDevice* servo, cJSON * parms) {
 
         cJSON* jdur= cJSON_GetObjectItem(parms,"param2");
         if (jdur) {
-            if (jdur->valuestring != NULL) {
+            if (jdur->valuestring != nullptr) {
                 cJSON_SetNumberValue(s->duration, std::stoi(jdur->valuestring));
             } else {
                 cJSON_SetNumberValue(s->duration, jdur->valueint);

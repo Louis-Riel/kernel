@@ -6,7 +6,7 @@ export default class CmdButton extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? this.props.selectedDevice.ip : "",
+            httpPrefix:this.props.selectedDevice?.ip ? this.props.selectedDevice.ip : ".",
             param1: this.props.param1,
             param2: this.props.param2,
             param3: this.props.param3,
@@ -61,7 +61,7 @@ export default class CmdButton extends Component {
             if (this.props.selectedDevice?.ip) {
                 this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
             } else {
-                this.setState({httpPrefix:""});
+                this.setState({httpPrefix:"."});
             }
         }
     }
