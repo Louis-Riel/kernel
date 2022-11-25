@@ -48,16 +48,18 @@ export default function BasicTabs() {
   return (
     <Box class="App">
       <div className="control-bar">
+        {selectedDevice.config ? 
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={value} onChange={tabChange} aria-label="The tabs">
             { tabStates.map((tab,idx)=><Tab label={tab.name} {...a11yProps(idx)}></Tab>)}
           </Tabs>
-        </Box>
+        </Box>:null}
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <DeviceList
               selectedDevice= {selectedDevice}
               onSet= {updateSelectedDevice}></DeviceList>
         </Suspense>
+        {selectedDevice.config ? 
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <WebSocketManager
             enabled={window.location.pathname.indexOf("sdcard") === -1}
@@ -66,9 +68,9 @@ export default function BasicTabs() {
             logCBFns={logCBFns}
             eventCBFns={eventCBFns}
           ></WebSocketManager>
-        </Suspense>
+        </Suspense>:null}
       </div>
-      {tabStates.map((tab,idx)=>getTabContent(idx))}
+      {selectedDevice.config?tabStates.map((tab,idx)=>getTabContent(idx)):null}
     </Box>
   );
 
