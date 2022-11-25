@@ -91,25 +91,29 @@ export default class PinDriverFlags extends Component {
     }
 
     getErrors(value) {
-        return value.errors.map((val,idx) => e(Snackbar,{
-            key:`error${idx}`, 
-            className:"popuperror", 
-            anchorOrigin: {vertical: "top", horizontal: "right"}, 
-            autoHideDuration: 3000,
-            onClose: (event, reason) => {val.visible=false; this.setState(this.state);},
-            open: val.visible},e(Alert,{key:`error${idx}`, severity: "error"}, val.error)));
+        return value.errors.map((val) => <Snackbar 
+            className={"popuperror"}
+            anchorOrigin={{vertical: "top", horizontal: "right"}}
+            autoHideDuration={3000}
+            onClose={(event, reason) => {val.visible=false; this.setState(this.state);}}
+            open={val.visible}>
+            <Alert severity={"error"}>{val.error}</Alert>
+        </Snackbar>);
     }
 
     renderOption(name, value) {    
         return [
-            <Chip label={name} className={this.state[name]?.value ? "selected" : "available"} onClick={_ => this.onChange(name, !this.state[name].value)}/>,
+            <Chip 
+                label={name} 
+                className={this.state[name]?.value ? "selected" : "available"} 
+                onClick={_ => this.onChange(name, !this.state[name].value)}/>,
             ...this.getErrors(value)
         ];
     }
 
     render() {
-        return <Paper className="driver-flags" elevation={3}>
-            {Object.keys(this.state).map(name => this.renderOption(name, this.state[name]))}
+        return <Paper className="driver-flags" elevation={3} variant={'outlined'}>
+            {Object.entries(this.state).map(state => this.renderOption(state[0], state[1]))}
             </Paper>
     }
 }

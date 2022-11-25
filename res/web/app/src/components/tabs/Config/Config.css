@@ -111,9 +111,18 @@ div.MuiListItemIcon-root>svg {
     justify-content: center;
     align-items: baseline;
     row-gap: 15px;
+    padding-top: 20px;
 }
 
 .config-header {
-    padding-bottom: 20px;
     padding-left: 10px;
+    background-color: black;
+}
+
+.driver-flags {
+    padding: 10px;
+}
+
+.config-content>.MuiFormControl-root {
+    padding: 5px;
 }

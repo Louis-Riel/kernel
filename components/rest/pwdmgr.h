@@ -7,12 +7,13 @@
 #define KEY_DEFAULT_TTL_SEC 600
 #define PASSWORD_LEN 400
 #define KEY_DYING_TIME_SEC 5
+#define HASH_LEN 65
+#define HEADER_MAX_LEN 1024
 #define KEYS_URL_QUERY_PARAMS "path=%s &method=%s&ttl=%d&name=%s"
 
 class PasswordEntry {
 public:
-    explicit PasswordEntry();
-    void Init(AppConfig*,AppConfig*,AppConfig*,AppConfig*,httpd_uri_t*);
+    explicit PasswordEntry(AppConfig*,AppConfig*,AppConfig*,AppConfig*,httpd_uri_t*);
     ~PasswordEntry();
     bool RefreshKey(uint32_t ttl);
     int64_t GetExpiresAt() const;
@@ -27,17 +28,12 @@ public:
 private:
 
     static esp_err_t HttpEventHandler(esp_http_client_event_t *evt);
-
-    static char* hostName;
-    static char* keyServer;
-    static char* keyServerPath;
-    static int keyServerPort;
+    char* keyServerUrl;
     
     httpd_uri_t* uri;
     char keyid[KEY_ID_LEN];
     char pwd[PASSWORD_LEN];
     int64_t expires_at;
-    static char* buf;
     uint32_t blen;
     cJSON* jBytesOut;
     cJSON* jBytesIn;
@@ -71,5 +67,5 @@ private:
     cJSON* jNumValid;
     cJSON* jNumInvalid;
 
-    PasswordEntry passwords[NUM_KEYS];
+    PasswordEntry* passwords[NUM_KEYS];
 };

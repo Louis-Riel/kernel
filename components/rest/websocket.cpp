@@ -109,7 +109,7 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
           if (wsMsg->buf) {
             ldfree(wsMsg->buf);
           }
-          wsMsg->bufLen = strlen((const char*)msg)+1;
+          wsMsg->bufLen = strlen((const char*)msg)+255;
           wsMsg->buf = dmalloc(wsMsg->bufLen);
         }
         memset(wsMsg->buf,0,wsMsg->bufLen);
@@ -120,14 +120,13 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
         cJSON_SetIntValue(clients[idx].jIsLive,false);
         httpd_sess_trigger_close(clients[idx].hd, clients[idx].fd);
         clients[idx].fd=0;
-        clients[idx].hd=NULL;
-        for (int idx = 0; idx < 5; idx++){
-          stateHandler->jIsLive->valueint |= clients[idx].jIsLive->valueint;
+        clients[idx].hd=nullptr;
+        for (int idx2 = 0; idx2 < 5; idx2++){
+          stateHandler->jIsLive->valueint |= clients[idx2].jIsLive->valueint;
         }
         AppConfig::SignalStateChange(state_change_t::MAIN);
         ESP_LOGW(__FUNCTION__,"Client %d disconnected: %s",idx, esp_err_to_name(ret));
-      } else {
-        if (msg)
+      } else if (msg) {
           ESP_LOGV(__FUNCTION__,"Client %d:%s",idx,(char*) msg);
       }
     }
@@ -136,7 +135,7 @@ void WebsocketManager::ProcessMessage(uint8_t* msg){
 
 void WebsocketManager::QueueHandler(void* param){
   ESP_LOGI(__FUNCTION__,"QueueHandler Starting");
-  uint8_t* buf = (uint8_t*)dmalloc(JSON_BUFFER_SIZE);
+  auto* buf = (uint8_t*)dmalloc(JSON_BUFFER_SIZE);
   while(stateHandler && stateHandler->msgQueue && stateHandler->jIsLive->valueint){
     memset(buf,0,JSON_BUFFER_SIZE);
     if (xQueueReceive(stateHandler->msgQueue,buf,2800/portTICK_PERIOD_MS)) {
@@ -243,7 +242,7 @@ void WebsocketManager::StatePoller(void* instance){
   cJSON* wifiState = AppConfig::GetAppStatus()->GetJSONConfig("wifi");
   cJSON* item;
 
-  char* stateBuffer = (char*)dmalloc(JSON_BUFFER_SIZE);
+  auto* stateBuffer = (char*)dmalloc(JSON_BUFFER_SIZE);
   while (stateHandler && stateHandler->jIsLive->valueint) {
     bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,portMAX_DELAY);
     if (stateHandler && stateHandler->jIsLive->valueint){
@@ -252,7 +251,7 @@ void WebsocketManager::StatePoller(void* instance){
         ESP_LOGV(__FUNCTION__,"gState Changed %d", bits);
         cJSON_AddItemReferenceToObject(state,"gps",gpsState);
       } else if (bits&state_change_t::THREADS) {
-        cJSON_AddItemToObject(state,"tasks",TheRest::tasks_json());
+        cJSON_AddItemReferenceToObject(state,"tasks",TheRest::tasks_json());
       } else if (bits&state_change_t::WIFI) {
         cJSON_AddItemReferenceToObject(state,"wifi",wifiState);
       } else {

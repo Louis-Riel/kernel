@@ -53,12 +53,12 @@ export default class LogLines extends Component {
     }
 
     renderLogFunctionFilter(lvl,func,logLines) {    
-        let label =  `${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") === func).length})`;
+        let label =  <div className={`log LOG${lvl}`}>{`${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") === func).length})`}</div>;
         return <Chip label={label} disabled={!this.state.logLevels[lvl].visible} className={this.state.logLevels[lvl][func] ? "enabled" : "filtered"} onClick={() => {this.state.logLevels[lvl][func] = !this.state.logLevels[lvl][func]; this.setState(this.state);}} />;
     }
 
     renderLogLevelFilterControl(lvl,logLines) {   
-        let label =  `Log Level ${lvl}(${logLines.length})`;
+        let label =  <div className={`log LOG${lvl}`}>{`${lvl}(${logLines.length})`}</div>;
         return <Chip label={label} className={this.state.logLevels[lvl].visible ? "enabled" : "filtered"} onClick={() => {this.state.logLevels[lvl].visible = !this.state.logLevels[lvl].visible; this.setState(this.state);}} />;
     }
 

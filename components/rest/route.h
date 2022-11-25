@@ -150,6 +150,9 @@ private:
   char *ipAddr;
   EventGroupHandle_t app_eg;
   uint8_t storageFlags;
+  TaskStatus_t * statuses;
+  UBaseType_t statusesLen;
+
   cJSON* system_status;
   
   cJSON* jnumErrors;

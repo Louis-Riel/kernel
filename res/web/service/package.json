@@ -1,0 +1,12 @@
+{
+  "name": "niotservice",
+  "version": "1.0.0",
+  "main": "server.js",
+  "repository": "http://niotservice",
+  "author": "Louis Riel",
+  "license": "MIT",
+  "dependencies": {
+    "node-nmap": "^4.0.0",
+    "ws": "^8.11.0"
+  }
+}

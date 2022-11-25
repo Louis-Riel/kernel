@@ -12,6 +12,7 @@ export default class LocalJSONEditor extends Component {
     constructor(props) {
         super(props);
         this.state = {
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : ".",
             json: props.json
         };
         if (this.props.registerEventInstanceCallback && this.props.name) {
@@ -113,6 +114,7 @@ export default class LocalJSONEditor extends Component {
                 ]) :
                 e(ROProp, {
                     key: `rofld${fld}`,
+                    selectedDevice: this.props.selectedDevice, 
                     value: json[fld],
                     name: fld,
                     label: fld
@@ -168,6 +170,7 @@ export default class LocalJSONEditor extends Component {
             e("input", { key: `input`, defaultValue: json.value === undefined ? json : json.value, onChange: this.processUpdate.bind(this) }) :
             e(ROProp, {
                 key: 'rofield',
+                selectedDevice: this.props.selectedDevice, 
                 value: json,
                 name: ""
             });

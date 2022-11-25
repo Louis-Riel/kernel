@@ -5,9 +5,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEraser, faLineChart } from '@fortawesome/free-solid-svg-icons';
 import * as Recharts from "recharts";
 
-
-let httpPrefix = "";
-
 export default class ROProp extends Component {
     constructor(props) {
         super(props);
@@ -15,12 +12,17 @@ export default class ROProp extends Component {
         if (IsNumberValue(this.props.value)) {
             this.state = {
                 maxLastStates: 50,
+                httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : ".",
                 lastStates:[
                     {
                         value:this.props.value,
                         ts: Date.now()
                     }
                 ]
+            };
+        } else {
+            this.state = {
+                httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : "."
             };
         }
     }
@@ -39,7 +41,7 @@ export default class ROProp extends Component {
         }
         
         if ((this.props.name === "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-            val = e("a", { href: `${httpPrefix}${val}` }, val.split('/').reverse()[0]);
+            val = e("a", { href: `${this.state.httpPrefix}${val}` }, val.split('/').reverse()[0]);
         }
         return val;
     }

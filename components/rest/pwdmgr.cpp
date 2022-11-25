@@ -7,6 +7,10 @@ uint8_t PasswordManager::numPasswordManagers=0;
 
 PasswordManager::~PasswordManager(){
     delete urlState;
+    for (PasswordEntry* pwd : passwords) {
+        pwd->~PasswordEntry();
+        ldfree(pwd);
+    }
 }
 
 PasswordManager::PasswordManager(AppConfig* config, AppConfig* restState, AppConfig* purlState, httpd_uri_t* uri)
@@ -31,7 +35,8 @@ PasswordManager::PasswordManager(AppConfig* config, AppConfig* restState, AppCon
             cJSON* url = cJSON_CreateObject();
             cJSON_AddNumberToObject(url,"ID",idx);
             cJSON_AddItemToArray(uris,url);
-            passwords[idx].Init(config,restState,urlState,new AppConfig(url,AppConfig::GetAppStatus()), uri);
+            passwords[idx] = (PasswordEntry *)dmalloc(sizeof(PasswordEntry));
+            new(passwords[idx]) PasswordEntry(config,restState,urlState,new AppConfig(url,AppConfig::GetAppStatus()), uri);
         }
 
     } else {
@@ -47,11 +52,11 @@ void PasswordManager::InitializePasswordRefresher() {
 PasswordEntry* PasswordManager::GetPassword(const char* keyId){
     int64_t curTime = esp_timer_get_time();
     for (uint8_t idx = 0; idx < NUM_KEYS; idx++) {
-        if (!passwords[idx].IsExpired(curTime) &&
-           (strcmp(passwords[idx].GetKey(),keyId)==0)) {
-            return &passwords[idx];
+        if (!passwords[idx]->IsExpired(curTime) &&
+           (strcmp(passwords[idx]->GetKey(),keyId)==0)) {
+            return passwords[idx];
         } else {
-            ESP_LOGV(__FUNCTION__,"Expired:%d keyid:%s!=%s",passwords[idx].IsExpired(curTime),passwords[idx].GetKey(),keyId);
+            ESP_LOGV(__FUNCTION__,"Expired:%d keyid:%s!=%s",passwords[idx]->IsExpired(curTime),passwords[idx]->GetKey(),keyId);
         }
     }
     return nullptr;
@@ -69,9 +74,9 @@ uint32_t PasswordManager::GetNextTTL(uint32_t ttl) const {
 
     for (int64_t thePlan = curTime + (ttl*1000000); numRetries--; thePlan = GetRandomTTL(ttl)) {
         int64_t nextRefresh = 0;
-        for (auto& password : passwords) {
-            if (password.GetExpiresAt() > nextRefresh) {
-                nextRefresh = password.GetExpiresAt();
+        for (uint8_t idx = 0; idx < NUM_KEYS; idx++) {
+            if (passwords[idx]->GetExpiresAt() > nextRefresh) {
+                nextRefresh = passwords[idx]->GetExpiresAt();
             }
         }
         if ((nextRefresh == 0) || ((thePlan - nextRefresh) > 60000000)) {
@@ -91,20 +96,20 @@ void PasswordManager::RefreshKeys(void* instance) {
     ESP_LOGV(__FUNCTION__,"Cur:%lld",esp_timer_get_time());
     int64_t refreshTs = INT64_MAX;
     uint32_t numKeys = 0;
-    for (int i=0; i < 255; i++) {
-        if (passwordManagers[i]) {
-            auto* that = passwordManagers[i];
-            for (auto& password : that->passwords) {
-                if (password.IsExpired(curTime)) {
+    for (uint8_t idx = 0; idx < NUM_KEYS; idx++) {
+        for (int i=0; i < 255; i++) {
+            if (passwordManagers[i]) {
+                auto const* that = passwordManagers[i];
+                if (that->passwords[idx]->IsExpired(curTime)) {
                     numKeys++;
-                    if (password.RefreshKey(that->GetNextTTL(KEY_DEFAULT_TTL_SEC))) {
-                        ESP_LOGV(__FUNCTION__,"Id:%s(%s %s)(%lld)",password.GetKey(), password.GetMethod(), password.GetPath(), password.GetExpiresAt());
+                    if (that->passwords[idx]->RefreshKey(that->GetNextTTL(KEY_DEFAULT_TTL_SEC))) {
+                        ESP_LOGV(__FUNCTION__,"Id:%s(%s %s)(%lld)",that->passwords[idx]->GetKey(), that->passwords[idx]->GetMethod(), that->passwords[idx]->GetPath(), that->passwords[idx]->GetExpiresAt());
                     } else {
-                        ESP_LOGE(__FUNCTION__,"Refresh failed for %s %s",password.GetMethod(), password.GetPath());
+                        ESP_LOGE(__FUNCTION__,"Refresh failed for %s %s",that->passwords[idx]->GetMethod(), that->passwords[idx]->GetPath());
                     }
                 }
-                if (refreshTs > password.GetExpiresAt()) {
-                    refreshTs = password.GetExpiresAt();
+                if (refreshTs > that->passwords[idx]->GetExpiresAt()) {
+                    refreshTs = that->passwords[idx]->GetExpiresAt();
                     ESP_LOGV(__FUNCTION__,"Next Key Refresh now at %lld", refreshTs);
                     ESP_LOGV(__FUNCTION__,"Next Key Refresh s:%lld", (refreshTs-esp_timer_get_time())/1000000);
                 }

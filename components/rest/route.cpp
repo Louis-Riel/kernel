@@ -28,6 +28,8 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       ipAddr(nullptr),
       app_eg(getAppEG()),
       storageFlags(initStorage()),
+      statuses(nullptr),
+      statusesLen(0),
       system_status(nullptr)
 {
     auto* apin = new AppConfig(status,AppConfig::GetAppStatus());

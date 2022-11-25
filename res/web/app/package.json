@@ -44,7 +44,7 @@
       "react-app/jest"
     ]
   },
-  "homepage": "http://localhost:1234/",
+  "homepage": "http://localhost:3000/",
   "browserslist": {
     "production": [
       ">0.2%",

@@ -4,7 +4,9 @@ services:
   front-gate:
     build: ./front-gate
     ports:
-      - 1234:1234
+      - 443:443
+    env_file:
+      - ./front-gate/.env
     volumes:
       - ./logs/webapp:/usr/local/openresty/nginx/logs
       - ./front-gate/nginx:/etc/nginx/conf.d
@@ -14,9 +16,10 @@ services:
       - keys
 
   gate-keeper:
-    image: openresty/openresty
+    build: ./gate-keeper
     ports:
       - 1235:1234
+      - 1443:443
     env_file:
       - ./gate-keeper/.env
     volumes:

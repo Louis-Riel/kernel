@@ -65,14 +65,22 @@ void UpsertTaskJson(cJSON* task, TaskStatus_t const * taskStatus,uint32_t totalR
 cJSON *TheRest::tasks_json()
 {
     UBaseType_t numTasks = uxTaskGetNumberOfTasks();
-    auto *statuses = (TaskStatus_t *)dmalloc(numTasks * sizeof(TaskStatus_t));
-    if (statuses != nullptr)
+    TheRest* rest = GetServer();
+    if (rest->statusesLen < numTasks) {
+        if (rest->statusesLen) {
+            ldfree(rest->statuses);
+        }
+        rest->statuses = (TaskStatus_t *)dmalloc(numTasks * sizeof(TaskStatus_t));
+        rest->statusesLen = numTasks;
+    }
+    if (rest->statuses != nullptr)
     {
+        memset(rest->statuses,0,rest->statusesLen * sizeof(TaskStatus_t));
         uint32_t totalRunTime;
         cJSON *task = nullptr;
         cJSON* toGo[32];
         int numToGo=0;
-        numTasks = uxTaskGetSystemState(statuses, numTasks, &totalRunTime);
+        numTasks = uxTaskGetSystemState(rest->statuses, numTasks, &totalRunTime);
         if (totalRunTime > 0)
         {
             if (tasks == nullptr){
@@ -83,13 +91,13 @@ cJSON *TheRest::tasks_json()
                 bool found = false;
                 cJSON_ArrayForEach(task, tasks) {
                     cJSON const* taskName = task ? cJSON_GetObjectItem(task,"Name") : nullptr;
-                    if (taskName && (strcmp(taskName->valuestring,statuses[taskNo].pcTaskName) == 0)) {
+                    if (taskName && (strcmp(taskName->valuestring,rest->statuses[taskNo].pcTaskName) == 0)) {
                         found=true;
-                        UpsertTaskJson(task, &statuses[taskNo],totalRunTime);
+                        UpsertTaskJson(task, &rest->statuses[taskNo],totalRunTime);
                     } else if (taskName != nullptr) {
                         bool stillExists = false;
                         for (uint32_t ttaskNo = 0; ttaskNo < numTasks; ttaskNo++) {
-                            stillExists = strcmp(statuses[ttaskNo].pcTaskName,taskName->valuestring)==0;
+                            stillExists = strcmp(rest->statuses[ttaskNo].pcTaskName,taskName->valuestring)==0;
                             if (stillExists) {
                                 break;
                             }
@@ -103,12 +111,11 @@ cJSON *TheRest::tasks_json()
                 if (!found) {
                     task=cJSON_CreateObject();
                     if (task && cJSON_AddItemToArray(tasks,task)) {
-                        UpsertTaskJson(task, &statuses[taskNo],totalRunTime);
+                        UpsertTaskJson(task, &rest->statuses[taskNo],totalRunTime);
                     }
                 }
             }
         }
-        ldfree(statuses);
         while (--numToGo>=0)
         {
             int taskIdx = -1;

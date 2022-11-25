@@ -15,19 +15,19 @@ export default class ConfigPage extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.ip}` : ".",
+            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : ".",
         };
         this.fetchConfig();
     }
 
     fetchConfig() {
-        wfetch(`${this.state.httpPrefix}/config/${!this.props.selectedDevice?.config?.deviceid?.value?"":this.props.selectedDevice.config.deviceid.value+".json"}`, {
+        wfetch(`${this.state.httpPrefix}/config/${!this.props.selectedDevice?.config?.deviceid?"":this.props.selectedDevice.config.deviceid+".json"}`, {
                 method: 'post',
                 //signal: abort.signal
             }).then(resp => resp.json())
               .then(config => {
                 //clearTimeout(timer);
-                this.props.selectedDevice.config = config;
+                this.props.selectedDevice.config = fromVersionedToPlain(config);
                 this.setState({
                     config: fromVersionedToPlain(config),
                     newconfig: fromVersionedToPlain(config),
@@ -79,7 +79,7 @@ export default class ConfigPage extends Component {
     componentDidUpdate(prevProps,prevState) {
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
             if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+                this.setState({httpPrefix:`https://${this.props.selectedDevice.config.devName}`});
             } else {
                 this.setState({httpPrefix:"."});
             }
