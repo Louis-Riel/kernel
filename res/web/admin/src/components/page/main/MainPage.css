@@ -1,0 +1,42 @@
+.waiting {
+    color: yellow;
+}
+
+.running {
+    color: yellow;
+    animation: processing 2s ease-out infinite;
+}
+
+.good {
+    color: green;
+}
+
+.bad {
+    color: red;
+}
+
+@keyframes processing {
+    0% {
+      transform: scale(1, 1);
+    }
+    50% {
+      transform: scale(1.1, 1.1);
+    }
+    100% {
+      transform: scale(1, 1);
+    }
+}
+
+.device, .device>.MuiPaper-root>.MuiCardContent-root {
+    display: flex;
+    flex-direction: column;
+    align-content: flex-start;
+    align-items: flex-start;
+    justify-content: flex-start;
+    row-gap: 15px;
+    flex-wrap: wrap;
+}
+
+button.MuiButtonBase-root.card-expand {
+    margin: 0 0 0 auto;
+}

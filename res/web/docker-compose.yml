@@ -4,35 +4,46 @@ services:
   front-gate:
     build: ./front-gate
     ports:
-      - 443:443
+      - 443:1443
     env_file:
       - ./front-gate/.env
     volumes:
       - ./logs/webapp:/usr/local/openresty/nginx/logs
-      - ./front-gate/nginx:/etc/nginx/conf.d
-      - ./front-gate/luas/signit.lua:/usr/local/openresty/nginx/signit.lua
+      # - ./front-gate/nginx:/etc/nginx/conf.d
+      - ./front-gate/upstreams:/etc/nginx/conf.d/upstreams
+      # - ./front-gate/luas/signit.lua:/usr/local/openresty/nginx/signit.lua
       - ./app/build:/usr/share/nginx/html
+      - ./admin/build:/usr/share/nginx/html/administration
     networks:
       - keys
+      - finder
+      - front-gate
 
   gate-keeper:
     build: ./gate-keeper
     ports:
-      - 1235:1234
-      - 1443:443
+      - 1443:1443
     env_file:
       - ./gate-keeper/.env
     volumes:
       - ./logs/gate-keeper:/usr/local/openresty/nginx/logs
-      - ./gate-keeper/openresty/bakeKeys.conf:/etc/nginx/conf.d/bakeKeys.conf
-      - ./gate-keeper/openresty/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
-      - ./gate-keeper/luas/setup.lua:/usr/local/openresty/nginx/setup.lua
-      - ./gate-keeper/luas/bake-key.lua:/usr/local/openresty/nginx/bake-key.lua
     networks:
       - keys
+
+  finderws:
+    build: ./service
+    env_file:
+      - ./service/.env
+    volumes:
+      - ./service/cfg/configured-clients.json:/usr/src/app/cfg/configured-clients.json
+      - ./front-gate/upstreams:/usr/src/app/upstreams
+    networks:
+      - finder
 
 volumes:
   redis-cache:
 
 networks:
   keys:
+  finder:
+  front-gate:
