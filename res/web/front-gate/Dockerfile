@@ -1,4 +1,12 @@
 FROM openresty/openresty
+
+ARG UID=8008
+ARG GID=8008
+
+RUN set -x \
+        && addgroup --system --gid $GID nginx || true \
+    && adduser --system --disabled-login --ingroup nginx --no-create-home --home /nonexistent --gecos "nginx user" --shell /bin/false --uid $UID nginx || true
+
 RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         openresty-opm openssl \
@@ -19,5 +27,15 @@ RUN mkdir -p /etc/ssl/certs/server/selfsigned && \
     openssl dhparam -out /etc/nginx/dhparam.pem 4096
 COPY scripts/bakeClientCert.sh /usr/bin/bakeClientCert.sh
 RUN chmod +x /usr/bin/bakeClientCert.sh
+COPY nginx/ /etc/nginx/conf.d/
+COPY luas/ /usr/local/openresty/nginx/
+RUN chown -R 8008:8008 /etc/ssl && \
+    chown -R 8008:8008 /etc/ssl && \
+    chown 8008:8008 /usr/bin/bakeClientCert.sh && \
+    chown -R 8008:8008 /usr/local/openresty/nginx && \
+    chown -R 8008:8008 /var/run/openresty
 
-    
+STOPSIGNAL SIGQUIT
+USER $UID
+CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 1443

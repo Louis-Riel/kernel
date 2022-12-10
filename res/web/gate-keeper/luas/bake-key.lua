@@ -65,10 +65,9 @@ function BakeKey()
         ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR )
     end
 
-    ngx.log(ngx.ERR,keyid..":"..rulePath..":"..ngx.req.get_uri_args().method)
-    
     ngx.say(cjson.encode({ keyid = keyid, password = pwd, ttl = ttl }))
     if forcible then
+        ngx.log(ngx.ERR,keyid..":"..rulePath..":"..ngx.req.get_uri_args().method)
         ngx.exit(ngx.HTTP_INSUFFICIENT_STORAGE)
     else
         ngx.exit(ngx.HTTP_CREATED )
@@ -76,7 +75,7 @@ function BakeKey()
 end
 
 function Split(pString, pPattern)
-    local Table = {}  -- NOTE: use {n = 0} in Lua-5.0
+    local Table = {}
     local fpat = "(.-)" .. pPattern
     local last_end = 1
     local s, e, cap = pString:find(fpat, 1)
@@ -97,7 +96,7 @@ function Split(pString, pPattern)
 function GetKey()
     local keyCandidates = {}
     local wildcards = {}
-    for key, value in pairs(ngx.shared.dskeys:get_keys()) do
+    for _key, value in pairs(ngx.shared.dskeys:get_keys()) do
         local key = Split(value,":")
         if string.match(ngx.req.get_uri_args().path, key[2]) and (ngx.req.get_uri_args().method == key[3]) then
             if (key[2]==".*") then
@@ -122,6 +121,34 @@ function GetKey()
     end
     ngx.say(cjson.encode({keyid= string.gsub(chosen,":.*","") ,password = ngx.shared.dskeys:get(chosen) }))
     ngx.exit(ngx.HTTP_OK)
+end
+
+function DeleteKey()
+    if not ngx.req.get_uri_args().name then
+        ngx.status = 400
+        ngx.say("Missing name parameter")
+        ngx.exit(ngx.OK)
+    end
+
+    local toGo = {}
+    for key, value in pairs(ngx.shared.dskeys:get_keys()) do
+        local keys = Split(value,":")
+        if string.find(keys[2], "/"..ngx.req.get_uri_args().name.."/") == 1 then
+            toGo[#toGo+1] = value
+        end
+    end
+
+    for key, value in pairs(toGo) do
+        ngx.shared.dskeys:delete(value)
+    end
+
+
+    ngx.say(cjson.encode(#toGo))
+    ngx.exit(ngx.HTTP_OK)
+end
+
+if ngx.req.get_method() == "DELETE" then
+    DeleteKey()
 end
 
 if ngx.req.get_method() == "POST" then

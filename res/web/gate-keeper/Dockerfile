@@ -17,3 +17,9 @@ RUN mkdir -p /etc/ssl/certs/server/selfsigned && \
                 -subj "/C=UK/ST=Warwickshire/L=Leamington/O=OrgName/OU=IT Department/CN=example.com" && \
     rm /etc/ssl/private/server.pass.key && \
     openssl dhparam -out /etc/nginx/dhparam.pem 4096
+COPY scripts/bakeClientCert.sh /usr/bin/bakeClientCert.sh
+RUN chmod +x /usr/bin/bakeClientCert.sh
+COPY nginx/nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
+COPY nginx/bakeKeys.conf /etc/nginx/conf.d/bakeKeys.conf
+COPY luas/ /usr/local/openresty/nginx/
+EXPOSE 1443
