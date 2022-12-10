@@ -728,9 +728,11 @@ esp_err_t add_type(httpd_req_t *req, const char* fileName) {
 
 esp_err_t TheRest::app_handler(httpd_req_t *req)
 {
-    req->user_ctx = restInstance->appUri.user_ctx;
-    if (checkTheSum(req) != ESP_OK) {
-        return ESP_FAIL;
+    if (restInstance && restInstance->appUri.user_ctx) {
+        req->user_ctx = restInstance->appUri.user_ctx;
+        if (checkTheSum(req) != ESP_OK) {
+            return ESP_FAIL;
+        }
     }
 
     ESP_ERROR_CHECK(add_type(req,req->uri));
@@ -1128,12 +1130,12 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
         char *buf;
         size_t buf_len;
         ESP_LOGI(__FUNCTION__, "OTA REQUEST!!!!! RAM:%d.%s", esp_get_free_heap_size(), req->uri);
+        esp_err_t ret = ESP_OK;
 
         buf_len = httpd_req_get_url_query_len(req) + 1;
         char md5[70];
         memset(md5, 0, 70);
         uint32_t totLen = 0;
-        esp_err_t ret = ESP_OK;
 
         if ((buf_len > 1) && (buf_len < 4096000))
         {
@@ -1149,217 +1151,216 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                     totLen = atoi(param);
                     if (totLen <= 0) {
                         ESP_LOGE(__FUNCTION__, "Cannot get query len param:%d", totLen);
-                        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad len param");
-                    }
-                    if (md5[0] == 0) {
+                        ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad len param");
+                    } else if (md5[0] == 0) {
                         ESP_LOGE(__FUNCTION__, "Cannot get query md5 param:%s", md5);
-                        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad len param");
-                    }
-                    ESP_LOGI(__FUNCTION__,"remote md5:%s len:%d", md5, totLen);
-                    if (initSpiff(false))
-                    {
-                        struct stat st;
-                        bool hasmd5 = stat("/lfs/firmware/current.bin.md5", &st) == 0;
-
-                        FILE *fw = nullptr;
-                        if (!hasmd5 || ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != nullptr))
+                        ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad len param");
+                    } else {
+                        ESP_LOGI(__FUNCTION__,"remote md5:%s len:%d", md5, totLen);
+                        if (initSpiff(false))
                         {
-                            char ccmd5[70];
-                            memset(ccmd5, 0, 70);
-                            int len = 0;
-                            if (!hasmd5 || ((len = fread((void *)ccmd5, 1, 70, fw)) > 0))
+                            struct stat st;
+                            bool hasmd5 = stat("/lfs/firmware/current.bin.md5", &st) == 0;
+
+                            FILE *fw = nullptr;
+                            if (!hasmd5 || ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != nullptr))
                             {
-                                if (hasmd5) {
-                                    fclose(fw);
-                                    ESP_LOGI(__FUNCTION__, "Local MD5:%s remote md5:%s", ccmd5, md5);
-                                }
-                                if (hasmd5 && (strcmp(ccmd5, md5) == 0))
+                                char ccmd5[70];
+                                memset(ccmd5, 0, 70);
+                                int len = 0;
+                                if (!hasmd5 || ((len = fread((void *)ccmd5, 1, 70, fw)) > 0))
                                 {
-                                    ESP_LOGI(__FUNCTION__, "Firmware is not updated RAM:%d", esp_get_free_heap_size());
-                                    TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 7;
-                                    deinitSpiff(false);
-                                    return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Not new");
-                                }
-                                else
-                                {
-                                    auto *img = (uint8_t *)dmalloc(totLen); //heap_caps_malloc(totLen, MALLOC_CAP_SPIRAM);
-                                    memset(img, 0, totLen);
-                                    ESP_LOGI(__FUNCTION__, "RAM:%d...len:%d md5:%s", esp_get_free_heap_size(), totLen, md5);
-
-                                    memset(ccmd5, 0, 70);
-                                    mbedtls_md_context_t ctx;
-                                    mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
-
-                                    mbedtls_md_init(&ctx);
-                                    mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
-                                    mbedtls_md_starts(&ctx);
-
-                                    uint32_t curLen = 0;
-
-                                    do
-                                    {
-                                        len = httpd_req_recv(req, (char *)img + curLen, MESSAGE_BUFFER_SIZE);
-                                        TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += len;
-                                        if (len < 0)
-                                        {
-                                            ESP_LOGE(__FUNCTION__, "Error occurred during receiving: errno %d", errno);
-                                            break;
-                                        }
-                                        else if (len == 0)
-                                        {
-                                            ESP_LOGW(__FUNCTION__, "Connection closed...");
-                                            break;
-                                        }
-                                        else if ((curLen + len) > totLen)
-                                        {
-                                            ESP_LOGW(__FUNCTION__, "Bad len at (curLen(%d+%d) > totLen(%d)", curLen, len, totLen);
-                                            break;
-                                        }
-                                        else
-                                        {
-                                            mbedtls_md_update(&ctx, img + curLen, len);
-                                            curLen += len;
-                                        }
-                                    } while (curLen < totLen);
-
-                                    uint8_t shaResult[70];
-                                    mbedtls_md_finish(&ctx, shaResult);
-                                    mbedtls_md_free(&ctx);
-                                    ESP_LOGI(__FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
-
-                                    for (uint8_t i = 0; i < 32; ++i)
-                                    {
-                                        sprintf((char *)&ccmd5[i * 2], "%02x", (unsigned int)shaResult[i]);
+                                    if (hasmd5) {
+                                        fclose(fw);
+                                        ESP_LOGI(__FUNCTION__, "Local MD5:%s remote md5:%s", ccmd5, md5);
                                     }
-
-                                    FILE *fw;
-                                    if (strcmp((char *)ccmd5, md5) == 0)
+                                    if (hasmd5 && (strcmp(ccmd5, md5) == 0))
                                     {
-                                        ESP_LOGI(__FUNCTION__, "Flashing md5:(%s)%dvs%d", ccmd5, totLen, curLen);
-                                        ESP_LOGV(__FUNCTION__, "RAM:%d", esp_get_free_heap_size());
+                                        ESP_LOGI(__FUNCTION__, "Firmware is not updated RAM:%d", esp_get_free_heap_size());
+                                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 7;
+                                        deinitSpiff(false);
+                                        ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Not new");
+                                    }
+                                    else
+                                    {
+                                        auto *img = (uint8_t *)dmalloc(totLen); //heap_caps_malloc(totLen, MALLOC_CAP_SPIRAM);
+                                        memset(img, 0, totLen);
+                                        ESP_LOGI(__FUNCTION__, "RAM:%d...len:%d md5:%s", esp_get_free_heap_size(), totLen, md5);
 
-                                        struct stat st;
+                                        memset(ccmd5, 0, 70);
+                                        mbedtls_md_context_t ctx;
+                                        mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
 
-                                        if (stat("/lfs/firmware/current.bin", &st) == 0)
+                                        mbedtls_md_init(&ctx);
+                                        mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
+                                        mbedtls_md_starts(&ctx);
+
+                                        uint32_t curLen = 0;
+
+                                        do
                                         {
-                                            ESP_LOGV(__FUNCTION__, "current bin exists %d bytes", (int)st.st_size);
-                                            if (!deleteFile("/lfs/firmware/current.bin"))
+                                            len = httpd_req_recv(req, (char *)img + curLen, MESSAGE_BUFFER_SIZE);
+                                            TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += len;
+                                            if (len < 0)
                                             {
-                                                ESP_LOGE(__FUNCTION__, "Cannot delete current bin");
+                                                ESP_LOGE(__FUNCTION__, "Error occurred during receiving: errno %d", errno);
+                                                break;
                                             }
+                                            else if (len == 0)
+                                            {
+                                                ESP_LOGW(__FUNCTION__, "Connection closed...");
+                                                break;
+                                            }
+                                            else if ((curLen + len) > totLen)
+                                            {
+                                                ESP_LOGW(__FUNCTION__, "Bad len at (curLen(%d+%d) > totLen(%d)", curLen, len, totLen);
+                                                break;
+                                            }
+                                            else
+                                            {
+                                                mbedtls_md_update(&ctx, img + curLen, len);
+                                                curLen += len;
+                                            }
+                                        } while (curLen < totLen);
+
+                                        uint8_t shaResult[70];
+                                        mbedtls_md_finish(&ctx, shaResult);
+                                        mbedtls_md_free(&ctx);
+                                        ESP_LOGI(__FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
+
+                                        for (uint8_t i = 0; i < 32; ++i)
+                                        {
+                                            sprintf((char *)&ccmd5[i * 2], "%02x", (unsigned int)shaResult[i]);
                                         }
 
-                                        if ((fw = fopenCd("/lfs/firmware/current.bin", "w", true)) != nullptr)
+                                        FILE *fw;
+                                        if (strcmp((char *)ccmd5, md5) == 0)
                                         {
-                                            ESP_LOGI(__FUNCTION__, "Writing /lfs/firmware/current.bin");
-                                            if (fwrite((void *)img, 1, totLen, fw) == totLen)
+                                            ESP_LOGI(__FUNCTION__, "Flashing md5:(%s)%dvs%d", ccmd5, totLen, curLen);
+                                            ESP_LOGV(__FUNCTION__, "RAM:%d", esp_get_free_heap_size());
+
+                                            struct stat st;
+
+                                            if (stat("/lfs/firmware/current.bin", &st) == 0)
                                             {
-                                                fclose(fw);
-
-                                                if ((fw = fopenCd("/lfs/firmware/tobe.bin.md5", "w", true)) != nullptr)
+                                                ESP_LOGV(__FUNCTION__, "current bin exists %d bytes", (int)st.st_size);
+                                                if (!deleteFile("/lfs/firmware/current.bin"))
                                                 {
-                                                    fwrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
-                                                    fclose(fw);
-                                                    ESP_LOGI(__FUNCTION__, "Firmware md5 written");
-                                                    esp_partition_iterator_t pi;
-                                                    const esp_partition_t *factory;
-                                                    esp_err_t err;
+                                                    ESP_LOGE(__FUNCTION__, "Cannot delete current bin");
+                                                }
+                                            }
 
-                                                    pi = esp_partition_find(ESP_PARTITION_TYPE_APP,            // Get partition iterator for
-                                                                            ESP_PARTITION_SUBTYPE_APP_FACTORY, // Ashy Flashy partition
-                                                                            "factory");
-                                                    if (pi == nullptr) // Check result
+                                            if ((fw = fopenCd("/lfs/firmware/current.bin", "w", true)) != nullptr)
+                                            {
+                                                ESP_LOGI(__FUNCTION__, "Writing /lfs/firmware/current.bin");
+                                                if (fwrite((void *)img, 1, totLen, fw) == totLen)
+                                                {
+                                                    fclose(fw);
+
+                                                    if ((fw = fopenCd("/lfs/firmware/tobe.bin.md5", "w", true)) != nullptr)
                                                     {
-                                                        ESP_LOGE(__FUNCTION__, "Failed to find factory partition");
-                                                        ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to find factory partition");
-                                                    }
-                                                    else
-                                                    {
-                                                        factory = esp_partition_get(pi);           // Get partition struct
-                                                        esp_partition_iterator_release(pi);        // Release the iterator
-                                                        err = esp_ota_set_boot_partition(factory); // Set partition for boot
-                                                        if (err != ESP_OK)                         // Check error
+                                                        fwrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
+                                                        fclose(fw);
+                                                        ESP_LOGI(__FUNCTION__, "Firmware md5 written");
+                                                        esp_partition_iterator_t pi;
+                                                        const esp_partition_t *factory;
+                                                        esp_err_t err;
+
+                                                        pi = esp_partition_find(ESP_PARTITION_TYPE_APP,            // Get partition iterator for
+                                                                                ESP_PARTITION_SUBTYPE_APP_FACTORY, // Ashy Flashy partition
+                                                                                "factory");
+                                                        if (pi == nullptr) // Check result
                                                         {
-                                                            ESP_LOGE(__FUNCTION__, "Failed to set boot partition");
-                                                            ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to set boot partition");
+                                                            ESP_LOGE(__FUNCTION__, "Failed to find factory partition");
+                                                            ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to find factory partition");
                                                         }
                                                         else
                                                         {
-                                                            httpd_resp_send(req, "Flashing...", 8);
-                                                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 8;
-                                                            dumpLogs();
-                                                            WaitToSleep();
-                                                            vTaskDelay(1000 / portTICK_PERIOD_MS);
-                                                            dumpTheLogs((void *)true);
-                                                            esp_system_abort("Flashing");
-                                                            esp_restart(); // Restart ESP
+                                                            factory = esp_partition_get(pi);           // Get partition struct
+                                                            esp_partition_iterator_release(pi);        // Release the iterator
+                                                            err = esp_ota_set_boot_partition(factory); // Set partition for boot
+                                                            if (err != ESP_OK)                         // Check error
+                                                            {
+                                                                ESP_LOGE(__FUNCTION__, "Failed to set boot partition");
+                                                                ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to set boot partition");
+                                                            }
+                                                            else
+                                                            {
+                                                                httpd_resp_send(req, "Flashing...", 8);
+                                                                TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 8;
+                                                                dumpLogs();
+                                                                WaitToSleep();
+                                                                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                                                                dumpTheLogs((void *)true);
+                                                                esp_system_abort("Flashing");
+                                                                esp_restart(); // Restart ESP
+                                                            }
                                                         }
+                                                    }
+                                                    else
+                                                    {
+                                                        ESP_LOGE(__FUNCTION__, "Cannot open /lfs/firmware/tobe.bin.md5.");
+                                                        ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot open /lfs/firmware/tobe.bin.md5");
                                                     }
                                                 }
                                                 else
                                                 {
-                                                    ESP_LOGE(__FUNCTION__, "Cannot open /lfs/firmware/tobe.bin.md5.");
-                                                    ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot open /lfs/firmware/tobe.bin.md5");
+                                                    ESP_LOGE(__FUNCTION__, "Firmware not backedup");
+                                                    fclose(fw);
+                                                    ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Firmware not backedup");
                                                 }
                                             }
                                             else
                                             {
-                                                ESP_LOGE(__FUNCTION__, "Firmware not backedup");
-                                                fclose(fw);
-                                                ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Firmware not backedup");
+                                                ESP_LOGE(__FUNCTION__, "Failed to open /lfs/firmware/current.bin");
+                                                ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open /lfs/firmware/current.bin");
                                             }
+                                            ldfree(img);
                                         }
                                         else
                                         {
-                                            ESP_LOGE(__FUNCTION__, "Failed to open /lfs/firmware/current.bin");
-                                            ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open /lfs/firmware/current.bin");
+                                            char* tmp = (char*)dmalloc(200);
+                                            sprintf(tmp, "Bad Checksum:(%s)(%s) len:%d", ccmd5, md5, totLen);
+                                            ESP_LOGV(__FUNCTION__, "%s", tmp);
+                                            ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, tmp);
+                                            TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(tmp);
+                                            ldfree(tmp);
+                                            ldfree(img);
                                         }
-                                        ldfree(img);
                                     }
-                                    else
-                                    {
-                                        char* tmp = (char*)dmalloc(200);
-                                        sprintf(tmp, "Bad Checksum:(%s)(%s) len:%d", ccmd5, md5, totLen);
-                                        ESP_LOGV(__FUNCTION__, "%s", tmp);
-                                        ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, tmp);
-                                        TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(tmp);
-                                        ldfree(tmp);
-                                        ldfree(img);
-                                    }
+                                }
+                                else
+                                {
+                                    fclose(fw);
+                                    ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d.", len);
+                                    deinitSpiff(false);
+                                    ret = httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Error with weird md5 len");
                                 }
                             }
                             else
                             {
-                                fclose(fw);
-                                ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d.", len);
-                                deinitSpiff(false);
-                                return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Error with weird md5 len");
+                                ESP_LOGE(__FUNCTION__, "Failed in opeing md5..");
                             }
+                            deinitSpiff(false);
                         }
                         else
                         {
-                            ESP_LOGE(__FUNCTION__, "Failed in opeing md5..");
+                            ESP_LOGE(__FUNCTION__, "Cannot init the fucking spiff or the md5:%d", md5[0]);
                         }
-                        deinitSpiff(false);
                     }
-                    else
-                    {
-                        ESP_LOGE(__FUNCTION__, "Cannot init the fucking spiff or the md5:%d", md5[0]);
-                    }
-
                 }
             }
             else
             {
                 ESP_LOGE(__FUNCTION__, "Cannot get query");
-                return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Cannot get query");
+                ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Cannot get query");
             }
             ldfree(buf);
         }
         else
         {
             ESP_LOGE(__FUNCTION__, "Cannot get query len:%d", buf_len);
-            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Cannot get query len");
+            ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Cannot get query len");
         }
 
         return ret;

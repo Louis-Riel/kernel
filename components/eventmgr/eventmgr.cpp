@@ -3,12 +3,12 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-static EventManager* runningInstance=NULL;
+static EventManager* runningInstance=nullptr;
 
 EventManager::EventManager(cJSON* cfg, cJSON* programs)
 :config(cfg)
 ,programs(programs)
-,eventBuffer(NULL)
+,eventBuffer(nullptr)
 ,eventQueue(xQueueCreate(20, sizeof(postedEvent_t)))
 {
     memset(eventInterpretors,0,sizeof(void*)*MAX_NUM_EVENTS);
@@ -16,11 +16,11 @@ EventManager::EventManager(cJSON* cfg, cJSON* programs)
         ESP_LOGE(__FUNCTION__,"Event manager is invalid");
     }
     ESP_LOGV(__FUNCTION__,"Event Manager Running");
-    CreateBackgroundTask(EventPoller,"EventPoller",4096,this,tskIDLE_PRIORITY,NULL);
+    CreateBackgroundTask(EventPoller,"EventPoller",4096,this,tskIDLE_PRIORITY,nullptr);
 }
 
 EventManager* EventManager::GetInstance(){
-    if (runningInstance == NULL) {
+    if (runningInstance == nullptr) {
         runningInstance = new EventManager(AppConfig::GetAppConfig()->GetJSONConfig("/events"),
                                            AppConfig::GetAppConfig()->GetJSONConfig("/programs"));
     }
@@ -57,7 +57,7 @@ bool EventManager::ValidateConfig(){
         }
     }
     ESP_LOGI(__FUNCTION__,"We have %d Events",idx);
-    if (eventQueue == NULL) {
+    if (eventQueue == nullptr) {
         ESP_LOGE(__FUNCTION__,"Event Queue not set");
         isValid=false;
     }
@@ -66,10 +66,10 @@ bool EventManager::ValidateConfig(){
 
 void EventManager::RegisterEventHandler(EventHandlerDescriptor* eventHandlerDescriptor) {
     ESP_LOGV(__FUNCTION__,"Registering %s",(char*)eventHandlerDescriptor->GetEventBase());
-    if (runningInstance == NULL) {
+    if (runningInstance == nullptr) {
         ESP_LOGV(__FUNCTION__,"Getting EventManager instance");
         runningInstance = EventManager::GetInstance();
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, EventManager::EventProcessor, runningInstance, NULL));
+        ESP_ERROR_CHECK(esp_event_handler_instance_register(ESP_EVENT_ANY_BASE, ESP_EVENT_ANY_ID, EventManager::EventProcessor, runningInstance, nullptr));
     }
 }
 
@@ -86,7 +86,7 @@ void EventManager::EventPoller(void* param){
     ESP_LOGV(__FUNCTION__,"Event Poller Running");
     while(!(xEventGroupGetBits(appEg) & app_bits_t::HIBERNATE) && xQueueReceive(mgr->eventQueue,postedEvent,portMAX_DELAY)){
         ESP_LOGV(__FUNCTION__,"Processing Event %s %d %" PRIXPTR "",postedEvent->base, postedEvent->id, (uintptr_t)postedEvent->event_data);
-        ProcessEvent(NULL, postedEvent);
+        ProcessEvent(nullptr, postedEvent);
     }
     ldfree(postedEvent);
 }
@@ -103,15 +103,15 @@ void EventManager::ProcessEvent(ManagedDevice* device, postedEvent_t* postedEven
     EventManager* evtMgr = EventManager::GetInstance();
     if (WebsocketManager::HasOpenedWs()){
         EventDescriptor_t* edesc = EventHandlerDescriptor::GetEventDescriptor(postedEvent->base,postedEvent->id);
-        if (edesc != NULL) {
+        if (edesc != nullptr) {
             cJSON* jevt = cJSON_CreateObject();
 
-            if (evtMgr->eventBuffer == NULL) {
+            if (evtMgr->eventBuffer == nullptr) {
                 evtMgr->eventBuffer = (char*) dmalloc(JSON_BUFFER_SIZE);
             }
             cJSON_AddStringToObject(jevt,"eventBase",postedEvent->base);
             cJSON_AddStringToObject(jevt,"eventId",edesc->eventName);
-            cJSON* jpl = NULL;
+            cJSON* jpl = nullptr;
             switch (postedEvent->eventDataType)
             {
             case event_data_type_tp::JSON:
@@ -138,7 +138,7 @@ void EventManager::ProcessEvent(ManagedDevice* device, postedEvent_t* postedEven
         }
     } else if (evtMgr->eventBuffer) {
         ldfree(evtMgr->eventBuffer);
-        evtMgr->eventBuffer = NULL;
+        evtMgr->eventBuffer = nullptr;
     }
 
     uint32_t numDevs = ManagedDevice::GetNumRunningInstances();
@@ -146,7 +146,7 @@ void EventManager::ProcessEvent(ManagedDevice* device, postedEvent_t* postedEven
         ManagedDevice** runningInstances = ManagedDevice::GetRunningInstances();
         for (uint32_t idx = 0; idx < numDevs; idx++ ) {
             if (runningInstances[idx]) {
-                ESP_LOGV(__FUNCTION__,"Checking %s:%d with %s(%d) equal:%d",postedEvent->base,postedEvent->id, runningInstances[idx]->eventBase,runningInstances[idx]->processEventFnc==NULL ,strcmp(runningInstances[idx]->eventBase, postedEvent->base));
+                ESP_LOGV(__FUNCTION__,"Checking %s:%d with %s(%d) equal:%d",postedEvent->base,postedEvent->id, runningInstances[idx]->eventBase,runningInstances[idx]->processEventFnc==nullptr ,strcmp(runningInstances[idx]->eventBase, postedEvent->base));
             }
             if (runningInstances[idx] && 
                 runningInstances[idx]->status && 
@@ -163,14 +163,14 @@ void EventManager::ProcessEvent(ManagedDevice* device, postedEvent_t* postedEven
     EventInterpretor* interpretor;
     uint8_t idx =0;
     while ((idx < MAX_NUM_EVENTS) && 
-           ((interpretor = evtMgr->eventInterpretors[idx++])!=NULL)) {
+           ((interpretor = evtMgr->eventInterpretors[idx++])!=nullptr)) {
         if (interpretor->IsValid(postedEvent->base,postedEvent->id,postedEvent->event_data)){
             ESP_LOGV(__FUNCTION__,"Running event at idx %d for %s",idx-1, postedEvent->base);
             if (interpretor->IsProgram()) {
                 ESP_LOGV(__FUNCTION__,"Running program %s at idx %d", postedEvent->base, idx);
                 interpretor->RunProgram(interpretor->GetProgramName());
             } else {
-                interpretor->RunMethod(NULL);
+                interpretor->RunMethod(nullptr);
             }
         }
     }
@@ -212,14 +212,14 @@ void EventManager::EventProcessor(void *handler_args, esp_event_base_t base, int
             }
             break;
         }
-        xQueueSendFromISR(mgr->eventQueue, &postedEvent, NULL);
+        xQueueSendFromISR(mgr->eventQueue, &postedEvent, nullptr);
     }
 }
 
-static ManagedThreads* theInstance = NULL;
+static ManagedThreads* theInstance = nullptr;
 
 ManagedThreads* ManagedThreads::GetInstance() {
-    if (theInstance == NULL) {
+    if (theInstance == nullptr) {
         theInstance = new ManagedThreads();
     }
     return theInstance;

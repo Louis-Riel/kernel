@@ -2,10 +2,10 @@
 #include "mbedtls/md.h"
 
 char* buf = (char*)dmalloc(JSON_BUFFER_SIZE);
-char* keyServer = nullptr;
-char* keyServerPath = nullptr;
-char* keyServerCert = nullptr;
-char* hostName = nullptr;
+const char* keyServer = nullptr;
+const char* keyServerPath = nullptr;
+const char* keyServerCert = nullptr;
+const char* hostName = nullptr;
 char* theHashes = (char*)dmalloc(HASH_LEN * 2);
 char* theHeaders = (char*)dmalloc(HEADER_MAX_LEN * 2);
 int keyServerPort = 0;
@@ -13,23 +13,10 @@ int keyServerPort = 0;
 PasswordEntry::PasswordEntry(AppConfig* config, AppConfig* restState, AppConfig* urlState, AppConfig* ppwdState, httpd_uri_t* curi) {
     if (keyServer == nullptr) {
         auto* serverCfg = new AppConfig(config->GetJSONConfig("KeyServer",config));
-
-        const char* param = serverCfg->GetStringProperty("keyServer");
-        keyServer=(char*)dmalloc(strlen(param)+1);
-        strcpy(keyServer,param);
-
-        param = serverCfg->GetStringProperty("keyServerPath");
-        keyServerPath=(char*)dmalloc(strlen(param)+1);
-        strcpy(keyServerPath,param);
-
-        param = serverCfg->GetStringProperty("serverCert");
-        keyServerCert=(char*)dmalloc(4096);
-        strcpy(keyServerCert,param);
-
-        param = AppConfig::GetAppConfig()->GetStringProperty("devName");
-        hostName=(char*)dmalloc(strlen(param)+1);
-        strcpy(hostName,param);
-
+        keyServer=serverCfg->GetStringProperty("keyServer");
+        keyServerPath=serverCfg->GetStringProperty("keyServerPath");
+        keyServerCert=serverCfg->GetStringProperty("serverCert");
+        hostName=AppConfig::GetAppConfig()->GetStringProperty("devName");
         keyServerPort=serverCfg->GetIntProperty("keyServerPort");
         delete serverCfg;
         ESP_LOGV(__FUNCTION__,"Initial Config Completed server:%s path:%s hostname:%s port:%d cert:%s",keyServer,keyServerPath,hostName,keyServerPort,keyServerCert);
@@ -246,7 +233,7 @@ bool PasswordEntry::RefreshKey(uint32_t ttl) {
     bool ret = true;
     if (esp_http_client_perform(client) != ESP_OK)
     {
-        ESP_LOGE(__FUNCTION__,"%s no worky",uri->uri);
+        ESP_LOGE(__FUNCTION__,"Error getting key for %s %s from http://%s:%d%s?%s", GetMethodName(uri->method) ,uri->uri, config.host, config.port, config.path, config.query);
         ret = false;
     } else {
         struct tm timeinfo;

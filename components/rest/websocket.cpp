@@ -12,7 +12,7 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-static WebsocketManager* stateHandler = NULL;
+static WebsocketManager* stateHandler = nullptr;
 const char* emptySpace = "                              ";
 const char* WebsocketManager::WEBSOCKET_BASE="WebsocketManager";
 
@@ -32,9 +32,9 @@ WebsocketManager::WebsocketManager():
   jIsLive = cJSON_HasObjectItem(status,"IsLive") ? cJSON_GetObjectItem(status,"IsLive") : cJSON_AddNumberToObject(status,"IsLive",true);
   cJSON_SetNumberValue(jIsLive,true);
   ESP_LOGI(__FUNCTION__,"Created Websocket");
-  CreateBackgroundTask(QueueHandler,"WebsocketQH",4096, NULL, tskIDLE_PRIORITY, NULL);
+  CreateBackgroundTask(QueueHandler,"WebsocketQH",4096, nullptr, tskIDLE_PRIORITY, nullptr);
   ESP_LOGI(__FUNCTION__,"Created WebsocketQH");
-  CreateBackgroundTask(StatePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, NULL);
+  CreateBackgroundTask(StatePoller,"StatePoller",4096, stateHandler, tskIDLE_PRIORITY, nullptr);
   ESP_LOGI(__FUNCTION__,"Created StatePoller");
   registerLogCallback(LogCallback,stateHandler);
   ESP_LOGI(__FUNCTION__,"Log callback registered");
@@ -49,7 +49,7 @@ WebsocketManager::~WebsocketManager(){
 
   cJSON_SetIntValue(cJSON_GetObjectItem(status,"IsLive"),false);
   cJSON_DeleteItemFromObject(status,"Clients");
-  stateHandler=NULL;
+  stateHandler=nullptr;
 }
 
 void WebsocketManager::PostToClient(void* msg) {
@@ -75,10 +75,10 @@ void WebsocketManager::PostToClient(void* msg) {
       cJSON_SetIntValue(wsMsg->client->jIsLive,false);
       httpd_sess_trigger_close(wsMsg->client->hd, wsMsg->client->fd);
       wsMsg->client->fd=0;
-      wsMsg->client->hd=NULL;
+      wsMsg->client->hd=nullptr;
       stateHandler->jIsLive->valueint = false;
       for (int idx = 0; idx < 5; idx++){
-        if (stateHandler->clients[idx].jIsLive != NULL) {
+        if (stateHandler->clients[idx].jIsLive != nullptr) {
           stateHandler->jIsLive->valueint |= stateHandler->clients[idx].jIsLive->valueint;
         }
       }
@@ -141,7 +141,7 @@ void WebsocketManager::QueueHandler(void* param){
     if (xQueueReceive(stateHandler->msgQueue,buf,2800/portTICK_PERIOD_MS)) {
       stateHandler->ProcessMessage(buf);
     } else {
-      stateHandler->ProcessMessage(NULL);
+      stateHandler->ProcessMessage(nullptr);
     }
   }
   ESP_LOGI(__FUNCTION__,"QueueHandler Done");
@@ -169,12 +169,12 @@ bool WebsocketManager::RegisterClient(httpd_handle_t hd,int fd){
       clients[idx].fd = fd;
       if (!clients[idx].pingMsg) {
         clients[idx].pingMsg = (ws_msg_t*)dmalloc(sizeof(ws_msg_t));
-        clients[idx].pingMsg->buf=NULL;
+        clients[idx].pingMsg->buf=nullptr;
         clients[idx].pingMsg->bufLen=0;
       }
       clients[idx].pingMsg->client=&clients[idx];
 
-      if (clients[idx].jErrCount == NULL) {
+      if (clients[idx].jErrCount == nullptr) {
         ESP_LOGI(__FUNCTION__,"Client is inserted at position %d",idx);
         cJSON* client = cJSON_CreateObject();
         cJSON_AddItemToArray(jClients,client);
@@ -237,12 +237,12 @@ void WebsocketManager::StatePoller(void* instance){
   EventGroupHandle_t stateEg = AppConfig::GetStateGroupHandle();
   ESP_LOGI(__FUNCTION__,"State poller started");
   EventBits_t bits = 0;
-  cJSON* mainState = AppConfig::GetAppStatus()->GetJSONConfig(NULL);
+  cJSON* mainState = AppConfig::GetAppStatus()->GetJSONConfig(nullptr);
   cJSON* gpsState = AppConfig::GetAppStatus()->GetJSONConfig("gps");;
   cJSON* wifiState = AppConfig::GetAppStatus()->GetJSONConfig("wifi");
   cJSON* item;
 
-  auto* stateBuffer = (char*)dmalloc(JSON_BUFFER_SIZE);
+  auto* stateBuffer = (char*)dmalloc(JSON_BUFFER_SIZE*2);
   while (stateHandler && stateHandler->jIsLive->valueint) {
     bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,portMAX_DELAY);
     if (stateHandler && stateHandler->jIsLive->valueint){
@@ -259,14 +259,15 @@ void WebsocketManager::StatePoller(void* instance){
             cJSON_AddItemReferenceToObject(state,item->string,item);//AppConfig::GetAppStatus()->GetJSONConfig(item->string));
         }
       }
-      if (cJSON_PrintPreallocated(state,stateBuffer,JSON_BUFFER_SIZE,pdFALSE)){
-        if (xQueueSend(stateHandler->msgQueue,stateBuffer,portMAX_DELAY) == pdTRUE) {
-          ESP_LOGV(__FUNCTION__,"State sent %zu",strlen(stateBuffer));
+      char* jbuf = stateBuffer + (xPortGetCoreID()*JSON_BUFFER_SIZE);
+      if (cJSON_PrintPreallocated(state,jbuf,JSON_BUFFER_SIZE,pdFALSE)){
+        if (xQueueSend(stateHandler->msgQueue,jbuf,portMAX_DELAY) == pdTRUE) {
+          ESP_LOGV(__FUNCTION__,"State sent %zu",strlen(jbuf));
         } else {
           ESP_LOGW(__FUNCTION__,"Failed to queue state");
         }
       } else {
-        ESP_LOGW(__FUNCTION__,"Failed to stringify state");
+        ESP_LOGV(__FUNCTION__,"Failed to stringify state buffer null:%d state null:%d",jbuf==nullptr,state==nullptr);
       }
       cJSON_free(state);
     }
@@ -280,7 +281,7 @@ void WebsocketManager::StatePoller(void* instance){
 esp_err_t TheRest::ws_handler(httpd_req_t *req) {
   ESP_LOGV(__FUNCTION__, "WEBSOCKET Session");
 
-  if (stateHandler == NULL) {
+  if (stateHandler == nullptr) {
     ESP_LOGI(__FUNCTION__, "Staring Manager");
     stateHandler = new WebsocketManager();
     ESP_LOGI(__FUNCTION__, "Manager Started");

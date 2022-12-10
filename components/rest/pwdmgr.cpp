@@ -4,6 +4,7 @@ uint8_t PasswordManager::refreshKeyTaskId=0;
 uint64_t PasswordManager::nextRefreshTs=INT64_MAX;
 PasswordManager* PasswordManager::passwordManagers[255];
 uint8_t PasswordManager::numPasswordManagers=0;
+static bool initialized = false;
 
 PasswordManager::~PasswordManager(){
     delete urlState;
@@ -31,6 +32,13 @@ PasswordManager::PasswordManager(AppConfig* config, AppConfig* restState, AppCon
 
         auto* uris = cJSON_AddArrayToObject(urlState->GetJSONConfig(nullptr),"keys");
 
+        if (!initialized) {
+            if (!ResetKeys(config)) {
+                ESP_LOGE(__FUNCTION__,"Failed to reset keys");
+            }
+            initialized = true;
+        }
+
         for (uint8_t idx = 0; idx < NUM_KEYS; idx++) {
             cJSON* url = cJSON_CreateObject();
             cJSON_AddNumberToObject(url,"ID",idx);
@@ -38,10 +46,41 @@ PasswordManager::PasswordManager(AppConfig* config, AppConfig* restState, AppCon
             passwords[idx] = (PasswordEntry *)dmalloc(sizeof(PasswordEntry));
             new(passwords[idx]) PasswordEntry(config,restState,urlState,new AppConfig(url,AppConfig::GetAppStatus()), uri);
         }
-
     } else {
         ESP_LOGE(__FUNCTION__,"No URI %d %d", uri==nullptr, uri->uri==nullptr);
     }
+}
+
+bool PasswordManager::ResetKeys(AppConfig* config) {
+    char query[255];
+    sprintf(query,KEYS_URL_DELETE_PARAMS,AppConfig::GetAppConfig()->GetStringProperty("devName"));
+    ESP_LOGV(__FUNCTION__,"url(%s)",query);
+    auto* serverCfg = new AppConfig(config->GetJSONConfig("KeyServer",config));
+
+    esp_http_client_config_t cconfig = {
+        .host = serverCfg->GetStringProperty("keyServer"),
+        .port = serverCfg->GetIntProperty("keyServerPort"),
+        .path = serverCfg->GetStringProperty("keyServerPath"),
+        .query = query,
+        .cert_pem = serverCfg->GetStringProperty("serverCert"),
+        .method = HTTP_METHOD_DELETE,
+        .timeout_ms = 2000,
+        .disable_auto_redirect = true,
+        .transport_type = HTTP_TRANSPORT_OVER_SSL,
+        .user_data = (void*)this,
+        .is_async = false,
+        .skip_cert_common_name_check = true
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&cconfig);
+    bool ret = true;
+    if (esp_http_client_perform(client) != ESP_OK)
+    {
+        ESP_LOGE(__FUNCTION__,"Error deleting key for %s",cconfig.query);
+        ret = false;
+    }
+    esp_http_client_cleanup(client);
+    delete serverCfg;
+    return ret;
 }
 
 void PasswordManager::InitializePasswordRefresher() {
@@ -155,11 +194,13 @@ esp_err_t PasswordManager::CheckTheSum(httpd_req_t *req) {
             ESP_LOGE(__FUNCTION__,"%s got weird hash id",theHash);
             cJSON_SetIntValue(jNumInvalid,jNumInvalid->valueint+1);
             httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
+            ret=ESP_FAIL;
         }
     } else {
         ESP_LOGE(__FUNCTION__,"%s got bad hash id",req->uri);
         cJSON_SetIntValue(jNumInvalid,jNumInvalid->valueint+1);
         httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
+        ret=ESP_FAIL;
     }
     ldfree(theHash);
 #endif

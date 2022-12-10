@@ -10,6 +10,7 @@
 #define HASH_LEN 65
 #define HEADER_MAX_LEN 1024
 #define KEYS_URL_QUERY_PARAMS "path=%s &method=%s&ttl=%d&name=%s"
+#define KEYS_URL_DELETE_PARAMS "name=%s"
 
 class PasswordEntry {
 public:
@@ -56,6 +57,7 @@ public:
     esp_err_t CheckTheSum(httpd_req_t *req);
 
 private:
+    bool ResetKeys(AppConfig* config);
     uint32_t GetNextTTL(uint32_t ttl) const;
     static void RefreshKeys(void* instance);
     PasswordEntry* GetPassword(char const *) ;
