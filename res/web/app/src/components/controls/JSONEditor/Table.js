@@ -9,7 +9,7 @@ export default class Table extends Component {
         super(props);
         this.id = this.props.id || genUUID();
         this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : ".",
+            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             keyColumn: this.getKeyColumn()
         }
     }

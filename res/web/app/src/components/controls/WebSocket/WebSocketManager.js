@@ -7,7 +7,7 @@ export default class WebSocketManager extends Component {
         super(props);
         this.widget = createRef();
         this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : ".",
+            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             enabled:props.enabled
         };
         window.anims=getAnims();
@@ -16,7 +16,7 @@ export default class WebSocketManager extends Component {
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
             if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.config.devName}`});
+                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
             } else {
                 this.setState({httpPrefix:"."});
             }
@@ -180,7 +180,7 @@ export default class WebSocketManager extends Component {
             return;
         }
         this.setState({connecting:true,running:false});
-        let ws = this.ws = new WebSocket("ws://" + (this.state.httpPrefix === "." ? `${window.location.hostname}:${window.location.port}/${window.location.pathname}`.replaceAll(/\/+$/g,"").replaceAll(/\/\//g,"/") : this.state.httpPrefix.substring(7)) + "/ws");
+        let ws = this.ws = new WebSocket("wss://" + (this.state.httpPrefix === "." ? `${window.location.hostname}:${window.location.port}/${window.location.pathname}`.replaceAll(/\/+$/g,"").replaceAll(/\/\//g,"/") : this.state.httpPrefix.substring(8)) + "/ws");
         let stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3600);
         
         ws.onmessage = (event) => {

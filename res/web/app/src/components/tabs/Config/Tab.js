@@ -1,6 +1,6 @@
 import { createElement as e, Component, Suspense } from 'react';
 import { Button,Collapse,ListItemButton,ListItemIcon,ListItemText } from '@mui/material';
-import {wfetch, fromVersionedToPlain,fromPlainToVersionned} from '../../../utils/utils'
+import { wfetch, fromVersionedToPlain,fromPlainToVersionned} from '../../../utils/utils'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
 import { faGears } from '@fortawesome/free-solid-svg-icons'
@@ -15,7 +15,7 @@ export default class ConfigPage extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : ".",
+            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
         };
         this.fetchConfig();
     }
@@ -99,6 +99,14 @@ export default class ConfigPage extends Component {
                     onChangeJSON: json => this.setState({newconfig: json})
                 }, this.state.config);
             });    
+        }
+
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
+            } else {
+                this.setState({httpPrefix:"."});
+            }
         }
 
         if (prevState.httpPrefix !== this.state.httpPrefix) {

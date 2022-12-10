@@ -12,7 +12,7 @@ export default class ROProp extends Component {
         if (IsNumberValue(this.props.value)) {
             this.state = {
                 maxLastStates: 50,
-                httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : ".",
+                httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
                 lastStates:[
                     {
                         value:this.props.value,
@@ -22,7 +22,7 @@ export default class ROProp extends Component {
             };
         } else {
             this.state = {
-                httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : "."
+                httpPrefix:this.props.selectedDevice?.ip ? `${this.props.selectedDevice.config.devName}` : "."
             };
         }
     }
@@ -40,8 +40,8 @@ export default class ROProp extends Component {
             val = ((val === "true") || (val === "yes") || (val === true)) ? "Y" : "N"
         }
         
-        if ((this.props.name === "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-            val = e("a", { href: `${this.state.httpPrefix}${val}` }, val.split('/').reverse()[0]);
+        if ((this.props.name === "name") && (val.match(/\/.*\.[a-z]{2,3}$/))) {
+            val = e("a", { href: `${val}` }, val.split('/').reverse()[0]);
         }
         return val;
     }

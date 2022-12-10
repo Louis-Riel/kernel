@@ -43,7 +43,7 @@ table.greyGridTable thead * {
     background: #181d17;
     border-bottom: 2px solid #c0c0c0;
     position: sticky;
-    top: 0;
+    top: -1px;
     color: aqua;
     padding-top: 8px;
 }

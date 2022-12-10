@@ -12,7 +12,7 @@ export default class LocalJSONEditor extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : ".",
+            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             json: props.json
         };
         if (this.props.registerEventInstanceCallback && this.props.name) {

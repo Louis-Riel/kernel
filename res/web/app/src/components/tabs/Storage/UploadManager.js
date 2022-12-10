@@ -9,7 +9,7 @@ export default class UploadManager extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : ".",
+            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             files: [],
             processed: [],
             failed: [],
@@ -126,7 +126,7 @@ export default class UploadManager extends Component {
     componentDidUpdate(prevProps, prevState) {
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
             if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.config.devName}`});
+                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
             } else {
                 this.setState({httpPrefix:"."});
             }

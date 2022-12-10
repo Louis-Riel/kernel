@@ -19,7 +19,6 @@ export default class DeviceList extends Component {
         try {
             let msg = JSON.parse(evt.data);
             if (msg.clients) {
-                console.info(msg.clients);
                 this.setState({devices:msg.clients});
             }
         } catch (ex) {
@@ -69,7 +68,7 @@ export default class DeviceList extends Component {
     getDevice(device) {
         let abort = new AbortController();
         let timer = setTimeout(()=>abort.abort(),2000);
-        return new Promise((resolve,reject) => wfetch(`http://${device.devName}/config/`, {
+        return new Promise((resolve,reject) => wfetch(`${device.devName}/config/`, {
             method: 'post',
             signal: abort.signal
         }).then(data => data.json())
@@ -90,10 +89,11 @@ export default class DeviceList extends Component {
             {this.state?.devices?.length > 0 ?
             <Select
                 className="devices"
-                value= {this.props.selectedDevice.config ? this.state.devices.find(device => device.config.deviceid === this.props.selectedDevice.config.deviceid) : this.state.devices[0]}
-                onChange= {(event) => {this.props.onSet(event.target.value);console.log((event.target.value))}}>
-                {this.state?.devices
-                    .map(device => <MenuItem value={device}>{`${device.config.devName}(${device.config.deviceid})`}</MenuItem>)}
+                value= {this.props.selectedDevice.config ? this.state.devices.find(device => device.config.deviceid === this.props.selectedDevice.config.deviceid) : null}
+                onChange= {(event) => this.props.onSet(event.target.value)}>
+                    <MenuItem value={null}>Select a device</MenuItem>
+                    {this.state?.devices
+                        .map(device => <MenuItem value={device}>{`${device.config.devName}(${device.config.deviceid})`}</MenuItem>)}
             </Select>:undefined}
             {this.state.scanning ? <CircularProgress variant="determinate" onClick={_evt => this.setState({scanning:false})} value={this.state.scanProgress*100}>33</CircularProgress > : 
                                    <Button onClick={_evt=>this.getDevices()}><FontAwesomeIcon icon={faMagnifyingGlass}></FontAwesomeIcon></Button>}

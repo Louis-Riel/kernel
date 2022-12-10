@@ -123,9 +123,9 @@ export function getAnims() {
 
 export function wfetch(requestInfo, params) {
     return new Promise((resolve,reject) => {
-      var browserPostAnims = getAnims().filter(anim => anim.type === "post" && anim.from === "browser");
-      var inSpot = getInSpot(browserPostAnims, "browser");
-      var reqAnim = inSpot;
+      let browserPostAnims = getAnims().filter(anim => anim.type === "post" && anim.from === "browser");
+      let inSpot = getInSpot(browserPostAnims, "browser");
+      let reqAnim = inSpot;
   
       if (inSpot) {
         inSpot.weight++;
@@ -143,8 +143,8 @@ export function wfetch(requestInfo, params) {
       }
   
       fetch(requestInfo,params).then(resp => {
-        var chipResponseAnim = getAnims().filter(anim => anim.type === "post" && anim.from === "chip");
-        var inSpot = getInSpot(chipResponseAnim, "chip");
+        let chipResponseAnim = getAnims().filter(anim => anim.type === "post" && anim.from === "chip");
+        let inSpot = getInSpot(chipResponseAnim, "chip");
   
         if (inSpot) {
           inSpot.weight++;

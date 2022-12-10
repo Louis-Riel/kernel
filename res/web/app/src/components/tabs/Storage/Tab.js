@@ -11,7 +11,7 @@ export default class StorageViewer extends Component {
     constructor(props) {
         super(props);
         this.state = { 
-            httpPrefix:this.props.selectedDevice?.ip ? `http://${this.props.selectedDevice.config.devName}` : ".",
+            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             loaded: false, 
             files: null,
             cache:{images:{}},
@@ -89,7 +89,7 @@ export default class StorageViewer extends Component {
 
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
             if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.config.devName}`});
+                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
             } else {
                 this.setState({httpPrefix:"."});
             }
@@ -177,8 +177,6 @@ export default class StorageViewer extends Component {
                                 destination={this.props.path}
                                 target="file">
                         </UploadManager>
-                      </Suspense>
-                      <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
                         <UploadManager 
                                 selectedDevice={this.props.selectedDevice}
                                 destination={this.props.path}

@@ -34,7 +34,8 @@
   },
   "scripts": {
     "start": "react-scripts start --host 0.0.0.0",
-    "build": "set GENERATE_SOURCEMAP=true && react-scripts build",
+    "build": "set \"PUBLIC_URL=https://192.168.1.109/\" && set \"GENERATE_SOURCEMAP=true\" && react-scripts build",
+    "buildsd": "set \"PUBLIC_URL=https://192.168.1.109/SecureDeviceTest1/sdcard/admin\" && set \"GENERATE_SOURCEMAP=false\" && react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -44,7 +45,6 @@
       "react-app/jest"
     ]
   },
-  "homepage": "http://localhost:3000/",
   "browserslist": {
     "production": [
       ">0.2%",
