@@ -20,5 +20,8 @@ exports.serve = (eventHost, port) => {
                     clients.push(client);
                     client.on("message",(msg) => processMessage(client, msg))
                     client.on("close",() => clients.splice(clients.findIndex(cl=>cl === client)))
-                }).on("listening",_evt=>events.emit("command",{command:"scan"}));
+                }).on("listening",_evt=>{
+                    events.emit("command",{command:"scan"});
+                    console.log(`Web socket running on port ${port}`)
+                });
 };
