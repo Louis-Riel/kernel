@@ -142,7 +142,7 @@ export function chipRequest(requestInfo, params) {
       }
   
       let httpPrefix = selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${selectedDevice.config.devName}` : ".";
-      fetch(`${httpPrefix}${requestInfo}`,params).then(resp => {
+      fetch(`${params.skipHttpPrefix ? '' : httpPrefix}${requestInfo}`,params).then(resp => {
         let chipResponseAnim = getAnims().filter(anim => anim.type === "post" && anim.from === "chip");
         let inSpot = getInSpot(chipResponseAnim, "chip");
   

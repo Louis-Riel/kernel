@@ -299,7 +299,7 @@ export default class TripViewer extends Component {
     downloadTile(tileX,tileY) {
         return new Promise((resolve,reject) => {
             let newImg;
-            chipRequest(`https://tile.openstreetmap.de/${this.zoomlevel}/${tileX}/${tileY}.png`)
+            chipRequest(`https://tile.openstreetmap.de/${this.zoomlevel}/${tileX}/${tileY}.png`,{skipHttpPrefix:true})
                 .then(resp => resp.blob())
                 .then(imgData => chipRequest(`/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
                     method: 'put',
