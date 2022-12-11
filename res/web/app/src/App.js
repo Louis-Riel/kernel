@@ -39,10 +39,7 @@ export default function BasicTabs() {
 
   const tabChange = (event, newValue) => {
     setValue(newValue);
-    tabStates.filter((tab,idx)=>idx!==newValue && tab.opened).forEach(tab=>tab.opened=false);
-    tabStates[newValue].opened=true;
-    tabStates[newValue].loaded=true;
-    updateTabStates(tabStates);
+    updateTabStates(tabStates.map((tabState,idx) => {return {...tabState, opened:idx!==newValue}}));
   };
 
   return (
@@ -149,11 +146,7 @@ export default function BasicTabs() {
   }
 
   function unRegisterStateCallback(stateCBFn) {
-    let idx = stateCBFns.findIndex(fn => fn.name === stateCBFn.name);
-    if (idx >= 0) {
-      stateCBFns.slice(idx,1);
-      updateStateCallbacks(stateCBFns);
-    }
+    updateStateCallbacks(stateCBFns.filter(fn => fn.name !== stateCBFn.name));
   }
 
   function registerLogCallback(logCBFn) {
@@ -162,11 +155,7 @@ export default function BasicTabs() {
   }
 
   function unRegisterLogCallback(logCBFn) {
-    let idx = logCBFns.findIndex(fn => fn.name === logCBFn.name);
-    if (idx >= 0) {
-      logCBFns.splice(idx,1);
-      updateLogCallbacks(logCBFns);
-    }
+    updateLogCallbacks(logCBFns.filter(fn => fn.name !== logCBFn.name));
   }
 
   function registerEventInstanceCallback(eventCBFn,instance) {
@@ -176,11 +165,7 @@ export default function BasicTabs() {
   }  
 
   function unRegisterEventInstanceCallback(eventCBFn,instance) {
-    let idx = eventCBFns.findIndex(fn => fn.fn.name === eventCBFn.name && fn.instance === instance);
-    if (idx >= 0) {
-      logCBFns.splice(idx,1);
-      updateEventCallbacks(eventCBFns);
-    }
+    updateEventCallbacks(eventCBFns.filter(fn => fn.fn.name !== eventCBFn.name && fn.instance !== instance));
   }  
 }
 

@@ -1,4 +1,4 @@
-import {createElement as e, Component, lazy, Suspense} from 'react';
+import {createElement as e, Component} from 'react';
 import {Tooltip} from '@mui/material';
 import { IsNumberValue, isFloat, genUUID, IsBooleanValue, IsDatetimeValue, degToRad} from '../../../utils/utils';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';

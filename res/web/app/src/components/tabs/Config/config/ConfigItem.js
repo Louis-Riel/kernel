@@ -1,5 +1,5 @@
 import {createElement as e, Component} from 'react';
-import {Paper, Typography, CardContent, List, ListItem, FormControlLabel, Checkbox, TextField, Chip} from '@mui/material';
+import {Paper, Typography, ListItem, TextField, Chip} from '@mui/material';
 
 export default class ConfigItem extends Component {
     constructor(props) {
@@ -85,23 +85,6 @@ export default class ConfigItem extends Component {
                     }).map(this.getEditor.bind(this))}
             </div>
         </Paper>
-
-
-        // return e( Card, { key: this.props.item[this.props.nameField], className: "config-item" },[
-        //     e( CardHeader, {key:"header", title: this.props.item[this.props.nameField] }),
-        //     e( CardContent, {key:"details"},  e(List,{key: "items"},
-        //         Object.keys(JSON.stringify(this.props.item) === "{}" ? this.props.value : this.props.item)
-        //               .filter(fld => !['collectionName','class','isArray'].find(val=>val===fld))
-        //               .sort((a,b) => {
-        //                 let wa = this.getFieldWeight(a);
-        //                 let wb = this.getFieldWeight(b);
-        //                 if (wa === wb) {
-        //                     return a.localeCompare(b);
-        //                 }
-        //                 return wb - wa;
-        //             }).map(this.getEditor.bind(this))
-        //     ))
-        // ]);
     }
 
     getEditor(key) {

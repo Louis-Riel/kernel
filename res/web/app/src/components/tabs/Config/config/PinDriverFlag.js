@@ -1,5 +1,5 @@
-import {createElement as e, Component} from 'react';
-import {Snackbar,Alert,Card,CardHeader,CardContent,List, Chip, Divider, Paper, Typography} from '@mui/material';
+import {Component} from 'react';
+import {Snackbar,Alert,Paper,Chip} from '@mui/material';
 
 export default class PinDriverFlags extends Component {
     constructor(props) {
@@ -38,7 +38,7 @@ export default class PinDriverFlags extends Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        if (this.props.value !== this.getValue(this.state)) {
+        if (this.props.value !== prevProps.value) {
             this.setState({
                 digital_in: { value: this.props.value &  0b00000001 ? true : false, errors:[] },
                 digital_out: { value: this.props.value & 0b00000010 ? true : false, errors:[] },
@@ -49,45 +49,49 @@ export default class PinDriverFlags extends Component {
                 wakeonlow: { value: this.props.value &   0b01000000 ? true : false, errors:[] }
             });
         }
+
+        if (prevState !== this.state) {
+            this.props.onChange(this.getValue(this.state));
+        }
     }
 
     isValidChange(name, value) {
         let newState =  JSON.parse(JSON.stringify(this.state));
         newState[name].value = value;
-        if ((name === "digital_in" || name === "digital_out") && value) {
-            if ((name === "digital_in") && newState.digital_out.value) {
-                this.state.digital_out.value = false;
+        if ((name === "digital_in") && newState.digital_out.value) {
+            this.setState({digital_out:{value:false,errors:[]},
+                            digital_in:{value:true,errors:[]}});
+        } else if ((name === "digital_out") && newState.digital_in.value) {
+            this.setState({
+                digital_out:{value: true,errors:[]},
+                digital_in:{value: false,errors:[]},
+                pullup:{value: false,errors:[]},
+                pulldown:{value: false,errors:[]},
+                touch:{value: false,errors:[]},
+                wakeonhigh:{value: false,errors:[]},
+                wakeonlow:{value: false,errors:[]}
+            });
+        } else {
+            if (newState.digital_out.value && this.getValue(newState) & 0b01111100) {
+                newState[name].value = false;
+                newState[name].errors.push({visible: true, error: "Can't set " + this.getFlagNames(this.props.value) + " option for output pins"});
+                this.setState(newState);
+                return false;
             }
-            if ((name === "digital_out") && newState.digital_in.value) {
-                this.state.digital_in.value = false;
-                this.state.pullup.value = false;
-                this.state.pulldown.value = false;
-                this.state.touch.value = false;
-                this.state.wakeonhigh.value = false;
-                this.state.wakeonlow.value = false;
-            }
-        }
-        if (newState.digital_out.value && this.getValue(newState) & 0b01111100) {
-            this.state[name].errors.push({visible: true, error: "Can't set " + this.getFlagNames(this.getValue(newState) & 0b01111100) + " option for output pins"});
-            Promise.resolve(this.setState(this.state));
-            return false;
-        }
-
-        if (newState.touch.value && (this.getValue(newState) & 0b00001100)) {
-            this.state[name].errors.push({visible: true, error: "Can't set " + this.getFlagNames(this.getValue(newState) & 0b00001100) + " option for touch pins"});
-            Promise.resolve(this.setState(this.state));
-            return false;
+            
+            if (newState.touch.value && (this.getValue(newState) & 0b00001100)) {
+                newState[name].value = false;
+                newState[name].errors.push({visible: true, error: "Can't set " + this.getFlagNames(this.props.value) + " option for touch pins"});
+                this.setState(newState);
+                return false;
+            } 
+            this.setState({[name]:{value:value,errors:[]}});
         }
         return true;
     }
 
     onChange(name, value) {
-        if (this.isValidChange(name, value)) {
-            this.state[name].value = value;
-            this.props.onChange(this.getValue(this.state));
-            return true;
-        }
-        return false;
+        return this.isValidChange(name, value);
     }
 
     getErrors(value) {

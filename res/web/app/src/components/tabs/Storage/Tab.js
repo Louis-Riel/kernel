@@ -59,12 +59,8 @@ export default class StorageViewer extends Component {
         }).then(data => {
             clearInterval(quitItNow);
             data.json()
-                .then(files => files.sort((f1, f2) => {
-                    if (f1.ftype !== f2.ftype) {
-                        return f1.ftype === "folder" ? 1 : -1;
-                    }
-                    return f1.name === f2.name ? 0 : f1.name > f2.name ? 1 : -1;
-                })).then(files => {
+                 .then(files => files.sort(sortEntries))
+                 .then(files => {
                     if (this.mounted){
                         this.setState({ loaded: true, files: files, total: files.reduce((e1,e2) => e1 + e2.size,0) });
                         let fileStatsToFetch = files.filter(file => file.ftype === "file" && !file.size);
@@ -76,11 +72,18 @@ export default class StorageViewer extends Component {
                     }
                 });
         }).catch(console.error);
+
+        function sortEntries(f1, f2) {
+            if (f1.ftype !== f2.ftype) {
+                return f1.ftype === "folder" ? 1 : -1;
+            }
+            return f1.name === f2.name ? 0 : f1.name > f2.name ? 1 : -1;
+        }
     }
 
     componentDidUpdate(prevProps, prevState) {
         if (!this.state.loaded) {
-            this.state.loaded = true;
+            this.setState({loaded: true});
         }
 
         if (prevProps && (prevProps.path !== this.props.path)) {

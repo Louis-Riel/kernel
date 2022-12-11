@@ -59,9 +59,19 @@ export class LiveEventPannel extends Component {
             }, {}));
         Object.values(curFilters).forEach(filter => {
             if (!this.state.filters[filter[0]]) {
-                this.state.filters[filter[0]] = filter[1];
+                this.setState({filters:{...this.state.filters,[filter[0]]: filter[1]}});
             } else if (filter[1].eventIds.find(newEvt => !this.state.filters[filter[0]].eventIds.find(eventId => eventId.eventId === newEvt.eventId))) {
-                this.state.filters[filter[0]].eventIds = this.state.filters[filter[0]].eventIds.concat(filter[1].eventIds.filter(eventId => !this.state.filters[filter[0]].eventIds.find(eventId2 => eventId.eventId === eventId2.eventId)));
+                this.setState({
+                    filters:{
+                        ...this.state.filters,
+                        [filter[0]]:{
+                            eventIds:[
+                                this.state.filters[filter[0]].eventIds,
+                                filter[1].eventIds.filter(eventId => !this.state.filters[filter[0]].eventIds.find(eventId2 => eventId.eventId === eventId2.eventId))
+                            ]
+                        }
+                    }
+                });
             }
         });
         return this.state.filters;

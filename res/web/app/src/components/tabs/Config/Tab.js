@@ -23,10 +23,8 @@ export default class ConfigPage extends Component {
     fetchConfig() {
         wfetch(`${this.state.httpPrefix}/config/${!this.props.selectedDevice?.config?.deviceid?"":this.props.selectedDevice.config.deviceid+".json"}`, {
                 method: 'post',
-                //signal: abort.signal
             }).then(resp => resp.json())
               .then(config => {
-                //clearTimeout(timer);
                 this.props.selectedDevice.config = fromVersionedToPlain(config);
                 this.setState({
                     config: fromVersionedToPlain(config),
@@ -37,7 +35,11 @@ export default class ConfigPage extends Component {
     }
 
     getEditorGroups() {
-        return e(ConfigGroup, { key: "configGroups", selectedDevice:this.props.selectedDevice, config: this.state?.newconfig, onChange: (_) => {this.jsoneditor?.update(this.state.newconfig); this.setState({newconfig: this.state.newconfig}) } });
+        return e(ConfigGroup, { key: "configGroups", 
+                                selectedDevice:this.props.selectedDevice, 
+                                config: this.state?.newconfig, 
+                                onChange: (newconfig) => this.setState({newconfig})
+                            });
     }
 
     saveChanges() {
@@ -58,8 +60,7 @@ export default class ConfigPage extends Component {
     renderConfigGroup(name,contentFnc,icon) {
         return <div>
             <ListItemButton onClick={_ => {
-                (this.state[name]?this.state[name]:(this.state[name]={})).opened = !this.state[name]?.opened;
-                this.setState({ [name]: this.state[name] });
+                this.setState({ [name]: {...this.state[name],opened: !this.state[name]?.opened}});
             } }>
                 <ListItemIcon>
                     <FontAwesomeIcon icon={icon}></FontAwesomeIcon>

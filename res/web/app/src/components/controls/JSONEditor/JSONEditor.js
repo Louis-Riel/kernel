@@ -178,14 +178,10 @@ export default class LocalJSONEditor extends Component {
 
     processUpdate(elem,fld) {
         if (fld) {
-            if (this.state.json[fld] === undefined) {
-                this.state.json[fld]={version:-1};
-            }
-            this.state.json[fld].value=elem.target.value;
-            this.state.json[fld].version++;
+            this.setState({json:{...this.state.json,
+                           [fld]:{value:elem.target.value,version:this.state.json[fld]?(this.state.json[fld].version+1):0}}});
         } else {
-            this.state.json.value=elem.target.value;
-            this.state.json.version++;
+            this.setState({json:{value:elem.target.value,version:this.state.json.version+1}})
         }
     }
 
@@ -217,8 +213,7 @@ export default class LocalJSONEditor extends Component {
     }
 
     addNewProperty(){
-        this.state.json[`prop${Object.keys(this.state.json).filter(prop => prop.match(/^prop.*/)).length+1}`]=null;
-        this.setState({value:this.state.json});
+        this.setState({value:{...this.state.json,[`prop${Object.keys(this.state.json).filter(prop => prop.match(/^prop.*/)).length+1}`]:null}});
     }
 
     objectControlPannel(){

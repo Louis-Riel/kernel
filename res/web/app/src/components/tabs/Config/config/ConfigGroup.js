@@ -94,13 +94,31 @@ export default class ConfigGroup extends Component {
         ]);
     }
 
-    renderEditor(key, item, idx) {
+    renderEditor(key, items, idx) {
         return  e("div",{key:`${key.collectionName}-${idx}-control-editor`,className:`control-editor`},[
                     <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
-                        {e( this.supportedTypes[key.collectionName]?.component || ConfigItem, { key: key.collectionName + idx, value: key, role: "tabpanel", item: item[idx], nameField: "name", onChange: this.props.onChange})}
+                        {e( this.supportedTypes[key.collectionName]?.component || ConfigItem, { 
+                            key: key.collectionName + idx, 
+                            value: key, 
+                            role: "tabpanel", 
+                            item: items[idx], 
+                            nameField: "name", 
+                            onChange: (updatedItem)=>this.props.onChange({
+                                ...this.props.config,
+                                [key.collectionName]:items.map((item,idx2)=>parseInt(idx) === idx2 ? updatedItem : item)})
+                            }
+                        )}
                     </Suspense>,
-                    e(Button, { key: "dup", onClick: evt=> {this.props.config[key.collectionName].push(JSON.parse(JSON.stringify(this.props.config[key.collectionName][idx]))); this.props.onChange()} }, <FontAwesomeIcon icon={faClone} />),
-                    e(Button, { key: "delete", onClick: evt=> {this.props.config[key.collectionName].splice(idx,1); this.props.onChange()} }, <FontAwesomeIcon icon={faTrashCan} />),
+                    e(Button, { key: "dup", onClick: evt=> 
+                        this.props.onChange({
+                            ...this.props.config,
+                            [key.collectionName]:[...items,JSON.parse(JSON.stringify(this.props.config[key.collectionName][idx]))]})
+                    }, <FontAwesomeIcon icon={faClone} />),
+                    e(Button, { key: "delete", onClick: evt=>
+                        this.props.onChange({
+                            ...this.props.config,
+                            [key.collectionName]:[...items.filter((it,idx2)=>parseInt(idx) !== idx2)]})
+                    }, <FontAwesomeIcon icon={faTrashCan} />),
                 ]);
     }
 }

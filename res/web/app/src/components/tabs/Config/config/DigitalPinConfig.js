@@ -1,5 +1,5 @@
-import {createElement as e, Component} from 'react';
-import {Card, CardHeader, CardContent, ListItem, TextField, List, Paper, Typography } from '@mui/material';
+import {Component} from 'react';
+import {TextField, Paper, Typography } from '@mui/material';
 import PinDriverFlags from './PinDriverFlag';
 
 export default class DigitalPinConfig extends Component {
@@ -10,7 +10,7 @@ export default class DigitalPinConfig extends Component {
 
     componentDidUpdate(prevProps, prevState) {
         if ((this.state !== prevState) && this.props.onChange) {
-            this.props.onChange(this.state);
+            this.props.onChange(this.state.pin);
         }
 
         if (JSON.stringify(this.props.item) !== JSON.stringify(prevProps.item)) {
@@ -19,8 +19,7 @@ export default class DigitalPinConfig extends Component {
     }
 
     onChange(name, value) {
-        this.state.pin[name] = name === "pinName" ? value : parseInt(value); 
-        this.setState(this.state);
+        this.setState({pin: {...this.state.pin, [name]:name === "pinName" ? value : parseInt(value)}});
     }
 
     render() {

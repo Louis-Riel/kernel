@@ -49,22 +49,6 @@ export default class DeviceList extends Component {
               });
     }
 
-    getLocalConfig() {
-        let abort = new AbortController();
-        let timer = setTimeout(()=>abort.abort(),4000);
-        return new Promise((resolve,reject) => wfetch(`/config/`, {
-            method: 'post',
-            signal: abort.signal
-        }).then(data => data.json())
-          .then(config => {
-              clearTimeout(timer);
-              resolve(config);
-          }).catch(err=>{
-              clearTimeout(timer);
-              reject(err);
-          }));
-    }
-
     getDevice(device) {
         let abort = new AbortController();
         let timer = setTimeout(()=>abort.abort(),2000);

@@ -181,7 +181,7 @@ export default class WebSocketManager extends Component {
         }
         this.setState({connecting:true,running:false});
         let ws = this.ws = new WebSocket("wss://" + (this.state.httpPrefix === "." ? `${window.location.hostname}:${window.location.port}/${window.location.pathname}`.replaceAll(/\/+$/g,"").replaceAll(/\/\//g,"/") : this.state.httpPrefix.substring(8)) + "/ws");
-        let stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3600);
+        let stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.setState({connecting: false}); }, 3600);
         
         ws.onmessage = (event) => {
           stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
@@ -217,7 +217,7 @@ export default class WebSocketManager extends Component {
         this.setState({connected:true,connecting:false});
         ws.send("Connected");
         window.animRenderer && window.requestAnimationFrame(window.animRenderer);
-        stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3600);
+        stopItWithThatShit = setTimeout(() => { this.setState({timeout: "Connect"}); ws.close(); console.log("Connect timeout"); }, 3600);
         return stopItWithThatShit;
     }
     
@@ -291,9 +291,11 @@ export default class WebSocketManager extends Component {
     processMessage(stopItWithThatShit, event, ws) {
         clearTimeout(stopItWithThatShit);
         if (!this.state.running || this.state.timeout) {
-          this.state.running = true;
-          this.state.error = null;
-          this.state.timeout = null;
+            this.setState({
+                running: true,
+                error: null,
+                timeout: null
+            });
         }
     
         if (event && event.data) {

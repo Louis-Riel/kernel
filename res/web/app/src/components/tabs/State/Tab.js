@@ -112,13 +112,7 @@ export default class StatusPage extends Component {
 
     refreshStatus(stat) {
         if (stat){
-            this.filterProperties(stat)
-                .then(stat=>{
-                Object.entries(stat)
-                      .filter(stat => this.state.status[stat[0]])
-                      .forEach(stat => this.state.status[stat[0]] = stat[1]);
-                this.setState({status:this.state.status});
-            });
+            this.setState({status:this.filterProperties(stat)});
         } else {
             this.updateAppStatus();
         }
@@ -132,10 +126,7 @@ export default class StatusPage extends Component {
         if (requests.length === 0) {
             return;
         }
-        //let abort = new AbortController()
-        //let timer = setTimeout(() => abort.abort(), 8000);
         this.updateStatus(requests.pop(), undefined, newState).then(res => {
-            //(timer);
             document.getElementById("Status").style.opacity = 1;
             if (res.path === "tasks") {
                 this.setState(prevState => {return {
@@ -187,14 +178,6 @@ export default class StatusPage extends Component {
             //signal: abort.signal
         }).then(data => data.json())
             .then(jstats => {
-                if (request.url === "/status/app") {
-                    this.state.status.storage.value=Object.keys(jstats)
-                                                          .filter(fld=>["sdcard","lfs"].includes(fld))
-                                                          .reduce((pv,cv)=>{pv[cv]=jstats[cv];return pv;},{});
-                    jstats = Object.keys(jstats)
-                                   .filter(fld=>!["sdcard","lfs"].includes(fld))
-                                   .reduce((pv,cv)=>{pv[cv]=jstats[cv];return pv;},{});
-                }
                 (newState[request.path]=newState[request.path]||{}).value = jstats;
                 resolve({ path: request.path, stat: jstats });
             }).catch(err => {
@@ -422,8 +405,10 @@ export default class StatusPage extends Component {
     renderComponents(fld) {
         return <div>
             <ListItemButton onClick={_ => {
-                this.state.status[fld].opened = !this.state.status[fld]?.opened;
-                this.setState({ status: this.state.status });
+                this.setState({ status: {
+                    ...this.state.status,
+                    [fld]:{...this.state.status[fld],opened:!this.state.status[fld]?.opened}
+                }});
             } }>
                 <ListItemIcon>
                     <FontAwesomeIcon icon={this.state.status[fld].icon}></FontAwesomeIcon>
@@ -447,10 +432,13 @@ export default class StatusPage extends Component {
                     .map(entry => {
                         return <div className='subitem'>
                             <ListItemButton onClick={_ => {
-                                this.state.componentOpenState[entry[0]] || (this.state.componentOpenState[entry[0]] = false);
-                                this.state.componentOpenState[entry[0]] = !this.state.componentOpenState[entry[0]];
-                                this.setState({ componentOpenState: this.state.componentOpenState });
-                            } }>
+                                this.setState({
+                                    componentOpenState:{
+                                        ...this.state.componentOpenState,
+                                        [entry[0]]: !this.state.componentOpenState[entry[0]]
+                                    }
+                                })
+                            }}>
                                 <ListItemIcon>
                                     <FontAwesomeIcon icon={this.getComponentIcon(entry[0])}></FontAwesomeIcon>
                                 </ListItemIcon>

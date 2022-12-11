@@ -17,49 +17,53 @@ export default class LogLines extends Component {
             return;
         }
 
-        let recIdx=-1;
         let msg = logln.match(/^[^IDVEW]*(.+)/)[1];
         let lvl = msg.substr(0, 1);
-        let ts = msg.substr(3, 12);
         let func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
 
-        if (this.state.logLines.some((clogln,idx) => {
-            let nmsg = clogln.match(/^[^IDVEW]*(.+)/)[1];
-            let nlvl = nmsg.substr(0, 1);
-            let nts = nmsg.substr(3, 12);
-            let nfunc = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
-            return nlvl === lvl && nts === ts && nfunc === func;
-        })) {
-            recIdx=this.state.logLines.length;
-        }
         while (this.state.logLines.length > 500) {
             this.state.logLines.shift();
         }
 
         if (this.state.logLevels[lvl] === undefined) {
-            this.state.logLevels[lvl] = {visible:true};
+            this.setState({
+                logLevels:{
+                    ...this.state.logLevels,
+                    [lvl]: {visible:true,
+                            [func]:true}
+                }
+            });
         }
 
-        if (this.state.logLevels[lvl][func] === undefined) {
-            this.state.logLevels[lvl][func] = true;
-        }
-
-        if (recIdx >= 0) {
-            this.state.logLines[recIdx] = logln;
-        } else {
-            this.state.logLines= [...(this.state?.logLines||[]),logln];
-        }
-        this.setState(this.state);
+        this.setState({logLines:[...this.state.logLines,logln]});
     }
 
     renderLogFunctionFilter(lvl,func,logLines) {    
         let label =  <div className={`log LOG${lvl}`}>{`${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") === func).length})`}</div>;
-        return <Chip label={label} disabled={!this.state.logLevels[lvl].visible} className={this.state.logLevels[lvl][func] ? "enabled" : "filtered"} onClick={() => {this.state.logLevels[lvl][func] = !this.state.logLevels[lvl][func]; this.setState(this.state);}} />;
+        return <Chip label={label} disabled={!this.state.logLevels[lvl].visible} className={this.state.logLevels[lvl][func] ? "enabled" : "filtered"} onClick={() => {
+            this.setState({logLevels:{
+                ...this.state.logLevels,
+                [lvl]:{
+                    ...this.state.logLevels[lvl],
+                    [func]:!this.state.logLevels[lvl][func]
+                }
+            }});
+        }} />;
     }
 
     renderLogLevelFilterControl(lvl,logLines) {   
         let label =  <div className={`log LOG${lvl}`}>{`${lvl}(${logLines.length})`}</div>;
-        return <Chip label={label} className={this.state.logLevels[lvl].visible ? "enabled" : "filtered"} onClick={() => {this.state.logLevels[lvl].visible = !this.state.logLevels[lvl].visible; this.setState(this.state);}} />;
+        return <Chip label={label} className={this.state.logLevels[lvl].visible ? "enabled" : "filtered"} onClick={() => {
+            this.setState({
+                logLevels:{
+                    ...this.state.logLevels,
+                    [lvl]:{
+                        ...this.state.logLevels[lvl],
+                        visible:!this.state.logLevels[lvl].visible
+                    }
+                }
+            });
+        }} />;
     }
 
     renderLogFunctionFilters(lvl, logLines) {
