@@ -1,6 +1,6 @@
 import { createElement as e, Component } from 'react';
 import { Button, FormControlLabel, Checkbox } from '@mui/material';
-import { wfetch } from '../../../utils/utils';
+import { chipRequest } from '../../../utils/utils';
 import { LiveEvent } from './LiveEvent';
 
 export class LiveEventPannel extends Component {
@@ -12,7 +12,6 @@ export class LiveEventPannel extends Component {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
         this.state = { 
-            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             filters: {} 
         };
     }
@@ -20,16 +19,6 @@ export class LiveEventPannel extends Component {
     componentWillUnmount() {
         if (this.props.unRegisterEventInstanceCallback && this.props.name) {
             this.props.unRegisterEventInstanceCallback(this.ProcessEvent.bind(this),`${this.props.class}-${this.props.name}`);
-        }
-    }
-
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
-            } else {
-                this.setState({httpPrefix:"."});
-            }
         }
     }
 
@@ -105,7 +94,7 @@ export class LiveEventPannel extends Component {
             } else {
                 let toControler = new AbortController();
                 const timer = setTimeout(() => toControler.abort(), 8000);
-                wfetch(`${this.state.httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
+                chipRequest(`/eventDescriptor/${event.eventBase}/${event.eventId}`, {
                     method: 'post',
                     signal: toControler.signal
                 }).then(data => {

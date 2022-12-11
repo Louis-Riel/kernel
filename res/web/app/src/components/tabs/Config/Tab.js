@@ -1,6 +1,6 @@
 import { createElement as e, Component, Suspense } from 'react';
 import { Button,Collapse,ListItemButton,ListItemIcon,ListItemText } from '@mui/material';
-import { wfetch, fromVersionedToPlain,fromPlainToVersionned} from '../../../utils/utils'
+import { chipRequest, fromVersionedToPlain,fromPlainToVersionned} from '../../../utils/utils'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
 import { faGears } from '@fortawesome/free-solid-svg-icons'
@@ -14,14 +14,12 @@ import 'jsoneditor/dist/jsoneditor.css';
 export default class ConfigPage extends Component {
     constructor(props) {
         super(props);
-        this.state={
-            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
-        };
         this.fetchConfig();
+        this.state={};
     }
 
     fetchConfig() {
-        wfetch(`${this.state.httpPrefix}/config/${!this.props.selectedDevice?.config?.deviceid?"":this.props.selectedDevice.config.deviceid+".json"}`, {
+        chipRequest(`/config/${!this.props.selectedDevice?.config?.deviceid?"":this.props.selectedDevice.config.deviceid+".json"}`, {
                 method: 'post',
             }).then(resp => resp.json())
               .then(config => {
@@ -45,7 +43,7 @@ export default class ConfigPage extends Component {
     saveChanges() {
         let abort = new AbortController()
         let timer = setTimeout(() => abort.abort(), 8000);
-        wfetch(`${this.state.httpPrefix}/config`, {
+        chipRequest(`/config`, {
                 method: 'put',
                 signal: abort.signal,
                 body: JSON.stringify(fromPlainToVersionned(this.state.newconfig, this.state.original))
@@ -78,14 +76,6 @@ export default class ConfigPage extends Component {
     }
 
     componentDidUpdate(prevProps,prevState) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`https://${this.props.selectedDevice.config.devName}`});
-            } else {
-                this.setState({httpPrefix:"."});
-            }
-        }
-
         if (this.jsoneditor) {
             if (this.state.newconfig && (this.jsoneditor.get() !== this.state.newconfig)) {
                 this.jsoneditor.update(this.state.newconfig)
@@ -103,14 +93,6 @@ export default class ConfigPage extends Component {
         }
 
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
-            } else {
-                this.setState({httpPrefix:"."});
-            }
-        }
-
-        if (prevState.httpPrefix !== this.state.httpPrefix) {
             this.fetchConfig();
         }
     }

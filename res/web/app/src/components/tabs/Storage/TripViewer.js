@@ -1,11 +1,10 @@
 import {createElement as e, Component} from 'react';
-import {wfetch} from '../../../utils/utils'
+import {chipRequest} from '../../../utils/utils'
 
 export default class TripViewer extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             cache:this.props.cache,
             zoomlevel:15,
             latitude:0,
@@ -20,14 +19,6 @@ export default class TripViewer extends Component {
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
-            } else {
-                this.setState({httpPrefix:"."});
-            }
-        }
-
         if (!prevProps.points || !prevProps.points.length || !prevProps.points.length || prevProps.points.length !== this.props.points.length){
             this.firstRender=true;
         }
@@ -308,9 +299,9 @@ export default class TripViewer extends Component {
     downloadTile(tileX,tileY) {
         return new Promise((resolve,reject) => {
             let newImg;
-            wfetch(`https://tile.openstreetmap.de/${this.zoomlevel}/${tileX}/${tileY}.png`)
+            chipRequest(`https://tile.openstreetmap.de/${this.zoomlevel}/${tileX}/${tileY}.png`)
                 .then(resp => resp.blob())
-                .then(imgData => wfetch(`${this.httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
+                .then(imgData => chipRequest(`/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
                     method: 'put',
                     body: (newImg=imgData)
                 }).then(resolve(newImg)).catch(resolve(newImg)))
@@ -329,7 +320,7 @@ export default class TripViewer extends Component {
             if (this.testing) {
                 return resolve(this.drawWatermark(tileX,tileY));
             }
-            wfetch(`${this.httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
+            chipRequest(`/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
                 .then(resp => resolve(resp.status >= 300? this.downloadTile(tileX,tileY):resp.blob()))
                 .catch(err => {
                     if (retryCount > 3) {

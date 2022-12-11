@@ -1,24 +1,13 @@
 import { createElement as e, Component } from 'react';
-import { wfetch } from '../../../utils/utils';
+import { chipRequest } from '../../../utils/utils';
 import { TripWithin } from './TripWithin';
 
 export class FileViewer extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             renderers: []
         };
-    }
-
-    componentDidUpdate(prevProps,prevState) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
-            } else {
-                this.setState({httpPrefix:"."});
-            }
-        }
     }
 
     componentDidMount() {
@@ -42,7 +31,7 @@ export class FileViewer extends Component {
     }
 
     parseLog(resolve, retryCount, reject) {
-        wfetch(`${this.state.httpPrefix}${this.props.folder}/${this.props.name}`)
+        chipRequest(`${this.props.folder}/${this.props.name}`)
             .then(resp => resp.text())
             .then(content => resolve(this.setState({
                 renderers: [{
@@ -70,7 +59,7 @@ export class FileViewer extends Component {
     }
 
     parseCsv(resolve, retryCount, reject) {
-        wfetch(`${this.state.httpPrefix}${this.props.folder}/${this.props.name}`)
+        chipRequest(`${this.props.folder}/${this.props.name}`)
             .then(resp => resp.text())
             .then(content => {
                 let cols = content.split(/\n|\r\n/)[0].split(",");
@@ -113,6 +102,6 @@ export class FileViewer extends Component {
     }
 
     render() {
-        return [e("a", { key: "filelink", href: `${this.state.httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]), this.getRenderers()];
+        return [e("a", { key: "filelink", href: `${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]), this.getRenderers()];
     }
 }

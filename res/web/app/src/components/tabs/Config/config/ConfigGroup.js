@@ -1,6 +1,6 @@
 import {createElement as e, Component, lazy, Suspense} from 'react';
 import { Tabs, Tab, Button } from '@mui/material';
-import { wfetch } from '../../../../utils/utils';
+import { chipRequest } from '../../../../utils/utils';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
 import { faPlusSquare, faClone, faTrashCan } from '@fortawesome/free-solid-svg-icons'
@@ -25,10 +25,9 @@ export default class ConfigGroup extends Component {
             }
         };
         this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             currentTab: undefined
         };
-        wfetch(`${this.state.httpPrefix}/templates/config`,{
+        chipRequest(`/templates/config`,{
             method: 'post'
         }).then(data => data.json())
           .then(this.updateConfigTemplates.bind(this))
@@ -37,14 +36,7 @@ export default class ConfigGroup extends Component {
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
-            } else {
-                this.setState({httpPrefix:"."});
-            }
-        }
-        if (prevState?.httpPrefix !== this.state.httpPrefix) {
-            wfetch(`${this.state.httpPrefix}/templates/config`,{
+            chipRequest(`/templates/config`,{
                 method: 'post'
             }).then(data => data.json())
               .then(this.updateConfigTemplates.bind(this))

@@ -1,5 +1,5 @@
 import {createElement as e, Component, lazy, Suspense} from 'react';
-import {wfetch,dirname,comparer} from '../../../utils/utils'
+import {chipRequest,dirname,comparer} from '../../../utils/utils'
 import './Storage.css';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner';
@@ -11,7 +11,6 @@ export default class StorageViewer extends Component {
     constructor(props) {
         super(props);
         this.state = { 
-            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             loaded: false, 
             files: null,
             cache:{images:{}},
@@ -34,7 +33,7 @@ export default class StorageViewer extends Component {
         if (this.mounted){
             fileStatsToFetch.forEach(fileToFetch => {
                 this.registerFileWork(new Promise((resolve, reject) => {
-                    wfetch(`${this.state.httpPrefix}/stat${fileToFetch.folder}/${fileToFetch.name}`, {
+                    chipRequest(`/stat${fileToFetch.folder}/${fileToFetch.name}`, {
                         method: 'post'
                     }).then(data => {
                         data.json().then(jdata => {
@@ -53,7 +52,7 @@ export default class StorageViewer extends Component {
         let abort = new AbortController();
     
         let quitItNow = setTimeout(() => abort.abort(), 8000);
-        wfetch(`${this.state.httpPrefix}/files` + this.props.path, {
+        chipRequest(`/files` + this.props.path, {
             method: 'post',
             signal: abort.signal
         }).then(data => {
@@ -91,13 +90,6 @@ export default class StorageViewer extends Component {
         }
 
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
-            } else {
-                this.setState({httpPrefix:"."});
-            }
-        }
-        if (prevState.httpPrefix !== this.state.httpPrefix) {
             if ((this.state.path || '/') === "/") {
                 this.fetchFiles();
             } else {

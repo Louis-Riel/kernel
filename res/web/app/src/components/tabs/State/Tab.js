@@ -1,5 +1,5 @@
 import { Component, Suspense, lazy } from 'react';
-import { wfetch } from '../../../utils/utils';
+import { chipRequest } from '../../../utils/utils';
 import { Button, FormControl, InputLabel, Select, MenuItem, List, ListItemButton, ListItemIcon, ListItemText, Collapse  } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
@@ -28,7 +28,6 @@ export default class StatusPage extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             refreshRate:"Manual",
             componentOpenState:{},
             threads:[],
@@ -90,13 +89,6 @@ export default class StatusPage extends Component {
         }
 
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
-            } else {
-                this.setState({httpPrefix:"."});
-            }
-        }
-        if (prevState.httpPrefix !== this.state.httpPrefix) {
             this.updateAppStatus();
         }
     }
@@ -161,7 +153,7 @@ export default class StatusPage extends Component {
                 document.getElementById("Status").style.opacity = 0.5
                 if (errors[0]?.waitFor) {
                     setTimeout(() => {
-                        if (err.message !== "Failed to wfetch")
+                        if (err.message !== "Failed to chipRequest")
                             console.error(err);
                         this.updateStatuses(requests, newState);
                     }, errors[0].waitFor);
@@ -173,7 +165,7 @@ export default class StatusPage extends Component {
     }
 
     updateStatus(request, abort, newState) {   
-        return new Promise((resolve, reject) => wfetch(`${this.state.httpPrefix}${request.url}`, {
+        return new Promise((resolve, reject) => chipRequest(`${request.url}`, {
             method: 'post',
             //signal: abort.signal
         }).then(data => data.json())
@@ -200,7 +192,7 @@ export default class StatusPage extends Component {
     }
 
     SendCommand(body) {
-        return wfetch(`${this.state.httpPrefix}/status/cmd`, {
+        return chipRequest(`/status/cmd`, {
             method: 'PUT',
             body: JSON.stringify(body)
         }).then(res => res.text().then(console.log))

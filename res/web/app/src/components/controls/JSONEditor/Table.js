@@ -2,8 +2,6 @@ import {createElement as e, Component} from 'react';
 import { IsNumberValue, isFloat, genUUID, IsBooleanValue, comparer} from '../../../utils/utils';
 import LocalJSONEditor from './JSONEditor'
 
-var httpPrefix = "";
-
 export default class Table extends Component {
     constructor(props) {
         super(props);
@@ -15,9 +13,16 @@ export default class Table extends Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        var keycol = this.getKeyColumn();
+        const keycol = this.getKeyColumn();
         if (this.state.keyColumn !== keycol){
             this.setState({keyColumn:keycol});
+        }
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
+            } else {
+                this.setState({httpPrefix:"."});
+            }
         }
     }
     getKeyColumn() {
@@ -102,7 +107,7 @@ export default class Table extends Component {
             }
     
             if ((fld === "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-                return e("a", { href: `${httpPrefix}${val}` }, val);
+                return e("a", { href: `${this.state.httpPrefix}${val}` }, val);
             }
             return val;
         }

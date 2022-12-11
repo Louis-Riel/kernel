@@ -1,4 +1,4 @@
-import { wfetch } from '../../../utils/utils'
+import { chipRequest } from '../../../utils/utils'
 import { Component} from 'react';
 import { Button, MenuItem, Select, CircularProgress } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -52,7 +52,7 @@ export default class DeviceList extends Component {
     getDevice(device) {
         let abort = new AbortController();
         let timer = setTimeout(()=>abort.abort(),2000);
-        return new Promise((resolve,reject) => wfetch(`${device.devName}/config/`, {
+        return new Promise((resolve,reject) => chipRequest(`${device.devName}/config/`, {
             method: 'post',
             signal: abort.signal
         }).then(data => data.json())

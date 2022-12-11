@@ -1,5 +1,5 @@
 import {Component} from 'react';
-import {wfetch } from '../../../utils/utils';
+import {chipRequest } from '../../../utils/utils';
 import CryptoJS from 'crypto-js';
 import { Button } from '@mui/material';
 import './FirmwareUpdater.css';
@@ -7,15 +7,13 @@ import './FirmwareUpdater.css';
 export default class FirmwareUpdater extends Component {
     constructor(props) {
         super(props);
-        this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
-        };
+        this.state={};
     }
 
     UploadFirmware() {
         this.setState({ loaded: `Sending ${this.state.len} firmware bytes` })
         if (this.state.fwdata && this.state.md5) {
-            return wfetch(`${this.state.httpPrefix}/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
+            return chipRequest(`/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
                 method: 'post',
                 body: this.state.fwdata
             }).then(res => res.text())
@@ -26,7 +24,7 @@ export default class FirmwareUpdater extends Component {
     waitForDevFlashing() {
         let abort = new AbortController();
         let stopAbort = setTimeout(() => { abort.abort() }, 1000);
-        wfetch(`${this.state.httpPrefix}/status/app`, {
+        chipRequest(`/status/app`, {
             method: 'post',
             signal: abort.signal
         }).then(res => {
@@ -41,14 +39,6 @@ export default class FirmwareUpdater extends Component {
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
-            } else {
-                this.setState({httpPrefix:"."});
-            }
-        }
-
         if ((this.state.loaded === "Flashing") && (this.state.waiter === null)) {
             this.waitForDevFlashing();
         }

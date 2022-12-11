@@ -1,6 +1,6 @@
 import {createElement as e, Component} from 'react';
 import './Events.css';
-import { wfetch, fromVersionedToPlain } from '../../../utils/utils';
+import { chipRequest, fromVersionedToPlain } from '../../../utils/utils';
 import { LiveEventPannel } from './LiveEventPannel';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
@@ -10,9 +10,6 @@ import Events from '../../controls/Events/Events';
 export default class EventsPage extends Component {
     constructor(props){
         super(props);
-        this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
-        }
     }
 
     componentDidMount(){
@@ -22,7 +19,7 @@ export default class EventsPage extends Component {
     getJsonConfig() {
         let abort = new AbortController();
         const timer = setTimeout(() => abort.abort(), 8000);
-        wfetch(`${this.state.httpPrefix}/config${!this.props.selectedDevice?.config?.ip?"":`/${this.props.selectedDevice.config.deviceid}`}`, {
+        chipRequest(`/config${!this.props.selectedDevice?.config?.ip?"":`/${this.props.selectedDevice.config.deviceid}`}`, {
             method: 'post',
             signal: abort.signal
         }).then(data =>  data.json())
@@ -33,13 +30,6 @@ export default class EventsPage extends Component {
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
-            } else {
-                this.setState({httpPrefix:"."});
-            }
-        }
-        if (prevState.httpPrefix !== this.state.httpPrefix) {
             this.getJsonConfig();
         }
     }

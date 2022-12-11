@@ -113,7 +113,13 @@ export function isSecure() {
   return window.location.protocol === "https";
 }
 
-export function wfetch(requestInfo, params) {
+let selectedDevice = undefined;
+
+export function setSelectedDevice(device) {
+  selectedDevice = device;
+}
+
+export function chipRequest(requestInfo, params) {
     return new Promise((resolve,reject) => {
       let browserPostAnims = getAnims().filter(anim => anim.type === "post" && anim.from === "browser");
       let inSpot = getInSpot(browserPostAnims, "browser");
@@ -135,7 +141,8 @@ export function wfetch(requestInfo, params) {
         getAnims().push(reqAnim);
       }
   
-      fetch(requestInfo,params).then(resp => {
+      let httpPrefix = selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${selectedDevice.config.devName}` : ".";
+      fetch(`${httpPrefix}${requestInfo}`,params).then(resp => {
         let chipResponseAnim = getAnims().filter(anim => anim.type === "post" && anim.from === "chip");
         let inSpot = getInSpot(chipResponseAnim, "chip");
   

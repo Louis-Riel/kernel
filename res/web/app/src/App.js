@@ -6,6 +6,7 @@ import Tab from '@mui/material/Tab';
 import Box from '@mui/material/Box';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner';
+import { setSelectedDevice } from './utils/utils';
 
 const StorageViewer = lazy(() => import('./components/tabs/Storage/Tab'));
 const StatusPage = lazy(() => import('./components/tabs/State/Tab'));
@@ -54,7 +55,10 @@ export default function BasicTabs() {
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <DeviceList
               selectedDevice= {selectedDevice}
-              onSet= {updateSelectedDevice}></DeviceList>
+              onSet={dev=>{
+                updateSelectedDevice(dev);
+                setSelectedDevice(dev);
+              }}></DeviceList>
         </Suspense>
         {selectedDevice.config ? 
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
