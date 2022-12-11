@@ -8,10 +8,6 @@ import Programs from '../../controls/Programs/Programs';
 import Events from '../../controls/Events/Events';
 
 export default class EventsPage extends Component {
-    constructor(props){
-        super(props);
-    }
-
     componentDidMount(){
         this.getJsonConfig();
     }

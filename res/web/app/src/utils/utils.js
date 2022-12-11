@@ -109,8 +109,8 @@ export function getAnims() {
   return window.anims
 }
 
-export function isSecure() {
-  return window.location.protocol === "https";
+export function isStandalone() {
+  return window.location.protocol !== "https:";
 }
 
 let selectedDevice = undefined;
@@ -141,7 +141,7 @@ export function chipRequest(requestInfo, params) {
         getAnims().push(reqAnim);
       }
   
-      let httpPrefix = selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${selectedDevice.config.devName}` : ".";
+      let httpPrefix = selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${selectedDevice.config.devName}` : "";
       fetch(`${params.skipHttpPrefix ? '' : httpPrefix}${requestInfo}`,params).then(resp => {
         let chipResponseAnim = getAnims().filter(anim => anim.type === "post" && anim.from === "chip");
         let inSpot = getInSpot(chipResponseAnim, "chip");

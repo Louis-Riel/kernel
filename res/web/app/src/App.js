@@ -6,7 +6,7 @@ import Tab from '@mui/material/Tab';
 import Box from '@mui/material/Box';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner';
-import { setSelectedDevice } from './utils/utils';
+import { isStandalone, setSelectedDevice } from './utils/utils';
 
 const StorageViewer = lazy(() => import('./components/tabs/Storage/Tab'));
 const StatusPage = lazy(() => import('./components/tabs/State/Tab'));
@@ -46,7 +46,7 @@ export default function BasicTabs() {
   return (
     <Box class="App">
       <div className="control-bar">
-        {selectedDevice.config ? 
+        {isStandalone() || selectedDevice.config ? 
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={value} onChange={tabChange} aria-label="The tabs">
             { tabStates.map((tab,idx)=><Tab label={tab.name} {...a11yProps(idx)}></Tab>)}
@@ -60,7 +60,7 @@ export default function BasicTabs() {
                 setSelectedDevice(dev);
               }}></DeviceList>
         </Suspense>
-        {selectedDevice.config ? 
+        {isStandalone() || selectedDevice.config ? 
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <WebSocketManager
             enabled={window.location.pathname.indexOf("sdcard") === -1}
@@ -71,7 +71,7 @@ export default function BasicTabs() {
           ></WebSocketManager>
         </Suspense>:null}
       </div>
-      {selectedDevice.config?tabStates.map((tab,idx)=>getTabContent(idx)):null}
+      {isStandalone() || selectedDevice.config?tabStates.map((tab,idx)=>getTabContent(idx)):null}
     </Box>
   );
 

@@ -1,5 +1,5 @@
 import { createRef, Component} from 'react';
-import { getInSpot, getAnims, fromVersionedToPlain } from '../../../utils/utils';
+import { getInSpot, getAnims, fromVersionedToPlain, isStandalone } from '../../../utils/utils';
 import './WebSocket.css';
 
 export default class WebSocketManager extends Component {
@@ -7,7 +7,7 @@ export default class WebSocketManager extends Component {
         super(props);
         this.widget = createRef();
         this.state = {
-            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
+            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : "",
             enabled:props.enabled
         };
         window.anims=getAnims();
@@ -180,7 +180,7 @@ export default class WebSocketManager extends Component {
             return;
         }
         this.setState({connecting:true,running:false});
-        let ws = this.ws = new WebSocket("wss://" + (this.state.httpPrefix === "." ? `${window.location.hostname}:${window.location.port}/${window.location.pathname}`.replaceAll(/\/+$/g,"").replaceAll(/\/\//g,"/") : this.state.httpPrefix.substring(8)) + "/ws");
+        let ws = this.ws = new WebSocket(`ws${isStandalone()? '' : 's'}://` + (this.state.httpPrefix === "" ? `${window.location.hostname}:${window.location.port}`.replaceAll(/\/+$/g,"").replaceAll(/\/\//g,"/") : this.state.httpPrefix.substring(8)) + "/ws");
         let stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.setState({connecting: false}); }, 3600);
         
         ws.onmessage = (event) => {
