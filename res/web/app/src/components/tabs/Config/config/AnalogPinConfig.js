@@ -15,7 +15,7 @@ export default class AnalogPinConfig extends Component {
 
     componentDidUpdate(prevProps, prevState) {
         if ((this.state !== prevState) && this.props.onChange) {
-            this.props.onChange(this.state);
+            this.props.onChange(this.state.pin);
         }
         
         if (prevProps?.item !== this.props?.item) {
