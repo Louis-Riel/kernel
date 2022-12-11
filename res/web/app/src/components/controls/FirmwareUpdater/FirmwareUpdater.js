@@ -1,5 +1,5 @@
 import {Component} from 'react';
-import {wfetch } from '../../../utils/utils';
+import {chipRequest } from '../../../utils/utils';
 import CryptoJS from 'crypto-js';
 import { Button } from '@mui/material';
 import './FirmwareUpdater.css';
@@ -7,15 +7,13 @@ import './FirmwareUpdater.css';
 export default class FirmwareUpdater extends Component {
     constructor(props) {
         super(props);
-        this.state = {
-            httpPrefix:"",
-        };
+        this.state={};
     }
 
     UploadFirmware() {
         this.setState({ loaded: `Sending ${this.state.len} firmware bytes` })
         if (this.state.fwdata && this.state.md5) {
-            return wfetch(`${this.state.httpPrefix}/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
+            return chipRequest(`/ota/flash?md5=${this.state.md5}&len=${this.state.len}`, {
                 method: 'post',
                 body: this.state.fwdata
             }).then(res => res.text())
@@ -24,9 +22,9 @@ export default class FirmwareUpdater extends Component {
     }
 
     waitForDevFlashing() {
-        var abort = new AbortController();
-        var stopAbort = setTimeout(() => { abort.abort() }, 1000);
-        wfetch(`${this.state.httpPrefix}/status/app`, {
+        let abort = new AbortController();
+        let stopAbort = setTimeout(() => { abort.abort() }, 1000);
+        chipRequest(`/status/app`, {
             method: 'post',
             signal: abort.signal
         }).then(res => {
@@ -41,27 +39,19 @@ export default class FirmwareUpdater extends Component {
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
-            } else {
-                this.setState({httpPrefix:""});
-            }
-        }
-
         if ((this.state.loaded === "Flashing") && (this.state.waiter === null)) {
             this.waitForDevFlashing();
         }
 
         if (this.state.firmware && !this.state.md5) {
             this.setState({md5 : "loading"});
-            var reader = new FileReader();
+            let reader = new FileReader();
             reader.onload = () => {
-                var res = reader.resultString || reader.result;
-                var md5 = CryptoJS.algo.SHA256.create();
+                let res = reader.resultString || reader.result;
+                let md5 = CryptoJS.algo.SHA256.create();
                 md5.update(CryptoJS.enc.Latin1.parse(reader.result));
-                var fwdata = new Uint8Array(this.state.firmware.size);
-                for (var i = 0; i < res.length; i++) {
+                let fwdata = new Uint8Array(this.state.firmware.size);
+                for (let i = 0; i < res.length; i++) {
                     fwdata[i] = res.charCodeAt(i);
                 }
 
@@ -94,7 +84,7 @@ export default class FirmwareUpdater extends Component {
             <div className="firmware_updater">
                 <label for="firmware-upload" class="custom-file-upload">
                  <Button onClick={_=>this.HandleClick()}>
-                    {this.state.fwdata?`Upload${this.state?.loaded?`(${this.state.loaded})`:``}`:"Update Firmware"}
+                    {this.state.fwdata?`Upload ${this.state.loaded}`:"Update Firmware"}
                  </Button>
                 </label>
                 <input id="firmware-upload" type= "file" name="firmware" multiple onChange={event => this.setState({ firmware: event.target.files[0] }) }></input>

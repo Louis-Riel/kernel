@@ -5,6 +5,7 @@
     align-content: flex-start;
     justify-content: flex-start;
     align-items: flex-start;
+    row-gap: 10px;
 }
 
 .MuiCardHeader-content {
@@ -17,7 +18,8 @@
 }
 
 .popuperror>.MuiPaper-root {
-    background: linear-gradient(to bottom, #cac8c8, #aaa7a7) !important;
+    background: linear-gradient(to bottom, #474242, #353434) !important;
+    color: inherit;
 }
 
 button.MuiButtonBase-root.MuiTab-root.MuiTab-textColorPrimary {
@@ -34,6 +36,7 @@ button.MuiButtonBase-root.MuiTab-root.MuiTab-textColorPrimary {
 .control-editor {
     display: flex;
     flex-direction: row;
+    max-width: 350px;
 }
 
 .MuiPaper-root,
@@ -44,7 +47,7 @@ button.MuiButtonBase-root.MuiTab-root.MuiTab-textColorPrimary {
 
 .control-editor>button {
     position: relative;
-    right: 155px;
+    right: 65px;
     margin: 0;
     cursor: pointer;
 }
@@ -90,4 +93,36 @@ li>label {
 
 div.MuiListItemIcon-root>svg {
     color: aquamarine;
+}
+
+.MuiChip-root.selected {
+    border: solid 1px aqua;
+}
+
+.MuiChip-root.available {
+    padding: 1px;
+}
+
+.config-content {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-content: center;
+    justify-content: center;
+    align-items: baseline;
+    row-gap: 15px;
+    padding-top: 20px;
+}
+
+.config-header {
+    padding-left: 10px;
+    background-color: black;
+}
+
+.driver-flags {
+    padding: 10px;
+}
+
+.config-content>.MuiFormControl-root {
+    padding: 5px;
 }

@@ -1,5 +1,5 @@
 import {createElement as e, Component} from 'react';
-import {Card, CardHeader, CardContent, List, ListItem, FormControlLabel, Checkbox, TextField} from '@mui/material';
+import {Paper, Typography, ListItem, TextField, Chip} from '@mui/material';
 
 export default class ConfigItem extends Component {
     constructor(props) {
@@ -19,7 +19,7 @@ export default class ConfigItem extends Component {
     }
 
     getFieldType(name) {
-        var obj = this.props.item[name];
+        let obj = this.props.item[name];
         if (obj !== undefined) {
             if (typeof(obj) === 'boolean') {
                 return "boolean";
@@ -68,36 +68,30 @@ export default class ConfigItem extends Component {
     }
 
     render() {
-        return e( Card, { key: this.props.item[this.props.nameField], className: "config-item" },[
-            e( CardHeader, {key:"header", title: this.props.item[this.props.nameField] }),
-            e( CardContent, {key:"details"},  e(List,{key: "items"},
-                Object.keys(JSON.stringify(this.props.item) === "{}" ? this.props.value : this.props.item)
+        return <Paper variant='outlined' elevation={3} className="config-item">
+            <div className='config-header'>
+                <Typography variant='h5'>{this.props.item[this.props.nameField]}</Typography>
+            </div>
+            <div className='config-content'>
+                {Object.keys(JSON.stringify(this.props.item) === "{}" ? this.props.value : this.props.item)
                       .filter(fld => !['collectionName','class','isArray'].find(val=>val===fld))
                       .sort((a,b) => {
-                        var wa = this.getFieldWeight(a);
-                        var wb = this.getFieldWeight(b);
+                        let wa = this.getFieldWeight(a);
+                        let wb = this.getFieldWeight(b);
                         if (wa === wb) {
                             return a.localeCompare(b);
                         }
                         return wb - wa;
-                    }).map(this.getEditor.bind(this))
-            ))
-        ]);
+                    }).map(this.getEditor.bind(this))}
+            </div>
+        </Paper>
     }
 
     getEditor(key) {
-        var tp = this.getFieldType(key);
+        let tp = this.getFieldType(key);
         return e(ListItem, { key: key },
             tp === "boolean" ? 
-            e(FormControlLabel,{
-                key:"label",
-                label: key,
-                control:e(Checkbox, {
-                    key: "ctrl",
-                    checked: this.parseFieldValue(this.props.item[key]),
-                    onChange: event => this.onChange(key, event.target.checked)
-                })
-            }):
+            <Chip label={key} className={this.parseFieldValue(this.props.item[key]) ? "selected" : "available"} onClick={_ => this.onChange(key, !this.parseFieldValue(this.props.item[key]))}/>:
             e(TextField, {
                 key: key,
                 autoFocus: tp === "text",

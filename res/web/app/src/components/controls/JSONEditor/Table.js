@@ -2,21 +2,27 @@ import {createElement as e, Component} from 'react';
 import { IsNumberValue, isFloat, genUUID, IsBooleanValue, comparer} from '../../../utils/utils';
 import LocalJSONEditor from './JSONEditor'
 
-var httpPrefix = "";
-
 export default class Table extends Component {
     constructor(props) {
         super(props);
         this.id = this.props.id || genUUID();
         this.state = {
+            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : ".",
             keyColumn: this.getKeyColumn()
         }
     }
 
     componentDidUpdate(prevProps, prevState) {
-        var keycol = this.getKeyColumn();
+        const keycol = this.getKeyColumn();
         if (this.state.keyColumn !== keycol){
             this.setState({keyColumn:keycol});
+        }
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
+            if (this.props.selectedDevice?.ip) {
+                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
+            } else {
+                this.setState({httpPrefix:"."});
+            }
         }
     }
     getKeyColumn() {
@@ -31,8 +37,8 @@ export default class Table extends Component {
 
     SortTable(th) {
         if (this.props.sortable){
-            var table,tbody;
-            Array.from((tbody=(table=th.target.closest("table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n)'))
+            let tbody;
+            Array.from((tbody=(th.target.closest("table")).querySelector('tbody')).querySelectorAll('tr:nth-child(n)'))
                     .sort(comparer(Array.from(th.target.parentNode.children).indexOf(th.target), this.asc = !this.asc))
                     .forEach(tr => tbody.appendChild(tr));
         }
@@ -101,7 +107,7 @@ export default class Table extends Component {
             }
     
             if ((fld === "name") && (val.match(/\/.*\.[a-z]{3}$/))) {
-                return e("a", { href: `${httpPrefix}${val}` }, val);
+                return e("a", { href: `${this.state.httpPrefix}${val}` }, val);
             }
             return val;
         }
@@ -207,7 +213,7 @@ export default class Table extends Component {
                             .map(fld => {
                                 if (!this.cols.some(col => fld === col)) {
                                     this.cols.push(fld);
-                                    var val = this.getValue(fld,this.props.json[0][fld]);
+                                    let val = this.getValue(fld,this.props.json[0][fld]);
                                     if (!this.sortedOn && !Array.isArray(val) && typeof val !== 'object' && isNaN(this.getValue(fld,val))) {
                                         this.sortedOn = fld;
                                     }

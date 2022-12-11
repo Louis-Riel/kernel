@@ -1,6 +1,6 @@
 import {createElement as e, Component} from 'react';
 import Chip from '@mui/material/Chip';
-import { FormControlLabel, Checkbox, Button } from '@mui/material';
+import { Button } from '@mui/material';
 import './Logs.css';
 
 export default class LogLines extends Component {
@@ -17,49 +17,53 @@ export default class LogLines extends Component {
             return;
         }
 
-        var recIdx=-1;
-        var msg = logln.match(/^[^IDVEW]*(.+)/)[1];
-        var lvl = msg.substr(0, 1);
-        var ts = msg.substr(3, 12);
-        var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
+        let msg = logln.match(/^[^IDVEW]*(.+)/)[1];
+        let lvl = msg.substr(0, 1);
+        let func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
 
-        if (this.state.logLines.some((clogln,idx) => {
-            var nmsg = clogln.match(/^[^IDVEW]*(.+)/)[1];
-            var nlvl = nmsg.substr(0, 1);
-            var nts = nmsg.substr(3, 12);
-            var nfunc = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
-            return nlvl === lvl && nts === ts && nfunc === func;
-        })) {
-            recIdx=this.state.logLines.length;
-        }
         while (this.state.logLines.length > 500) {
             this.state.logLines.shift();
         }
 
         if (this.state.logLevels[lvl] === undefined) {
-            this.state.logLevels[lvl] = {visible:true};
+            this.setState({
+                logLevels:{
+                    ...this.state.logLevels,
+                    [lvl]: {visible:true,
+                            [func]:true}
+                }
+            });
         }
 
-        if (this.state.logLevels[lvl][func] === undefined) {
-            this.state.logLevels[lvl][func] = true;
-        }
-
-        if (recIdx >= 0) {
-            this.state.logLines[recIdx] = logln;
-        } else {
-            this.state.logLines= [...(this.state?.logLines||[]),logln];
-        }
-        this.setState(this.state);
+        this.setState({logLines:[...this.state.logLines,logln]});
     }
 
     renderLogFunctionFilter(lvl,func,logLines) {    
-        var label =  `${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") === func).length})`;
-        return <Chip label={label} disabled={!this.state.logLevels[lvl].visible} className={this.state.logLevels[lvl][func] ? "enabled" : "filtered"} onClick={() => {this.state.logLevels[lvl][func] = !this.state.logLevels[lvl][func]; this.setState(this.state);}} />;
+        let label =  <div className={`log LOG${lvl}`}>{`${func} (${logLines.filter(logln => logln.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1") === func).length})`}</div>;
+        return <Chip label={label} disabled={!this.state.logLevels[lvl].visible} className={this.state.logLevels[lvl][func] ? "enabled" : "filtered"} onClick={() => {
+            this.setState({logLevels:{
+                ...this.state.logLevels,
+                [lvl]:{
+                    ...this.state.logLevels[lvl],
+                    [func]:!this.state.logLevels[lvl][func]
+                }
+            }});
+        }} />;
     }
 
     renderLogLevelFilterControl(lvl,logLines) {   
-        var label =  `Log Level ${lvl}(${logLines.length})`;
-        return <Chip label={label} className={this.state.logLevels[lvl].visible ? "enabled" : "filtered"} onClick={() => {this.state.logLevels[lvl].visible = !this.state.logLevels[lvl].visible; this.setState(this.state);}} />;
+        let label =  <div className={`log LOG${lvl}`}>{`${lvl}(${logLines.length})`}</div>;
+        return <Chip label={label} className={this.state.logLevels[lvl].visible ? "enabled" : "filtered"} onClick={() => {
+            this.setState({
+                logLevels:{
+                    ...this.state.logLevels,
+                    [lvl]:{
+                        ...this.state.logLevels[lvl],
+                        visible:!this.state.logLevels[lvl].visible
+                    }
+                }
+            });
+        }} />;
     }
 
     renderLogFunctionFilters(lvl, logLines) {
@@ -98,13 +102,10 @@ export default class LogLines extends Component {
     }
 
     isLogVisible(logLine) {
-        var msg = logLine.match(/^[^IDVEW]*(.+)/)[1];
-        var lvl = msg.substr(0, 1);
-        var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
-        if (this.state.logLevels[lvl].visible && this.state.logLevels[lvl][func]) {
-            return true;
-        }
-        return false;
+        let msg = logLine.match(/^[^IDVEW]*(.+)/)[1];
+        let lvl = msg.substr(0, 1);
+        let func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
+        return this.state.logLevels[lvl].visible && this.state.logLevels[lvl][func];
     }
 
     render() {
@@ -118,18 +119,18 @@ export default class LogLines extends Component {
 class LogLine extends Component {
     isScrolledIntoView()
     {
-        var rect = this.logdiv.getBoundingClientRect();
-        var elemTop = rect.top;
-        var elemBottom = rect.bottom;
+        let rect = this.logdiv.getBoundingClientRect();
+        let elemTop = rect.top;
+        let elemBottom = rect.bottom;
     
         return (elemTop >= 0) && (elemBottom <= window.innerHeight);
     }
 
     render() {
-        var msg = this.props.logln.match(/^[^IDVEW]*(.+)/)[1];
-        var lvl = msg.substr(0, 1);
-        var func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
-        var logLn = this.props.logln.substr(this.props.logln.indexOf(func) + func.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/[^0-9a-zA-Z ]\[..\n.*/g, "");
+        let msg = this.props.logln.match(/^[^IDVEW]*(.+)/)[1];
+        let lvl = msg.substr(0, 1);
+        let func = msg.match(/.*\) ([^:]*)/g)[0].replaceAll(/^.*\) (.*)/g, "$1");
+        let logLn = this.props.logln.substr(this.props.logln.indexOf(func) + func.length + 2).replaceAll(/^[\r\n]*/g, "").replaceAll(/[^0-9a-zA-Z ]\[..\n.*/g, "");
 
         return e("div", { key: "logLine" , className: `log LOG${lvl}` }, [
             e("div", { key: "level", ref: ref => this.logdiv = ref, className: "LOGLEVEL" }, lvl),

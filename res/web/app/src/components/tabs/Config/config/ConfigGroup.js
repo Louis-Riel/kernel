@@ -1,11 +1,9 @@
 import {createElement as e, Component, lazy, Suspense} from 'react';
 import { Tabs, Tab, Button } from '@mui/material';
-import { wfetch } from '../../../../utils/utils';
+import { chipRequest } from '../../../../utils/utils';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
-import { faPlusSquare } from '@fortawesome/free-solid-svg-icons'
-import { faClone } from '@fortawesome/free-solid-svg-icons'
-import { faTrashCan } from '@fortawesome/free-solid-svg-icons'
+import { faPlusSquare, faClone, faTrashCan } from '@fortawesome/free-solid-svg-icons'
 
 
 const AnalogPinConfig = lazy(() => import('./AnalogPinConfig'));
@@ -27,10 +25,9 @@ export default class ConfigGroup extends Component {
             }
         };
         this.state = {
-            httpPrefix:"",
             currentTab: undefined
         };
-        wfetch(`${this.state.httpPrefix}/templates/config`,{
+        chipRequest(`/templates/config`,{
             method: 'post'
         }).then(data => data.json())
           .then(this.updateConfigTemplates.bind(this))
@@ -39,11 +36,11 @@ export default class ConfigGroup extends Component {
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
-            } else {
-                this.setState({httpPrefix:""});
-            }
+            chipRequest(`/templates/config`,{
+                method: 'post'
+            }).then(data => data.json())
+              .then(this.updateConfigTemplates.bind(this))
+              .catch(console.error);
         }
     }
 
@@ -63,7 +60,7 @@ export default class ConfigGroup extends Component {
     }
 
     renderArrayTypes() {
-        var tabs = this.state.configTemplates
+        let tabs = this.state.configTemplates
             .filter(configTemplate => configTemplate.isArray);
         return [
             e(Tabs, {
@@ -89,21 +86,31 @@ export default class ConfigGroup extends Component {
         ]);
     }
 
-    renderConfigItemTab(key, item, idx) {
-        return e( Tab, { key: item, label: idx+1, value: key });
-    }
-
-    renderEditor(key, item, idx) {
+    renderEditor(key, items, idx) {
         return  e("div",{key:`${key.collectionName}-${idx}-control-editor`,className:`control-editor`},[
                     <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
-                        {e( this.supportedTypes[key.collectionName]?.component || ConfigItem, { key: key.collectionName + idx, value: key, role: "tabpanel", item: item[idx], onChange: this.props.onChange})}
+                        {e( this.supportedTypes[key.collectionName]?.component || ConfigItem, { 
+                            key: key.collectionName + idx, 
+                            value: key, 
+                            role: "tabpanel", 
+                            item: items[idx], 
+                            nameField: "name", 
+                            onChange: (updatedItem)=>this.props.onChange({
+                                ...this.props.config,
+                                [key.collectionName]:items.map((item,idx2)=>parseInt(idx) === idx2 ? updatedItem : item)})
+                            }
+                        )}
                     </Suspense>,
-                    e(Button, { key: "dup", onClick: evt=> {this.props.config[key.collectionName].push(JSON.parse(JSON.stringify(this.props.config[key.collectionName][idx]))); this.props.onChange()} }, <FontAwesomeIcon icon={faClone} />),
-                    e(Button, { key: "delete", onClick: evt=> {this.props.config[key.collectionName].splice(idx,1); this.props.onChange()} }, <FontAwesomeIcon icon={faTrashCan} />),
+                    e(Button, { key: "dup", onClick: evt=> 
+                        this.props.onChange({
+                            ...this.props.config,
+                            [key.collectionName]:[...items,JSON.parse(JSON.stringify(this.props.config[key.collectionName][idx]))]})
+                    }, <FontAwesomeIcon icon={faClone} />),
+                    e(Button, { key: "delete", onClick: evt=>
+                        this.props.onChange({
+                            ...this.props.config,
+                            [key.collectionName]:[...items.filter((it,idx2)=>parseInt(idx) !== idx2)]})
+                    }, <FontAwesomeIcon icon={faTrashCan} />),
                 ]);
-    }
-
-    isSupported(key) {
-        return Object.keys(this.supportedTypes).indexOf(key)>-1;
     }
 }

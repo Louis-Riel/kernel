@@ -3,6 +3,7 @@ class StateCommands extends React.Component {
         return e("div",{key:'commands',name:"commands", className:"commands"},this.props.commands.map(cmd => e(CmdButton,{
             key: `${cmd.command}-${cmd.param1}`,
             name:this.props.name,
+            httpPrefix:this.props.httpPrefix,
             onSuccess:this.props.onSuccess,
             onError:this.props.onError,
             ...cmd
@@ -116,8 +117,8 @@ class LocalJSONEditor extends React.Component {
                                                                                          .map(fld => this.renderField(json, fld))
                                                                                          .reduce((pv,cv)=>{
                     if (cv){
-                        var fc = this.getFieldClass(json,cv.fld);
-                        var item = pv.find(it=>it.fclass == fc);
+                        let fc = this.getFieldClass(json,cv.fld);
+                        let item = pv.find(it=>it.fclass == fc);
                         if (item) {
                             item.elements.push(cv.element);
                         } else {
@@ -225,8 +226,8 @@ class LocalJSONEditor extends React.Component {
     getSortedProperties(json) {
         return Object.keys(json)
             .sort((f1, f2) => { 
-                var f1s = this.getFieldWeight(json, f1);
-                var f2s = this.getFieldWeight(json, f2);
+                let f1s = this.getFieldWeight(json, f1);
+                let f2s = this.getFieldWeight(json, f2);
                 if (f1s == f2s) {
                     return f1.localeCompare(f2);
                 }

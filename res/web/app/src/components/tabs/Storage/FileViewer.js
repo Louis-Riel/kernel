@@ -1,24 +1,13 @@
 import { createElement as e, Component } from 'react';
-import { wfetch } from '../../../utils/utils';
+import { chipRequest } from '../../../utils/utils';
 import { TripWithin } from './TripWithin';
 
 export class FileViewer extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            httpPrefix:"",
             renderers: []
         };
-    }
-
-    componentDidUpdate(prevProps,prevState) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
-            } else {
-                this.setState({httpPrefix:""});
-            }
-        }
     }
 
     componentDidMount() {
@@ -42,13 +31,13 @@ export class FileViewer extends Component {
     }
 
     parseLog(resolve, retryCount, reject) {
-        wfetch(`${this.state.httpPrefix}${this.props.folder}/${this.props.name}`)
+        chipRequest(`${this.props.folder}/${this.props.name}`)
             .then(resp => resp.text())
             .then(content => resolve(this.setState({
                 renderers: [{
                     name: "trip",
                     points: content.split("\n")
-                        .filter(ln => ln.match(/[ID] \([0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}\).* Location:.*/))
+                        .filter(ln => ln.match(/[ID] \(\d{2}:\d{2}:\d{2}[.]\d{3}\).* Location:.*/))
                         .map(ln => ln.match(/[ID] \((?<timestamp>.*)\).*Location:\s*(?<latitude>[0-9.-]+),\s*(?<longitude>[0-9.-]+).*speed:\s*(?<speed>[0-9.]+).*altitude:\s*(?<altitude>[0-9.]+).*course:\s*(?<course>[0-9.]+).*bat:\s*(?<Battery>[0-9.]+)/i)?.groups)
                         .filter(point => point)
                         .map(point => {
@@ -70,19 +59,19 @@ export class FileViewer extends Component {
     }
 
     parseCsv(resolve, retryCount, reject) {
-        wfetch(`${this.state.httpPrefix}${this.props.folder}/${this.props.name}`)
+        chipRequest(`${this.props.folder}/${this.props.name}`)
             .then(resp => resp.text())
             .then(content => {
-                var cols = content.split(/\n|\r\n/)[0].split(",");
+                let cols = content.split(/\n|\r\n/)[0].split(",");
                 resolve(this.setState({
                     renderers: [{
                         name: "trip",
                         points: content.split(/\n|\r\n/)
                             .splice(1).map(ln => {
-                                var ret = {};
+                                let ret = {};
                                 ln.split(",").forEach((it, idx) => ret[cols[idx]] = isNaN(it) ? it : parseFloat(it));
                                 return ret;
-                            }).filter(item => item.timestamp && item.timestamp.match(/[0-9]{4}\/[0-9]{2}\/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/))
+                            }).filter(item => item.timestamp && item.timestamp.match(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/))
                     }]
                 }));
             }).catch(err => {
@@ -113,6 +102,6 @@ export class FileViewer extends Component {
     }
 
     render() {
-        return [e("a", { key: "filelink", href: `${this.state.httpPrefix}${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]), this.getRenderers()];
+        return [e("a", { key: "filelink", href: `${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]), this.getRenderers()];
     }
 }

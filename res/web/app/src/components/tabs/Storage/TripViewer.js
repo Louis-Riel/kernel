@@ -1,11 +1,10 @@
 import {createElement as e, Component} from 'react';
-import {wfetch} from '../../../utils/utils'
+import {chipRequest} from '../../../utils/utils'
 
 export default class TripViewer extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:"",
             cache:this.props.cache,
             zoomlevel:15,
             latitude:0,
@@ -20,14 +19,6 @@ export default class TripViewer extends Component {
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
-            } else {
-                this.setState({httpPrefix:""});
-            }
-        }
-
         if (!prevProps.points || !prevProps.points.length || !prevProps.points.length || prevProps.points.length !== this.props.points.length){
             this.firstRender=true;
         }
@@ -49,8 +40,8 @@ export default class TripViewer extends Component {
     }
    
     getTripTiles() {
-        var lastPoint=undefined;
-        this.state.points=this.props.points.map(this.pointToCartesian.bind(this))
+        let lastPoint=undefined;
+        this.points=this.props.points.map(this.pointToCartesian.bind(this))
                               .filter(point => point.latitude && point.longitude)
                               .filter(point => point.latitude > -90 && point.latitude < 90)
                               .filter(point => point.longitude > -180 && point.longitude < 180)
@@ -65,59 +56,59 @@ export default class TripViewer extends Component {
                                   lastPoint = point;
                                   return true;
                               });
-        this.state.trip={
-                leftTile: this.state.points.reduce((a,b)=>a<b.tileX?a:b.tileX,99999),
-                rightTile: this.state.points.reduce((a,b)=>a>b.tileX?a:b.tileX,-99999),
-                bottomTile: this.state.points.reduce((a,b)=>a<b.tileY?a:b.tileY,99999),
-                topTile: this.state.points.reduce((a,b)=>a>b.tileY?a:b.tileY,-99999)
+        this.trip={
+                leftTile: this.points.reduce((a,b)=>a<b.tileX?a:b.tileX,99999),
+                rightTile: this.points.reduce((a,b)=>a>b.tileX?a:b.tileX,-99999),
+                bottomTile: this.points.reduce((a,b)=>a<b.tileY?a:b.tileY,99999),
+                topTile: this.points.reduce((a,b)=>a>b.tileY?a:b.tileY,-99999)
         };
-        this.state.maxXTiles= Math.ceil(window.innerWidth/256)+1;
-        this.state.maxYTiles= Math.ceil(window.innerHeight/256)+1;
-        this.state.trip.XTiles = this.state.trip.rightTile-this.state.trip.leftTile+1;
-        this.state.trip.YTiles = this.state.trip.topTile-this.state.trip.bottomTile+1;
-        this.state.margin = {
-            left: this.state.maxXTiles>this.state.trip.XTiles?Math.floor((this.state.maxXTiles-this.state.trip.XTiles)/2):0,
-            bottom: this.state.maxYTiles>this.state.trip.YTiles?Math.floor((this.state.maxYTiles-this.state.trip.YTiles)/2):0
+        this.maxXTiles= Math.ceil(window.innerWidth/256)+1;
+        this.maxYTiles= Math.ceil(window.innerHeight/256)+1;
+        this.trip.XTiles = this.trip.rightTile-this.trip.leftTile+1;
+        this.trip.YTiles = this.trip.topTile-this.trip.bottomTile+1;
+        this.margin = {
+            left: this.maxXTiles>this.trip.XTiles?Math.floor((this.maxXTiles-this.trip.XTiles)/2):0,
+            bottom: this.maxYTiles>this.trip.YTiles?Math.floor((this.maxYTiles-this.trip.YTiles)/2):0
         };
-        this.state.margin.right=this.state.maxXTiles>this.state.trip.XTiles?this.state.maxXTiles-this.state.trip.XTiles-this.state.margin.left:0;
-        this.state.margin.top= this.state.maxYTiles>this.state.trip.YTiles?this.state.maxYTiles-this.state.trip.YTiles-this.state.margin.bottom:0;
-        this.state.leftTile=Math.max(0,this.state.trip.leftTile-this.state.margin.left);
-        this.state.rightTile=this.state.trip.rightTile+this.state.margin.right;
-        this.state.bottomTile=Math.max(0,this.state.trip.bottomTile-this.state.margin.bottom);
-        this.state.topTile=this.state.trip.topTile + this.state.margin.top;
-        this.state.leftlatitude = this.state.points.reduce((a,b)=>a<b.latitude?a:b.latitude,99999);
-        this.state.rightlatitude = this.state.points.reduce((a,b)=>a>b.latitude?a:b.latitude,-99999);
-        this.state.toplongitude = this.state.points.reduce((a,b)=>a<b.longitude?a:b.longitude,99999);
-        this.state.bottomlongitude = this.state.points.reduce((a,b)=>a>b.longitude?a:b.longitude,-99999);
-        this.state.latitude= this.state.leftlatitude+(this.state.rightlatitude-this.state.leftlatitude)/2;
-        this.state.longitude= this.state.toplongitude+(this.state.bottomlongitude-this.state.toplongitude)/2;
-        this.state.windowTiles = {
+        this.margin.right=this.maxXTiles>this.trip.XTiles?this.maxXTiles-this.trip.XTiles-this.margin.left:0;
+        this.margin.top= this.maxYTiles>this.trip.YTiles?this.maxYTiles-this.trip.YTiles-this.margin.bottom:0;
+        this.leftTile=Math.max(0,this.trip.leftTile-this.margin.left);
+        this.rightTile=this.trip.rightTile+this.margin.right;
+        this.bottomTile=Math.max(0,this.trip.bottomTile-this.margin.bottom);
+        this.topTile=this.trip.topTile + this.margin.top;
+        this.leftlatitude = this.points.reduce((a,b)=>a<b.latitude?a:b.latitude,99999);
+        this.rightlatitude = this.points.reduce((a,b)=>a>b.latitude?a:b.latitude,-99999);
+        this.toplongitude = this.points.reduce((a,b)=>a<b.longitude?a:b.longitude,99999);
+        this.bottomlongitude = this.points.reduce((a,b)=>a>b.longitude?a:b.longitude,-99999);
+        this.latitude= this.state.leftlatitude+(this.state.rightlatitude-this.state.leftlatitude)/2;
+        this.longitude= this.state.toplongitude+(this.state.bottomlongitude-this.state.toplongitude)/2;
+        this.windowTiles = {
             center: {
-                tileX: this.lon2tile(this.state.longitude, this.state.zoomlevel),
-                tileY: this.lat2tile(this.state.latitude, this.state.zoomlevel),
+                tileX: this.lon2tile(this.longitude, this.state.zoomlevel),
+                tileY: this.lat2tile(this.latitude, this.state.zoomlevel),
             }
         }
-        this.state.windowTiles.leftTile = this.state.windowTiles.center.tileX - Math.floor(this.state.maxXTiles/2);
-        this.state.windowTiles.rightTile = this.state.windowTiles.center.tileX + Math.floor(this.state.maxXTiles/2);
-        this.state.windowTiles.bottomTile = this.state.windowTiles.center.tileY - Math.floor(this.state.maxYTiles/2);
-        this.state.windowTiles.topTile = this.state.windowTiles.center.tileY + Math.floor(this.state.maxYTiles/2);
-        this.state.windowTiles.XTiles = this.state.windowTiles.rightTile-this.state.windowTiles.leftTile+1;
-        this.state.windowTiles.YTiles = this.state.windowTiles.topTile-this.state.windowTiles.bottomTile+1;
+        this.windowTiles.leftTile = this.state.windowTiles.center.tileX - Math.floor(this.maxXTiles/2);
+        this.windowTiles.rightTile = this.state.windowTiles.center.tileX + Math.floor(this.maxXTiles/2);
+        this.windowTiles.bottomTile = this.state.windowTiles.center.tileY - Math.floor(this.maxYTiles/2);
+        this.windowTiles.topTile = this.state.windowTiles.center.tileY + Math.floor(this.maxYTiles/2);
+        this.windowTiles.XTiles = this.state.windowTiles.rightTile-this.state.windowTiles.leftTile+1;
+        this.windowTiles.YTiles = this.state.windowTiles.topTile-this.state.windowTiles.bottomTile+1;
         this.setState(this.state);
     }
 
     drawTripVisibleTiles() {
         return new Promise(async (resolve,reject)=>{
-            this.popupWidget.width=(this.state.rightTile-this.state.leftTile)*256;
-            this.popupWidget.height=(this.state.topTile-this.state.bottomTile)*256;
-            this.mapWidget.width=(this.state.rightTile-this.state.leftTile)*256;
-            this.mapWidget.height=(this.state.topTile-this.state.bottomTile)*256;
-            this.tripWidget.width=(this.state.rightTile-this.state.leftTile)*256;
-            this.tripWidget.height=(this.state.topTile-this.state.bottomTile)*256;
+            this.popupWidget.width=(this.rightTile-this.leftTile)*256;
+            this.popupWidget.height=(this.topTile-this.state.bottomTile)*256;
+            this.mapWidget.width=(this.rightTile-this.leftTile)*256;
+            this.mapWidget.height=(this.topTile-this.state.bottomTile)*256;
+            this.tripWidget.width=(this.rightTile-this.leftTile)*256;
+            this.tripWidget.height=(this.topTile-this.state.bottomTile)*256;
 
             this.mapCanvas.fillStyle = "black";
             this.mapCanvas.fillRect(0,0,window.innerWidth,window.innerHeight);
-            var wasFirstRender=this.firstRender;
+            let wasFirstRender=this.firstRender;
             
             if (this.firstRender) {
                 this.firstRender=false;
@@ -125,11 +116,11 @@ export default class TripViewer extends Component {
                 this.mapWidget.parentElement.scrollTo((elementRect.width/2)-512, (elementRect.height/2)-256);
             }
 
-            for (var tileX = this.state.windowTiles.leftTile; tileX <= this.state.windowTiles.rightTile; tileX++) {
-                for (var tileY = this.state.windowTiles.bottomTile; tileY <= this.state.windowTiles.topTile; tileY++) {
+            for (let tileX = this.windowTiles.leftTile; tileX <= this.state.windowTiles.rightTile; tileX++) {
+                for (let tileY = this.windowTiles.bottomTile; tileY <= this.state.windowTiles.topTile; tileY++) {
                     if (!this.props.cache.images[this.state.zoomlevel] ||
-                        !this.props.cache.images[this.state.zoomlevel][tileX] || 
-                        !this.props.cache.images[this.state.zoomlevel][tileX][tileY]){
+                        !this.props.cache.images[this.zoomlevel][tileX] || 
+                        !this.props.cache.images[this.zoomlevel][tileX][tileY]){
                         await this.addTileToCache(tileX, tileY).catch(reject);
                     } else {
                         await this.getTileFromCache(tileX, tileY).catch(reject);
@@ -138,11 +129,11 @@ export default class TripViewer extends Component {
             }
             if (wasFirstRender) {
                 new Promise((resolve,reject)=>{
-                    for (var tileX = this.state.trip.leftTile; tileX <= this.state.trip.rightTile; tileX++) {
-                        for (var tileY = this.state.trip.bottomTile; tileY <= this.state.trip.topTile; tileY++) {
+                    for (let tileX = this.trip.leftTile; tileX <= this.trip.rightTile; tileX++) {
+                        for (let tileY = this.trip.bottomTile; tileY <= this.trip.topTile; tileY++) {
                             if (!this.props.cache.images[this.state.zoomlevel] ||
-                                !this.props.cache.images[this.state.zoomlevel][tileX] || 
-                                !this.props.cache.images[this.state.zoomlevel][tileX][tileY]){
+                                !this.props.cache.images[this.zoomlevel][tileX] || 
+                                !this.props.cache.images[this.zoomlevel][tileX][tileY]){
                                 this.addTileToCache(tileX, tileY).catch(reject);
                             }        
                         }
@@ -161,12 +152,12 @@ export default class TripViewer extends Component {
             this.popupCanvas.fillRect(0,0,window.innerWidth,window.innerHeight);
     
             this.popupCanvas.font = "12px Helvetica";
-            var txtSz = this.popupCanvas.measureText(new Date(`${this.focused.timestamp} UTC`).toLocaleString());
-            var props =  Object.keys(this.focused)
+            let txtSz = this.popupCanvas.measureText(new Date(`${this.focused.timestamp} UTC`).toLocaleString());
+            let props =  Object.keys(this.focused)
                                .filter(prop => prop !== "timestamp" && !prop.match(/.*tile.*/i));
 
-            var boxHeight=50 + (9*props.length);
-            var boxWidth=txtSz.width+10;
+            let boxHeight=50 + (9*props.length);
+            let boxWidth=txtSz.width+10;
             this.popupCanvas.strokeStyle = 'green';
             this.popupCanvas.shadowColor = '#00ffff';
             this.popupCanvas.fillStyle = "#000000";
@@ -181,8 +172,8 @@ export default class TripViewer extends Component {
             this.popupCanvas.strokeStyle = '#000000';
 
             this.popupCanvas.beginPath();
-            var ypos = this.getClientY(this.focused)-boxHeight+txtSz.actualBoundingBoxAscent+3;
-            var xpos = this.getClientX(this.focused)+3;
+            let ypos = this.getClientY(this.focused)-boxHeight+txtSz.actualBoundingBoxAscent+3;
+            let xpos = this.getClientX(this.focused)+3;
 
             this.popupCanvas.strokeStyle = '#97ea44';
             this.popupCanvas.shadowColor = '#ffffff';
@@ -194,7 +185,7 @@ export default class TripViewer extends Component {
 
             ypos+=txtSz.actualBoundingBoxAscent+3;
             props.forEach(prop => {
-                var propVal = this.getPropValue(prop,this.focused[prop]);
+                let propVal = this.getPropValue(prop,this.focused[prop]);
                 this.popupCanvas.strokeStyle = 'aquamarine';
                 this.popupCanvas.shadowColor = '#ffffff';
                 this.popupCanvas.fillStyle = "aquamarine";
@@ -213,7 +204,7 @@ export default class TripViewer extends Component {
 
     drawTrip() {
         return new Promise((resolve,reject)=>{
-            var firstPoint = this.state.points[0];
+            let firstPoint = this.points[0];
             if (firstPoint){
                 this.tripCanvas.fillStyle = "transparent";
                 this.tripCanvas.fillRect(0,0,window.innerWidth,window.innerHeight);
@@ -226,16 +217,16 @@ export default class TripViewer extends Component {
         
                 this.tripCanvas.beginPath();
                 this.tripCanvas.moveTo(this.getClientX(firstPoint), this.getClientY(firstPoint));
-                this.state.points.forEach(point => {
+                this.points.forEach(point => {
                     this.tripCanvas.lineTo(this.getClientX(point), this.getClientY(point));
                 });
                 this.tripCanvas.stroke();
                 this.tripCanvas.strokeStyle = '#0000ff';
                 this.tripCanvas.shadowColor = '#0000ff';
                 this.tripCanvas.fillStyle = "#0000ff";
-                this.state.points.forEach(point => {
+                this.points.forEach(point => {
                     this.tripCanvas.beginPath();
-                    this.tripCanvas.arc(((point.tileX - this.state.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - this.state.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
+                    this.tripCanvas.arc(((point.tileX - this.leftTile) * 256) + (256 * point.posTileX), ((point.tileY - this.bottomTile) * 256) + (256 * point.posTileY), 5, 0, 2 * Math.PI);
                     this.tripCanvas.stroke();
                 });
                 resolve(this.state);
@@ -246,8 +237,8 @@ export default class TripViewer extends Component {
     }
 
     mouseEvent(event) {
-        var margin = 10;
-        var focused = this.state.points.find(point => 
+        let margin = 10;
+        let focused = this.points.find(point => 
             (this.getClientX(point) >= (event.offsetX - margin)) &&
             (this.getClientX(point) <= (event.offsetX + margin)) &&
             (this.getClientY(point) >= (event.offsetY - margin)) &&
@@ -274,17 +265,17 @@ export default class TripViewer extends Component {
     addTileToCache(tileX,tileY) {
         return new Promise((resolve,reject) => {
             this.getTile(tileX, tileY, 0).then(imgData => {
-                var tileImage = new Image();
-                tileImage.posX = tileX - this.state.leftTile;
-                tileImage.posY = tileY - this.state.bottomTile;
+                let tileImage = new Image();
+                tileImage.posX = tileX - this.leftTile;
+                tileImage.posY = tileY - this.bottomTile;
                 tileImage.src = (window.URL || window.webkitURL).createObjectURL(imgData);
                 if (!this.props.cache.images[this.state.zoomlevel]) {
                     this.props.cache.images[this.state.zoomlevel] = {};
                 }
-                if (!this.props.cache.images[this.state.zoomlevel][tileX]) {
-                    this.props.cache.images[this.state.zoomlevel][tileX] = {};
+                if (!this.props.cache.images[this.zoomlevel][tileX]) {
+                    this.props.cache.images[this.zoomlevel][tileX] = {};
                 }
-                this.props.cache.images[this.state.zoomlevel][tileX][tileY] = tileImage;
+                this.props.cache.images[this.zoomlevel][tileX][tileY] = tileImage;
 
                 tileImage.onload = (elem) => {
                     resolve(this.mapCanvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height));
@@ -295,11 +286,11 @@ export default class TripViewer extends Component {
 
     getTileFromCache(tileX,tileY) {
         return new Promise((resolve,reject) => {
-            var tileImage = this.props.cache.images[this.state.zoomlevel][tileX][tileY];
+            let tileImage = this.props.cache.images[this.zoomlevel][tileX][tileY];
             try {
                 resolve(this.mapCanvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height));
             } catch (err) {
-                this.props.cache.images[this.state.zoomlevel][tileX][tileY] = null;
+                this.props.cache.images[this.zoomlevel][tileX][tileY] = null;
                 reject(err);
             }
         });
@@ -307,10 +298,10 @@ export default class TripViewer extends Component {
 
     downloadTile(tileX,tileY) {
         return new Promise((resolve,reject) => {
-            var newImg;
-            wfetch(`https://tile.openstreetmap.de/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
+            let newImg;
+            chipRequest(`https://tile.openstreetmap.de/${this.zoomlevel}/${tileX}/${tileY}.png`,{skipHttpPrefix:true})
                 .then(resp => resp.blob())
-                .then(imgData => wfetch(`${this.state.httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
+                .then(imgData => chipRequest(`/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
                     method: 'put',
                     body: (newImg=imgData)
                 }).then(resolve(newImg)).catch(resolve(newImg)))
@@ -329,11 +320,11 @@ export default class TripViewer extends Component {
             if (this.testing) {
                 return resolve(this.drawWatermark(tileX,tileY));
             }
-            wfetch(`${this.state.httpPrefix}/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
+            chipRequest(`/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`)
                 .then(resp => resolve(resp.status >= 300? this.downloadTile(tileX,tileY):resp.blob()))
                 .catch(err => {
                     if (retryCount > 3) {
-                        reject({error:`Error in downloading ${this.state.zoomlevel}/${tileX}/${tileY}`});
+                        reject({error:`Error in downloading ${this.zoomlevel}/${tileX}/${tileY}`});
                     } else {
                         resolve(this.getTile(tileX,tileY,retryCount++));
                     }
@@ -342,11 +333,11 @@ export default class TripViewer extends Component {
     }
 
     getClientY(firstPoint) {
-        return ((firstPoint.tileY - this.state.bottomTile) * 256) + (256 * firstPoint.posTileY);
+        return ((firstPoint.tileY - this.bottomTile) * 256) + (256 * firstPoint.posTileY);
     }
 
     getClientX(firstPoint) {
-        return ((firstPoint.tileX - this.state.leftTile) * 256) + (256 * firstPoint.posTileX);
+        return ((firstPoint.tileX - this.leftTile) * 256) + (256 * firstPoint.posTileX);
     }
 
     lon2tile(lon) { 
@@ -370,7 +361,7 @@ export default class TripViewer extends Component {
     }
 
     tile2lat(y,z) {
-        var n=Math.PI-2*Math.PI*y/Math.pow(2,z);
+        let n=Math.PI-2*Math.PI*y/Math.pow(2,z);
         return (180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n))));
     }
     
@@ -378,8 +369,8 @@ export default class TripViewer extends Component {
         return {
             tileX: this.lon2tile(point.longitude, this.state.zoomlevel),
             tileY: this.lat2tile(point.latitude, this.state.zoomlevel),
-            posTileX: this.lon2x(point.longitude,this.state.zoomlevel) - this.lon2tile(point.longitude, this.state.zoomlevel),
-            posTileY: this.lat2y(point.latitude,this.state.zoomlevel) - this.lat2tile(point.latitude, this.state.zoomlevel),
+            posTileX: this.lon2x(point.longitude,this.zoomlevel) - this.lon2tile(point.longitude, this.state.zoomlevel),
+            posTileY: this.lat2y(point.latitude,this.zoomlevel) - this.lat2tile(point.latitude, this.state.zoomlevel),
             ...point
         };
     }

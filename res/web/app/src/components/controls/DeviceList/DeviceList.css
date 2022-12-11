@@ -8,3 +8,17 @@
     justify-content: space-between;
     align-items: stretch;
 }
+
+.devices {
+    color: #7fffd4;
+}
+
+div.MuiSelect-select {
+    padding: 2px 15px;
+}
+
+div.MuiOutlinedInput-root {
+    border: solid #008b8b;
+    border-radius: 20px;
+    color: aqua;
+}

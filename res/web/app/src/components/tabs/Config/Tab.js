@@ -1,9 +1,8 @@
-import {createElement as e, Component} from 'react';
+import { createElement as e, Component, Suspense } from 'react';
 import { Button,Collapse,ListItemButton,ListItemIcon,ListItemText } from '@mui/material';
-import {wfetch, fromVersionedToPlain,fromPlainToVersionned} from '../../../utils/utils'
+import { chipRequest, fromVersionedToPlain,fromPlainToVersionned} from '../../../utils/utils'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner'
-import { Suspense } from 'react';
 import { faGears } from '@fortawesome/free-solid-svg-icons'
 import { faChevronDown } from '@fortawesome/free-solid-svg-icons/faChevronDown'
 import { faChevronUp } from '@fortawesome/free-solid-svg-icons/faChevronUp'
@@ -15,20 +14,16 @@ import 'jsoneditor/dist/jsoneditor.css';
 export default class ConfigPage extends Component {
     constructor(props) {
         super(props);
-        this.state={
-            httpPrefix:""
-        };
         this.fetchConfig();
+        this.state={};
     }
 
     fetchConfig() {
-        wfetch(`${this.state.httpPrefix}/config/${!this.props.selectedDevice?.config?.deviceid?"":this.props.selectedDevice.config.deviceid+".json"}`, {
+        chipRequest(`/config/${!this.props.selectedDevice?.config?.deviceid?"":this.props.selectedDevice.config.deviceid+".json"}`, {
                 method: 'post',
-                //signal: abort.signal
             }).then(resp => resp.json())
-            .then(config => {
-                //clearTimeout(timer);
-                this.props.selectedDevice.config = config;
+              .then(config => {
+                this.props.selectedDevice.config = fromVersionedToPlain(config);
                 this.setState({
                     config: fromVersionedToPlain(config),
                     newconfig: fromVersionedToPlain(config),
@@ -38,13 +33,17 @@ export default class ConfigPage extends Component {
     }
 
     getEditorGroups() {
-        return e(ConfigGroup, { key: "configGroups", selectedDevice:this.props.selectedDevice, config: this.state?.newconfig, onChange: (_) => {this.jsoneditor?.set(this.state.newconfig); this.setState(this.state) } });
+        return e(ConfigGroup, { key: "configGroups", 
+                                selectedDevice:this.props.selectedDevice, 
+                                config: this.state?.newconfig, 
+                                onChange: (newconfig) => this.setState({newconfig})
+                            });
     }
 
     saveChanges() {
-        var abort = new AbortController()
-        var timer = setTimeout(() => abort.abort(), 8000);
-        wfetch(`${this.state.httpPrefix}/config`, {
+        let abort = new AbortController()
+        let timer = setTimeout(() => abort.abort(), 8000);
+        chipRequest(`/config`, {
                 method: 'put',
                 signal: abort.signal,
                 body: JSON.stringify(fromPlainToVersionned(this.state.newconfig, this.state.original))
@@ -59,8 +58,7 @@ export default class ConfigPage extends Component {
     renderConfigGroup(name,contentFnc,icon) {
         return <div>
             <ListItemButton onClick={_ => {
-                (this.state[name]?this.state[name]:(this.state[name]={})).opened = !this.state[name]?.opened;
-                this.setState({ [name]: this.state[name] });
+                this.setState({ [name]: {...this.state[name],opened: !this.state[name]?.opened}});
             } }>
                 <ListItemIcon>
                     <FontAwesomeIcon icon={icon}></FontAwesomeIcon>
@@ -78,31 +76,23 @@ export default class ConfigPage extends Component {
     }
 
     componentDidUpdate(prevProps,prevState) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
-            } else {
-                this.setState({httpPrefix:""});
+        if (this.jsoneditor) {
+            if (this.state.newconfig && (this.jsoneditor.get() !== this.state.newconfig)) {
+                this.jsoneditor.update(this.state.newconfig)
+            } else if (this.state.config && (this.jsoneditor.get() !== this.state.config)) {
+                this.jsoneditor.update(this.state.config)
             }
         }
 
-        if (this.state["Full Configuration"]?.opened && !this.jsoneditor) {
-            this.jsoneditor = import('jsoneditor');
-            this.jsoneditor.then(({default: JSONEditor})=> {
+        if (this.state["Full Configuration"]?.opened && !this.jsoneditor && this.container) {
+            import('jsoneditor').then(({default: JSONEditor})=> {
                 this.jsoneditor = new JSONEditor(this.container, {
                     onChangeJSON: json => this.setState({newconfig: json})
                 }, this.state.config);
             });    
         }
 
-        if (this.jsoneditor) {
-            if (this.state.newconfig && (prevState.newconfig !== this.state.newconfig)) {
-                this.jsoneditor.set(this.state.newconfig)
-            } else if (this.state.config && (prevState.config !== this.state.config)) {
-                this.jsoneditor.set(this.state.config)
-            }
-        }
-        if (prevState.httpPrefix !== this.state.httpPrefix) {
+        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
             this.fetchConfig();
         }
     }

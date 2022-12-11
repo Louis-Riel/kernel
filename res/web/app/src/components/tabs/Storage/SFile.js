@@ -1,23 +1,8 @@
 import { createElement as e, Component } from 'react';
-import { wfetch } from '../../../utils/utils';
+import { chipRequest } from '../../../utils/utils';
 import { FileViewer } from './FileViewer';
 
 export class SFile extends Component {
-    constructor(props) {
-        super(props);
-        this.state={httpPrefix:""};
-    }
-
-    componentDidUpdate(prevProps,prevState) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
-            } else {
-                this.setState({httpPrefix:""});
-            }
-        }
-    }
-
     render() {
         return e("tr", { key: "tr", className: this.props.file.ftype }, [
             e("td", { key: "link" }, this.getLink(this.props.file)),
@@ -31,7 +16,7 @@ export class SFile extends Component {
             key: "delete",
             href: "#",
             onClick: () => {
-                wfetch(`${this.state.httpPrefix}/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
+                chipRequest(`/stat${this.props.path === "/" ? "" : this.props.path}/${this.props.file.name}`, {
                     method: 'post',
                     headers: {
                         ftype: this.props.file.ftype === "file" ? "file" : "directory",

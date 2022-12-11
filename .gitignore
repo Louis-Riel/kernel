@@ -1,6 +1,7 @@
 .pioenvs
 .piolibdeps
-build
+build*
+remote*
 .vscode
 *.kml
 *.tar
@@ -11,3 +12,6 @@ node_modules
 .cache
 logs
 res/package-lock.json
+res/web/app/src/assets
+res/web/app/admin
+res/web/service/cfg/*

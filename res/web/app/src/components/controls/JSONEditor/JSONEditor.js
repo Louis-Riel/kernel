@@ -72,8 +72,8 @@ export default class LocalJSONEditor extends Component {
                                                                                          .map(fld => this.renderField(json, fld))
                                                                                          .reduce((pv,cv)=>{
                     if (cv){
-                        var fc = this.getFieldClass(json,cv.fld);
-                        var item = pv.find(it=>it.fclass === fc);
+                        let fc = this.getFieldClass(json,cv.fld);
+                        let item = pv.find(it=>it.fclass === fc);
                         if (item) {
                             item.elements.push(cv.element);
                         } else {
@@ -113,6 +113,7 @@ export default class LocalJSONEditor extends Component {
                 ]) :
                 e(ROProp, {
                     key: `rofld${fld}`,
+                    selectedDevice: this.props.selectedDevice, 
                     value: json[fld],
                     name: fld,
                     label: fld
@@ -168,6 +169,7 @@ export default class LocalJSONEditor extends Component {
             e("input", { key: `input`, defaultValue: json.value === undefined ? json : json.value, onChange: this.processUpdate.bind(this) }) :
             e(ROProp, {
                 key: 'rofield',
+                selectedDevice: this.props.selectedDevice, 
                 value: json,
                 name: ""
             });
@@ -175,28 +177,24 @@ export default class LocalJSONEditor extends Component {
 
     processUpdate(elem,fld) {
         if (fld) {
-            if (this.state.json[fld] === undefined) {
-                this.state.json[fld]={version:-1};
-            }
-            this.state.json[fld].value=elem.target.value;
-            this.state.json[fld].version++;
+            this.setState({json:{...this.state.json,
+                           [fld]:{value:elem.target.value,version:this.state.json[fld]?(this.state.json[fld].version+1):0}}});
         } else {
-            this.state.json.value=elem.target.value;
-            this.state.json.version++;
+            this.setState({json:{value:elem.target.value,version:this.state.json.version+1}})
         }
     }
 
     getSortedProperties(json) {
         return Object.keys(json)
             .sort((f1, f2) => { 
-                var f1s = this.getFieldWeight(json, f1);
-                var f2s = this.getFieldWeight(json, f2);
+                let f1s = this.getFieldWeight(json, f1);
+                let f2s = this.getFieldWeight(json, f2);
                 if (f1s === f2s) {
                     return 1;
                 }
                 return f1s > f2s ? 1 : f2s > f1s ? -1 : 0;
             })
-            .filter(fld => !json[fld] || !(typeof(json[fld]) === "object" && Object.keys(json[fld]).filter(fld=>fld !== "class" && fld !== "name").length==0));
+            .filter(fld => !json[fld] || !(typeof(json[fld]) === "object" && Object.keys(json[fld]).filter(fld=>fld !== "class" && fld !== "name").length===0));
     }
 
     getFieldWeight(json, f1) {
@@ -214,8 +212,7 @@ export default class LocalJSONEditor extends Component {
     }
 
     addNewProperty(){
-        this.state.json[`prop${Object.keys(this.state.json).filter(prop => prop.match(/^prop.*/)).length+1}`]=null;
-        this.setState({value:this.state.json});
+        this.setState({value:{...this.state.json,[`prop${Object.keys(this.state.json).filter(prop => prop.match(/^prop.*/)).length+1}`]:null}});
     }
 
     objectControlPannel(){

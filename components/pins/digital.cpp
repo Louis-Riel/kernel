@@ -3,17 +3,17 @@
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
-static Pin** pins=NULL;
+static Pin** pins=nullptr;
 uint8_t Pin::numPins=0;
 QueueHandle_t Pin::eventQueue;
-esp_event_handler_instance_t* Pin::handlerInstance=NULL;
+esp_event_handler_instance_t* Pin::handlerInstance=nullptr;
 const char* Pin::PIN_BASE="DigitalPin";
 
 Pin::~Pin(){
     ldfree((void*)name);
     for (int idx=0; idx < MAX_NUM_PINS; idx++){
         if (pins[idx] == this) {
-            pins[idx]=NULL;
+            pins[idx]=nullptr;
             numPins--;
         }
     }
@@ -24,11 +24,11 @@ Pin::~Pin(){
 }
 
 Pin::Pin(AppConfig* config)
-    :ManagedDevice(PIN_BASE,config->GetStringProperty("pinName"),NULL,&ProcessCommand,&ProcessEvent),
+    :ManagedDevice(PIN_BASE,config->GetStringProperty("pinName"),nullptr,&ProcessCommand,&ProcessEvent),
     pinNo(config->GetPinNoProperty("pinNo")),
     flags(config->GetIntProperty("driverFlags")),
     config(config),
-    pinStatus(NULL)
+    pinStatus(nullptr)
 {
     InitDevice();
 }
@@ -55,7 +55,7 @@ EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
 }
 
 void Pin::InitDevice(){
-    if (pins == NULL){
+    if (pins == nullptr){
         EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
         pins = (Pin**)dmalloc(sizeof(void*)*MAX_NUM_PINS);
         memset(pins,0,sizeof(void*)*MAX_NUM_PINS);
@@ -107,7 +107,7 @@ void Pin::InitDevice(){
     if (isRtcGpio)
         ESP_ERROR_CHECK(gpio_isr_handler_add(pinNo, pinHandler, this));
 
-    if (status == NULL) {
+    if (status == nullptr) {
         ESP_LOGE(__FUNCTION__,"No status object for %s",name);
     }
     AppConfig* apin = new AppConfig(status,AppConfig::GetAppStatus());
@@ -158,7 +158,7 @@ void Pin::RefrestState(){
 }
 
 void Pin::queuePoller(void *arg){
-    Pin* pin = NULL;
+    Pin* pin = nullptr;
 
     EventGroupHandle_t appEg = getAppEG();
     while(!(xEventGroupGetBits(appEg) & app_bits_t::HIBERNATE) && xQueueReceive(eventQueue,&pin,portMAX_DELAY)){
@@ -169,13 +169,13 @@ void Pin::queuePoller(void *arg){
 
 void Pin::pinHandler(void *arg)
 {
-  xQueueSendFromISR(eventQueue, &arg, NULL);
+  xQueueSendFromISR(eventQueue, &arg, nullptr);
 }
 
 void Pin::PollPins(){
   ESP_LOGV(__FUNCTION__, "Configuring Pins.");
   eventQueue = xQueueCreate(10, sizeof(uint32_t));
-  CreateBackgroundTask(queuePoller, "pinsPoller", 4096, NULL, tskIDLE_PRIORITY, NULL);
+  CreateBackgroundTask(queuePoller, "pinsPoller", 4096, nullptr, tskIDLE_PRIORITY, nullptr);
   ESP_LOGV(__FUNCTION__, "ISR Service Started");
 }
 
@@ -184,7 +184,7 @@ void Pin::ProcessEvent(ManagedDevice* dev, postedEvent_t* postedEvent){
         ESP_LOGV(__FUNCTION__,"posting to %s",dev ->GetName());
         ((Pin*) dev)->ProcessTheEvent(postedEvent);
     } else {
-        ESP_LOGW(__FUNCTION__,"Stuff's missing dev:%d event:%d", dev==NULL, postedEvent==NULL);
+        ESP_LOGW(__FUNCTION__,"Stuff's missing dev:%d event:%d", dev==nullptr, postedEvent==nullptr);
     }
 }
 
@@ -196,7 +196,7 @@ void Pin::ProcessTheEvent(postedEvent_t* postedEvent){
             ESP_LOGV(__FUNCTION__,"d: %d==%d",cPinNo, pinNo);
         } else if (postedEvent->event_data) {
             cJSON* event = (cJSON*)postedEvent->event_data;
-            cJSON* jpinNo = event ? cJSON_GetObjectItem(event, "pinNo") :NULL;
+            cJSON* jpinNo = event ? cJSON_GetObjectItem(event, "pinNo") :nullptr;
             cPinNo = cJSON_GetNumberValue(jpinNo);
             ESP_LOGV(__FUNCTION__,"j: %d==%d",cPinNo, pinNo);
         }  else {

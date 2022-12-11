@@ -6,6 +6,7 @@ import Tab from '@mui/material/Tab';
 import Box from '@mui/material/Box';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner } from '@fortawesome/free-solid-svg-icons/faSpinner';
+import { isStandalone, setSelectedDevice } from './utils/utils';
 
 const StorageViewer = lazy(() => import('./components/tabs/Storage/Tab'));
 const StatusPage = lazy(() => import('./components/tabs/State/Tab'));
@@ -39,26 +40,27 @@ export default function BasicTabs() {
 
   const tabChange = (event, newValue) => {
     setValue(newValue);
-    tabStates.filter((tab,idx)=>idx!==newValue && tab.opened).forEach(tab=>tab.opened=false);
-    tabStates[newValue].opened=true;
-    tabStates[newValue].loaded=true;
-    updateTabStates(tabStates);
+    updateTabStates(tabStates.map((tabState,idx) => {return {...tabState, opened:idx!==newValue}}));
   };
 
   return (
     <Box class="App">
       <div className="control-bar">
+        {isStandalone() || selectedDevice.config ? 
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={value} onChange={tabChange} aria-label="The tabs">
             { tabStates.map((tab,idx)=><Tab label={tab.name} {...a11yProps(idx)}></Tab>)}
           </Tabs>
-        </Box>
+        </Box>:null}
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <DeviceList
               selectedDevice= {selectedDevice}
-              onSet= {val => updateSelectedDevice(val)}></DeviceList>
+              onSet={dev=>{
+                updateSelectedDevice(dev);
+                setSelectedDevice(dev);
+              }}></DeviceList>
         </Suspense>
-        {tabStates[value].controlPanel ? tabStates[value].controlPanel() : undefined}
+        {isStandalone() || selectedDevice.config ? 
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <WebSocketManager
             enabled={window.location.pathname.indexOf("sdcard") === -1}
@@ -67,9 +69,9 @@ export default function BasicTabs() {
             logCBFns={logCBFns}
             eventCBFns={eventCBFns}
           ></WebSocketManager>
-        </Suspense>
+        </Suspense>:null}
       </div>
-      {tabStates.map((tab,idx)=>getTabContent(idx))}
+      {isStandalone() || selectedDevice.config?tabStates.map((tab,idx)=>getTabContent(idx)):null}
     </Box>
   );
 
@@ -98,9 +100,6 @@ export default function BasicTabs() {
             registerStateCallback={registerStateCallback}
             unRegisterEventInstanceCallback={unRegisterEventInstanceCallback}
             unRegisterStateCallback={unRegisterStateCallback}
-            registerControlPanel={(ctrlPanel)=>{
-              tabStates[1].controlPanel=ctrlPanel;
-            }}
           ></StatusPage>
         </Suspense>
         </div>
@@ -151,11 +150,7 @@ export default function BasicTabs() {
   }
 
   function unRegisterStateCallback(stateCBFn) {
-    var idx = stateCBFns.findIndex(fn => fn.name === stateCBFn.name);
-    if (idx >= 0) {
-      stateCBFns.slice(idx,1);
-      updateStateCallbacks(stateCBFns);
-    }
+    updateStateCallbacks(stateCBFns.filter(fn => fn.name !== stateCBFn.name));
   }
 
   function registerLogCallback(logCBFn) {
@@ -164,11 +159,7 @@ export default function BasicTabs() {
   }
 
   function unRegisterLogCallback(logCBFn) {
-    var idx = logCBFns.findIndex(fn => fn.name === logCBFn.name);
-    if (idx >= 0) {
-      logCBFns.splice(idx,1);
-      updateLogCallbacks(logCBFns);
-    }
+    updateLogCallbacks(logCBFns.filter(fn => fn.name !== logCBFn.name));
   }
 
   function registerEventInstanceCallback(eventCBFn,instance) {
@@ -178,11 +169,7 @@ export default function BasicTabs() {
   }  
 
   function unRegisterEventInstanceCallback(eventCBFn,instance) {
-    var idx = eventCBFns.findIndex(fn => fn.fn.name === eventCBFn.name && fn.instance === instance);
-    if (idx >= 0) {
-      logCBFns.splice(idx,1);
-      updateEventCallbacks(eventCBFns);
-    }
+    updateEventCallbacks(eventCBFns.filter(fn => fn.fn.name !== eventCBFn.name && fn.instance !== instance));
   }  
 }
 

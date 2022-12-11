@@ -1,16 +1,14 @@
 import { createRef, Component} from 'react';
 import { Button, ClickAwayListener, Tooltip, Zoom } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faFolderPlus } from '@fortawesome/free-solid-svg-icons'
-import { faFileArrowDown } from '@fortawesome/free-solid-svg-icons'
+import { faFolderPlus, faFileArrowDown } from '@fortawesome/free-solid-svg-icons'
 
-import { wfetch } from '../../../utils/utils'
+import { chipRequest } from '../../../utils/utils'
 
 export default class UploadManager extends Component {
     constructor(props) {
         super(props);
         this.state={
-            httpPrefix:"",
             files: [],
             processed: [],
             failed: [],
@@ -21,9 +19,9 @@ export default class UploadManager extends Component {
     }
 
     uploadIt(event) {
-        var files=Array.from(event.target.files).map(file => 
+        let files=Array.from(event.target.files).map(file => 
             new Promise((resolve,reject)=>{
-                var reader = new FileReader();
+                let reader = new FileReader();
                 reader.readAsArrayBuffer(file);
                 reader.onerror = reject;
                 reader.onload = data => resolve({
@@ -125,13 +123,6 @@ export default class UploadManager extends Component {
     }
 
     componentDidUpdate(prevProps, prevState) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
-            } else {
-                this.setState({httpPrefix:""});
-            }
-        }
         if (this.state.files.length && !this.state.activeFile) {
             try{
               this.state.files.shift()?.then(file=>this.setState({activeFile:file}));
@@ -141,7 +132,7 @@ export default class UploadManager extends Component {
         }
         if (this.state.activeFile && (this.state.activeFile !== prevState?.activeFile)) {
             new Promise((resolve,reject) => {
-                wfetch(`${this.state.httpPrefix}/stat${this.state.activeFile.destFile}`, {
+                chipRequest(`/stat${this.state.activeFile.destFile}`, {
                     method: 'post'
                 }).then(response => {
                     if (response.status === 200) {
@@ -151,7 +142,7 @@ export default class UploadManager extends Component {
                                         this.setState({skipped: [ ...this.state.skipped, this.state.activeFile]});
                                         resolve(this.state.activeFile.destFile);
                                     } else {
-                                        wfetch(`${this.state.httpPrefix}/stat${this.state.activeFile.destFile}`, {
+                                        chipRequest(`/stat${this.state.activeFile.destFile}`, {
                                             method: 'post',
                                             headers: {
                                                 ftype: "file",
@@ -177,7 +168,7 @@ export default class UploadManager extends Component {
     uploadCurrentFile() {
         return new Promise((resolve,reject)=>{
             try {
-                wfetch(`${this.state.httpPrefix}${this.state.activeFile.destFile}.dwnld`,{
+                chipRequest(`${this.state.activeFile.destFile}.dwnld`,{
                     method: 'put',
                     body: this.state.activeFile.content,
                     headers: new Headers({'content-type': 'application/octet-stream',

@@ -1,5 +1,5 @@
 import { createRef, Component} from 'react';
-import { getInSpot, getAnims, fromVersionedToPlain } from '../../../utils/utils';
+import { getInSpot, getAnims, fromVersionedToPlain, isStandalone } from '../../../utils/utils';
 import './WebSocket.css';
 
 export default class WebSocketManager extends Component {
@@ -7,7 +7,7 @@ export default class WebSocketManager extends Component {
         super(props);
         this.widget = createRef();
         this.state = {
-            httpPrefix:"",
+            httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : "",
             enabled:props.enabled
         };
         window.anims=getAnims();
@@ -16,9 +16,9 @@ export default class WebSocketManager extends Component {
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
             if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
+                this.setState({httpPrefix:`${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}`});
             } else {
-                this.setState({httpPrefix:""});
+                this.setState({httpPrefix:"."});
             }
         }
 
@@ -28,8 +28,8 @@ export default class WebSocketManager extends Component {
             }
         }
 
-        if ((prevState.enabled != this.state.enabled ) || 
-            (this.ws != this.state.enabled)) {
+        if ((prevState.enabled !== this.state.enabled ) || 
+            (this.ws !== this.state.enabled)) {
                 this.state.enabled ? this.startWs() : this.stopWs();
         }
     }
@@ -68,9 +68,9 @@ export default class WebSocketManager extends Component {
             anim.startWindow = performance.now();
             anim.endWindow = anim.startWindow + anim.tripLen;
         } else {
-            anim.x += (anim.direction*((performance.now() - anim.startWindow))/anim.tripLen);
+            anim.x += (anim.direction*(performance.now() - anim.startWindow)/anim.tripLen);
         }
-        var width=Math.min(15,4 + (anim.weight));
+        let width=Math.min(15,4 + (anim.weight));
         if ((anim.y-(width/2)) <= 0) {
             anim.y = width;
         }
@@ -86,9 +86,9 @@ export default class WebSocketManager extends Component {
         this.canvas.stroke();
 
         if (anim.weight > 1) {
-            var today = ""+anim.weight
+            let today = ""+anim.weight
             this.canvas.font = Math.min(20,8+anim.weight)+"px Helvetica";
-            var txtbx = this.canvas.measureText(today);
+            let txtbx = this.canvas.measureText(today);
             this.canvas.fillStyle=anim.textColor;
             this.canvas.strokeStyle = anim.textColor;
             this.canvas.fillText(today, anim.x - txtbx.width / 2, anim.y + txtbx.actualBoundingBoxAscent / 2);
@@ -107,13 +107,13 @@ export default class WebSocketManager extends Component {
         this.canvas.lineWidth = 2;
         this.canvas.shadowBlur = 2;
         this.canvas.shadowColor = '#002222';
-        var idx = (Date.now()%3)+2;
+        let idx = (Date.now()%3)+2;
         if ( this.state?.enabled) {
             if (this.state.error) {
                 this.canvas.fillStyle="#f27c7c";
             } else if (this.state.connecting) {
                 this.canvas.fillStyle=`#00${[idx,idx,idx,idx].join('')}`;
-            } if (this.state.connected) {
+            } else if (this.state.connected) {
                 this.canvas.fillStyle="#00ffff59";
             }
         } else {
@@ -142,7 +142,7 @@ export default class WebSocketManager extends Component {
         this.canvas.fillStyle = "#00ffff";
         this.roundedRectagle(startX, startY, boxWidht, boxHeight, cornerSize);
 
-        for (var idx = 0; idx < pinVCount; idx++) {
+        for (let idx = 0; idx < pinVCount; idx++) {
             this.canvas.moveTo(startX,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
             this.canvas.lineTo(startX-pinWidth,1.5*cornerSize+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
             this.canvas.lineTo(startX-pinWidth,1.5*cornerSize+pinHeight+startY+(idx * ((boxHeight-2*cornerSize)/pinVCount)));
@@ -180,8 +180,8 @@ export default class WebSocketManager extends Component {
             return;
         }
         this.setState({connecting:true,running:false});
-        var ws = this.ws = new WebSocket("ws://" + (this.state.httpPrefix === "" ? `${window.location.hostname}:${window.location.port}` : this.state.httpPrefix.substring(7)) + "/ws");
-        var stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.state.connecting = false; }, 3600);
+        let ws = this.ws = new WebSocket(`ws${isStandalone()? '' : 's'}://` + (this.state.httpPrefix === "" ? `${window.location.hostname}:${window.location.port}`.replaceAll(/\/+$/g,"").replaceAll(/\/\//g,"/") : this.state.httpPrefix.substring(8)) + "/ws");
+        let stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.setState({connecting: false}); }, 3600);
         
         ws.onmessage = (event) => {
           stopItWithThatShit = this.processMessage(stopItWithThatShit, event, ws);
@@ -217,18 +217,18 @@ export default class WebSocketManager extends Component {
         this.setState({connected:true,connecting:false});
         ws.send("Connected");
         window.animRenderer && window.requestAnimationFrame(window.animRenderer);
-        stopItWithThatShit = setTimeout(() => { this.state.timeout = "Connect"; ws.close(); console.log("Connect timeout"); }, 3600);
+        stopItWithThatShit = setTimeout(() => { this.setState({timeout: "Connect"}); ws.close(); console.log("Connect timeout"); }, 3600);
         return stopItWithThatShit;
     }
     
     AddLogLine(ln) {
-        var anims = window.anims.filter(anim => anim.type === "log" && anim.level === ln[0]);
-        var inSpot = getInSpot(anims, "chip");
+        let anims = window.anims.filter(anim => anim.type === "log" && anim.level === ln[0]);
+        let inSpot = getInSpot(anims, "chip");
         if (inSpot) {
             inSpot.weight++;
         } else {
-            var msg = ln.match(/^[^IDVEW]*(.+)/)[1];
-            var lvl = msg.substr(0, 1);
+            let msg = ln.match(/^[^IDVEW]*(.+)/)[1];
+            let lvl = msg.substr(0, 1);
             window.anims.push({
                 type:"log",
                 from: "chip",
@@ -246,8 +246,8 @@ export default class WebSocketManager extends Component {
     }
 
     UpdateState(state) {
-        var anims = window.anims.filter(anim => anim.type === "state");
-        var inSpot = getInSpot(anims, "chip");
+        let anims = window.anims.filter(anim => anim.type === "state");
+        let inSpot = getInSpot(anims, "chip");
         if (inSpot) {
             inSpot.weight++;
         } else {
@@ -267,8 +267,8 @@ export default class WebSocketManager extends Component {
     }
 
     ProcessEvent(event) {
-        var anims = window.anims.filter(anim => anim.type === "event");
-        var inSpot = getInSpot(anims, "chip");
+        let anims = window.anims.filter(anim => anim.type === "event");
+        let inSpot = getInSpot(anims, "chip");
         if (inSpot) {
             inSpot.weight++;
         } else {
@@ -291,9 +291,11 @@ export default class WebSocketManager extends Component {
     processMessage(stopItWithThatShit, event, ws) {
         clearTimeout(stopItWithThatShit);
         if (!this.state.running || this.state.timeout) {
-          this.state.running = true;
-          this.state.error = null;
-          this.state.timeout = null;
+            this.setState({
+                running: true,
+                error: null,
+                timeout: null
+            });
         }
     
         if (event && event.data) {

@@ -28,14 +28,9 @@
     align-content: flex-start;
     justify-content: flex-start;
     align-items: center;
-    border: solid aquamarine 1px;
-    border-radius: 10px 10px 0 0;
 }
 
 .filterPannelContent {
-    border-top: 1px solid #7fffd4;
-    -webkit-column-gap: 5px;
-    column-gap: 5px;
     display: flex;
 }
 
@@ -46,9 +41,7 @@
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: baseline;
-    border-right: solid aquamarine 1px;
     padding-left: 10px;
-    background: linear-gradient(to bottom,#040404,#3a4a38);
 }
 
 .logLevelFilterContent {
@@ -136,7 +129,7 @@ span.MuiChip-label.MuiChip-labelMedium {
     font-size: large;
 }
 
-.logLevelFilterTitle {
-    border-right: solid 1px aquamarine;
-    padding-right: 7px;
+.filterlabel {
+    display: flex;
+    column-gap: 5px;
 }

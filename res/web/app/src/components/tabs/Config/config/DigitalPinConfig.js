@@ -1,5 +1,5 @@
-import {createElement as e, Component} from 'react';
-import {Card, CardHeader, CardContent, ListItem, TextField, List } from '@mui/material';
+import {Component} from 'react';
+import {TextField, Paper, Typography } from '@mui/material';
 import PinDriverFlags from './PinDriverFlag';
 
 export default class DigitalPinConfig extends Component {
@@ -10,31 +10,39 @@ export default class DigitalPinConfig extends Component {
 
     componentDidUpdate(prevProps, prevState) {
         if ((this.state !== prevState) && this.props.onChange) {
-            this.props.onChange(this.state);
+            this.props.onChange(this.state.pin);
         }
-        
-        if (prevProps?.item !== this.props?.item) {
+
+        if (JSON.stringify(this.props.item) !== JSON.stringify(prevProps.item)) {
             this.setState({pin: this.props.item});
         }
     }
 
     onChange(name, value) {
-        this.state.pin[name] = name === "pinName" ? value : parseInt(value); 
-        this.setState(this.state);
+        this.setState({pin: {...this.state.pin, [name]:name === "pinName" ? value : parseInt(value)}});
     }
 
     render() {
-        return e( Card, { key: this.state.pin.pinName, className: "pin-config" },[
-            e( CardHeader, {key:"header", title: this.state.pin.pinName }),
-            e( CardContent, {key:"details"},  e(List,{key: "items"},
-                [
-                    e( ListItem, { key: "pinName" },  
-                        e( TextField, { key: "pinName", autoFocus:true, value: this.state.pin.pinName, label: "Name", type: "text", onChange: event => this.onChange("pinName", event.target.value)})),
-                    e( ListItem, { key: "pinNo" },  
-                        e( TextField, { key:"pinNo", value: this.state.pin.pinNo, label: "PinNo", type: "number", onChange: event => this.onChange("pinNo", event.target.value) })),
-                    e( PinDriverFlags, { key: "driverFlags", autoFocus:true, value: this.state.pin.driverFlags, onChange: val => this.onChange("driverFlags", val) }),
-                ]
-            ))
-        ]);
+        return <Paper variant='outlined' elevation={3} className="pin-config">
+            <div className='config-header'>
+                <Typography variant='h5'>{this.state.pin.pinName}</Typography>
+            </div>
+            <div className='config-content'>
+                <TextField 
+                    value={this.state.pin.pinName}
+                    label="Name"
+                    type="text"
+                    onChange={event => this.onChange("pinName", event.target.value)}/>
+                <TextField 
+                    value={this.state.pin.pinNo}
+                    label="PinNo"
+                    type="number"
+                    onChange={event => this.onChange("pinNo", event.target.value)}/>
+                <PinDriverFlags 
+                    autoFocus={true}
+                    value={this.state.pin.driverFlags}
+                    onChange={val => this.onChange("driverFlags", val)}/>
+            </div>
+        </Paper>
     }
 }

@@ -1,6 +1,6 @@
 import { createElement as e, Component } from 'react';
 import { Button, FormControlLabel, Checkbox } from '@mui/material';
-import { wfetch } from '../../../utils/utils';
+import { chipRequest } from '../../../utils/utils';
 import { LiveEvent } from './LiveEvent';
 
 export class LiveEventPannel extends Component {
@@ -12,7 +12,6 @@ export class LiveEventPannel extends Component {
             this.props.registerEventCallback(this.ProcessEvent.bind(this));
         }
         this.state = { 
-            httpPrefix:"",
             filters: {} 
         };
     }
@@ -23,19 +22,9 @@ export class LiveEventPannel extends Component {
         }
     }
 
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps?.selectedDevice !== this.props.selectedDevice) {
-            if (this.props.selectedDevice?.ip) {
-                this.setState({httpPrefix:`http://${this.props.selectedDevice.ip}`});
-            } else {
-                this.setState({httpPrefix:""});
-            }
-        }
-    }
-
     ProcessEvent(evt) {
         if (evt && this.isEventVisible(evt)) {
-            var lastEvents = (this.state?.lastEvents || []).concat(evt);
+            let lastEvents = (this.state?.lastEvents || []).concat(evt);
             while (lastEvents.length > 100) {
                 lastEvents.shift();
             }
@@ -47,7 +36,7 @@ export class LiveEventPannel extends Component {
     }
 
     updateFilters(lastEvents) {
-        var curFilters = Object.entries(lastEvents
+        let curFilters = Object.entries(lastEvents
             .filter(evt => evt && evt.eventBase && evt.eventId)
             .reduce((ret, evt) => {
                 if (!ret[evt.eventBase]) {
@@ -59,20 +48,30 @@ export class LiveEventPannel extends Component {
             }, {}));
         Object.values(curFilters).forEach(filter => {
             if (!this.state.filters[filter[0]]) {
-                this.state.filters[filter[0]] = filter[1];
+                this.setState({filters:{...this.state.filters,[filter[0]]: filter[1]}});
             } else if (filter[1].eventIds.find(newEvt => !this.state.filters[filter[0]].eventIds.find(eventId => eventId.eventId === newEvt.eventId))) {
-                this.state.filters[filter[0]].eventIds = this.state.filters[filter[0]].eventIds.concat(filter[1].eventIds.filter(eventId => !this.state.filters[filter[0]].eventIds.find(eventId2 => eventId.eventId === eventId2.eventId)));
+                this.setState({
+                    filters:{
+                        ...this.state.filters,
+                        [filter[0]]:{
+                            eventIds:[
+                                this.state.filters[filter[0]].eventIds,
+                                filter[1].eventIds.filter(eventId => !this.state.filters[filter[0]].eventIds.find(eventId2 => eventId.eventId === eventId2.eventId))
+                            ]
+                        }
+                    }
+                });
             }
         });
         return this.state.filters;
     }
 
     parseEvent(event) {
-        var eventType = this.eventTypes.find(eventType => (eventType.eventBase === event.eventBase) && (eventType.eventName === event.eventId));
+        let eventType = this.eventTypes.find(eventType => (eventType.eventBase === event.eventBase) && (eventType.eventName === event.eventId));
         if (eventType) {
             return { dataType: eventType.dataType, ...event };
         } else {
-            var req = this.eventTypeRequests.find(req => (req.eventBase === event.eventBase) && (req.eventId === event.eventId));
+            let req = this.eventTypeRequests.find(req => (req.eventBase === event.eventBase) && (req.eventId === event.eventId));
             if (!req) {
                 this.getEventDescriptor(event)
                     .then(eventType => this.setState({
@@ -86,16 +85,16 @@ export class LiveEventPannel extends Component {
     }
 
     getEventDescriptor(event) {
-        var curReq;
+        let curReq;
         this.eventTypeRequests.push((curReq = { waiters: [], ...event }));
         return new Promise((resolve, reject) => {
-            var eventType = this.eventTypes.find(eventType => (eventType.eventBase === event.eventBase) && (eventType.eventName === event.eventId));
+            let eventType = this.eventTypes.find(eventType => (eventType.eventBase === event.eventBase) && (eventType.eventName === event.eventId));
             if (eventType) {
                 resolve({ dataType: eventType.dataType, ...event });
             } else {
-                var toControler = new AbortController();
+                let toControler = new AbortController();
                 const timer = setTimeout(() => toControler.abort(), 8000);
-                wfetch(`${this.state.httpPrefix}/eventDescriptor/${event.eventBase}/${event.eventId}`, {
+                chipRequest(`/eventDescriptor/${event.eventBase}/${event.eventId}`, {
                     method: 'post',
                     signal: toControler.signal
                 }).then(data => {
@@ -118,11 +117,6 @@ export class LiveEventPannel extends Component {
 
     updateEventIdFilter(eventId, enabled) {
         eventId.visible = enabled;
-        this.setState({ filters: this.state.filters });
-    }
-
-    updateEventBaseFilter(eventBase, enabled) {
-        eventBase.visible = enabled;
         this.setState({ filters: this.state.filters });
     }
 
@@ -174,11 +168,11 @@ export class LiveEventPannel extends Component {
     }
 
     isEventVisible(event) {
-        return event && ((Object.keys(this.state.filters).length === 0) || !this.state.filters[event.eventBase]?.eventIds?.some(eventId => eventId.eventId === event.eventId)) ||
+        return event && (((Object.keys(this.state.filters).length === 0) || !this.state.filters[event.eventBase]?.eventIds?.some(eventId => eventId.eventId === event.eventId)) ||
             (Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase && this.state.filters[eventBase].visible) &&
                 Object.keys(this.state.filters).some(eventBase => event.eventBase === eventBase &&
                     this.state.filters[eventBase].eventIds
-                        .some(eventId => eventId.eventId === event.eventId && eventId.visible)));
+                        .some(eventId => eventId.eventId === event.eventId && eventId.visible))));
     }
 
     getFilteredEvents() {
