@@ -1,38 +1,38 @@
-..  Copyright 2014-present PlatformIO <contact@platformio.org>
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-       http://www.apache.org/licenses/LICENSE-2.0
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+======
+Kernel
+======
 
-How to build PlatformIO based project
-=====================================
+This project is to manage an ESP32 MCU and use it as a REST service and WebSocket for real time updates
 
-1. `Install PlatformIO Core <http://docs.platformio.org/page/core.html>`_
-2. Download `development platform with examples <https://github.com/platformio/platform-espressif32/archive/develop.zip>`_
-3. Extract ZIP archive
-4. Run these commands:
+Components
+==========
 
-.. code-block:: bash
+This project includes the following components:
 
-    # Change directory to example
-    > cd platform-espressif32/examples/arduino-blink
+The ESP32 firmware
+------------------
+- `Entry point <https://github.com/Louis-Riel/kernel/blob/master/main/Blink.cpp>`_
+- `LED Apa102 <https://github.com/Louis-Riel/kernel/tree/master/components/apa102>`_
+- `Infrared Reader <https://github.com/Louis-Riel/kernel/tree/master/components/IR>`_
+- `Digital/Analog Pins <https://github.com/Louis-Riel/kernel/tree/master/components/pins>`_
+- `Servo Motors <https://github.com/Louis-Riel/kernel/tree/master/components/servo>`_
+- `GPS <https://github.com/Louis-Riel/kernel/tree/master/components/TinyGPS>`_
+- `Web Server <https://github.com/Louis-Riel/kernel/tree/master/components/rest>`_
 
-    # Build project
-    > platformio run
+Web Servers
+-----------
+- `Front Gate <https://github.com/Louis-Riel/kernel/tree/master/res/web/front-gate>`_
+- `Key Manager <https://github.com/Louis-Riel/kernel/tree/master/res/web/gate-keeper>`_
 
-    # Upload firmware
-    > platformio run --target upload
+Web Apps
+--------
+`ESP32 Management <https://github.com/Louis-Riel/kernel/tree/master/res/web/app>`_
 
-    # Build specific environment
-    > platformio run -e esp32dev
+.. image:: res/pictures/status_sc.png
+.. image:: res/pictures/screen_logs.png
 
-    # Upload firmware for the specific environment
-    > platformio run -e esp32dev --target upload
+`ESP32 Administration <https://github.com/Louis-Riel/kernel/tree/master/res/web/admin>`_
 
-    # Clean build files
-    > platformio run --target clean
+Services
+--------
+- `Device Finder/Configuration <https://github.com/Louis-Riel/kernel/tree/master/res/web/service>`_
