@@ -9,7 +9,7 @@ import Http from '@mui/icons-material/Http';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import forge from 'node-forge';
 import * as React from 'react';
-import './MainPage.css';
+import './DeviceEntry.css';
 import { grey } from '@mui/material/colors';
 import IconButton from '@mui/material/IconButton';
 import Collapse from '@mui/material/Collapse';
@@ -26,7 +26,7 @@ const ExpandMore = styled((props) => {
     }),
 }));
 
-export default function MainPage(props) {
+export default function DeviceEntry(props) {
     const responseState = ["waiting","good","bad"];
     const [secureResponse, setSecureResponse] = React.useState(0);
     const [expanded, setExpanded] = React.useState(false);

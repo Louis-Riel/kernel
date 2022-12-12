@@ -17,7 +17,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Lock from '@mui/icons-material/Lock';
 import LockOpen from '@mui/icons-material/LockOpen';
-import MainPage from '../main/MainPage';
+import DeviceEntry from '../main/DeviceEntry';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import './SideBar.css';
@@ -107,7 +107,7 @@ export default function SideDrawer(props) {
                 </DrawerHeader>
                 <Divider />
                 <List>
-                {props.clients.map(deviceIcon)}
+                {props.clients.map(deviceEntry)}
                 </List>
                 <Divider />
                 <List>
@@ -116,7 +116,7 @@ export default function SideDrawer(props) {
             </Drawer>
             <Box component="main" sx={{ flexGrow: 1, p: 3}}>
                 <DrawerHeader />
-                <MainPage client={client}></MainPage>
+                <DeviceEntry client={client}></DeviceEntry>
             </Box>
         </Box>
     );
@@ -167,7 +167,7 @@ export default function SideDrawer(props) {
         </ListItem>;
     }
 
-    function deviceIcon(client) {
+    function deviceEntry(client) {
         return <ListItem key={client.config.deviceid} disablePadding sx={{ display: 'block' }}>
             <ListItemButton
                 onClick={_evt=>{client.refresh=true;setClient(client);}}
