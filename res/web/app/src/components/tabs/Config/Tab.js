@@ -36,13 +36,14 @@ export default class ConfigPage extends Component {
         return e(ConfigGroup, { key: "configGroups", 
                                 selectedDevice:this.props.selectedDevice, 
                                 config: this.state?.newconfig, 
-                                onChange: (newconfig) => this.setState({newconfig})
+                                onChange: (newconfig) => this.setState({newconfig:newconfig})
                             });
     }
 
     saveChanges() {
         let abort = new AbortController()
         let timer = setTimeout(() => abort.abort(), 8000);
+        console.log(fromPlainToVersionned(this.state.newconfig, this.state.original));
         chipRequest(`/config`, {
                 method: 'put',
                 signal: abort.signal,

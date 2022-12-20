@@ -65,27 +65,28 @@ export function fromVersionedToPlain(obj, level = "") {
 }
 
 function isObject(obj) {
-  if (typeof obj === 'object') {
+  if (obj && obj.constructor === Object) {
     return Object.keys(obj => obj === "name" || obj === "value").length === 2;
   }
   return false;
 }
 
 export function fromPlainToVersionned(obj, vobj, level = "") {
-  return Object.entries(obj).map(entry => {
+  return Object.entries(obj).reduce((ret,entry) => {
     let fld = entry[0];
     let pvobj = vobj ? vobj[fld] : undefined;
     if (Array.isArray(obj[fld])) {
-        return obj[fld].map((child,idx) => fromPlainToVersionned(child, pvobj ? pvobj[idx] : null, `${level}/${fld}[${idx}]`));
-    } else if (isObject(obj[fld])) {
-        return fromPlainToVersionned(obj[fld], pvobj, `${level}/${fld}`);
+      ret[fld]=obj[fld].map((child,idx) => fromPlainToVersionned(child, pvobj ? pvobj[idx] : null, `${level}/${fld}[${idx}]`));
+    } else if (obj[fld] && (obj[fld].constructor === Object)) {
+      ret[fld]=fromPlainToVersionned(obj[fld], pvobj, `${level}/${fld}`);
     } else {
-        return {
-            version: pvobj === undefined ? 0 : obj[fld] === pvobj.value ? pvobj.version : pvobj.version + 1,
-            value: obj[fld]
-        }
+      ret[fld]= {
+        version: pvobj === undefined ? 0 : obj[fld] === pvobj.value ? pvobj.version : pvobj.version + 1,
+        value: obj[fld]
+      }
     }
-  });
+    return ret;
+  },{});
 }
 
 const getCellValue = (tr, idx) => tr.children[idx]?.innerText || tr.children[idx]?.textContent;
@@ -142,7 +143,7 @@ export function chipRequest(requestInfo, params) {
       }
   
       let httpPrefix = selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${selectedDevice.config.devName}` : "";
-      fetch(`${params.skipHttpPrefix ? '' : httpPrefix}${requestInfo}`,params).then(resp => {
+      fetch(`${params?.skipHttpPrefix ? '' : httpPrefix}${requestInfo}`,params).then(resp => {
         let chipResponseAnim = getAnims().filter(anim => anim.type === "post" && anim.from === "chip");
         let inSpot = getInSpot(chipResponseAnim, "chip");
   

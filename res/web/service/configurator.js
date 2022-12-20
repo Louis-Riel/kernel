@@ -35,18 +35,21 @@ function getServerCert() {
 }
 
 exports.secureClients = function secureClients(request,finder,events) {
-    return new Promise((resolve,reject) => 
-        getSecureConfig(request,finder).then(sendSecureConfig)
-                                       .then(rebootDevice)
-                                       .then(registerSecureDevice)
-                                       .then(device => updateUpstreams(device,finder,events))
-                                       .then(resolve)
-                                       .catch(reject));
+    return getSecureConfig(request,finder)
+            .then(sendSecureConfig)
+            .then(rebootDevice)
+            .then(registerSecureDevice)
+            .then(device => updateUpstreams(device,finder,events))
 }
 
 function registerSecureDevice(device) {
     return new Promise((resolve,reject) => {
-        fs.writeFile(secureClientFileName,JSON.stringify([...secureClients,device]),err=>err?reject(err):resolve(device));
+        if (!secureClients.some(sdevice => sdevice.config.deviceId === device.config.deviceId)) {
+            fs.writeFile(secureClientFileName,JSON.stringify([...secureClients,device]),err=>err?reject(err):resolve(device));
+        } else {
+            console.warn(`Weird dummy update to secure clients`);
+            resolve(device);
+        }
     });
 }
 
@@ -110,8 +113,10 @@ function getSecureConfig(request,finder) {
             try {
                 const device = JSON.parse(Buffer.concat(body).toString());
                 if (device) {
+                    console.log(`Validating ${JSON.stringify(device.ip)}`);
                     finder.validateHost(device)
                           .then(config => {
+                            console.log(`Securing ${JSON.stringify(device)}`);
                             config.Rest=config.Rest||{};
                             updateValue(config.Rest, "Access-Control-Allow-Origin" , `http://${process.env.REACT_APP_BACK_GATE}:${process.env.REACT_APP_BACK_GATE_PORT}`);
                             updateValue(config.Rest, "Access-Control-Allow-Methods" , `POST,PUT,OPTIONS,DELETE`);

@@ -28,12 +28,12 @@ const ExpandMore = styled((props) => {
 
 export default function DeviceEntry(props) {
     const responseState = ["waiting","good","bad"];
-    const [secureResponse, setSecureResponse] = React.useState(0);
+    const [secureResponse, setSecureResponse] = React.useState(2);
     const [expanded, setExpanded] = React.useState(false);
     if (!props.client) {
         return undefined;
     }
-    return SecureDevice();
+    return GetDevice();
 
     function getStatusIcon(state,secure) {
         switch (state) {
@@ -65,10 +65,7 @@ export default function DeviceEntry(props) {
                     <Typography variant='httppath'>{path[0]}</Typography>
                     {Object.entries(path[1]).map(method => <Box key={ep.method}>
                         <Typography paragraph>
-                            <Typography variant='httpmethod' display='inline'>{method[0]}</Typography><Typography>{method[1].keys.length} keys refreshed 
-                              {method[1].keys.reduce((ret,key)=>ret+key.NumRefreshes,0)} times, invoked
-                              {method[1].keys.reduce((ret,key)=>ret+key.NumValid+key.NumInvalid,0)} times with
-                              {method[1].keys.reduce((ret,key)=>ret+key.NumInvalid,0)} bad checksums and {method[1].NumInvalid} revoked calls.</Typography>
+                            <Typography variant='httpmethod' display='inline'>{method[0]}</Typography><Typography> {method[1].keys.length} keys refreshed {method[1].keys.reduce((ret,key)=>ret+key.NumRefreshes,0)} times, invoked {method[1].keys.reduce((ret,key)=>ret+key.NumValid+key.NumInvalid,0)} times with {method[1].keys.reduce((ret,key)=>ret+key.NumInvalid,0)} bad checksums and {method[1].NumInvalid} revoked calls.</Typography>
                         </Typography>
                     </Box>)}
                 </Box>
@@ -86,14 +83,13 @@ export default function DeviceEntry(props) {
         }
     }
 
-    function SecureDevice() {
+    function GetDevice() {
         if (!props.client?.config) {
             return undefined;
         }
         if (props.client.refresh) {
             props.client.refresh=false;
-            refreshStatus(true);
-            //refreshStatus(false);
+            refreshStatus(props.client?.config?.Rest?.KeyServer !== undefined);
         }
 
         const cert = props.client?.config?.Rest?.KeyServer?.serverCert ? forge.pki.certificateFromPem(props.client.config.Rest.KeyServer.serverCert) : undefined;
@@ -126,7 +122,7 @@ export default function DeviceEntry(props) {
                         InputProps={{ readOnly: true }} />]}
                 </CardContent>
                 <CardActions>
-                    <IconButton onClick={_evt=>refreshStatus(true)}>{getStatusIcon(secureResponse,true)}</IconButton>
+                    <IconButton onClick={_evt=>refreshStatus(props.client?.config?.Rest?.KeyServer !== undefined)}>{getStatusIcon(secureResponse,props.client?.config?.Rest?.KeyServer !== undefined)}</IconButton>
                     {props.client?.status?.Rest?.Keys && <ExpandMore
                         className="card-expand"
                         expand={expanded}
@@ -136,6 +132,10 @@ export default function DeviceEntry(props) {
                         >
                         <ExpandMoreIcon />
                     </ExpandMore>}
+                    {props.client?.config?.Rest?.KeyServer === undefined && 
+                        <IconButton onClick={_evt => secureDevice()} >
+                            <Typography variant='subtitle1'>Secure It</Typography>
+                        </IconButton>}
                 </CardActions>
                 {props.client?.status?.Rest?.Keys && <Collapse in={expanded} timeout="auto" unmountOnExit>
                     <CardContent>
@@ -145,26 +145,51 @@ export default function DeviceEntry(props) {
             </Card>
         </Box>;
 
-        function refreshStatus(secure) {
-            setSecureResponse(0);
-            fetch(secure?`https://${process.env.REACT_APP_SECURE_BASE}:${process.env.REACT_APP_SECURE_PORT}/${props.client.config.devName}/status/app`:
-                         `http://${props.client.ip}/status/app`,{
-                method: 'post',
-                protocol: 'https'
+        function secureDevice() {
+            fetch(`${process.env.REACT_APP_FINDER_SERVICE}/device/secure`,{
+                method:'post',
+                headers: {
+                  'Accept': 'application/json',
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(props.client)
             }).then(response => {
                 if (!response.ok) {
-                  throw new Error(`Request failed with status ${response.status}`)
+                    throw new Error(`Request failed with status ${response.status}`)
                 }
-                return response.json()
-            }).then(status => {
-                if (status.Rest !== undefined) {
-                    setSecureResponse(1);
-                    props.client.status = status;
-                } else {
+            }).catch(err => {throw new Error(err)});
+        }
+
+        function refreshStatus(secure) {
+            if (secure) {
+                setSecureResponse(0);
+                fetch(`https://${process.env.REACT_APP_SECURE_BASE}:${process.env.REACT_APP_SECURE_PORT}/${props.client.config.devName}/status/app`,{
+                    method: 'post',
+                    protocol: 'https'
+                }).then(response => {
+                    if (!response.ok) {
+                      throw new Error(`Request failed with status ${response.status}`)
+                    }
+                    return response.json()
+                }).then(status => {
+                    if (status.Rest !== undefined) {
+                        setSecureResponse(1);
+                        props.client.status = status;
+                    } else {
+                        setSecureResponse(2);
+                        console.error(status);
+                    }
+                }).catch(_err => {
+                    delete props.client.status;
                     setSecureResponse(2);
-                    console.error(status);
+                });
+            } else {
+                if (props.client.status) {
+                    props.client.refresh=true;
+                    delete props.client.status;
                 }
-            }).catch(_err => setSecureResponse(2));
+                setSecureResponse(2);
+            }
         }
     }
 }

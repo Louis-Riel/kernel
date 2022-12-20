@@ -21,7 +21,6 @@ import DeviceEntry from '../main/DeviceEntry';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import './SideBar.css';
-import { cyan } from '@mui/material/colors';
 
 const drawerWidth = 240;
 
@@ -101,18 +100,15 @@ export default function SideDrawer(props) {
             {appBar()}
             <Drawer variant="permanent" open={open}>
                 <DrawerHeader>
-                <IconButton onClick={handleDrawerClose}>
-                    {theme.direction === 'rtl' ? <ChevronRightIcon /> : <ChevronLeftIcon />}
-                </IconButton>
+                  Device Details
+                  <IconButton onClick={handleDrawerClose}>
+                      {theme.direction === 'rtl' ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+                  </IconButton>
                 </DrawerHeader>
+                {open?<Divider />:null}
+                {deviceListSummary(open)}
                 <Divider />
-                <List>
-                {props.clients.map(deviceEntry)}
-                </List>
-                <Divider />
-                <List>
-                    {modelToggle()}
-                </List>
+                {modelToggle()}
             </Drawer>
             <Box component="main" sx={{ flexGrow: 1, p: 3}}>
                 <DrawerHeader />
@@ -120,6 +116,49 @@ export default function SideDrawer(props) {
             </Box>
         </Box>
     );
+
+  function deviceListSummary(open) {
+      let summary = props.clients.reduce((ret,client)=>{
+        if (client.config.Rest?.KeyServer) {
+          return {secured: [...ret.secured,client],unsecured:ret.unsecured}
+        } else {
+          return {secured: [...ret.secured],unsecured:[...ret.unsecured,client]}
+        }
+      }, {secured:[],unsecured:[]});
+
+      if (open) {
+        return <div><div>{deviceList(true)}</div><div>{deviceList(false)}</div></div>;
+      } else {
+        return <List>
+          {summary.secured.length?<ListItem>
+            <div><Typography variant='overline'>{summary.secured.length}</Typography><Lock onClick={_evt => setOpen(true)} /></div>
+          </ListItem>:null}
+          {summary.unsecured.length?<ListItem>
+            <div><Typography variant='overline'>{summary.unsecured.length}</Typography><LockOpen onClick={_evt => setOpen(true)} /></div>
+          </ListItem>:null}
+        </List>
+      } 
+  }
+
+  function deviceList(secure) {
+    if (props.clients.some(client => (client.config.Rest?.KeyServer !== undefined) === secure)) {
+      return <List>
+        <ListItemIcon
+                sx={{
+                    minWidth: 0,
+                    mr: open ? 3 : 'auto',
+                    justifyContent: 'center',
+                }}>
+                {secure ? <Lock /> : <LockOpen />}
+            </ListItemIcon>{secure?"Secure Devices":"Insecure Devices"}
+            {props.clients
+                  .filter(client=>secure === (client.config.Rest?.KeyServer !== undefined))
+                  .map(deviceEntry)}
+      </List>;
+    } else {
+      return undefined;
+    }
+  }
 
     function appBar() {
         return <AppBar position="fixed" open={open}>
@@ -151,15 +190,13 @@ export default function SideDrawer(props) {
                     justifyContent: open ? 'initial' : 'center',
                     px: 2.5,
                 }}
-                onClick={() => props.setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'))}
-            >
+                onClick={() => props.setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'))}>
                 <ListItemIcon
                     sx={{
                         minWidth: 0,
                         mr: open ? 3 : 'auto',
                         justifyContent: 'center',
-                    }}
-                >
+                    }}>
                     {props.mode === "dark" ? <Brightness4Icon /> : <Brightness7Icon />}
                 </ListItemIcon>
                 <ListItemText primary={`${props.mode} Mode`} sx={{ opacity: open ? 1 : 0 }} />
@@ -167,27 +204,25 @@ export default function SideDrawer(props) {
         </ListItem>;
     }
 
-    function deviceEntry(client) {
-        return <ListItem key={client.config.deviceid} disablePadding sx={{ display: 'block' }}>
-            <ListItemButton
-                onClick={_evt=>{client.refresh=true;setClient(client);}}
-                sx={{
-                    minHeight: 48,
-                    justifyContent: open ? 'initial' : 'center',
-                    px: 2.5,
-                }}
-            >
-                <ListItemIcon
-                    sx={{
-                        minWidth: 0,
-                        mr: open ? 3 : 'auto',
-                        justifyContent: 'center',
-                    }}
-                >
-                    {client.config?.Rest?.KeyServer ? <Lock /> : <LockOpen />}
-                </ListItemIcon>
-                <ListItemText primary={client.config.devName} sx={{ opacity: open ? 1 : 0 }} />
-            </ListItemButton>
-        </ListItem>
+    function deviceEntry(cclient) {
+      if ((cclient.config.deviceid === client?.config?.deviceid) && (cclient.config !== client.config)) {
+        client.config = cclient.config;
+        setClient(client);
+      }
+      return <ListItem 
+                className={cclient.config.deviceid === client?.config?.deviceid ? "selected" : ""}
+                key={cclient.config.deviceid} 
+                disablePadding 
+                sx={{ display: 'block' }}>
+          <ListItemButton
+              onClick={_evt=>{cclient.refresh=true;setClient(cclient);}}
+              sx={{
+                  minHeight: 48,
+                  justifyContent: open ? 'initial' : 'center',
+                  px: 2.5,
+              }}>
+              <ListItemText primary={cclient.config.devName} sx={{ opacity: open ? 1 : 0 }} />
+          </ListItemButton>
+      </ListItem>
     }
 }

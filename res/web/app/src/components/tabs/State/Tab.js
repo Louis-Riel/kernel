@@ -305,7 +305,7 @@ export default class StatusPage extends Component {
             <ul className='threads'>
                 {data.payload
                      .sort((a,b) => a.value === b.value ? 0 : (a.value < b.value || -1))
-                     .map(stat => <div className='thread'>
+                     .map(stat => <div key="header" className='thread'>
                     <div className='thread-name' style={{color:stat.fill === "black" ? "lightgreen" : stat.fill}}>{stat.name}</div>
                     <div className='thread-value'>{stat.value}<div className='thread-summary'>
                         ({(stat.value/data.payload.reduce((ret,stat) => ret + stat.value,0)*100).toFixed(2)}%)
@@ -370,6 +370,7 @@ export default class StatusPage extends Component {
                      .filter(line => line !== 'ts' && line !== 'IDLE')
                      .sort((a,b)=>this.state.threads[this.state.threads.length-1][a] === this.state.threads[this.state.threads.length-1][b] ? 0 : (this.state.threads[this.state.threads.length-1][a] > this.state.threads[this.state.threads.length-1][b] || -1) )
                      .map((line,idx,arr) => <Area
+                                    key={line}
                                     type="monotone"
                                     fill={this.rainbow(arr.length,idx,line)}
                                     dataKey={line}
@@ -422,15 +423,16 @@ export default class StatusPage extends Component {
                             return pv;
                         }, {}))
                     .map(entry => {
-                        return <div className='subitem'>
+                        return <div key={entry[0]} className='subitem'>
                             <ListItemButton onClick={_ => {
-                                this.setState({
-                                    componentOpenState:{
-                                        ...this.state.componentOpenState,
-                                        [entry[0]]: !this.state.componentOpenState[entry[0]]
-                                    }
-                                })
-                            }}>
+                                this.setState(
+                                    {
+                                        componentOpenState:{
+                                            ...this.state.componentOpenState,
+                                            [entry[0]]: !this.state.componentOpenState[entry[0]]
+                                        }
+                                    })
+                                }}>
                                 <ListItemIcon>
                                     <FontAwesomeIcon icon={this.getComponentIcon(entry[0])}></FontAwesomeIcon>
                                 </ListItemIcon>

@@ -1,9 +1,8 @@
 function route(req,response,events,finder) {
-    console.log(req.url);
     let route = undefined;
-    if ((req.url === "/devices") && (req.method === "GET")) {
+    if (req.url.endsWith("/devices") && (req.method === "GET")) {
         route = finder.findHosts();
-    } else if ((req.url === "/device/secure") && (req.method === "POST")) {
+    } else if (req.url.endsWith("/device/secure") && (req.method === "POST")) {
         route = require("./configurator").secureClients(req,finder,events);
     }
     
@@ -12,7 +11,8 @@ function route(req,response,events,finder) {
              .catch(err=>respond({message:err.message,stack:err.stack},500))
              .finally(()=>response.end());
     } else {
-        respond(404,{ message: "Route not found" });
+        respond({message:"Invalid route"}, 404);
+        response.end();
     }
 
     function respond(res,code) {
@@ -23,5 +23,5 @@ function route(req,response,events,finder) {
 
 exports.serve = (events, finderService, port) => {
     require("http").createServer((req,response) => route(req,response,events,finderService))
-                   .listen(port, ()=>console.log(`Server started on port ${port}`));
+                   .listen(port, ()=>console.log(`Server started on port ${port}.`));
 };

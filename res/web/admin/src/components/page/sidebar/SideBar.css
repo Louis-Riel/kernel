@@ -1,0 +1,4 @@
+li.MuiListItem-root.selected {
+    background-color: dimgrey;
+    color: greenyellow;
+}

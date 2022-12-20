@@ -16,10 +16,14 @@ exports.serve = (eventHost, port) => {
     events.on("clients",esps => clients.forEach(client => client.send(JSON.stringify(esps))));
     new WebSocket.Server({port:port})
                  .on('connection',client => {
-                    events.emit("clientConnected",client);
+                    console.log("Client connected");
                     clients.push(client);
                     client.on("message",(msg) => processMessage(client, msg))
-                    client.on("close",() => clients.splice(clients.findIndex(cl=>cl === client)))
+                    client.on("close",() => {
+                        clients.splice(clients.findIndex(cl=>cl === client));
+                        console.log("Client disconnected");
+                    })
+                    events.emit("clientConnected",client);
                 }).on("listening",_evt=>{
                     events.emit("command",{command:"scan"});
                     console.log(`Web socket running on port ${port}`)

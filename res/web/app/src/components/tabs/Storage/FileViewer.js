@@ -18,10 +18,10 @@ export class FileViewer extends Component {
 
     buildRenderers(retryCount) {
         return new Promise((resolve, reject) => {
-            if (this.props.name.endsWith(".csv") && !this.state?.renderers?.some("trip")) {
+            if (this.props.name.endsWith(".csv") && !this.state?.renderers?.some(renderer => renderer.name === "trip")) {
                 this.setState({ renderers: [{ name: "loading" }] });
                 this.parseCsv(resolve, retryCount, reject);
-            } else if (this.props.name.endsWith(".log") && !this.state?.renderers?.some("trip")) {
+            } else if (this.props.name.endsWith(".log") && !this.state?.renderers?.some(renderer => renderer.name === "trip")) {
                 this.setState({ renderers: [{ name: "loading" }] });
                 this.parseLog(resolve, retryCount, reject);
             } else {
@@ -102,6 +102,13 @@ export class FileViewer extends Component {
     }
 
     render() {
-        return [e("a", { key: "filelink", href: `${this.props.folder}/${this.props.name}` }, this.props.name.split('/').reverse()[0]), this.getRenderers()];
+        return [e("a", { key: "filelink", href: this.getFileLink() }, this.props.name.split('/').reverse()[0]), this.getRenderers()];
+    }
+
+    getFileLink() {
+        if (this.props.selectedDevice?.config?.Rest?.KeyServer) {
+            return `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}${this.props.folder}/${this.props.name}`;
+        }
+        return `${this.props.folder}/${this.props.name}`;
     }
 }

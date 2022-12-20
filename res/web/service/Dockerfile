@@ -6,9 +6,10 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
 
 WORKDIR /usr/src/app
 
-COPY package*.json ./
+COPY package.json /usr/src/app/
 RUN npm install
-COPY . .
+COPY *.js /usr/src/app/
+COPY .env /usr/src/app/ 
 
 EXPOSE 8008 8009
 CMD [ "node", "server.js" ]

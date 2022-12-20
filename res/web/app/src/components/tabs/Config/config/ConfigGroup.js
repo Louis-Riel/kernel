@@ -80,7 +80,7 @@ export default class ConfigGroup extends Component {
 
     renderConfigType(key) {
         return e("div",{key:`${key.class}-control-panel`,className:`edior-pannel ${this.state.currentTab === key.collectionName ? "":"hidden"}`},[
-            e(Button, { key: "add", onClick: evt=> {this.props.config[key.collectionName] ? this.props.config[key.collectionName].push({}) : this.props.config[key.collectionName] = [{}]; this.props.onChange()} }, <FontAwesomeIcon icon={faPlusSquare} />),
+            e(Button, { key: "add", onClick: evt=> {this.props.config[key.collectionName] ? this.props.config[key.collectionName].push({}) : this.props.config[key.collectionName] = [{}]; this.props.onChange(this.props.config)} }, <FontAwesomeIcon icon={faPlusSquare} />),
             e("div",{key:"items", className:`config-cards`}, this.props.config[key.collectionName] ? Object.keys(this.props.config[key.collectionName]).map(idx =>
                 this.renderEditor(key,this.props.config[key.collectionName],idx)) : null)
         ]);

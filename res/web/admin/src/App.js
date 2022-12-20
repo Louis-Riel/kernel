@@ -12,8 +12,12 @@ const finder = new WebSocket(process.env.REACT_APP_FINDER_SERVICE_WS);
 
 function App() {
   
-  const [clients, setClients] = React.useState(undefined);
+  const [clients, setClients] = React.useState([]);
   const [mode, setMode] = React.useState('dark');
+
+  finder.onopen = evt => {
+    finder.send(JSON.stringify({command:"scan"}));
+  }
   
   finder.onmessage = (evt) => {
     try {
@@ -32,7 +36,7 @@ function App() {
     <CssVarsProvider theme={theme}>
       <CssBaseline />
       <Box data-mui-color-scheme={mode}>
-        {clients && <SideDrawer theme={theme} clients={clients} mode={mode} setMode={setMode}></SideDrawer>}
+        {<SideDrawer theme={theme} clients={clients} mode={mode} setMode={setMode}></SideDrawer>}
       </Box>
     </CssVarsProvider>
   );

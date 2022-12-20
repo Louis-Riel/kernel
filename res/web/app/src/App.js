@@ -52,14 +52,14 @@ export default function BasicTabs() {
             { tabStates.map((tab,idx)=><Tab label={tab.name} {...a11yProps(idx)}></Tab>)}
           </Tabs>
         </Box>:null}
-        <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
+        {isStandalone() ? null : <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <DeviceList
               selectedDevice= {selectedDevice}
               onSet={dev=>{
                 updateSelectedDevice(dev);
                 setSelectedDevice(dev);
               }}></DeviceList>
-        </Suspense>
+        </Suspense>}
         {isStandalone() || selectedDevice.config ? 
         <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
           <WebSocketManager

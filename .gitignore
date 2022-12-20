@@ -15,3 +15,4 @@ res/package-lock.json
 res/web/app/src/assets
 res/web/app/admin
 res/web/service/cfg/*
+managed_components
