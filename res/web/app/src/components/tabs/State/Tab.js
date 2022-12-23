@@ -120,32 +120,43 @@ export default class StatusPage extends Component {
         }
         this.updateStatus(requests.pop(), undefined, newState).then(res => {
             document.getElementById("Status").style.opacity = 1;
+            this.setState(prevState=>{ return {
+                error: null,
+                status: {
+                    ...prevState.status,
+                    [res.path]: {...prevState.status[res.path],value: Array.isArray(res.stat) ? {[res.path]:res.stat} : res.stat}
+                }
+            }});
+
             if (res.path === "tasks") {
                 this.setState(prevState => {return {
-                    error: null,
                     threads: [...prevState.threads.filter((_val,idx,arr) => arr.length >= 200 ? idx > arr.length - 200 : true), 
-                             res.stat.reduce((ret,thread) => {if (thread.Name !== "IDLE") {ret[thread.Name] = thread.Runtime;}; return ret}, {ts: new Date().getTime()})],
+                             res.stat.reduce((ret,thread) => {if (thread.Name !== "IDLE") {ret[thread.Name] = thread.Runtime;}; return ret}, {ts: new Date().getTime()})]
+                    }
+                });
+            }
+            if (res.path === "components") {
+                this.setState(prevState => { return {
                     status: {
-                        ...this.state.status,
-                        [res.path]: {...this.state.status[res.path],value: {tasks:res.stat}}
+                        ...prevState.status,
+                        storage: {
+                            ...prevState.status.storage,
+                            value: Object.entries(res.stat)
+                                         .filter(entry => ['sdcard','lfs'].includes(entry[0]))
+                                         .reduce((ret,entry) => {
+                                            ret[entry[0]] = entry[1];
+                                            return ret;
+                                         },{})
+                        }
                     }
                 }});
-            } else {
-                this.setState({
-                    error: null,
-                    status: Object.keys(this.state.status)
-                                .reduce((pv,cv)=>{
-                                pv[cv]=this.state.status[cv]; 
-                                pv[cv].value= Array.isArray(newState[cv]?.value) ? 
-                                                                {[cv]:newState[cv].value} : 
-                                                                (newState[cv]?.value || pv[cv]?.value);
-                                return pv;},{})});
             }
 
             if (requests.length > 0) {
                 this.updateStatuses(requests, newState);
             }
         }).catch(err => {
+            console.error(err);
             document.getElementById("Status").style.opacity = 0.5
             //clearTimeout(timer);
             if (err.code !== 20) {

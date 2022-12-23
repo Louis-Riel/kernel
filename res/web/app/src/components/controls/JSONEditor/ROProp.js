@@ -1,6 +1,6 @@
 import {createElement as e, Component} from 'react';
 import {Tooltip} from '@mui/material';
-import { IsNumberValue, isFloat, genUUID, IsBooleanValue, IsDatetimeValue, degToRad} from '../../../utils/utils';
+import { IsNumberValue, isFloat, genUUID, IsBooleanValue, IsDatetimeValue, degToRad, isStandalone} from '../../../utils/utils';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEraser, faLineChart } from '@fortawesome/free-solid-svg-icons';
 import * as Recharts from "recharts";
@@ -36,7 +36,7 @@ export default class ROProp extends Component {
         }
         
         if ((this.props.name === "name") && (val.match(/\/.*\.[a-z]{2,3}$/))) {
-            val = e("a", { href: `${val}` }, val.split('/').reverse()[0]);
+            val = e("a", { href: isStandalone() ? val : `${this.props.selectedDevice.config.devName}${val}` }, val.split('/').reverse()[0]);
         }
         return val;
     }
