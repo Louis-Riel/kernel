@@ -125,8 +125,8 @@ export default class TripViewer extends Component {
             for (let tileX = this.windowTiles.leftTile; tileX <= this.windowTiles.rightTile; tileX++) {
                 for (let tileY = this.windowTiles.bottomTile; tileY <= this.windowTiles.topTile; tileY++) {
                     if (!this.props.cache.images[this.state.zoomlevel] ||
-                        !this.props.cache.images[this.zoomlevel][tileX] || 
-                        !this.props.cache.images[this.zoomlevel][tileX][tileY]){
+                        !this.props.cache.images[this.state.zoomlevel][tileX] || 
+                        !this.props.cache.images[this.state.zoomlevel][tileX][tileY]){
                         await this.addTileToCache(tileX, tileY).catch(reject);
                     } else {
                         await this.getTileFromCache(tileX, tileY).catch(reject);
@@ -138,8 +138,8 @@ export default class TripViewer extends Component {
                     for (let tileX = this.trip.leftTile; tileX <= this.trip.rightTile; tileX++) {
                         for (let tileY = this.trip.bottomTile; tileY <= this.trip.topTile; tileY++) {
                             if (!this.props.cache.images[this.state.zoomlevel] ||
-                                !this.props.cache.images[this.zoomlevel][tileX] || 
-                                !this.props.cache.images[this.zoomlevel][tileX][tileY]){
+                                !this.props.cache.images[this.state.zoomlevel][tileX] || 
+                                !this.props.cache.images[this.state.zoomlevel][tileX][tileY]){
                                 this.addTileToCache(tileX, tileY).catch(reject);
                             }        
                         }
@@ -278,10 +278,10 @@ export default class TripViewer extends Component {
                 if (!this.props.cache.images[this.state.zoomlevel]) {
                     this.props.cache.images[this.state.zoomlevel] = {};
                 }
-                if (!this.props.cache.images[this.zoomlevel][tileX]) {
-                    this.props.cache.images[this.zoomlevel][tileX] = {};
+                if (!this.props.cache.images[this.state.zoomlevel][tileX]) {
+                    this.props.cache.images[this.state.zoomlevel][tileX] = {};
                 }
-                this.props.cache.images[this.zoomlevel][tileX][tileY] = tileImage;
+                this.props.cache.images[this.state.zoomlevel][tileX][tileY] = tileImage;
 
                 tileImage.onload = (elem) => {
                     resolve(this.mapCanvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height));
@@ -292,11 +292,11 @@ export default class TripViewer extends Component {
 
     getTileFromCache(tileX,tileY) {
         return new Promise((resolve,reject) => {
-            let tileImage = this.props.cache.images[this.zoomlevel][tileX][tileY];
+            let tileImage = this.props.cache.images[this.state.zoomlevel][tileX][tileY];
             try {
                 resolve(this.mapCanvas.drawImage(tileImage, tileImage.posX * tileImage.width, tileImage.posY * tileImage.height));
             } catch (err) {
-                this.props.cache.images[this.zoomlevel][tileX][tileY] = null;
+                this.props.cache.images[this.state.zoomlevel][tileX][tileY] = null;
                 reject(err);
             }
         });
@@ -305,7 +305,7 @@ export default class TripViewer extends Component {
     downloadTile(tileX,tileY) {
         return new Promise((resolve,reject) => {
             let newImg;
-            chipRequest(`https://tile.openstreetmap.de/${this.zoomlevel}/${tileX}/${tileY}.png`,{skipHttpPrefix:true})
+            chipRequest(`https://tile.openstreetmap.de/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{skipHttpPrefix:true})
                 .then(resp => resp.blob())
                 .then(imgData => chipRequest(`/sdcard/web/tiles/${this.state.zoomlevel}/${tileX}/${tileY}.png`,{
                     method: 'put',
@@ -330,7 +330,7 @@ export default class TripViewer extends Component {
                 .then(resp => resolve(resp.status >= 300? this.downloadTile(tileX,tileY):resp.blob()))
                 .catch(err => {
                     if (retryCount > 3) {
-                        reject({error:`Error in downloading ${this.zoomlevel}/${tileX}/${tileY}`});
+                        reject({error:`Error in downloading ${this.state.zoomlevel}/${tileX}/${tileY}`});
                     } else {
                         resolve(this.getTile(tileX,tileY,retryCount++));
                     }
@@ -375,8 +375,8 @@ export default class TripViewer extends Component {
         return {
             tileX: this.lon2tile(point.longitude, this.state.zoomlevel),
             tileY: this.lat2tile(point.latitude, this.state.zoomlevel),
-            posTileX: this.lon2x(point.longitude,this.zoomlevel) - this.lon2tile(point.longitude, this.state.zoomlevel),
-            posTileY: this.lat2y(point.latitude,this.zoomlevel) - this.lat2tile(point.latitude, this.state.zoomlevel),
+            posTileX: this.lon2x(point.longitude,this.state.zoomlevel) - this.lon2tile(point.longitude, this.state.zoomlevel),
+            posTileY: this.lat2y(point.latitude,this.state.zoomlevel) - this.lat2tile(point.latitude, this.state.zoomlevel),
             ...point
         };
     }
