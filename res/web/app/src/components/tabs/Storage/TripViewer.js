@@ -106,11 +106,11 @@ export default class TripViewer extends Component {
     drawTripVisibleTiles() {
         return new Promise(async (resolve,reject)=>{
             this.popupWidget.width=(this.rightTile-this.leftTile)*256;
-            this.popupWidget.height=(this.topTile-this.state.bottomTile)*256;
+            this.popupWidget.height=(this.topTile-this.bottomTile)*256;
             this.mapWidget.width=(this.rightTile-this.leftTile)*256;
-            this.mapWidget.height=(this.topTile-this.state.bottomTile)*256;
+            this.mapWidget.height=(this.topTile-this.bottomTile)*256;
             this.tripWidget.width=(this.rightTile-this.leftTile)*256;
-            this.tripWidget.height=(this.topTile-this.state.bottomTile)*256;
+            this.tripWidget.height=(this.topTile-this.bottomTile)*256;
 
             this.mapCanvas.fillStyle = "black";
             this.mapCanvas.fillRect(0,0,window.innerWidth,window.innerHeight);
@@ -122,8 +122,8 @@ export default class TripViewer extends Component {
                 this.mapWidget.parentElement.scrollTo((elementRect.width/2)-512, (elementRect.height/2)-256);
             }
 
-            for (let tileX = this.windowTiles.leftTile; tileX <= this.state.windowTiles.rightTile; tileX++) {
-                for (let tileY = this.windowTiles.bottomTile; tileY <= this.state.windowTiles.topTile; tileY++) {
+            for (let tileX = this.windowTiles.leftTile; tileX <= this.windowTiles.rightTile; tileX++) {
+                for (let tileY = this.windowTiles.bottomTile; tileY <= this.windowTiles.topTile; tileY++) {
                     if (!this.props.cache.images[this.state.zoomlevel] ||
                         !this.props.cache.images[this.zoomlevel][tileX] || 
                         !this.props.cache.images[this.zoomlevel][tileX][tileY]){
