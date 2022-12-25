@@ -86,14 +86,20 @@ export default class TripViewer extends Component {
             center: {
                 tileX: this.lon2tile(this.longitude, this.state.zoomlevel),
                 tileY: this.lat2tile(this.latitude, this.state.zoomlevel),
+            },
+            windowTiles: {
+                leftTile: this.lon2tile(this.longitude, this.state.zoomlevel) - Math.floor(this.maxXTiles/2),
+                rightTile: this.lon2tile(this.longitude, this.state.zoomlevel) + Math.floor(this.maxXTiles/2),
+                bottomTile: this.lat2tile(this.latitude, this.state.zoomlevel) - Math.floor(this.maxYTiles/2),
+                topTile: this.lat2tile(this.latitude, this.state.zoomlevel) + Math.floor(this.maxYTiles/2)
             }
         }
-        this.windowTiles.leftTile = this.state.windowTiles.center.tileX - Math.floor(this.maxXTiles/2);
-        this.windowTiles.rightTile = this.state.windowTiles.center.tileX + Math.floor(this.maxXTiles/2);
-        this.windowTiles.bottomTile = this.state.windowTiles.center.tileY - Math.floor(this.maxYTiles/2);
-        this.windowTiles.topTile = this.state.windowTiles.center.tileY + Math.floor(this.maxYTiles/2);
-        this.windowTiles.XTiles = this.state.windowTiles.rightTile-this.state.windowTiles.leftTile+1;
-        this.windowTiles.YTiles = this.state.windowTiles.topTile-this.state.windowTiles.bottomTile+1;
+        // this.windowTiles.leftTile = this.state.windowTiles.center.tileX - Math.floor(this.maxXTiles/2);
+        // this.windowTiles.rightTile = this.state.windowTiles.center.tileX + Math.floor(this.maxXTiles/2);
+        // this.windowTiles.bottomTile = this.state.windowTiles.center.tileY - Math.floor(this.maxYTiles/2);
+        // this.windowTiles.topTile = this.state.windowTiles.center.tileY + Math.floor(this.maxYTiles/2);
+        // this.windowTiles.XTiles = this.state.windowTiles.rightTile-this.state.windowTiles.leftTile+1;
+        // this.windowTiles.YTiles = this.state.windowTiles.topTile-this.state.windowTiles.bottomTile+1;
         this.setState(this.state);
     }
 
