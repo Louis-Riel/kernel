@@ -119,3 +119,18 @@ span.MuiTooltip-arrow {
 .error {
     color: red;
 }
+
+.lightbox.opened {
+    position: absolute;
+    top: 0px;
+    background-color: black;
+}
+
+canvas.mapCanvas {
+    position: absolute;
+    top: 63px;
+}
+
+tr.file>td>div.trip>svg {
+    height: 15px;
+}
