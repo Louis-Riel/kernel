@@ -24,7 +24,15 @@
 
 const char* logPath = "/lfs/logs";
 
+enum sdtype_t {
+  UNDEFINED,
+  NOSD,
+  SPI,
+  MMC
+};
+
 static bool spiInitialized = false;
+static sdtype_t sdType = sdtype_t::UNDEFINED;
 
 sdmmc_host_t host = SDSPI_HOST_DEFAULT();
 esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -137,6 +145,24 @@ const char *getErrorMsg(int32_t errCode)
   return "Invalid error code";
 }
 
+bool initSDCard(bool log) {
+  if (sdType == sdtype_t::UNDEFINED) {
+    ESP_LOGD(__FUNCTION__,"Determining SD Type");
+    AppConfig *cfg = AppConfig::GetAppConfig()->GetConfig("/sdcard");
+    if (cfg->HasProperty("ClkPin")) {
+      ESP_LOGD(__FUNCTION__,"SD Card reader config is present as %s",cfg->HasProperty("BusWidth") ? "sdtype_t::MMC" : "sdtype_t::SPI");
+      sdType = cfg->HasProperty("BusWidth") ? sdtype_t::MMC : sdtype_t::SPI;
+    } else {
+      ESP_LOGD(__FUNCTION__,"No SD Card reader configured");
+      sdType = sdtype_t::NOSD;
+    }
+  }
+  if (sdType != sdtype_t::NOSD) {
+    return sdType == sdtype_t::MMC ? initSDMMCSDCard(log) : initSPISDCard(log);
+  }
+  return false;
+}
+
 bool initSDMMCSDCard(bool log)
 {
   xSemaphoreTake(storageSema,portMAX_DELAY);
@@ -159,38 +185,47 @@ bool initSDMMCSDCard(bool log)
 
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot_config.width = 1;
+    if (cfg->HasProperty("BusWidth"))
+    {
+      slot_config.width = cfg->GetIntProperty("BusWidth");
 
-    gpio_set_pull_mode(cfg->GetPinNoProperty("MisoPin"), GPIO_PULLUP_ONLY);
-    gpio_set_pull_mode(cfg->GetPinNoProperty("MosiPin"), GPIO_PULLUP_ONLY);
-    gpio_set_pull_mode(cfg->GetPinNoProperty("ClkPin"), GPIO_PULLUP_ONLY);
-    gpio_set_pull_mode(cfg->GetPinNoProperty("CsPin"), GPIO_PULLUP_ONLY);
+      // if (slot_config.width == 4 ){
+      //   slot_config.clk = cfg->GetIntProperty("ClkPin") 
+      //   slot_config.cmd = cfg->GetIntProperty("CmdPin") 
+      //   slot_config.d0 = cfg->GetIntProperty("D0Pin") 
+      //   slot_config.d1 = cfg->GetIntProperty("D1Pin") 
+      //   slot_config.d2 = cfg->GetIntProperty("D2Pin") 
+      //   slot_config.d3 = cfg->GetIntProperty("D3Pin") 
+      //   slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+      // }
 
-    ESP_LOGI(__FUNCTION__, "Mounting filesystem");
-    ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
+      ESP_LOGI(__FUNCTION__, "Mounting filesystem");
+      ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
 
-    ESP_LOGI(__FUNCTION__, "Initializing SD card cd:%d wp:%d",slot_config.gpio_cd,slot_config.gpio_wp);
+      ESP_LOGI(__FUNCTION__, "Initializing SD card cd:%d wp:%d",slot_config.gpio_cd,slot_config.gpio_wp);
 
-    if (ret != ESP_OK) {
-        sdcState->SetStateProperty("state", item_state_t::ERROR);
-        if (ret == ESP_FAIL) {
-            ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
-                    "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
-        } else {
-            ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
-                    "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
-        }
-    } else {
-      sdmmc_card_print_info(stdout, card);
-      sdcState->SetStateProperty("state", item_state_t::ACTIVE);
+      if (ret != ESP_OK) {
+          sdcState->SetStateProperty("state", item_state_t::ERROR);
+          if (ret == ESP_FAIL) {
+              ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
+                      "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
+          } else {
+              ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
+                      "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+          }
+      } else {
+        sdmmc_card_print_info(stdout, card);
+        sdcState->SetStateProperty("state", item_state_t::ACTIVE);
+      }
+      ESP_LOGI(__FUNCTION__, "Filesystem mounted");
+      // Card has been initialized, print its properties
     }
-    ESP_LOGI(__FUNCTION__, "Filesystem mounted");
-    // Card has been initialized, print its properties
   }
   numSdCallers++;
   xSemaphoreGive(storageSema);
   return ret==ESP_OK;
 }
+
 bool deinitSDMMCSDCard(bool log)
 {
   xSemaphoreTake(storageSema,portMAX_DELAY);
@@ -284,6 +319,13 @@ bool deinitSpiff(bool log)
   return true;
 }
 
+bool deinitSDCard(bool log) {
+  if (sdType != sdtype_t::NOSD) {
+    return sdType == sdtype_t::MMC ? deinitSDMMCSDCard(log) : deinitSPISDCard(log);
+  }
+  return false;
+}
+
 bool deinitSPISDCard(bool log)
 {
   log=true;
@@ -331,7 +373,7 @@ bool deinitSPISDCard(bool log)
 
 bool deinitStorage(uint8_t flags)
 {
-  return (flags & SPIFF_FLAG ? deinitSpiff(false) : true) && (flags & SDCARD_FLAG ? deinitSPISDCard(false) : true);
+  return (flags & SPIFF_FLAG ? deinitSpiff(false) : true) && (flags & SDCARD_FLAG ? deinitSDCard(false) : true);
   //return deinitSDMMCSDCard(log);
 }
 
@@ -680,7 +722,7 @@ uint8_t initStorage() {
 
 uint8_t initStorage(bool log)
 {
-  return (initSpiff(log) ? SPIFF_FLAG : 0) + (initSPISDCard(log) ? SDCARD_FLAG : 0);
+  return (initSpiff(log) ? SPIFF_FLAG : 0) + (initSDCard(log) ? SDCARD_FLAG : 0);
   //return initSpiff(log) && initSDMMCSDCard(log);
 }
 

@@ -210,7 +210,7 @@ bool deinitSpiff(bool);
 bool initSpiff(bool);
 bool initSPISDCard(bool);
 bool deinitSPISDCard(bool);
-bool initSDMMCSDCard();
+bool initSDMMCSDCard(bool);
 char* indexOf(const char* str, const char* key);
 char* lastIndexOf(const char* str, const char* key);
 bool endsWith(const char* str,const char* val) ;
