@@ -1,4 +1,5 @@
 #include "route.h"
+#include "mbedtls/md.h"
 
 #define NUM_KEYS 5
 #define KEY_SERVER_LEN 50
@@ -29,6 +30,10 @@ public:
 private:
 
     static esp_err_t HttpEventHandler(esp_http_client_event_t *evt);
+    static const mbedtls_md_info_t* md_info;
+    mbedtls_md_context_t* ctx;
+    static mbedtls_md_context_t ctx1;
+    static mbedtls_md_context_t ctx2;
     char* keyServerUrl;
     
     httpd_uri_t* uri;

@@ -6,8 +6,13 @@ const char* keyServer = nullptr;
 const char* keyServerPath = nullptr;
 const char* keyServerCert = nullptr;
 const char* hostName = nullptr;
+const char* hashHeaders[3] = {"TheHashTime","TheHashRandom","TheHashKey"};
 char* theHashes = (char*)dmalloc(HASH_LEN * 2);
 char* theHeaders = (char*)dmalloc(HEADER_MAX_LEN * 2);
+const mbedtls_md_info_t* PasswordEntry::md_info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+mbedtls_md_context_t PasswordEntry::ctx1;
+mbedtls_md_context_t PasswordEntry::ctx2;
+
 int keyServerPort = 0;
 
 PasswordEntry::PasswordEntry(AppConfig* config, AppConfig* restState, AppConfig* urlState, AppConfig* ppwdState, httpd_uri_t* curi) {
@@ -20,8 +25,13 @@ PasswordEntry::PasswordEntry(AppConfig* config, AppConfig* restState, AppConfig*
         keyServerPort=serverCfg->GetIntProperty("keyServerPort");
         delete serverCfg;
         ESP_LOGV(__FUNCTION__,"Initial Config Completed server:%s path:%s hostname:%s port:%d cert:%s",keyServer,keyServerPath,hostName,keyServerPort,keyServerCert);
+        mbedtls_md_init(&ctx1);
+        mbedtls_md_setup(&ctx1, this->md_info, 0);
+        mbedtls_md_init(&ctx2);
+        mbedtls_md_setup(&ctx2, this->md_info, 0);
     }
-    keyServerUrl = (char*)dmalloc(1024);
+
+    keyServerUrl = (char*)dmalloc(255);
     pwdState = ppwdState;
 
     if (!restState->HasProperty("BytesOut")) {
@@ -67,6 +77,8 @@ PasswordEntry::PasswordEntry(AppConfig* config, AppConfig* restState, AppConfig*
 PasswordEntry::~PasswordEntry()
 {
     delete pwdState;
+    mbedtls_md_free(&ctx1);
+    mbedtls_md_free(&ctx2);
     ESP_LOGV(__FUNCTION__,"Destructing");
 }
 
@@ -270,46 +282,41 @@ esp_err_t PasswordEntry::CheckTheSum(httpd_req_t *req) {
     size_t hlen = httpd_req_get_hdr_value_len(req, "TheHash");
     if (hlen > 1) {
         auto* theHash = xPortGetCoreID() ? theHashes : theHashes + HASH_LEN;
+        ctx = xPortGetCoreID() ? &ctx1 : &ctx2;
         if (!theHash) {
             ESP_LOGE(__FUNCTION__,"Can't allocate hash");
             return ESP_FAIL;
         }
         if (httpd_req_get_hdr_value_str(req, "TheHash", theHash, 65) == ESP_OK) {
             ESP_LOGV(__FUNCTION__,"Hash:%s(%s)",req->uri, theHash);
-            mbedtls_md_context_t ctx;
-            mbedtls_md_type_t md_type = MBEDTLS_MD_SHA256;
-
-            mbedtls_md_init(&ctx);
-            mbedtls_md_setup(&ctx, mbedtls_md_info_from_type(md_type), 0);
-            mbedtls_md_starts(&ctx);
+            mbedtls_md_starts(ctx);
 
             const char* val = GetMethodName((httpd_method_t)req->method);
 
-            mbedtls_md_update(&ctx, (const unsigned char*)val, strlen(val));
+            mbedtls_md_update(ctx, (const unsigned char*)val, strlen(val));
             ESP_LOGV(__FUNCTION__,"method(%s)",val);
-            mbedtls_md_update(&ctx, (const unsigned char*)"/", 1);
-            mbedtls_md_update(&ctx, (const unsigned char*)hostName, strlen(hostName));
-            mbedtls_md_update(&ctx, (const unsigned char*)req->uri, strlen(req->uri));
+            mbedtls_md_update(ctx, (const unsigned char*)"/", 1);
+            mbedtls_md_update(ctx, (const unsigned char*)hostName, strlen(hostName));
+            mbedtls_md_update(ctx, (const unsigned char*)req->uri, strlen(req->uri));
             ESP_LOGV(__FUNCTION__,"path(/%s%s)",hostName,req->uri);
 
             auto* theHeader = xPortGetCoreID() ? theHeaders : theHeaders + HEADER_MAX_LEN;
             
-            for (const char* headerName : {"TheHashTime","TheHashRandom","TheHashKey"}) {
+            for (const char* headerName : hashHeaders) {
                 hlen = httpd_req_get_hdr_value_len(req, headerName);
                 if (hlen && (hlen < 254) && (httpd_req_get_hdr_value_str(req, headerName, theHeader, HEADER_MAX_LEN) == ESP_OK)) {
-                    mbedtls_md_update(&ctx, (const unsigned char*)theHeader, strlen(theHeader));
+                    mbedtls_md_update(ctx, (const unsigned char*)theHeader, strlen(theHeader));
                     ESP_LOGV(__FUNCTION__,"%s(%s)",headerName,theHeader);
                 } else {
                     ESP_LOGE(__FUNCTION__,"Can't get header for %s",headerName);
                     ret=ESP_FAIL;
                 }
             }
-            mbedtls_md_update(&ctx, (const unsigned char*)GetPassword(), strlen(GetPassword()));
+            mbedtls_md_update(ctx, (const unsigned char*)GetPassword(), strlen(GetPassword()));
             ESP_LOGV(__FUNCTION__,"password(%s)",GetPassword());
 
             uint8_t shaResult[32];
-            mbedtls_md_finish(&ctx, shaResult);
-            mbedtls_md_free(&ctx);
+            mbedtls_md_finish(ctx, shaResult);
             for (uint8_t i = 0; i < sizeof(shaResult); ++i)
             {
                 sprintf(theHeader+(i*2),"%02x", shaResult[i]);
