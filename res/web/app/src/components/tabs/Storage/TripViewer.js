@@ -80,8 +80,8 @@ export default class TripViewer extends Component {
         this.rightlatitude = this.points.reduce((a,b)=>a>b.latitude?a:b.latitude,-99999);
         this.toplongitude = this.points.reduce((a,b)=>a<b.longitude?a:b.longitude,99999);
         this.bottomlongitude = this.points.reduce((a,b)=>a>b.longitude?a:b.longitude,-99999);
-        this.latitude= this.state.leftlatitude+(this.state.rightlatitude-this.state.leftlatitude)/2;
-        this.longitude= this.state.toplongitude+(this.state.bottomlongitude-this.state.toplongitude)/2;
+        this.latitude= this.leftlatitude+(this.rightlatitude-this.leftlatitude)/2;
+        this.longitude= this.toplongitude+(this.bottomlongitude-this.toplongitude)/2;
         this.windowTiles = {
             center: {
                 tileX: this.lon2tile(this.longitude, this.state.zoomlevel),
