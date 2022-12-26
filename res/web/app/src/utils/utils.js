@@ -64,13 +64,6 @@ export function fromVersionedToPlain(obj, level = "") {
   return ret;
 }
 
-function isObject(obj) {
-  if (obj && obj.constructor === Object) {
-    return Object.keys(obj => obj === "name" || obj === "value").length === 2;
-  }
-  return false;
-}
-
 export function fromPlainToVersionned(obj, vobj, level = "") {
   return Object.entries(obj).reduce((ret,entry) => {
     let fld = entry[0];
@@ -111,7 +104,7 @@ export function getAnims() {
 }
 
 export function isStandalone() {
-  return window.location.protocol !== "https:";
+  return window.location.protocol !== "https:" && window.location.port < 10000;
 }
 
 let selectedDevice = undefined;
@@ -142,7 +135,7 @@ export function chipRequest(requestInfo, params) {
         getAnims().push(reqAnim);
       }
   
-      let httpPrefix = selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${selectedDevice.config.devName}` : "";
+      let httpPrefix = selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}${selectedDevice.config.devName}` : "";
       fetch(`${params?.skipHttpPrefix ? '' : httpPrefix}${requestInfo}`,params).then(resp => {
         let chipResponseAnim = getAnims().filter(anim => anim.type === "post" && anim.from === "chip");
         let inSpot = getInSpot(chipResponseAnim, "chip");

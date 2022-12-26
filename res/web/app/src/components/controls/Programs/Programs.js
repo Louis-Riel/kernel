@@ -7,7 +7,7 @@ import { faChevronDown, faChevronUp, faComputer, faSquarePen, faTasks } from '@f
 import { methods } from '../../../config/config'
 
 export default function Programs(params) {
-    const [programs, setPrograms] = useState(params.programs || []);
+    const programs = params.programs || [];
     const [state, setState] = useState(false);
 
     return  <List className='pgms'>
@@ -30,37 +30,34 @@ export default function Programs(params) {
 }
 
 export function Program(props) {
-    const [program, setProgram] = useState(props.program);
     const [state, setState] = useState(false);
 
-    if (program === undefined) {
+    if (props.program === undefined) {
         return undefined;
     }
 
-    return <ListItem className='program'>
+    return <ListItem className='props.program'>
         <ListItemButton onClick={_ => setState(!state) }>
             <ListItemIcon>
                 <FontAwesomeIcon icon={faComputer}></FontAwesomeIcon>
             </ListItemIcon>
-            <ListItemText primary={program.name} />
+            <ListItemText primary={props.program.name} />
             {(state || false) === false ? <FontAwesomeIcon icon={faChevronUp}></FontAwesomeIcon> :
                                         <FontAwesomeIcon icon={faChevronDown}></FontAwesomeIcon>}
         </ListItemButton>
         <Collapse in={state} timeout="auto">
-                <InlineThreads inLineThreads={program.inLineThreads} config={props.config}></InlineThreads>
+                <InlineThreads inLineThreads={props.program.inLineThreads} config={props.config}></InlineThreads>
         </Collapse>
     </ListItem>;
 }
 
 export function InlineThreads(props) {
-    const [threads,setThreads] = useState(props.inLineThreads);
-
-    if (threads === undefined) {
+    if (props.inLineThreads === undefined) {
         return undefined;
     }
 
-    return <List className="inLineThreads">
-        {threads.map(thread => <InLineThread inLineThread={thread} config={props.config}></InLineThread>)}
+    return <List className="inLineprops.inLineThreads">
+        {props.inLineThreads.map(thread => <InLineThread inLineThread={thread} config={props.config}></InLineThread>)}
     </List>;
 }
 

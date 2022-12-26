@@ -11,8 +11,13 @@ export default class DeviceList extends Component {
         this.state = {
             devices : []
         }
-        this.finder = new WebSocket(process.env.REACT_APP_FINDER_SERVICE_WS)
+    }
+
+    componentDidMount() {
+        this.finder = new WebSocket(process.env.REACT_APP_FINDER_SERVICE_WS);
         this.finder.onmessage = this.onMessage.bind(this);
+        this.finder.onerror = console.error;
+        this.finder.onclose = console.log;
     }
 
     onMessage(evt) {
@@ -73,11 +78,11 @@ export default class DeviceList extends Component {
             {this.state?.devices?.length > 0 ?
             <Select
                 className="devices"
-                value= {this.props.selectedDevice.config ? this.state.devices.find(device => device.config.deviceid === this.props.selectedDevice.config.deviceid) : null}
+                value= {this.props.selectedDevice.config ? this.state.devices.find(device => device.config.deviceid === this.props.selectedDevice.config.deviceid) : undefined}
                 onChange= {(event) => this.props.onSet(event.target.value)}>
-                    <MenuItem value={null}>Select a device</MenuItem>
+                    <MenuItem key={"noselection"} value={undefined}>Select a device</MenuItem>
                     {this.state?.devices
-                        .map(device => <MenuItem value={device}>{`${device.config.devName}(${device.config.deviceid})`}</MenuItem>)}
+                        .map(device => <MenuItem key={device.config.devName} value={device}>{`${device.config.devName}(${device.config.deviceid})`}</MenuItem>)}
             </Select>:undefined}
             {this.state.scanning ? <CircularProgress variant="determinate" onClick={_evt => this.setState({scanning:false})} value={this.state.scanProgress*100}>33</CircularProgress > : 
                                    <Button onClick={_evt=>this.getDevices()}><FontAwesomeIcon icon={faMagnifyingGlass}></FontAwesomeIcon></Button>}

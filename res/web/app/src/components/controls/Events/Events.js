@@ -7,7 +7,7 @@ import { faChevronDown, faChevronUp, faJedi, faMagicWandSparkles } from '@fortaw
 import { methods } from '../../../config/config'
 
 export default function Events(params) {
-    const [events, setEvents] = useState(params.events || []);
+    const events = params.events;
     const [state, setState] = useState(false);
 
     return <List className='pgms'>

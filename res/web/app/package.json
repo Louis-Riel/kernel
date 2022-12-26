@@ -33,7 +33,7 @@
     "webpack": "^5.74.0"
   },
   "scripts": {
-    "start": "react-scripts start --host 0.0.0.0",
+    "start": "set \"PUBLIC_URL=https://192.168.1.138/\" && set \"GENERATE_SOURCEMAP=true\" && REACT_APP_API_URI=https://192.168.1.109/ HTTPS=true react-scripts start --host 0.0.0.0",
     "build": "set \"PUBLIC_URL=https://192.168.1.109/\" && set \"REACT_APP_API_URI=https://192.168.1.109/\" && set \"GENERATE_SOURCEMAP=true\" && react-scripts build",
     "buildsd": "set \"PUBLIC_URL=http://192.168.1.108/sdcard/admin\" && set \"GENERATE_SOURCEMAP=false\"  && set \"REACT_APP_API_URI=http://192.168.1.108\" && react-scripts build",
     "test": "react-scripts test",

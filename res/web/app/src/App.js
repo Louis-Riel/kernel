@@ -44,12 +44,12 @@ export default function BasicTabs() {
   };
 
   return (
-    <Box class="App">
+    <Box className="App">
       <div className="control-bar">
         {isStandalone() || selectedDevice.config ? 
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={value} onChange={tabChange} aria-label="The tabs">
-            { tabStates.map((tab,idx)=><Tab label={tab.name} {...a11yProps(idx)}></Tab>)}
+            { tabStates.map((tab,idx)=><Tab key={tab.name} label={tab.name} {...a11yProps(idx)}></Tab>)}
           </Tabs>
         </Box>:null}
         {isStandalone() ? null : <Suspense fallback={<FontAwesomeIcon className='fa-spin-pulse' icon={faSpinner} />}>
