@@ -129,6 +129,7 @@ protected:
   static esp_err_t config_template_handler(httpd_req_t *req);
   static esp_err_t ws_handler(httpd_req_t *req);
   static esp_err_t sendFile(httpd_req_t *req, const char *path);
+  static esp_err_t stream_handler(httpd_req_t *req);
 
   static esp_err_t HandleSystemCommand(httpd_req_t *req);
   static esp_err_t HandleStatusChange(httpd_req_t *req);
@@ -162,7 +163,7 @@ private:
   cJSON* jBytesOut;
   cJSON* jScanning;
 
-  httpd_uri_t restUris[12] =
+  httpd_uri_t restUris[13] =
       {
           {.uri = "/templates/config*",
            .method = HTTP_POST,
@@ -244,6 +245,13 @@ private:
           {.uri = "/lfs/*",
            .method = HTTP_PUT,
            .handler = download_handler,
+           .user_ctx = nullptr,
+           .is_websocket = false,
+           .handle_ws_control_frames = false,
+           .supported_subprotocol = nullptr},
+          {.uri = "/stream/*",
+           .method = HTTP_POST,
+           .handler = stream_handler,
            .user_ctx = nullptr,
            .is_websocket = false,
            .handle_ws_control_frames = false,

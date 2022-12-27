@@ -17,6 +17,7 @@
 #include <cstring>
 #include <sys/dirent.h>
 #include "../../main/utils.h"
+#include "camera.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -1411,4 +1412,21 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 6;
     deinitSpiff(false);
     return httpd_resp_send(req, "BADMD5", 6);
+}
+
+esp_err_t TheRest::stream_handler(httpd_req_t *req) {
+    ESP_LOGI(__FUNCTION__,"Stream request");
+    if (startsWith(req->uri, "/stream") && (req->method == HTTP_POST)) {
+        ManagedDevice **dev = ManagedDevice::GetRunningInstances();
+        for (uint32_t idx = 0; idx < ManagedDevice::GetNumRunningInstances(); idx++) {
+            if (dev[idx] && (strcmp("Camera", dev[idx]->eventBase) == 0) && endsWith(req->uri,dev[idx]->GetName())) {
+                return ((Camera*) dev[idx])->streamVideo(req);
+            }
+        }
+        ESP_LOGI(__FUNCTION__,"Camera not found:%s",req->uri);
+        return httpd_resp_send_404(req);
+    } else {
+        ESP_LOGI(__FUNCTION__,"Invalid Camrea request:%s",req->uri);
+        return httpd_resp_send_500(req);
+    }
 }

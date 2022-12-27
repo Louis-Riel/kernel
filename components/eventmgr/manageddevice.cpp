@@ -3,6 +3,7 @@
 #include "../../components/pins/pins.h"
 #include "../../components/servo/servo.h"
 #include "../../components/apa102/apa102.h"
+#include "../../components/camera/include/camera.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -80,6 +81,7 @@ cJSON* ManagedDevice::GetConfigTemplates(){
     cJSON_AddItemToArray(configTemplates, Pin::BuildConfigTemplate());
     cJSON_AddItemToArray(configTemplates, Servo::BuildConfigTemplate());
     cJSON_AddItemToArray(configTemplates, Apa102::BuildConfigTemplate());
+    cJSON_AddItemToArray(configTemplates, Camera::BuildConfigTemplate());
   }
   return configTemplates;
 }

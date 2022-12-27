@@ -37,6 +37,7 @@
 #include "../components/bluetooth/bt.h"
 #include "../components/servo/servo.h"
 #include "../components/apa102/apa102.h"
+#include "../components/camera/include/camera.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -546,6 +547,12 @@ void ConfigurePins(AppConfig *cfg)
       ESP_LOGV(__FUNCTION__, "Configuring pin %d", pinNo);
       new Servo(cpin);
     }
+    ldfree(cpin);
+  }
+  cJSON_ArrayForEach(pin, cfg->GetJSONConfig("Cameras"))
+  {
+    AppConfig *cpin = new AppConfig(pin, cfg);
+    new Camera(cpin);
     ldfree(cpin);
   }
 
