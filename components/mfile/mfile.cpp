@@ -115,9 +115,9 @@ void MFile::Open(const char* mode){
     }
 
     if (startsWith(name, "/sdcard")) {
-        initSPISDCard(false);
+        initStorage(SDCARD_FLAG);
     } else {
-        initSpiff(false);
+        initStorage(SPIFF_FLAG);
     }
 
     file = fopenCd(name, mode,true);
@@ -158,9 +158,9 @@ void MFile::Close(){
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_INIT);
         fileStatus = (mfile_state_t)(fileStatus & ~mfile_state_t::MFILE_FAILED);
         if (startsWith(name, "/sdcard")) {
-            deinitSPISDCard(false);
+            deinitStorage(SDCARD_FLAG);
         } else {
-            deinitSpiff(false);
+            deinitStorage(SPIFF_FLAG);
         }
     }
 }

@@ -225,7 +225,7 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
         sprintf(res, "[{\"name\":\"sdcard\",\"ftype\":\"folder\",\"size\":0},{\"name\":\"lfs\",\"ftype\":\"folder\",\"size\":0}]");
         return ESP_OK;
     }
-    if (!(startsWith(path, "/sdcard") ? initSPISDCard(false) : initSpiff(false))) {
+    if (!(startsWith(path, "/sdcard") ? initStorage(SDCARD_FLAG) : initStorage(SPIFF_FLAG))) {
         ESP_LOGE(__FUNCTION__, "Cannot init storage");
         return ESP_FAIL;
     }
@@ -335,7 +335,7 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
     ldfree(theFName);
     ldfree(theFolders);
     ldfree(kmlFileName);
-    startsWith(path, "/sdcard") ? deinitSPISDCard(false) : deinitSpiff(false);
+    startsWith(path, "/sdcard") ? deinitStorage(SDCARD_FLAG) : deinitStorage(SPIFF_FLAG);
     return ret;
 }
 
@@ -640,7 +640,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
     //httpd_resp_set_hdr(req, "filename", path);
     FILE *theFile;
     uint32_t len = 0;
-    if (startsWith(path, "/sdcard") ? initSPISDCard(false) : initSpiff(false))
+    if (startsWith(path, "/sdcard") ? initStorage(SDCARD_FLAG) : initStorage(SPIFF_FLAG))
     {
         if ((theFile = fopen(path, "r")) != nullptr)
         {
@@ -685,7 +685,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
         }
     }
     ESP_LOGV(__FUNCTION__, "Sent %s(%d)", path, len);
-    startsWith(path, "/sdcard") ? deinitSPISDCard(false) : deinitSpiff(false);
+    startsWith(path, "/sdcard") ? deinitStorage(SDCARD_FLAG) : deinitStorage(SPIFF_FLAG);
     return ESP_OK;
 }
 
@@ -1158,7 +1158,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                         ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad len param");
                     } else {
                         ESP_LOGI(__FUNCTION__,"remote md5:%s len:%d", md5, totLen);
-                        if (initSpiff(false))
+                        if (initStorage(SPIFF_FLAG))
                         {
                             struct stat st;
                             bool hasmd5 = stat("/lfs/firmware/current.bin.md5", &st) == 0;
@@ -1179,7 +1179,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                     {
                                         ESP_LOGI(__FUNCTION__, "Firmware is not updated RAM:%d", esp_get_free_heap_size());
                                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 7;
-                                        deinitSpiff(false);
+                                        deinitStorage(SPIFF_FLAG);
                                         ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Not new");
                                     }
                                     else
@@ -1334,7 +1334,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                 {
                                     fclose(fw);
                                     ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d.", len);
-                                    deinitSpiff(false);
+                                    deinitStorage(SPIFF_FLAG);
                                     ret = httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Error with weird md5 len");
                                 }
                             }
@@ -1342,7 +1342,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                             {
                                 ESP_LOGE(__FUNCTION__, "Failed in opeing md5..");
                             }
-                            deinitSpiff(false);
+                            deinitStorage(SPIFF_FLAG);
                         }
                         else
                         {
@@ -1368,7 +1368,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
     }
     else if (indexOf(req->uri, "/ota/getmd5") == req->uri)
     {
-        if (initSpiff(false))
+        if (initStorage(SPIFF_FLAG))
         {
             FILE *fw = nullptr;
             if ((fw = fopenCd("/lfs/firmware/current.bin.md5", "r", true)) != nullptr)
@@ -1389,7 +1389,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                         ESP_LOGI(__FUNCTION__, "Sent MD5:%s", ccmd5);
                     }
                     fclose(fw);
-                    deinitSpiff(false);
+                    deinitStorage(SPIFF_FLAG);
                     return ret;
                 }
                 else
@@ -1410,7 +1410,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
     }
     
     TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 6;
-    deinitSpiff(false);
+    deinitStorage(SPIFF_FLAG);
     return httpd_resp_send(req, "BADMD5", 6);
 }
 

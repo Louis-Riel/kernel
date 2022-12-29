@@ -158,7 +158,6 @@ void doHibernate(void *param)
   BufferedFile::FlushAll();
   hibernate = true;
   uint64_t ext_wakeup_on_pin_mask = 0;
-  uint64_t ext_wakeup_off_pin_mask = 0;
   int curLvl = 0;
   for (int idx = 0; idx < numWakePins; idx++)
   {
@@ -226,11 +225,8 @@ void doHibernate(void *param)
 void Hibernate()
 {
   if (hybernator == NULL){
-    EventGroupHandle_t eg = getAppEG();
-    EventBits_t bits = xEventGroupGetBits(getAppEG());
     ESP_LOGV(__FUNCTION__, "Hibernating");
     CreateWokeBackgroundTask(doHibernate, "doHibernate", 8192, NULL, tskIDLE_PRIORITY, &hybernator);
-    //xEventGroupSetBits(eg,app_bits_t::HIBERNATE);
   }
 }
 
@@ -242,7 +238,6 @@ static void gpsEvent(void *handler_args, esp_event_base_t base, int32_t id, void
     now = esp_timer_get_time();
     sampleBatteryVoltage();
     char* ctmp;
-    double dtmp;
     switch (id)
     {
     case TinyGPSPlus::gpsEvent::locationChanged:
@@ -726,9 +721,7 @@ bool CleanupEmptyDirs(char* path) {
   ESP_LOGV(__FUNCTION__,"Looking for files to cleanup in %s",path);
 
   DIR *theFolder;
-  FILE *theFile;
   struct dirent *fi;
-  struct stat fileStat;
   char* cpath = (char*)dmalloc(300);
   bool retVal = false;
   int retCode = 0;
@@ -792,17 +785,20 @@ void app_main(void)
                 ret == ESP_ERR_INVALID_ARG ? "ESP_ERR_INVALID_ARG" : "ESP_ERR_NOT_SUPPORTED");
   }
 
+  ESP_ERROR_CHECK(esp_event_loop_create_default());
+
   if (setupLittlefs() == ESP_OK)
   {
     gpio_install_isr_service(0);
 
     AppConfig *appcfg = new AppConfig(CFG_PATH);
     AppConfig *appstat = AppConfig::GetAppStatus();
+    bool hasSdCard = initStorage(SDCARD_FLAG);
 
-    if (initSPISDCard(true)) {
-      ESP_LOGI(__FUNCTION__, "SPI SD card initialized");
+    if (hasSdCard) {
+      ESP_LOGI(__FUNCTION__, "SD card initialized");
     } else {
-      ESP_LOGI(__FUNCTION__, "No SPI SD present");
+      ESP_LOGI(__FUNCTION__, "No SD card present");
     }
 
     if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE) {
@@ -825,7 +821,6 @@ void app_main(void)
     uint32_t defvref = 1100;
     esp_adc_cal_value_t val_type = esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, defvref, &characteristics);
     print_char_val_type(val_type);
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
     nvs_flash_init();
     initLog();
 
@@ -889,6 +884,8 @@ void app_main(void)
 
     ESP_LOGI(__FUNCTION__,"Starting service loop");
     CreateBackgroundTask(serviceLoop, "ServiceLoop", 8192, NULL, tskIDLE_PRIORITY, NULL);
+
+    deinitStorage(SPIFF_FLAG + (hasSdCard ? SDCARD_FLAG : 0));
   }
   if (!heap_caps_check_integrity_all(true))
   {

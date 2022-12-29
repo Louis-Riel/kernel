@@ -23,6 +23,9 @@
 #define F_BUF_SIZE 8192
 
 const char* logPath = "/lfs/logs";
+static AppConfig* sdcConfig = nullptr;
+static AppConfig* sdcState = nullptr;
+static AppConfig* spiffState = nullptr;
 
 enum sdtype_t {
   UNDEFINED,
@@ -145,25 +148,7 @@ const char *getErrorMsg(int32_t errCode)
   return "Invalid error code";
 }
 
-bool initSDCard(bool log) {
-  if (sdType == sdtype_t::UNDEFINED) {
-    ESP_LOGD(__FUNCTION__,"Determining SD Type");
-    AppConfig *cfg = AppConfig::GetAppConfig()->GetConfig("/sdcard");
-    if (cfg->HasProperty("ClkPin")) {
-      ESP_LOGD(__FUNCTION__,"SD Card reader config is present as %s",cfg->HasProperty("BusWidth") ? "sdtype_t::MMC" : "sdtype_t::SPI");
-      sdType = cfg->HasProperty("BusWidth") ? sdtype_t::MMC : sdtype_t::SPI;
-    } else {
-      ESP_LOGD(__FUNCTION__,"No SD Card reader configured");
-      sdType = sdtype_t::NOSD;
-    }
-  }
-  if (sdType != sdtype_t::NOSD) {
-    return sdType == sdtype_t::MMC ? initSDMMCSDCard(log) : initSPISDCard(log);
-  }
-  return false;
-}
-
-bool initSDMMCSDCard(bool log)
+bool initSDMMCSDCard(AppConfig *cfg,AppConfig *sdcState)
 {
   xSemaphoreTake(storageSema,portMAX_DELAY);
   esp_err_t ret = ESP_OK;
@@ -176,29 +161,14 @@ bool initSDMMCSDCard(bool log)
         .max_files = 5,
         .allocation_unit_size = 16 * 1024
     };
-    AppConfig *cfg = AppConfig::GetAppConfig()->GetConfig("/sdcard");
     sdmmc_card_t *card;
     const char mount_point[] = "/sdcard";
-
-    AppConfig *appState = AppConfig::GetAppStatus();
-    AppConfig *sdcState = appState->GetConfig("sdcard");
 
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
     if (cfg->HasProperty("BusWidth"))
     {
       slot_config.width = cfg->GetIntProperty("BusWidth");
-
-      // if (slot_config.width == 4 ){
-      //   slot_config.clk = cfg->GetIntProperty("ClkPin") 
-      //   slot_config.cmd = cfg->GetIntProperty("CmdPin") 
-      //   slot_config.d0 = cfg->GetIntProperty("D0Pin") 
-      //   slot_config.d1 = cfg->GetIntProperty("D1Pin") 
-      //   slot_config.d2 = cfg->GetIntProperty("D2Pin") 
-      //   slot_config.d3 = cfg->GetIntProperty("D3Pin") 
-      //   slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
-      // }
-
       ESP_LOGI(__FUNCTION__, "Mounting filesystem");
       ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
 
@@ -226,29 +196,26 @@ bool initSDMMCSDCard(bool log)
   return ret==ESP_OK;
 }
 
-bool deinitSDMMCSDCard(bool log)
+bool deinitSDMMCSDCard(AppConfig *sdcState)
 {
   xSemaphoreTake(storageSema,portMAX_DELAY);
   if (numSdCallers >= 0)
     numSdCallers--;
-  if (log)
-    ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
+  ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   if (numSdCallers == 0)
   {
     esp_err_t ret = ESP_OK;
-    AppConfig *appState = AppConfig::GetAppStatus();
     EventGroupHandle_t app_eg = getAppEG();
     if (xEventGroupGetBits(app_eg) & SPIFF_MOUNTED)
     {
       ret = esp_vfs_littlefs_unregister("storage");
       if (ret != ESP_OK)
       {
-        if (log)
-          ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
+        ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
       } else {
-          ESP_LOGI(__FUNCTION__, "lfs unmounted");
+        ESP_LOGI(__FUNCTION__, "lfs unmounted");
       }
-      appState->SetStateProperty("/lfs/state", item_state_t::INACTIVE);
+      sdcState->SetStateProperty("state", item_state_t::INACTIVE);
       xEventGroupClearBits(app_eg, SPIFF_MOUNTED);
     }
     if (xEventGroupGetBits(app_eg) & SDCARD_MOUNTED)
@@ -256,32 +223,29 @@ bool deinitSDMMCSDCard(bool log)
       ESP_LOGV(__FUNCTION__, "Using SPI peripheral");
       if (esp_vfs_fat_sdmmc_unmount() == ESP_OK)
       {
-        if (log)
-          ESP_LOGI(__FUNCTION__, "Unmounted SD Card");
+        ESP_LOGD(__FUNCTION__, "Unmounted SD Card");
       }
       else
       {
-        appState->SetStateProperty("/sdcard/state", item_state_t::ERROR);
-        if (log)
-          ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
+        sdcState->SetStateProperty("state", item_state_t::ERROR);
+        ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
         xSemaphoreGive(storageSema);
         return false;
       }
       spi_bus_free(SPI2_HOST);
       xEventGroupClearBits(app_eg, SDCARD_MOUNTED);
-      appState->SetStateProperty("/sdcard/state", item_state_t::INACTIVE);
+      sdcState->SetStateProperty("state", item_state_t::INACTIVE);
     }
   }
   else
   {
-    if (log)
       ESP_LOGV(__FUNCTION__, "Postponing SD card umount");
   }
   xSemaphoreGive(storageSema);
   return true;
 }
 
-bool deinitSpiff(bool log)
+bool deinitSpiff(AppConfig* state)
 {
   xSemaphoreTake(storageSema,portMAX_DELAY);
   if (numSpiffCallers >= 0) {
@@ -289,46 +253,34 @@ bool deinitSpiff(bool log)
   } else {
     numSpiffCallers=0;
   }
-  if (log)
-    ESP_LOGV(__FUNCTION__, "SD callers %d", numSpiffCallers);
+  ESP_LOGV(__FUNCTION__, "SD callers %d", numSpiffCallers);
   if (numSpiffCallers == 0)
   {
     esp_err_t ret = ESP_OK;
-    AppConfig *appState = AppConfig::GetAppStatus();
     EventGroupHandle_t app_eg = getAppEG();
     if (xEventGroupGetBits(app_eg) & SPIFF_MOUNTED)
     {
       ret = esp_vfs_littlefs_unregister("storage");
       if (ret != ESP_OK)
       {
-        if (log)
-          ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
+        ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
       } else {
-          ESP_LOGI(__FUNCTION__, "lfs unmounted");
+        ESP_LOGI(__FUNCTION__, "lfs unmounted");
       }
-      appState->SetStateProperty("/lfs/state", item_state_t::INACTIVE);
+      state->SetStateProperty("state", item_state_t::INACTIVE);
       xEventGroupClearBits(app_eg, SPIFF_MOUNTED);
     }
   }
   else
   {
-    if (log)
-      ESP_LOGV(__FUNCTION__, "Postponing SD card umount");
+    ESP_LOGV(__FUNCTION__, "Postponing SD card umount");
   }
   xSemaphoreGive(storageSema);
   return true;
 }
 
-bool deinitSDCard(bool log) {
-  if (sdType != sdtype_t::NOSD) {
-    return sdType == sdtype_t::MMC ? deinitSDMMCSDCard(log) : deinitSPISDCard(log);
-  }
-  return false;
-}
-
-bool deinitSPISDCard(bool log)
+bool deinitSPISDCard(AppConfig* state)
 {
-  log=true;
   xSemaphoreTake(storageSema,portMAX_DELAY);
   if (numSdCallers > 0){
     numSdCallers--;
@@ -336,45 +288,46 @@ bool deinitSPISDCard(bool log)
     numSdCallers=0;
   }
 
-  if (log)
-    ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
+  ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   if (numSdCallers == 0)
   {
-    AppConfig *appState = AppConfig::GetAppStatus();
     EventGroupHandle_t app_eg = getAppEG();
     if (xEventGroupGetBits(app_eg) & SDCARD_MOUNTED)
     {
       ESP_LOGV(__FUNCTION__, "Using SPI peripheral");
       if (esp_vfs_fat_sdmmc_unmount() == ESP_OK)
       {
-        if (log)
-          ESP_LOGI(__FUNCTION__, "Unmounted SD Card");
+        ESP_LOGD(__FUNCTION__, "Unmounted SD Card");
       }
       else
       {
-        appState->SetStateProperty("/sdcard/state", item_state_t::ERROR);
-        if (log)
-          ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
+        state->SetStateProperty("state", item_state_t::ERROR);
+        ESP_LOGE(__FUNCTION__, "Failed to unmount SD Card");
         xSemaphoreGive(storageSema);
         return false;
       }
       xEventGroupClearBits(app_eg, SDCARD_MOUNTED);
-      appState->SetStateProperty("/sdcard/state", item_state_t::INACTIVE);
+      state->SetStateProperty("state", item_state_t::INACTIVE);
     }
   }
   else
   {
-    if (log)
-      ESP_LOGV(__FUNCTION__, "Postponing SD card umount");
+    ESP_LOGV(__FUNCTION__, "Postponing SD card umount");
   }
   xSemaphoreGive(storageSema);
   return true;
 }
 
+bool deinitSDCard(AppConfig* state) {
+  if (sdType != sdtype_t::NOSD) {
+    return sdType == sdtype_t::MMC ? deinitSDMMCSDCard(state) : deinitSPISDCard(state);
+  }
+  return false;
+}
+
 bool deinitStorage(uint8_t flags)
 {
-  return (flags & SPIFF_FLAG ? deinitSpiff(false) : true) && (flags & SDCARD_FLAG ? deinitSDCard(false) : true);
-  //return deinitSDMMCSDCard(log);
+  return (flags & SPIFF_FLAG ? deinitSpiff(spiffState) : true) && (flags & SDCARD_FLAG ? deinitSDCard(sdcState) : true);
 }
 
 struct dirFiles_t {
@@ -435,7 +388,6 @@ esp_err_t setupLittlefs()
   esp_err_t ret = esp_vfs_littlefs_register(&conf);
   AppConfig *appState = AppConfig::GetAppStatus();
   ESP_LOGI(__FUNCTION__, "lfs mounted %d", ret);
-  AppConfig *spiffState = appState->GetConfig("lfs");
   if (ret != ESP_OK)
   {
     spiffState->SetStateProperty("state", item_state_t::ERROR);
@@ -450,10 +402,6 @@ esp_err_t setupLittlefs()
     ESP_LOGE(__FUNCTION__, "Failed in getting info %s", esp_err_to_name(ret));
     return ret;
   }
-  spiffState->SetStateProperty("state", item_state_t::ACTIVE);
-  spiffState->SetIntProperty("total", total_bytes);
-  spiffState->SetIntProperty("used", used_bytes);
-  spiffState->SetIntProperty("free", total_bytes - used_bytes);
   if (total_bytes - used_bytes < 1782579) {
     dirFiles_t* dirFiles = (dirFiles_t*)dmalloc(sizeof(dirFiles_t));
     dirFiles->curDir = (char*)dmalloc(300);
@@ -538,11 +486,10 @@ esp_err_t setupLittlefs()
   return ESP_OK;
 }
 
-bool initSpiff(bool log) {
+bool initSpiff(AppConfig *spiffState) {
   if (numSpiffCallers <= 0)
   {
-    if (log)
-      ESP_LOGV(__FUNCTION__, "Using SPI peripheral");
+    ESP_LOGV(__FUNCTION__, "Using SPI peripheral");
 
     esp_err_t ret = ESP_OK;
     EventGroupHandle_t app_eg = getAppEG();
@@ -553,19 +500,15 @@ bool initSpiff(bool log) {
           .partition_label = "storage",
           .format_if_mount_failed = true,
           .dont_mount = false};
-      AppConfig *appState = AppConfig::GetAppStatus();
-      AppConfig *spiffState = appState->GetConfig("lfs");
 
       ret = esp_vfs_littlefs_register(&conf);
       xEventGroupSetBits(app_eg, SPIFF_MOUNTED);
       if (ret != ESP_OK)
       {
         spiffState->SetStateProperty("state", item_state_t::ERROR);
-        if (log)
-          ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
+        ESP_LOGE(__FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
       }
-      if (log)
-        ESP_LOGV(__FUNCTION__, "lfs mounted %d", ret);
+      ESP_LOGV(__FUNCTION__, "lfs mounted %d", ret);
       spiffState->SetStateProperty("state", item_state_t::ACTIVE);
       size_t total_bytes;
       size_t used_bytes;
@@ -597,19 +540,13 @@ bool initSpiff(bool log) {
   }
 }
 
-bool initSPISDCard(bool log){
-  log=true;
-  if (log)
-    ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
+bool initSPISDCard(AppConfig *cfg,AppConfig *sdcState){
+  ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   xSemaphoreTake(storageSema,portMAX_DELAY);
   if (numSdCallers <= 0)
   {
-    AppConfig *appState = AppConfig::GetAppStatus();
-    AppConfig *sdcState = appState->GetConfig("sdcard");
     EventGroupHandle_t app_eg = getAppEG();
     esp_err_t ret = ESP_FAIL;
-
-    AppConfig *cfg = AppConfig::GetAppConfig()->GetConfig("/sdcard");
     if (cfg->HasProperty("MosiPin") &&
         cfg->HasProperty("MisoPin") &&
         cfg->HasProperty("ClkPin") &&
@@ -654,22 +591,18 @@ bool initSPISDCard(bool log){
         {
           if (ret == ESP_FAIL)
           {
-            if (log)
-              ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
-                                      "If you want the card to be formatted, set format_if_mount_failed = true.");
+            ESP_LOGE(__FUNCTION__, "Failed to mount filesystem. "
+                                   "If you want the card to be formatted, set format_if_mount_failed = true.");
           }
           else
           {
-            if (log)
-              ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
-                                      "Make sure SD card lines have pull-up resistors in place.",
-                        esp_err_to_name(ret));
+            ESP_LOGE(__FUNCTION__, "Failed to initialize the card (%s). "
+                                   "Make sure SD card lines have pull-up resistors in place.",
+                                    esp_err_to_name(ret));
           }
           sdcState->SetStateProperty("state", item_state_t::ERROR);
           xEventGroupSetBits(app_eg, SDCARD_ERROR);
           spi_bus_free(SPI2_HOST);
-          ldfree(sdcState);
-          ldfree(cfg);
           numSdCallers=0;
           xSemaphoreGive(storageSema);
           return false;
@@ -693,8 +626,6 @@ bool initSPISDCard(bool log){
         }
 
         xEventGroupSetBits(app_eg, SDCARD_MOUNTED | SDCARD_WORKING);
-        ldfree(sdcState);
-        ldfree(cfg);
         xSemaphoreGive(storageSema);
         return true;
       }
@@ -703,27 +634,47 @@ bool initSPISDCard(bool log){
     {
       ESP_LOGW(__FUNCTION__, "Cannot mount SD, Missingparams");
     }
-    ldfree(cfg);
-    ldfree(sdcState);
   }
   else
   {
     numSdCallers>= 0 ? numSdCallers++ : numSdCallers = 1;
-    if (log)
-      ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
+    ESP_LOGV(__FUNCTION__, "SD callers %d", numSdCallers);
   }
   xSemaphoreGive(storageSema);
   return true;
 }
 
-uint8_t initStorage() {
-  return initStorage(false);
+bool initSDCard(AppConfig *cfg,AppConfig *sdcState) {
+  if (sdType == sdtype_t::UNDEFINED) {
+    ESP_LOGI(__FUNCTION__,"Determining SD Type");
+    if (cfg && cfg->HasProperty("BusWidth")) {
+      ESP_LOGI(__FUNCTION__,"MMC SD Card reader config is present as %s",cfg->HasProperty("BusWidth") ? "sdtype_t::MMC" : "sdtype_t::SPI");
+      sdType = sdtype_t::MMC;
+    } else if (cfg->HasProperty("ClkPin")) {
+      ESP_LOGI(__FUNCTION__,"SPI SD Card reader config is present as %s",cfg->HasProperty("BusWidth") ? "sdtype_t::MMC" : "sdtype_t::SPI");
+      sdType = sdtype_t::SPI;
+    } else {
+      ESP_LOGI(__FUNCTION__,"No SD Card reader configured");
+      sdType = sdtype_t::NOSD;
+    }
+  }
+  if (sdType != sdtype_t::NOSD) {
+    return sdType == sdtype_t::MMC ? initSDMMCSDCard(cfg, sdcState) : initSPISDCard(cfg, sdcState);
+  }
+  return false;
 }
 
-uint8_t initStorage(bool log)
+
+uint8_t initStorage(uint8_t flags)
 {
-  return (initSpiff(log) ? SPIFF_FLAG : 0) + (initSDCard(log) ? SDCARD_FLAG : 0);
-  //return initSpiff(log) && initSDMMCSDCard(log);
+  if (spiffState == nullptr) {
+    spiffState = AppConfig::GetAppStatus()->GetConfig("lfs");
+    sdcState = AppConfig::GetAppStatus()->GetConfig("sdcard");
+    sdcConfig = AppConfig::GetAppConfig()->GetConfig("sdcard");
+  }
+
+  return ((flags & SPIFF_FLAG) && initSpiff(spiffState) ? SPIFF_FLAG : 0) + 
+         ((flags & SDCARD_FLAG) && initSDCard(sdcConfig,sdcState) ? SDCARD_FLAG : 0);
 }
 
 bool deleteFile(const char *fileName)
@@ -940,7 +891,7 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
   ESP_LOGI(__FUNCTION__, "Writing to partition subtype %d at offset 0x%x",
            update_partition->subtype, update_partition->address);
 
-  if (initSpiff(false))
+  if (initStorage(SPIFF_FLAG))
   {
     if (isOnOta)
     {
@@ -968,7 +919,7 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
                 deleteFile("/lfs/firmware/current.bin");
               }
               dumpTheLogs((void*)true);
-              deinitSpiff(false);
+              deinitStorage(SPIFF_FLAG);
               esp_system_abort("Flashing");
             }
             else
@@ -1000,7 +951,7 @@ void flashTheThing(uint8_t *img, uint32_t totLen)
 
 void UpgradeFirmware()
 {
-  initSpiff(false);
+  initStorage(SPIFF_FLAG);
   struct stat md5St, fwSt;
   char md5fName[] = "/lfs/firmware/tobe.bin.md5";
   char fwfName[] = "/lfs/firmware/current.bin";
@@ -1088,7 +1039,7 @@ void UpgradeFirmware()
     AppConfig* stat = AppConfig::GetAppStatus();
     ESP_LOGI(__FUNCTION__, "No FW to update, running %s built on %s", stat->GetStringProperty("/build/ver"), stat->GetStringProperty("/build/date"));
   }
-  deinitSpiff(false);
+  deinitStorage(SPIFF_FLAG);
 }
 
 void DisplayMemInfo(){

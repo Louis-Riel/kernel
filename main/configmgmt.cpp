@@ -10,7 +10,7 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
 #if LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE
-#include "esp_debug_helpers.h" |
+#include "esp_debug_helpers.h"
 #endif
 
 extern const uint8_t defaultconfig_json_start[] asm("_binary_defaultconfig_json_start");
@@ -309,7 +309,7 @@ void AppConfig::SaveAppConfig(bool skipMount)
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   ESP_LOGV(__FUNCTION__, "Saving config %s",config->filePath);
   version++;
-  uint8_t storage = skipMount ? 0 : initStorage();
+  uint8_t storage = skipMount ? 0 : initStorage(SPIFF_FLAG);
   FILE *currentCfg = fopen(config->filePath, "w");
   if (currentCfg != nullptr)
   {

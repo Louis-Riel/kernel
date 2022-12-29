@@ -27,7 +27,7 @@ TheRest::TheRest(AppConfig *config, EventGroupHandle_t evtGrp)
       gwAddr(nullptr),
       ipAddr(nullptr),
       app_eg(getAppEG()),
-      storageFlags(initStorage()),
+      storageFlags(initStorage(SDCARD_FLAG+SPIFF_FLAG)),
       statuses(nullptr),
       statusesLen(0),
       system_status(nullptr)
