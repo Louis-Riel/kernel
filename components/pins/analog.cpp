@@ -102,10 +102,28 @@ void AnalogPin::InitDevice(){
         ESP_LOGE(PIN_BASE, "Invalid channel atten");
         return;
     }
-    ESP_LOGI(__FUNCTION__,"Initialising analog %s pin %d status null:%d invalid: %d",this->name,this->pinNo, status == NULL, status == NULL ? -1 : cJSON_IsInvalid(status));
+    ESP_LOGI(__FUNCTION__,"Initializing analog %s pin %d status null:%d invalid: %d",this->name,this->pinNo, status == NULL, status == NULL ? -1 : cJSON_IsInvalid(status));
     ESP_ERROR_CHECK(adc1_config_width(this->channel_width));   
     ESP_ERROR_CHECK(adc1_config_channel_atten(this->channel, this->channel_atten));
-    esp_adc_cal_characterize(ADC_UNIT_1,this->channel_atten ,this->channel_width,DEFAULT_VREF,&chars);
+    
+    switch (esp_adc_cal_characterize(ADC_UNIT_1,this->channel_atten ,this->channel_width,DEFAULT_VREF,&chars))
+    {
+    case ESP_ADC_CAL_VAL_EFUSE_VREF:
+        ESP_LOGI(__FUNCTION__,"VRef Calibration used for pin %s:%d",GetName(),pinNo);
+        break;
+    case ESP_ADC_CAL_VAL_EFUSE_TP:
+        ESP_LOGI(__FUNCTION__,"Two point calibration used for pin %s:%d",GetName(),pinNo);
+        break;
+    case ESP_ADC_CAL_VAL_EFUSE_TP_FIT:
+        ESP_LOGI(__FUNCTION__,"Two point fit calibration used for pin %s:%d",GetName(),pinNo);
+        break;
+    case ESP_ADC_CAL_VAL_NOT_SUPPORTED:
+        ESP_LOGI(__FUNCTION__,"Calibration not supported for pin %s:%d",GetName(),pinNo);
+        break;
+    default:
+        ESP_LOGW(__FUNCTION__,"Weird calibration, not supported for pin %s:%d",GetName(),pinNo);
+        break;
+    };
 
     AppConfig* appstate = new AppConfig(status,AppConfig::GetAppStatus());
 

@@ -5,9 +5,9 @@ export default class AnalogPinConfig extends Component {
     constructor(props) {
         super(props);
         this.state = {pin: props.item,errors:[]};
-        this.state.pin.channel = this.state.pin.channel ? this.state.pin.channel : this.pinNoToChannel(this.state.pin.pinNo);
-        this.state.pin.channel_width = this.state.pin.channel_width ? this.state.pin.channel_width : 9;
-        this.state.pin.channel_atten = this.state.pin.channel_atten ? this.state.pin.channel_atten : 0.0;
+        this.state.pin.channel = this.state.pin.channel >= 0 ? this.state.pin.channel : this.pinNoToChannel(this.state.pin.pinNo);
+        this.state.pin.channel_width = this.state.pin.channel_width >= 0 ? this.state.pin.channel_width : 9;
+        this.state.pin.channel_atten = this.state.pin.channel_atten >= 0 ? this.state.pin.channel_atten : 0.0;
         this.state.pin.waitTime = this.state.pin.waitTime ? this.state.pin.waitTime : 10000;
         this.state.pin.minValue = this.state.pin.minValue ? this.state.pin.minValue : 0;
         this.state.pin.maxValue = this.state.pin.maxValue ? this.state.pin.maxValue : 4096;
@@ -20,6 +20,16 @@ export default class AnalogPinConfig extends Component {
         
         if (prevProps?.item !== this.props?.item) {
             this.setState({pin: this.props.item});
+        }
+
+        if (this.state?.pin?.pinNo && (prevState?.pin?.pinNo !== this.state.pin.pinNo)) {
+            this.setState(prevStat => {return {
+                ...prevStat,
+                pin: { 
+                    channel: this.pinNoToChannel(this.state.pin.pinNo),
+                    ...prevStat.pin
+                }
+            }});
         }
     }
 
