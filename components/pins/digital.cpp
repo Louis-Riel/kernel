@@ -8,6 +8,7 @@ uint8_t Pin::numPins=0;
 QueueHandle_t Pin::eventQueue;
 esp_event_handler_instance_t* Pin::handlerInstance=nullptr;
 const char* Pin::PIN_BASE="DigitalPin";
+bool Pin::isRtcGpioInitialized = false;
 
 Pin::~Pin(){
     ldfree((void*)name);
@@ -104,8 +105,16 @@ void Pin::InitDevice(){
     ESP_LOGV(__FUNCTION__, "Pin %d: Level:%d", pinNo, gpio_get_level(pinNo));
     ESP_LOGV(__FUNCTION__, "Pin %d: 0x%" PRIXPTR "", pinNo,(uintptr_t)this);
     ESP_LOGV(__FUNCTION__, "Numpins %d", numPins);
-    if (isRtcGpio)
-        ESP_ERROR_CHECK(gpio_isr_handler_add(pinNo, pinHandler, this));
+    if (isRtcGpio) {
+        if (!isRtcGpioInitialized) {
+            isRtcGpioInitialized = gpio_install_isr_service(0) == ESP_OK;
+        }
+        if (isRtcGpioInitialized) {
+            ESP_ERROR_CHECK(gpio_isr_handler_add(pinNo, pinHandler, this));
+        } else {
+            ESP_LOGE(__FUNCTION__,"Failed to setup isr for Pin(%d):%s",pinNo,name);
+        }
+    }
 
     if (status == nullptr) {
         ESP_LOGE(__FUNCTION__,"No status object for %s",name);

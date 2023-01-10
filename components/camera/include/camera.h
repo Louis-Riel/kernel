@@ -42,13 +42,20 @@ protected:
     gpio_num_t pin_vsync;
     gpio_num_t pin_href;
     gpio_num_t pin_pclk;
+    uint8_t ledc_timer;
+    uint8_t ledc_channel;
+    uint8_t pixel_format;
+    uint8_t frame_size;
+    uint8_t fb_count;
+    int jpeg_quality;
     const char* cameraType;
 
-    void InitDevice();
+    bool InitDevice();
     EventHandlerDescriptor* BuildHandlerDescriptors();
 
     static bool ProcessCommand(ManagedDevice*, cJSON *);
 
+    cJSON* powered;
     cJSON* initialized;
     cJSON* streaming;
 };

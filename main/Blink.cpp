@@ -789,8 +789,6 @@ void app_main(void)
 
   if (setupLittlefs() == ESP_OK)
   {
-    gpio_install_isr_service(0);
-
     AppConfig *appcfg = new AppConfig(CFG_PATH);
     AppConfig *appstat = AppConfig::GetAppStatus();
     bool hasSdCard = initStorage(SDCARD_FLAG);
