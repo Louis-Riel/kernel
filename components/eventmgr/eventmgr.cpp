@@ -174,7 +174,7 @@ void EventManager::ProcessEvent(ManagedDevice* device, postedEvent_t* postedEven
             }
         }
     }
-    if ((postedEvent->eventDataType == event_data_type_tp::String)){
+    if (postedEvent->eventDataType == event_data_type_tp::String){
         ldfree(postedEvent->event_data);
     }
 }
