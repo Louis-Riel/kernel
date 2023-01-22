@@ -7,7 +7,7 @@
 #include "route.h"
 #include "../wifi/station.h"
 #include "esp_partition.h"
-#include "esp_ota_ops.h"
+#include <cstdint>
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
@@ -50,10 +50,14 @@ public:
   struct ws_msg_t {
     void* buf;
     ws_client_t* client;
-    uint32_t bufLen;
+    size_t bufLen;
+    size_t len;
+    httpd_ws_type_t msgType;
+    TaskFunction_t postHook;
+    void* postHookParam;
   };
 
-  bool RegisterClient(httpd_handle_t hd, int fd);
+  int RegisterClient(httpd_handle_t hd, int fd);
   void ProcessMessage(uint8_t *msg);
   static void QueueHandler(void *instance);
   static void StatePoller(void *instance);
@@ -63,9 +67,9 @@ public:
 
   TaskHandle_t queueTask;
   cJSON* jIsLive;
+  static void PostToClient(void* msg);
 
 protected:
-  static void PostToClient(void* msg);
   static const char* WEBSOCKET_BASE;
 
   EventHandlerDescriptor *BuildHandlerDescriptors();

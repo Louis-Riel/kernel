@@ -9,13 +9,13 @@ uint32_t EventHandlerDescriptor::numCacheEntries = 0;
 EventHandlerDescriptor::EventHandlerDescriptor(esp_event_base_t eventBase,const char* name){
     this->eventBase = eventBase;
     this->eventDescriptors = (EventDescriptor_t*)dmalloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS_PER_BASE);
-    ESP_LOGV(__FUNCTION__,"Event descriptor for base %s with name %s created", eventBase, name);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Event descriptor for base %s with name %s created", eventBase, name);
     memset(this->eventDescriptors,0,sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS_PER_BASE);
     for (int idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
         this->eventDescriptors[idx].id=-1;
     }
     if (EventHandlerDescriptor::eventDescriptorCache == NULL) {
-        ESP_LOGV(__FUNCTION__,"Initing Event descriptor cache from base %s with name %s", eventBase, name);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Initing Event descriptor cache from base %s with name %s", eventBase, name);
         EventHandlerDescriptor::eventDescriptorCache = (EventDescriptor_t*)dmalloc(sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS);
         memset(EventHandlerDescriptor::eventDescriptorCache,0,sizeof(EventDescriptor_t)*MAX_NUM_HANDLERS);
         for (int idx = 0; idx < MAX_NUM_HANDLERS; idx++) {
@@ -37,7 +37,7 @@ bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName
 bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName,event_data_type_tp dtp){
     EventDescriptor_t* desc = GetEventDescriptor(eventBase,id);
     if (desc == NULL) {
-        ESP_LOGV(__FUNCTION__,"Caching event descriptor %s(%d) registered in %s at idx %d", eventName,id,this->eventBase,EventHandlerDescriptor::numCacheEntries);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Caching event descriptor %s(%d) registered in %s at idx %d", eventName,id,this->eventBase,EventHandlerDescriptor::numCacheEntries);
         desc=&EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries];
         EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].id = id;
         EventHandlerDescriptor::eventDescriptorCache[EventHandlerDescriptor::numCacheEntries].baseName = name;
@@ -54,16 +54,16 @@ bool EventHandlerDescriptor::AddEventDescriptor(int32_t id,const char* eventName
                 descriptor->eventName = desc->eventName;
                 descriptor->baseName = desc->baseName;
                 descriptor->dataType = desc->dataType;
-                ESP_LOGV(__FUNCTION__,"Event descriptor %s(%d) registered in %s at idx %d", eventName,id,this->eventBase, idx);
+                ESP_LOGV(__PRETTY_FUNCTION__,"Event descriptor %s(%d) registered in %s at idx %d", eventName,id,this->eventBase, idx);
                 return true;
             }
         }
     } else {
-        ESP_LOGE(__FUNCTION__,"Event descriptor %s(%d) NOT cached in %s", eventName,id,this->eventBase);
+        ESP_LOGE(__PRETTY_FUNCTION__,"Event descriptor %s(%d) NOT cached in %s", eventName,id,this->eventBase);
     }
 
 
-    ESP_LOGE(__FUNCTION__,"Event descriptor %s(%d) NOT registered in %s", eventName,id,this->eventBase);
+    ESP_LOGE(__PRETTY_FUNCTION__,"Event descriptor %s(%d) NOT registered in %s", eventName,id,this->eventBase);
     return false;
 }
 
@@ -72,29 +72,29 @@ char* EventHandlerDescriptor::GetName(){
 }
 
 EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(esp_event_base_t base,const char* eventName) {
-    ESP_LOGV(__FUNCTION__,"GetEventDescriptor %s(%s)", eventName, base);
+    ESP_LOGV(__PRETTY_FUNCTION__,"GetEventDescriptor %s(%s)", eventName, base);
     if ((base == NULL) || (eventName == NULL)) {
-        ESP_LOGW(__FUNCTION__,"Missing base(%d) or name(%d)",base == NULL,eventName == NULL);
+        ESP_LOGW(__PRETTY_FUNCTION__,"Missing base(%d) or name(%d)",base == NULL,eventName == NULL);
     }
     for (int idx = 0; idx < numCacheEntries; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
-        ESP_LOGV(__FUNCTION__,"%s-%s == %s-%s",base,eventName,ei->baseName,ei->eventName);
+        ESP_LOGV(__PRETTY_FUNCTION__,"%s-%s == %s-%s",base,eventName,ei->baseName,ei->eventName);
         if ((ei != NULL) && 
             (ei->baseName != NULL) &&
             (ei->eventName != NULL) &&
             (indexOf(ei->baseName,base) != NULL) &&
             (indexOf(ei->eventName,eventName) != NULL)) {
-            ESP_LOGV(__FUNCTION__,"got a match");
+            ESP_LOGV(__PRETTY_FUNCTION__,"got a match");
             return ei;
         }
     }
-    ESP_LOGV(__FUNCTION__,"no match");
+    ESP_LOGV(__PRETTY_FUNCTION__,"no match");
 
     return NULL;
 }
 
 EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(esp_event_base_t base,uint32_t id) {
-    ESP_LOGV(__FUNCTION__,"Looking for GetEventDescriptor %s(%d)-%d",  base, id, numCacheEntries);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Looking for GetEventDescriptor %s(%d)-%d",  base, id, numCacheEntries);
     for (int idx = 0; idx < numCacheEntries; idx++) {
         EventDescriptor_t* ei = &EventHandlerDescriptor::eventDescriptorCache[idx];
         if (ei->id == -1)
@@ -106,29 +106,29 @@ EventDescriptor_t* EventHandlerDescriptor::GetEventDescriptor(esp_event_base_t b
             (base != NULL) && 
             (indexOf(ei->baseName,base) != NULL) &&
             (ei->id == id)) {
-            ESP_LOGV(__FUNCTION__,"GetEventDescriptor %s(%d)-%d",  ei->baseName, ei->id, idx);
+            ESP_LOGV(__PRETTY_FUNCTION__,"GetEventDescriptor %s(%d)-%d",  ei->baseName, ei->id, idx);
             return ei;
         }
     }
-    ESP_LOGV(__FUNCTION__,"no match");
+    ESP_LOGV(__PRETTY_FUNCTION__,"no match");
     return NULL;
 }
 
 void EventHandlerDescriptor::SetEventName(int32_t id,const char* name){
     for (uint8_t idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
         if (eventDescriptors[idx].eventName == NULL) {
-            ESP_LOGV(__FUNCTION__,"%d:%s set at idx:%d", id, name, idx);
+            ESP_LOGV(__PRETTY_FUNCTION__,"%d:%s set at idx:%d", id, name, idx);
             eventDescriptors[idx].id = id;
             eventDescriptors[idx].eventName=name;
             return;
         }
     }
-    ESP_LOGE(__FUNCTION__,"No space to set event name for %s-%d",name, id);
+    ESP_LOGE(__PRETTY_FUNCTION__,"No space to set event name for %s-%d",name, id);
 }
 
 int32_t EventHandlerDescriptor::GetEventId(const char* name){
     if ((name == NULL) || (strlen(name)==0)) {
-        ESP_LOGW(__FUNCTION__,"Missing name for descriptor");
+        ESP_LOGW(__PRETTY_FUNCTION__,"Missing name for descriptor");
         return -1;
     }
     for (int idx = 0; idx < MAX_NUM_HANDLERS_PER_BASE; idx++) {
@@ -180,7 +180,7 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
     if (!sourceValue || !strlen(sourceValue)) {
         return NULL;
     }
-    ESP_LOGV(__FUNCTION__,"before:%s", sourceValue);
+    ESP_LOGV(__PRETTY_FUNCTION__,"before:%s", sourceValue);
     uint32_t retLen = strlen(sourceValue)+200;
     char* retCursor=(char*)dmalloc(retLen);
     memset(retCursor,0,retLen);
@@ -210,7 +210,7 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
         lastClosePos=closePos;
         if (openPos != srcCursor) {
             memcpy(retCursor,srcCursor,openPos-srcCursor);
-            ESP_LOGV(__FUNCTION__,"added:%s(%d)", retCursor,openPos-srcCursor);
+            ESP_LOGV(__PRETTY_FUNCTION__,"added:%s(%d)", retCursor,openPos-srcCursor);
         }
         retCursor+=strlen(retCursor);
         *closePos=0;
@@ -219,69 +219,69 @@ char* EventHandlerDescriptor::GetParsedValue(const char* sourceValue){
         case EventHandlerDescriptor::templateType_t::Config:
         case EventHandlerDescriptor::templateType_t::Status:
             cfg = tt==EventHandlerDescriptor::templateType_t::Status?jstat:jcfg;
-            ESP_LOGV(__FUNCTION__,"Getting %s", tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
+            ESP_LOGV(__PRETTY_FUNCTION__,"Getting %s", tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
             termName=indexOf(openPos,".");
             if (termName) {
                 termName++;
-                ESP_LOGV(__FUNCTION__,"termname:%s", termName);
+                ESP_LOGV(__PRETTY_FUNCTION__,"termname:%s", termName);
                 if (cfg->HasProperty(termName)){
                     if (cfg->isItemObject(termName)) {
                         cJSON_PrintPreallocated(cfg->GetJSONConfig(termName),retCursor,200,false);
-                        ESP_LOGV(__FUNCTION__,"added json:%s", retCursor);
+                        ESP_LOGV(__PRETTY_FUNCTION__,"added json:%s", retCursor);
                     } else {
                         jtmp = cfg->GetPropertyHolder(termName);
                         if (cJSON_IsNumber(jtmp)) {
                             sprintf(strftime_buf,"%f",cJSON_GetNumberValue(jtmp));
-                            ESP_LOGV(__FUNCTION__,"Number Value %s", strftime_buf);
+                            ESP_LOGV(__PRETTY_FUNCTION__,"Number Value %s", strftime_buf);
                             strcpy(retCursor,strftime_buf);
                         } else if (cJSON_IsBool(jtmp)) {
                             *retCursor=cJSON_IsTrue(jtmp)?'Y':'N';
-                            ESP_LOGV(__FUNCTION__,"Bool Value %s", cJSON_IsTrue(jtmp)?"Y":"N");
+                            ESP_LOGV(__PRETTY_FUNCTION__,"Bool Value %s", cJSON_IsTrue(jtmp)?"Y":"N");
                         } else {
                             strcpy(retCursor,cfg->GetStringProperty(termName));
-                            ESP_LOGV(__FUNCTION__,"String Value:%s", retCursor);
+                            ESP_LOGV(__PRETTY_FUNCTION__,"String Value:%s", retCursor);
                         }
                     }
                 } else {
-                    ESP_LOGI(__FUNCTION__,"Cannot find %s in %s", termName, tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
+                    ESP_LOGI(__PRETTY_FUNCTION__,"Cannot find %s in %s", termName, tt==EventHandlerDescriptor::templateType_t::Status?"Status":"Config");
                 }
             }
             break;
         case EventHandlerDescriptor::templateType_t::CurrentDate:
             strftime(strftime_buf, 64, "%Y/%m/%d %H:%M:%S", &timeinfo);
             strcpy(retCursor, strftime_buf);
-            ESP_LOGV(__FUNCTION__,"added datetime:%s", retCursor);
+            ESP_LOGV(__PRETTY_FUNCTION__,"added datetime:%s", retCursor);
             break;
         case EventHandlerDescriptor::templateType_t::RAM:
             sprintf(strftime_buf, "%d", esp_get_free_heap_size());
             strcpy(retCursor, strftime_buf);
-            ESP_LOGV(__FUNCTION__,"added RAM:%s", retCursor);
+            ESP_LOGV(__PRETTY_FUNCTION__,"added RAM:%s", retCursor);
             break;
         case EventHandlerDescriptor::templateType_t::Battery:
             sprintf(strftime_buf, "%f", getBatteryVoltage());
             strcpy(retCursor, strftime_buf);
-            ESP_LOGV(__FUNCTION__,"added Batterry:%s", retCursor);
+            ESP_LOGV(__PRETTY_FUNCTION__,"added Batterry:%s", retCursor);
             break;
         case EventHandlerDescriptor::templateType_t::CurrentDateNoSpace:
             strftime(strftime_buf, 64, "%Y-%m-%d", &timeinfo);
             strcpy(retCursor, strftime_buf);
-            ESP_LOGV(__FUNCTION__,"added datetime:%s - %s", retCursor, strftime_buf);
+            ESP_LOGV(__PRETTY_FUNCTION__,"added datetime:%s - %s", retCursor, strftime_buf);
             break;
         case EventHandlerDescriptor::templateType_t::Invalid:
             break;
         }
         srcCursor=openPos=closePos+1;
         retCursor+=strlen(retCursor);
-        ESP_LOGV(__FUNCTION__,"now at:%s", srcCursor);
+        ESP_LOGV(__PRETTY_FUNCTION__,"now at:%s", srcCursor);
     }
 
     if (lastClosePos != NULL) {
         strcpy(retCursor,lastClosePos+1);
-        ESP_LOGV(__FUNCTION__,"Added last chunck:%s", lastClosePos+1);
-        ESP_LOGV(__FUNCTION__,"Translated:%s", retVal);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Added last chunck:%s", lastClosePos+1);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Translated:%s", retVal);
     } else {
         strcpy(retVal,srcCursor);
-        ESP_LOGV(__FUNCTION__,"Straight copy:%s", retVal);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Straight copy:%s", retVal);
     }
 
     ldfree(strftime_buf);

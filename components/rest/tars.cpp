@@ -4,7 +4,7 @@
 #include "time.h"
 #include "../../main/logs.h"
 #include "../../main/utils.h"
-#include "../esp_littlefs/include/esp_littlefs.h"
+#include "esp_littlefs.h"
 #include "rom/ets_sys.h"
 #include "soc/rtc_cntl_reg.h"
 #include "soc/sens_reg.h"
@@ -69,16 +69,16 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     EventGroupHandle_t eventGroup = TheRest::GetEventGroup();
 
     uint32_t fdpos = filesToDelete == NULL ? 0 : strlen(filesToDelete);
-    ESP_LOGD(__FUNCTION__, "Parsing %s", path);
+    ESP_LOGD(__PRETTY_FUNCTION__, "Parsing %s", path);
     struct timeval tv_start, tv_end, tv_open, tv_stat, tv_rstart, tv_rend, tv_wstart, tv_wend;
     bool folderAdded=false;
 
     if ((theFolder = openDir(path)) != NULL)
     {
-        ESP_LOGV(__FUNCTION__, "Reading folder %s", path);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Reading folder %s", path);
         while (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (tarStat == MTAR_ESUCCESS) && ((fi = readDir(theFolder)) != NULL))
         {
-            ESP_LOGV(__FUNCTION__, "At %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
+            ESP_LOGV(__PRETTY_FUNCTION__, "At %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
             if (strlen(fi->d_name) == 0)
             {
                 break;
@@ -87,23 +87,23 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
             {
                 if (recursive)
                 {
-                    ESP_LOGV(__FUNCTION__, "Parsing %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
+                    ESP_LOGV(__PRETTY_FUNCTION__, "Parsing %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
                     dcnt++;
                     sprintf(kmlFileName, "%s/%s", path, fi->d_name);
                     sprintf(theFolders + fpos, "%s", kmlFileName);
                     fpos += strlen(kmlFileName) + 1;
-                    ESP_LOGV(__FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding dir (%s)%d", path, fcnt, dcnt, fpos, kmlFileName, strlen(kmlFileName));
+                    ESP_LOGV(__PRETTY_FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding dir (%s)%d", path, fcnt, dcnt, fpos, kmlFileName, strlen(kmlFileName));
                 }
             }
             else if ((ext == NULL) || (strlen(ext) == 0) || endsWith(fi->d_name, ext))
             {
-                ESP_LOGV(__FUNCTION__, "Parsing %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
+                ESP_LOGV(__PRETTY_FUNCTION__, "Parsing %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
                 sprintf(theFName, "%s/%s", path, fi->d_name);
                 if ((excludeList == NULL) || (indexOf(excludeList, fi->d_name) == NULL))
                 {
                     stat(theFName, &fileStat);
                     if (fileStat.st_size == 0) {
-                        ESP_LOGW(__FUNCTION__,"Skipping empty file %s",theFName);
+                        ESP_LOGW(__PRETTY_FUNCTION__,"Skipping empty file %s",theFName);
                         continue;
                     }
                     gettimeofday(&tv_start, NULL);
@@ -117,9 +117,9 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                             tarStat = mtar_write_dir_header(tar, kmlFileName);
                             folderAdded=true;
                         }
-                        ESP_LOGV(__FUNCTION__, "Adding %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
+                        ESP_LOGV(__PRETTY_FUNCTION__, "Adding %s %s/%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
                         tarStat = mtar_write_file_header(tar, theFName + 1, fileStat.st_size);
-                        ESP_LOGV(__FUNCTION__, "stat %s: %d files. file %s, ram %d len: %li", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), fileStat.st_size);
+                        ESP_LOGV(__PRETTY_FUNCTION__, "stat %s: %d files. file %s, ram %d len: %li", path, fcnt, fi->d_name, heap_caps_get_free_size(MALLOC_CAP_DEFAULT), fileStat.st_size);
                         while (!(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) && (tarStat == MTAR_ESUCCESS) && !feof(theFile))
                         {
                             gettimeofday(&tv_rstart, NULL);
@@ -127,14 +127,14 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                             {
                                 totlen+=len;
                                 gettimeofday(&tv_rend, NULL);
-                                ESP_LOGV(__FUNCTION__, "%d read", len);
+                                ESP_LOGV(__PRETTY_FUNCTION__, "%d read", len);
 
                                 tarStat = mtar_write_data(tar, buf, len);
                                 gettimeofday(&tv_wend, NULL);
                             }
                             else
                             {
-                                ESP_LOGW(__FUNCTION__, "Error reading %s totlen:%d len:%d.", theFName, totlen, len);
+                                ESP_LOGW(__PRETTY_FUNCTION__, "Error reading %s totlen:%d len:%d.", theFName, totlen, len);
                             }
                         }
                         gettimeofday(&tv_end, NULL);
@@ -146,7 +146,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                             int64_t rstart_time_ms = (int64_t)tv_rstart.tv_sec * 1000L + ((int64_t)tv_rstart.tv_usec / 1000);
                             int64_t rend_time_ms = (int64_t)tv_rend.tv_sec * 1000L + ((int64_t)tv_rend.tv_usec / 1000);
                             int64_t wend_time_ms = (int64_t)tv_wend.tv_sec * 1000L + ((int64_t)tv_wend.tv_usec / 1000);
-                            ESP_LOGV(__FUNCTION__, "%s: Total Time: %f,Open Time: %f,Read Time: %f, Len: %d, Rate %f/s ram %d, ",
+                            ESP_LOGV(__PRETTY_FUNCTION__, "%s: Total Time: %f,Open Time: %f,Read Time: %f, Len: %d, Rate %f/s ram %d, ",
                                         path,
                                         (end_time_ms - start_time_ms) / 1000.0,
                                         (oend_time_ms - start_time_ms) / 1000.0,
@@ -156,7 +156,7 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                                         heap_caps_get_free_size(MALLOC_CAP_DEFAULT));
                         }
                         fClose(theFile);
-                        ESP_LOGV(__FUNCTION__, "Closing %s", theFName);
+                        ESP_LOGV(__PRETTY_FUNCTION__, "Closing %s", theFName);
                         if ((tarStat == MTAR_ESUCCESS) && 
                             !(xEventGroupGetBits(eventGroup) & TAR_SEND_DONE) &&
                             removeSrc && 
@@ -165,32 +165,32 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
                             !endsWith(theFName, ".md5") &&
                             !endsWith(theFName,getLogFName())){
                             if ((strlen(theFName)+strlen(filesToDelete)) > JSON_BUFFER_SIZE){
-                                ESP_LOGW(__FUNCTION__,"%s cannot be added to the deleted files this go round", theFName);
+                                ESP_LOGW(__PRETTY_FUNCTION__,"%s cannot be added to the deleted files this go round", theFName);
                             } else {
-                                ESP_LOGD(__FUNCTION__,"Flagging %s for deletion",theFName);
+                                ESP_LOGD(__PRETTY_FUNCTION__,"Flagging %s for deletion",theFName);
                                 fdpos+=sprintf(filesToDelete+fdpos,"%s,",theFName);
-                                ESP_LOGV(__FUNCTION__,"Files to delete(%d):%s",fdpos, filesToDelete);
+                                ESP_LOGV(__PRETTY_FUNCTION__,"Files to delete(%d):%s",fdpos, filesToDelete);
                             }
                         } else {
-                            ESP_LOGV(__FUNCTION__,"Not deleting %s",theFName);
+                            ESP_LOGV(__PRETTY_FUNCTION__,"Not deleting %s",theFName);
                         }
-                        ESP_LOGD(__FUNCTION__, "Added %d bytes from %s %s/%s", len, fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
+                        ESP_LOGD(__PRETTY_FUNCTION__, "Added %d bytes from %s %s/%s", len, fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name);
                     }
                     else
                     {
-                        ESP_LOGE(__FUNCTION__, "Cannot read %s", theFName);
+                        ESP_LOGE(__PRETTY_FUNCTION__, "Cannot read %s", theFName);
                         ret = ESP_FAIL;
                         break;
                     }
                 }
                 else
                 {
-                    ESP_LOGV(__FUNCTION__, "Skipping %s %s/%s excludeList:%s Match:%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name, excludeList, indexOf(excludeList, fi->d_name));
+                    ESP_LOGV(__PRETTY_FUNCTION__, "Skipping %s %s/%s excludeList:%s Match:%s", fi->d_type == DT_DIR ? "folder" : "file", path, fi->d_name, excludeList, indexOf(excludeList, fi->d_name));
                 }
             }
             else
             {
-                ESP_LOGV(__FUNCTION__, "Skipping %s %s", fi->d_type == DT_DIR ? "folder" : "file", fi->d_name);
+                ESP_LOGV(__PRETTY_FUNCTION__, "Skipping %s %s", fi->d_type == DT_DIR ? "folder" : "file", fi->d_name);
             }
             if (tar->pos > maxSize)
             {
@@ -200,27 +200,27 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
         closeDir(theFolder);
         if (tarStat == MTAR_ESUCCESS)
         {
-            ESP_LOGV(__FUNCTION__, "%s had %d files and %d folders subfolder len:%d", path, fcnt, dcnt, fpos);
+            ESP_LOGV(__PRETTY_FUNCTION__, "%s had %d files and %d folders subfolder len:%d", path, fcnt, dcnt, fpos);
             uint32_t ctpos = 0;
             while ((tarStat == MTAR_ESUCCESS)&&(dcnt-- > 0))
             {
-                ESP_LOGV(__FUNCTION__, "%d-%s: Getting sub-folder(%d) %s", dcnt, path, ctpos, theFolders + ctpos);
+                ESP_LOGV(__PRETTY_FUNCTION__, "%d-%s: Getting sub-folder(%d) %s", dcnt, path, ctpos, theFolders + ctpos);
                 if ((ret = tarFiles(tar, theFolders + ctpos, ext, recursive, excludeList, maxSize, removeSrc, filesToDelete)) != ESP_OK)
                 {
-                    ESP_LOGW(__FUNCTION__, "Error invoking getSdFiles for %s", kmlFileName);
+                    ESP_LOGW(__PRETTY_FUNCTION__, "Error invoking getSdFiles for %s", kmlFileName);
                 }
                 ctpos += strlen(theFolders + ctpos) + 1;
             }
         } 
         else 
         {
-            ESP_LOGW(__FUNCTION__, "Tar error opening %s:%d", path, tarStat);
+            ESP_LOGW(__PRETTY_FUNCTION__, "Tar error opening %s:%d", path, tarStat);
             ret = ESP_FAIL;
         }
     } 
     else
     {
-        ESP_LOGW(__FUNCTION__, "Error opening %s:%s", path, esp_err_to_name(errno));
+        ESP_LOGW(__PRETTY_FUNCTION__, "Error opening %s:%s", path, esp_err_to_name(errno));
         ret = ESP_FAIL;
     }
 
@@ -229,13 +229,13 @@ esp_err_t tarFiles(mtar_t *tar, const char *path, const char *ext, bool recursiv
     ldfree(buf);
     ldfree(kmlFileName);
     deinitSDCard();
-    ESP_LOGV(__FUNCTION__,"Done reading %s",path);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Done reading %s",path);
     return ret;
 }
 
 int tarRead(mtar_t *tar, void *data, unsigned size)
 {
-    ESP_LOGE(__FUNCTION__, "Cannot read");
+    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot read");
     return ESP_FAIL;
 }
 
@@ -244,7 +244,7 @@ int tarCount(mtar_t *tar, const void *data, unsigned size)
     sendTarParams* sp = (sendTarParams*)tar->stream;
     if (size == 0)
     {
-        ESP_LOGW(__FUNCTION__, "empty set");
+        ESP_LOGW(__PRETTY_FUNCTION__, "empty set");
         return ESP_OK;
     }
     sp->len+=size;
@@ -256,7 +256,7 @@ int tarWrite(mtar_t *tar, const void *data, unsigned size)
     sendTarParams* sp = (sendTarParams*)tar->stream;
     if (size == 0)
     {
-        ESP_LOGW(__FUNCTION__, "empty set");
+        ESP_LOGW(__PRETTY_FUNCTION__, "empty set");
         return ESP_OK;
     }
 
@@ -264,14 +264,14 @@ int tarWrite(mtar_t *tar, const void *data, unsigned size)
     {
         if (xEventGroupGetBits(sp->eventGroup) & TAR_SEND_DONE)
         {
-            ESP_LOGE(__FUNCTION__, "SendeR Died");
+            ESP_LOGE(__PRETTY_FUNCTION__, "SendeR Died");
             return ESP_FAIL;
         }
 
-        ESP_LOGV(__FUNCTION__, "Preparing chunck of %d", sp->bufLen);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Preparing chunck of %d", sp->bufLen);
 
         if (sp->sendBuf != NULL){
-            ESP_LOGV(__FUNCTION__, "Waiting for TAR_BUFFER_SENT");
+            ESP_LOGV(__PRETTY_FUNCTION__, "Waiting for TAR_BUFFER_SENT");
             xEventGroupWaitBits(sp->eventGroup, TAR_BUFFER_SENT, pdTRUE, pdTRUE, portMAX_DELAY);
         }
 
@@ -283,7 +283,7 @@ int tarWrite(mtar_t *tar, const void *data, unsigned size)
         sp->tarBuf = sp->tarBuf == sp->memBuf ? &sp->memBuf[JSON_BUFFER_SIZE] : sp->memBuf;
         sp->bufLen = 0;
     }
-    //ESP_LOGV(__FUNCTION__, "chunck: %d buflen:%d tot:%d", size, sp->bufLen, sp->len);
+    //ESP_LOGV(__PRETTY_FUNCTION__, "chunck: %d buflen:%d tot:%d", size, sp->bufLen, sp->len);
     memcpy(sp->tarBuf + sp->bufLen, data, size);
     sp->bufLen += size;
     sp->len += size;
@@ -292,7 +292,7 @@ int tarWrite(mtar_t *tar, const void *data, unsigned size)
 
 int tarSeek(mtar_t *tar, unsigned pos)
 {
-    ESP_LOGE(__FUNCTION__, "Cannot seek");
+    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot seek");
     return ESP_FAIL;
 }
 
@@ -305,24 +305,24 @@ int tarClose(mtar_t *tar)
     sendTarParams* sp = (sendTarParams*)tar->stream;
 
     if (sp->sendBuf && (xEventGroupGetBits(sp->eventGroup) & TAR_SEND_DONE) && (sp->bufLen > 0)) {
-        ESP_LOGE(__FUNCTION__, "Closing Tar, Cannot send final chunck of %d as sender died", sp->bufLen);
+        ESP_LOGE(__PRETTY_FUNCTION__, "Closing Tar, Cannot send final chunck of %d as sender died", sp->bufLen);
         xEventGroupSetBits(sp->eventGroup, TAR_BUILD_DONE);
         return ESP_FAIL;
     }
 
     if (sp->bufLen > 0){
-        ESP_LOGV(__FUNCTION__, "Closing Tar, waiting for final chunck of %d", sp->bufLen);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Closing Tar, waiting for final chunck of %d", sp->bufLen);
 
         if (sp->sendBuf)
             xEventGroupWaitBits(sp->eventGroup, TAR_BUFFER_SENT, pdFALSE, pdFALSE, portMAX_DELAY);
 
-        ESP_LOGV(__FUNCTION__, "Closing Tar, sending final chunck of %d", sp->bufLen);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Closing Tar, sending final chunck of %d", sp->bufLen);
         sp->sendBuf = sp->tarBuf;
         sp->sendLen = sp->bufLen;
         xEventGroupSetBits(sp->eventGroup, TAR_BUFFER_FILLED);
     }
 
-    ESP_LOGD(__FUNCTION__, "Wrote %d bytes", sp->len);
+    ESP_LOGD(__PRETTY_FUNCTION__, "Wrote %d bytes", sp->len);
     xEventGroupSetBits(sp->eventGroup, TAR_BUILD_DONE);
 
     return ESP_OK;
@@ -330,7 +330,7 @@ int tarClose(mtar_t *tar)
 
 void DeleteTarFiles(void* param){
     char* filesToDelete = (char*) param;
-    ESP_LOGV(__FUNCTION__,"Deleting %s",filesToDelete);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Deleting %s",filesToDelete);
 
     struct tm timeinfo;
     time_t now = 0;
@@ -343,7 +343,7 @@ void DeleteTarFiles(void* param){
     if (nextFile){
         *nextFile=0; //Remove trailng ,
         nextFile = lastIndexOf(filesToDelete,",");
-        ESP_LOGV(__FUNCTION__,"Files to delete:%s",filesToDelete);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Files to delete:%s",filesToDelete);
         if (nextFile == NULL) {
             nextFile = filesToDelete; //Assume there was only one file
         } else {
@@ -351,18 +351,18 @@ void DeleteTarFiles(void* param){
         }
     }
     while (nextFile) {
-        ESP_LOGV(__FUNCTION__,"nextFile:%s",filesToDelete);
+        ESP_LOGV(__PRETTY_FUNCTION__,"nextFile:%s",filesToDelete);
         if (!indexOf(nextFile,strftime_buf)){
             deleteFile(nextFile);
         } else {
-            ESP_LOGD(__FUNCTION__,"Not deleting %s",nextFile);
+            ESP_LOGD(__PRETTY_FUNCTION__,"Not deleting %s",nextFile);
         }
         if (nextFile == filesToDelete) {
-            ESP_LOGV(__FUNCTION__,"Done deleting");
+            ESP_LOGV(__PRETTY_FUNCTION__,"Done deleting");
             break;
         } else {
             *(nextFile-1)=0; // remove comma of processed file
-            ESP_LOGV(__FUNCTION__,"FTD:%s",filesToDelete);
+            ESP_LOGV(__PRETTY_FUNCTION__,"FTD:%s",filesToDelete);
             nextFile = lastIndexOf(filesToDelete,",");
             if (nextFile == NULL) {
                 nextFile = filesToDelete; // last file to delete
@@ -380,11 +380,11 @@ void BuildTar(void* param){
     memset(filesToDelete,0,JSON_BUFFER_SIZE);
     tarFiles(tar,"/lfs",NULL,true,"current.bin",1024000,true,filesToDelete);
     if (mtar_close(tar) == MTAR_ESUCCESS){
-        ESP_LOGD(__FUNCTION__,"Deleting %s",filesToDelete);
+        ESP_LOGD(__PRETTY_FUNCTION__,"Deleting %s",filesToDelete);
         CreateWokeBackgroundTask(DeleteTarFiles, "DeleteTarFiles", 4096, filesToDelete, tskIDLE_PRIORITY, NULL);
     } else {
         ldfree(filesToDelete);
-        ESP_LOGE(__FUNCTION__,"Failed to close tar");
+        ESP_LOGE(__PRETTY_FUNCTION__,"Failed to close tar");
     }
 }
 
@@ -399,7 +399,8 @@ void MeasureTar(void* param){
     mtar_close(&tar);
 }
 
-void TheRest::SendTar(void* param)
+//void TheRest::SendTar(void* param)
+void SendTar(void* param)
 {
     BufferedFile::FlushAll();
 
@@ -457,12 +458,12 @@ void TheRest::SendTar(void* param)
 
     CreateBackgroundTask(BuildTar,"BuildTar",8192, &tar, tskIDLE_PRIORITY,NULL);
     
-    ESP_LOGV(__FUNCTION__, "Connecting to %s", url);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Connecting to %s", url);
     if ((client = esp_http_client_init(config)) &&
         ((err = esp_http_client_set_header(client, "Content-Type","application/x-tar")) == ESP_OK) &&
         ((err = esp_http_client_open(client, 20000000) == ESP_OK))) {
         
-        ESP_LOGD(__FUNCTION__, "Sending to %s", url);
+        ESP_LOGD(__PRETTY_FUNCTION__, "Sending to %s", url);
         EventBits_t theBits = 0;
 
         while ((theBits=xEventGroupWaitBits(sp->eventGroup, TAR_BUFFER_FILLED, pdTRUE, pdTRUE, portMAX_DELAY)))
@@ -470,7 +471,7 @@ void TheRest::SendTar(void* param)
             if (sp->sendLen > 0)
             {
                 //printf(".");
-                ESP_LOGV(__FUNCTION__, "Sending chunk of %d", sp->sendLen);
+                ESP_LOGV(__PRETTY_FUNCTION__, "Sending chunk of %d", sp->sendLen);
                 len += sp->sendLen;
                 sentLen=0;
                 while((sentLen = esp_http_client_write(client,(const char *)sp->sendBuf, sp->sendLen)) != -1)
@@ -479,16 +480,16 @@ void TheRest::SendTar(void* param)
                         sp->sendBuf+=sentLen;
                         sp->sendLen-=sentLen;
                         if (sp->sendLen <= 0 ) {
-                            ESP_LOGV(__FUNCTION__, "Sent chunk of %d", sp->sendLen);
+                            ESP_LOGV(__PRETTY_FUNCTION__, "Sent chunk of %d", sp->sendLen);
                             break;
                         }
                     } else {
-                        ESP_LOGW(__FUNCTION__,"Failed sending %d",sp->sendLen);
+                        ESP_LOGW(__PRETTY_FUNCTION__,"Failed sending %d",sp->sendLen);
                         break;
                     }
                 }
                 if (sentLen <= 0) {
-                    ESP_LOGE(__FUNCTION__, "Client disconnected:%d",sentLen);
+                    ESP_LOGE(__PRETTY_FUNCTION__, "Client disconnected:%d",sentLen);
                     break;
                 }
 
@@ -497,7 +498,7 @@ void TheRest::SendTar(void* param)
                 }
                 xEventGroupSetBits(sp->eventGroup, TAR_BUFFER_SENT);
             } else {
-                ESP_LOGW(__FUNCTION__,"Got an empty chunck");
+                ESP_LOGW(__PRETTY_FUNCTION__,"Got an empty chunck");
             }
             if (xEventGroupGetBits(sp->eventGroup) & TAR_BUILD_DONE)
             {
@@ -509,11 +510,11 @@ void TheRest::SendTar(void* param)
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         xEventGroupSetBits(sp->eventGroup, TAR_SEND_DONE);
-        ESP_LOGD(__FUNCTION__, "Sent %d to %s", len, url);
+        ESP_LOGD(__PRETTY_FUNCTION__, "Sent %d to %s", len, url);
     } else {
-        ESP_LOGE(__FUNCTION__,"Error whilst sending tar:%s hlen:%d",esp_err_to_name(err), hlen);
+        ESP_LOGE(__PRETTY_FUNCTION__,"Error whilst sending tar:%s hlen:%d",esp_err_to_name(err), hlen);
     }
-    ESP_LOGD(__FUNCTION__, "Done sending to %s", url);
+    ESP_LOGD(__PRETTY_FUNCTION__, "Done sending to %s", url);
     xEventGroupClearBits(getAppEG(),app_bits_t::TRIPS_SYNCING);
     ldfree((void*)config->url);
     ldfree(config);

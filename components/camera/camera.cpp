@@ -1,9 +1,16 @@
 #include "include/camera.h"
+#include "esp_err.h"
 #include "esp_sleep.h"
 #include "esp_camera.h"
 #include "cJSON.h"
 #include "esp_timer.h"
 #include "esp_http_server.h"
+#include "eventmgr.h"
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include "freertos/portmacro.h"
+#include "freertos/semphr.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -40,8 +47,10 @@ Camera::Camera(AppConfig* config)
     frame_size(config->GetIntProperty("FRAME_SIZE")),
     fb_count(config->GetIntProperty("FB_COUNT")),
     jpeg_quality(config->GetIntProperty("JPEG_QUALITY")),
-    cameraType(config->GetStringProperty("type"))
+    cameraType(config->GetStringProperty("type")),
+    frameLock(xSemaphoreCreateBinary())
 {
+    xSemaphoreGive(frameLock);
     auto* appstate = new AppConfig(status,AppConfig::GetAppStatus());
     appstate->SetStringProperty("name",config->GetStringProperty("type"));
     appstate->SetIntProperty("initialized",0);
@@ -50,6 +59,9 @@ Camera::Camera(AppConfig* config)
     initialized = appstate->GetPropertyHolder("initialized");
     streaming = appstate->GetPropertyHolder("streaming");
     powered = appstate->GetPropertyHolder("powered");
+    std::memset(clients,0,5*sizeof(void*));
+    std::memset(inTransit,0,5*sizeof(void*));
+    std::memset(frameTs,0,sizeof(int64_t)*5);
     delete appstate;
 }
 
@@ -87,7 +99,7 @@ cJSON* Camera::BuildConfigTemplate() {
 }
 
 EventHandlerDescriptor* Camera::BuildHandlerDescriptors(){
-  ESP_LOGV(__FUNCTION__,"%s BuildHandlerDescriptors",name);
+  ESP_LOGV(__PRETTY_FUNCTION__,"%s BuildHandlerDescriptors",name);
   EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
   handler->AddEventDescriptor(1,"setTargetAngle",event_data_type_tp::JSON);
   return handler;
@@ -95,7 +107,7 @@ EventHandlerDescriptor* Camera::BuildHandlerDescriptors(){
 
 bool Camera::InitDevice(){
     if (this->initialized->valueint == 0){
-        ESP_LOGI(__FUNCTION__,"Initializing %s camera",this->cameraType);
+        ESP_LOGI(__PRETTY_FUNCTION__,"Initializing %s camera",this->cameraType);
 
         static camera_config_t camera_config = {
             .pin_pwdn  = this->pin_pwdn,
@@ -115,7 +127,7 @@ bool Camera::InitDevice(){
             .pin_href = this->pin_href,
             .pin_pclk = this->pin_pclk,
 
-            .xclk_freq_hz = 20000000,//EXPERIMENTAL: Set to 16MHz on ESP32-S2 or ESP32-S3 to enable EDMA mode
+            .xclk_freq_hz = 10000000,//EXPERIMENTAL: Set to 16MHz on ESP32-S2 or ESP32-S3 to enable EDMA mode
             .ledc_timer = (ledc_timer_t)this->ledc_timer,
             .ledc_channel = (ledc_channel_t)this->ledc_channel,
 
@@ -129,63 +141,55 @@ bool Camera::InitDevice(){
             .sccb_i2c_port = -1
         };
 
+        //initialize the camera
+        esp_err_t ret;
+        ESP_LOGI(__PRETTY_FUNCTION__,"Initializing camera with ");
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_pwdn=%d",camera_config.pin_pwdn);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_reset=%d",camera_config.pin_reset);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_xclk=%d",camera_config.pin_xclk);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_sccb_sda=%d",camera_config.pin_sccb_sda);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_sccb_scl=%d",camera_config.pin_sccb_scl);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_d7=%d",camera_config.pin_d7);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_d6=%d",camera_config.pin_d6);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_d5=%d",camera_config.pin_d5);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_d4=%d",camera_config.pin_d4);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_d3=%d",camera_config.pin_d3);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_d2=%d",camera_config.pin_d2);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_d1=%d",camera_config.pin_d1);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_d0=%d",camera_config.pin_d0);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_vsync=%d",camera_config.pin_vsync);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_href=%d",camera_config.pin_href);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pin_pclk=%d",camera_config.pin_pclk);
+        ESP_LOGI(__PRETTY_FUNCTION__,"xclk_freq_hz=%d",camera_config.xclk_freq_hz);
+        ESP_LOGI(__PRETTY_FUNCTION__,"ledc_timer=%d",camera_config.ledc_timer);
+        ESP_LOGI(__PRETTY_FUNCTION__,"ledc_channel=%d",camera_config.ledc_channel);
+        ESP_LOGI(__PRETTY_FUNCTION__,"pixel_format=%d",camera_config.pixel_format);
+        ESP_LOGI(__PRETTY_FUNCTION__,"frame_size=%d",camera_config.frame_size);
+        ESP_LOGI(__PRETTY_FUNCTION__,"jpeg_quality=%d",camera_config.jpeg_quality);
+        ESP_LOGI(__PRETTY_FUNCTION__,"fb_count=%zu",camera_config.fb_count);
+        ESP_LOGI(__PRETTY_FUNCTION__,"fb_location=%d",camera_config.fb_location);
+        ESP_LOGI(__PRETTY_FUNCTION__,"grab_mode=%d",camera_config.grab_mode);
+        ESP_LOGI(__PRETTY_FUNCTION__,"sccb_i2c_port=%d",camera_config.sccb_i2c_port);
+
+
         //power up the camera if PWDN pin is defined
         if(this->pin_pwdn != -1){
             ESP_ERROR_CHECK(gpio_set_direction(this->pin_pwdn,gpio_mode_t::GPIO_MODE_OUTPUT));
             ESP_ERROR_CHECK(gpio_set_level(this->pin_pwdn,0));
             cJSON_SetIntValue(powered,1);
-            ESP_LOGI(__FUNCTION__, "Camera powered up");
+            ESP_LOGI(__PRETTY_FUNCTION__, "Camera powered up");
         } else {
-            ESP_LOGI(__FUNCTION__, "Camera does not have pwdn");
+            ESP_LOGI(__PRETTY_FUNCTION__, "Camera does not have pwdn");
         }
-
-        //initialize the camera
-        esp_err_t ret;
-        ESP_LOGI(__FUNCTION__,"Initializing camera with ");
-        ESP_LOGI(__FUNCTION__,"pin_pwdn=%d",camera_config.pin_pwdn);
-        ESP_LOGI(__FUNCTION__,"pin_reset=%d",camera_config.pin_reset);
-        ESP_LOGI(__FUNCTION__,"pin_xclk=%d",camera_config.pin_xclk);
-        ESP_LOGI(__FUNCTION__,"pin_sccb_sda=%d",camera_config.pin_sccb_sda);
-        ESP_LOGI(__FUNCTION__,"pin_sccb_scl=%d",camera_config.pin_sccb_scl);
-        ESP_LOGI(__FUNCTION__,"pin_d7=%d",camera_config.pin_d7);
-        ESP_LOGI(__FUNCTION__,"pin_d6=%d",camera_config.pin_d6);
-        ESP_LOGI(__FUNCTION__,"pin_d5=%d",camera_config.pin_d5);
-        ESP_LOGI(__FUNCTION__,"pin_d4=%d",camera_config.pin_d4);
-        ESP_LOGI(__FUNCTION__,"pin_d3=%d",camera_config.pin_d3);
-        ESP_LOGI(__FUNCTION__,"pin_d2=%d",camera_config.pin_d2);
-        ESP_LOGI(__FUNCTION__,"pin_d1=%d",camera_config.pin_d1);
-        ESP_LOGI(__FUNCTION__,"pin_d0=%d",camera_config.pin_d0);
-        ESP_LOGI(__FUNCTION__,"pin_vsync=%d",camera_config.pin_vsync);
-        ESP_LOGI(__FUNCTION__,"pin_href=%d",camera_config.pin_href);
-        ESP_LOGI(__FUNCTION__,"pin_pclk=%d",camera_config.pin_pclk);
-        ESP_LOGI(__FUNCTION__,"xclk_freq_hz=%d",camera_config.xclk_freq_hz);
-        ESP_LOGI(__FUNCTION__,"ledc_timer=%d",camera_config.ledc_timer);
-        ESP_LOGI(__FUNCTION__,"ledc_channel=%d",camera_config.ledc_channel);
-        ESP_LOGI(__FUNCTION__,"pixel_format=%d",camera_config.pixel_format);
-        ESP_LOGI(__FUNCTION__,"frame_size=%d",camera_config.frame_size);
-        ESP_LOGI(__FUNCTION__,"jpeg_quality=%d",camera_config.jpeg_quality);
-        ESP_LOGI(__FUNCTION__,"fb_count=%d",camera_config.fb_count);
-        ESP_LOGI(__FUNCTION__,"fb_location=%d",camera_config.fb_location);
-        ESP_LOGI(__FUNCTION__,"grab_mode=%d",camera_config.grab_mode);
-        ESP_LOGI(__FUNCTION__,"sccb_i2c_port=%d",camera_config.sccb_i2c_port);
-
 
         cJSON_SetIntValue(initialized,(ret=esp_camera_init(&camera_config)) == ESP_OK ? 1: 0);
         if (initialized->valueint == 1) {
-            ESP_LOGI(__FUNCTION__, "Camera Initialized");
+            ESP_LOGI(__PRETTY_FUNCTION__, "Camera Initialized");
         } else {
-            ESP_LOGE(__FUNCTION__, "Camera Init Failed:(%#03x)%s",ret,esp_err_to_name(ret));
+            ESP_LOGE(__PRETTY_FUNCTION__, "Camera Init Failed:(%#03x)%s",ret,esp_err_to_name(ret));
         }
-    } else {
-        //power up the camera if PWDN pin is defined
-        if(this->pin_pwdn != -1){
-            ESP_ERROR_CHECK(gpio_set_direction(this->pin_pwdn,gpio_mode_t::GPIO_MODE_OUTPUT));
-            ESP_ERROR_CHECK(gpio_set_level(this->pin_pwdn,0));
-            cJSON_SetIntValue(powered,1);
-            ESP_LOGI(__FUNCTION__, "Camera powered up");
-        } else {
-            ESP_LOGI(__FUNCTION__, "Camera does not have pwdn");
-        }
+
+        CreateBackgroundTask(Camera::Janitor, "FrameJanitor", 4096, this, tskIDLE_PRIORITY, NULL);
     }
 
     return initialized->valueint == 1;
@@ -195,10 +199,204 @@ const char* Camera::GetName() {
     return ManagedDevice::GetName();
 }
 
+struct camera_frame_request_t {
+    Camera* camera;
+    WebsocketManager::ws_msg_t* wsMsg;
+};
+
+void Camera::sentFrame(void* param) {
+    void** params = (void**)param;
+    Camera* camera = (Camera*) params[0];
+    void* pos = params[1];
+    void* fb = camera->inTransit[(uint64_t)pos];
+    camera->inTransit[(uint64_t)pos] = nullptr;
+    camera->frameTs[(uint64_t)pos] = 0;
+    uint8_t activeClients = 0;
+    ESP_LOGV(__PRETTY_FUNCTION__,"frame returned by %d",(int)pos);
+
+    for (uint8_t idx = 0; idx < 5; idx++) {
+        if (camera->inTransit[idx]) {
+            ESP_LOGV(__PRETTY_FUNCTION__,"client %d is still active",idx);
+            activeClients++;
+        }
+    }
+
+    if ((activeClients == 0) && fb) {
+        if (params[2]) {
+            ESP_LOGV(__PRETTY_FUNCTION__,"client %d freed compressed jpg",(int)pos);
+            free(fb);
+        } else {
+            ESP_LOGV(__PRETTY_FUNCTION__,"client %d returned frame", (int)pos);
+            esp_camera_fb_return((camera_fb_t*)fb);
+        }
+        camera->sendFrame();
+    }
+}
+
+void Camera::sendFrame() {
+    ESP_LOGV(__PRETTY_FUNCTION__,"frame start");
+
+    uint8_t activeClients = 0;
+
+    camera_fb_t* fb = nullptr;
+
+    ESP_LOGV(__PRETTY_FUNCTION__,"taking");
+    size_t _jpg_buf_len;
+    uint8_t * _jpg_buf;
+    void* isCompressed = nullptr;
+    if (xSemaphoreTake(frameLock, portMAX_DELAY)) {
+        ESP_LOGV(__PRETTY_FUNCTION__,"took");
+        fb = esp_camera_fb_get();
+
+        if(fb && fb->format != PIXFORMAT_JPEG){
+            ESP_LOGV(__PRETTY_FUNCTION__,"uncompressed image %zu",fb->len);
+            if(!frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len)){
+                xSemaphoreGive(frameLock);
+                esp_camera_fb_return(fb);
+                ESP_LOGE(__PRETTY_FUNCTION__, "JPEG compression failed");
+            } else {
+                xSemaphoreGive(frameLock);
+                isCompressed = _jpg_buf;
+                esp_camera_fb_return(fb);
+                ESP_LOGV(__PRETTY_FUNCTION__,"compressed jpg %zu",_jpg_buf_len);
+            }
+        } else if (fb) {
+            xSemaphoreGive(frameLock);
+            _jpg_buf_len = fb->len;
+            _jpg_buf = fb->buf;
+            ESP_LOGV(__PRETTY_FUNCTION__,"native jpg %zu",_jpg_buf_len);
+        }
+    }
+
+    if (fb) {
+        for (uint8_t idx = 0; idx < 5; idx++) {
+            WebsocketManager::ws_msg_t* wsMsg = clients[idx];
+            if (wsMsg) {
+                if (!wsMsg->client->jIsLive->valueint) {
+                    clients[idx] = nullptr;
+                    ESP_LOGW(__PRETTY_FUNCTION__,"Client %d had disconnected",idx);
+                    ldfree((wsMsg->postHookParam));
+                    ldfree(wsMsg);
+                } else if (!inTransit[idx]) {
+                    wsMsg->buf = _jpg_buf;
+                    wsMsg->len = _jpg_buf_len;
+                    esp_err_t ret = httpd_queue_work(wsMsg->client->hd,WebsocketManager::PostToClient,wsMsg);
+
+                    if (ret != ESP_OK) {
+                        cJSON_SetIntValue(wsMsg->client->jIsLive,false);
+                        httpd_sess_trigger_close(wsMsg->client->hd, wsMsg->client->fd);
+                        wsMsg->client->fd=0;
+                        wsMsg->client->hd=nullptr;
+                        AppConfig::SignalStateChange(state_change_t::MAIN);
+                        clients[idx] = nullptr;
+                        ESP_LOGW(__PRETTY_FUNCTION__,"Client %d disconnected: %s",idx, esp_err_to_name(ret));
+                        ldfree((wsMsg->postHookParam));
+                        ldfree(wsMsg);
+                    } else {
+                        inTransit[idx] = _jpg_buf;
+                        frameTs[idx] = esp_timer_get_time();
+                        ((void**)wsMsg->postHookParam)[2] = isCompressed;
+                        activeClients++;
+                    }
+                }
+            }
+        }
+
+        if (!fb || !activeClients) {
+            ESP_LOGE(__PRETTY_FUNCTION__,"Stopping. Got a frame:%d. Frame sent:%d.",fb != nullptr, activeClients);
+            for (uint8_t idx = 0; idx < 5; idx++) {
+                clients[idx] = nullptr;
+                inTransit[idx] = nullptr;
+            }
+
+            if (fb) {
+                esp_camera_fb_return(fb);
+            }
+
+            ESP_LOGI(__PRETTY_FUNCTION__,"Streaming %s Done", GetName());
+
+            if(pin_pwdn != -1){
+                ESP_ERROR_CHECK(gpio_set_direction(pin_pwdn,gpio_mode_t::GPIO_MODE_OUTPUT));
+                ESP_ERROR_CHECK(gpio_set_level(pin_pwdn,1));
+                cJSON_SetIntValue(powered,0);
+                ESP_LOGI(__PRETTY_FUNCTION__, "Camera powered down");
+            } else {
+                ESP_LOGI(__PRETTY_FUNCTION__, "Camera does not have pwdn");
+            }
+            esp_camera_deinit();
+            cJSON_SetIntValue(initialized,0);
+            cJSON_SetBoolValue(streaming,cJSON_False);
+        }
+    }
+}
+
+void Camera::Janitor(void* param) {
+    ESP_LOGI(__PRETTY_FUNCTION__,"Starting Janitor");
+    Camera* camera = (Camera*) param;
+    int64_t curTs = 0;
+    while (camera->initialized->valueint) {
+        curTs = esp_timer_get_time();
+        for (int idx =0; idx<5; idx++) {
+            if (camera->frameTs[idx]) {
+                ESP_LOGV(__PRETTY_FUNCTION__,"Client %d:%lld",idx,(long long int)curTs - camera->frameTs[idx]);
+            }
+            if (camera->clients[idx] && !camera->clients[idx]->client->jIsLive->valueint) {
+                ESP_LOGW(__PRETTY_FUNCTION__,"Client %d disconnected",idx);
+                camera->sendFrame();
+                continue;
+            }
+            if (camera->frameTs[idx] && ((curTs - camera->frameTs[idx]) > 500000)) {
+                ESP_LOGW(__PRETTY_FUNCTION__,"Stale frame for client %d",idx);
+                camera->sentFrame(camera->clients[idx]->postHookParam);
+            }
+        }
+        vTaskDelay(500/portTICK_PERIOD_MS);
+    }
+    ESP_LOGI(__PRETTY_FUNCTION__,"Janitor done");
+}
+
+void Camera::streamVideoToWs(void * params){
+    camera_ws_stream_t* request = (camera_ws_stream_t*)params;
+    if (!request->camera->InitDevice()) {
+        ESP_LOGE(__PRETTY_FUNCTION__,"Camera not initialized");
+        return;
+    }
+
+    bool clientRegistered = false;
+
+    for (uint8_t idx = 0; idx < 5; idx++) {
+        if (!request->camera->clients[idx]) {
+            WebsocketManager::ws_msg_t* wsMsg = (WebsocketManager::ws_msg_t*)dmalloc(sizeof(WebsocketManager::ws_msg_t));
+            memset(wsMsg, 0, sizeof(WebsocketManager::ws_msg_t));
+            void** params = (void**)dmalloc(3*sizeof(void*));
+            params[0] = request->camera;
+            params[1] = (void*)(uint64_t)idx;
+            params[2] = nullptr;
+
+            wsMsg->msgType = HTTPD_WS_TYPE_BINARY;
+            wsMsg->postHook = sentFrame;
+            wsMsg->postHookParam = params;
+            wsMsg->client = request->client;
+            request->camera->clients[idx] = wsMsg;
+            clientRegistered = true;
+            ESP_LOGI(__PRETTY_FUNCTION__,"Client Registered as %d", idx);
+            break;
+        }
+    }
+
+    if (!clientRegistered) {
+        ESP_LOGE(__PRETTY_FUNCTION__,"Cannot register client");
+        return;
+    }
+    cJSON_SetBoolValue(request->camera->streaming,cJSON_True);
+    ESP_LOGI(__PRETTY_FUNCTION__,"Sending frame");
+    request->camera->sendFrame();
+    ESP_LOGI(__PRETTY_FUNCTION__,"Sent frame");
+}
 
 esp_err_t Camera::streamVideo(httpd_req_t * req) {
     if (!InitDevice()) {
-        ESP_LOGE(__FUNCTION__,"Camera not initialized");
+        ESP_LOGE(__PRETTY_FUNCTION__,"Camera not initialized");
         httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Camera not initialized");
         return ESP_FAIL;
     }
@@ -216,14 +414,14 @@ esp_err_t Camera::streamVideo(httpd_req_t * req) {
 
     res = httpd_resp_set_type(req, _STREAM_CONTENT_TYPE);
     if(res != ESP_OK){
-        ESP_LOGE(__FUNCTION__,"Cannot set resp type");
+        ESP_LOGE(__PRETTY_FUNCTION__,"Cannot set resp type");
     } else {
-        ESP_LOGI(__FUNCTION__,"Straming %s", GetName());
+        ESP_LOGI(__PRETTY_FUNCTION__,"Straming %s", GetName());
         cJSON_SetBoolValue(streaming,cJSON_True);
         while(res == ESP_OK){
             fb = esp_camera_fb_get();
             if (!fb) {
-                ESP_LOGE(__FUNCTION__, "Camera capture failed");
+                ESP_LOGE(__PRETTY_FUNCTION__, "Camera capture failed");
                 res = ESP_FAIL;
                 httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Camera capture failed");
                 break;
@@ -231,7 +429,7 @@ esp_err_t Camera::streamVideo(httpd_req_t * req) {
             if(fb->format != PIXFORMAT_JPEG){
                 bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
                 if(!jpeg_converted){
-                    ESP_LOGE(__FUNCTION__, "JPEG compression failed");
+                    ESP_LOGE(__PRETTY_FUNCTION__, "JPEG compression failed");
                     esp_camera_fb_return(fb);
                     res = ESP_FAIL;
                 }
@@ -259,27 +457,27 @@ esp_err_t Camera::streamVideo(httpd_req_t * req) {
                 httpd_resp_send_err(req,HTTPD_500_INTERNAL_SERVER_ERROR,"Camera fb return failed");
                 break;
             }
+
             int64_t fr_end = esp_timer_get_time();
             int64_t frame_time = fr_end - last_frame;
             last_frame = fr_end;
             frame_time /= 1000;
-            ESP_LOGI(__FUNCTION__, "MJPG: %uKB %ums (%.1ffps)",
+            ESP_LOGI(__PRETTY_FUNCTION__, "MJPG: %uKB %ums (%.1ffps)",
                 (uint32_t)(_jpg_buf_len/1024),
                 (uint32_t)frame_time, 1000.0 / (uint32_t)frame_time);
         }
-        ESP_LOGI(__FUNCTION__,"Straming %s Done", GetName());
+        ESP_LOGI(__PRETTY_FUNCTION__,"Straming %s Done", GetName());
         //power down the camera if PWDN pin is defined
         if(this->pin_pwdn != -1){
             ESP_ERROR_CHECK(gpio_set_direction(this->pin_pwdn,gpio_mode_t::GPIO_MODE_OUTPUT));
             ESP_ERROR_CHECK(gpio_set_level(this->pin_pwdn,1));
             cJSON_SetIntValue(powered,0);
-            ESP_LOGI(__FUNCTION__, "Camera powered down");
+            ESP_LOGI(__PRETTY_FUNCTION__, "Camera powered down");
         } else {
-            ESP_LOGI(__FUNCTION__, "Camera does not have pwdn");
+            ESP_LOGI(__PRETTY_FUNCTION__, "Camera does not have pwdn");
         }
         esp_camera_deinit();
         cJSON_SetIntValue(initialized,0);
-
     }
     return res;
 }

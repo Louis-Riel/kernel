@@ -64,7 +64,7 @@ Servo::Servo(AppConfig* config)
         this->InitDevice();
     } else {
         appstate->SetIntProperty("currentAngle",-1);    
-        ESP_LOGE(__FUNCTION__,"Bad config, noting innited");
+        ESP_LOGE(__PRETTY_FUNCTION__,"Bad config, noting innited");
     }
     delete appstate;
 }
@@ -84,7 +84,7 @@ cJSON* Servo::BuildConfigTemplate() {
 }
 
 EventHandlerDescriptor* Servo::BuildHandlerDescriptors(){
-  ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
+  ESP_LOGV(__PRETTY_FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
   EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
   handler->AddEventDescriptor(1,"setTargetAngle",event_data_type_tp::JSON);
   return handler;
@@ -97,7 +97,7 @@ uint32_t Servo::servo_angle_to_duty_us(int angle)
 }
 
 void Servo::InitDevice(){
-    ESP_LOGI(__FUNCTION__,"Initialising servo at pin %d",this->pinNo);
+    ESP_LOGI(__PRETTY_FUNCTION__,"Initialising servo at pin %d",this->pinNo);
 
     ESP_ERROR_CHECK(mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM0A, pinNo));
 
@@ -111,10 +111,10 @@ void Servo::InitDevice(){
         };
         mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config);
         isPwmInitialized = true;
-        ESP_LOGI(__FUNCTION__,"Servo PWM init done");
+        ESP_LOGI(__PRETTY_FUNCTION__,"Servo PWM init done");
     }
 
-    ESP_LOGI(__FUNCTION__,"Servo pin %d initialised",this->pinNo);
+    ESP_LOGI(__PRETTY_FUNCTION__,"Servo pin %d initialised",this->pinNo);
     CreateBackgroundTask(servoThread,this->name, 4096, this, tskIDLE_PRIORITY, nullptr);
 }
 
@@ -129,7 +129,7 @@ bool Servo::ProcessCommand(ManagedDevice* servo, cJSON * parms) {
         } else {
             angle = jangle->valueint;
         }
-        ESP_LOGI(__FUNCTION__,"Processing angle request for %s angle:%d",servo->GetName(), angle);
+        ESP_LOGI(__PRETTY_FUNCTION__,"Processing angle request for %s angle:%d",servo->GetName(), angle);
         if (angle < 0) {
             angle = 0;
         }
@@ -157,7 +157,7 @@ void Servo::servoThread(void* instance) {
     servo->isRunning = true;
     cJSON_SetIntValue(servo->currentAngle, 0);
     cJSON_SetIntValue(servo->targetAngle, 0);
-    ESP_LOGI(__FUNCTION__, "Angle of rotation: %d/%d", servo->currentAngle->valueint,servo->servo_angle_to_duty_us(servo->currentAngle->valueint));
+    ESP_LOGI(__PRETTY_FUNCTION__, "Angle of rotation: %d/%d", servo->currentAngle->valueint,servo->servo_angle_to_duty_us(servo->currentAngle->valueint));
     ESP_ERROR_CHECK(mcpwm_set_duty_in_us(MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_OPR_A, servo->servo_angle_to_duty_us(servo->currentAngle->valueint)));
     EventGroupHandle_t stateEg = AppConfig::GetStateGroupHandle();
     EventBits_t bits = 0;
@@ -166,7 +166,7 @@ void Servo::servoThread(void* instance) {
         bits = xEventGroupWaitBits(stateEg,0xff,pdTRUE,pdFALSE,portMAX_DELAY);
         if (bits & state_change_t::MAIN) {
             if (servo->targetAngle->valueint != servo->currentAngle->valueint) {
-                ESP_LOGI(__FUNCTION__, "Angle of rotation: %d/%d in %dms", servo->targetAngle->valueint,servo->servo_angle_to_duty_us(servo->targetAngle->valueint),servo->duration->valueint);
+                ESP_LOGI(__PRETTY_FUNCTION__, "Angle of rotation: %d/%d in %dms", servo->targetAngle->valueint,servo->servo_angle_to_duty_us(servo->targetAngle->valueint),servo->duration->valueint);
 
                 if (servo->duration->valueint == 0) {
                     ESP_ERROR_CHECK(mcpwm_set_duty_in_us(MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_OPR_A, servo->servo_angle_to_duty_us(servo->targetAngle->valueint)));
@@ -178,12 +178,12 @@ void Servo::servoThread(void* instance) {
                     uint32_t sliceSize = totalAngle / NUM_TIME_SLICES;
                     int direction = (servo->targetAngle->valueint > servo->currentAngle->valueint) ? 1 : -1;
                     TickType_t xLastWakeTime = 0;
-                    ESP_LOGV(__FUNCTION__,"timeleft:%d, totalAngle:%d, sliceSize:%d",timeLeft,totalAngle,sliceSize);
+                    ESP_LOGV(__PRETTY_FUNCTION__,"timeleft:%d, totalAngle:%d, sliceSize:%d",timeLeft,totalAngle,sliceSize);
                     for (int i = 0; i < NUM_TIME_SLICES; i++) {
                         uint32_t sliceTime = max(1,servo->duration->valueint * time_distribution[i]);
                         uint32_t stepAngle = max(1, sliceSize / (sliceTime/10));
                         TickType_t sliceTicks = pdMS_TO_TICKS(sliceTime);
-                        ESP_LOGV(__FUNCTION__,"slicetime:%d,stepAngle:%d,sliceTicks:%d",sliceTime,stepAngle,sliceTicks);
+                        ESP_LOGV(__PRETTY_FUNCTION__,"slicetime:%d,stepAngle:%d,sliceTicks:%d",sliceTime,stepAngle,sliceTicks);
                         TickType_t stepStartTime = xTaskGetTickCount();
                         for (int x = 0; x < sliceSize; x+=stepAngle) {
                             xLastWakeTime = xTaskGetTickCount();

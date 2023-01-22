@@ -37,7 +37,7 @@ void dumpTheLogs(void* params){
 
 void dumpLogs(){
     if (xEventGroupGetBits(getAppEG())&app_bits_t::TRIPS_SYNCING) {
-        ESP_LOGI(__FUNCTION__,"Not flushing whilst dumping");
+        ESP_LOGI(__PRETTY_FUNCTION__,"Not flushing whilst dumping");
         return;
     }
 

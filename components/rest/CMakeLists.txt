@@ -6,3 +6,4 @@ idf_component_register(
     EMBED_TXTFILES "../../res/index.html" "../../res/index-sd.html" "../../res/dist/app-min-min.js" "../../res/dist/app-min-min.css"
     SRCS "../../main/log.cpp" "../../main/utils.cpp" "handlers.cpp" "websocket.cpp" "route.cpp" "flash.cpp" "netjobs.cpp" "restvalid.cpp" "pwdmgr.cpp" "pwdentry.cpp"
 )
+

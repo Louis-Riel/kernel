@@ -18,6 +18,7 @@
 #include <sys/dirent.h>
 #include "../../main/utils.h"
 #include "camera.h"
+#include "esp_ota_ops.h"
 
 #define LOG_LOCAL_LEVEL ESP_LOG_DEBUG
 
@@ -135,7 +136,7 @@ cJSON *TheRest::tasks_json()
 
 cJSON* TheRest::status_json() {
     TheRest* rest = GetServer();
-    ESP_LOGV(__FUNCTION__, "Status Handler");
+    ESP_LOGV(__PRETTY_FUNCTION__, "Status Handler");
 
     struct timeval tv_now;
     gettimeofday(&tv_now, nullptr);
@@ -176,7 +177,7 @@ cJSON* TheRest::status_json() {
 
 cJSON* TheRest::bake_status_json()
 {
-    ESP_LOGV(__FUNCTION__, "Bake Status Handler");
+    ESP_LOGV(__PRETTY_FUNCTION__, "Bake Status Handler");
 
     struct timeval tv_now;
     gettimeofday(&tv_now, nullptr);
@@ -217,7 +218,7 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
 {
     if ((path == nullptr) || (strlen(path) == 0))
     {
-        ESP_LOGE(__FUNCTION__, "Missing path");
+        ESP_LOGE(__PRETTY_FUNCTION__, "Missing path");
         return ESP_FAIL;
     }
     if (strcmp(path, "/") == 0)
@@ -226,12 +227,12 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
         return ESP_OK;
     }
     if (!(startsWith(path, "/sdcard") ? initStorage(SDCARD_FLAG) : initStorage(SPIFF_FLAG))) {
-        ESP_LOGE(__FUNCTION__, "Cannot init storage");
+        ESP_LOGE(__PRETTY_FUNCTION__, "Cannot init storage");
         return ESP_FAIL;
     }
     esp_err_t ret = ESP_OK;
     uint32_t sLen = strlen(res);
-    ESP_LOGV(__FUNCTION__, "Parsing %s", path);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Parsing %s", path);
     char *theFolders = (char *)dmalloc(1024);
     memset(theFolders, 0, 1024);
     char *theFName = (char *)dmalloc(1024);
@@ -257,16 +258,16 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
                         dcnt++;
                         sprintf(kmlFileName, "%s/%s", path, fi->d_name);
                         fpos += sprintf(theFolders + fpos, "%s", kmlFileName) + 1;
-                        ESP_LOGV(__FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding dir %s", path, fcnt, dcnt, fpos, kmlFileName);
+                        ESP_LOGV(__PRETTY_FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding dir %s", path, fcnt, dcnt, fpos, kmlFileName);
                     }
                     if ((ext == nullptr) || (strlen(ext) == 0))
                     {
                         if (sLen > (resLen - 100))
                         {
-                            ESP_LOGV(__FUNCTION__, "Buffer Overflow, flushing");
+                            ESP_LOGV(__PRETTY_FUNCTION__, "Buffer Overflow, flushing");
                             if ((ret = httpd_resp_send_chunk(req, res, sLen)) != ESP_OK)
                             {
-                                ESP_LOGE(__FUNCTION__, "Error sending chunk %s sLenL%d, actuallen:%d", esp_err_to_name(ret), sLen, strlen(res));
+                                ESP_LOGE(__PRETTY_FUNCTION__, "Error sending chunk %s sLenL%d, actuallen:%d", esp_err_to_name(ret), sLen, strlen(res));
                                 break;
                             }
                             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(res);
@@ -284,13 +285,13 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
                 else if ((ext == nullptr) || (strlen(ext) == 0) || endsWith(fi->d_name, ext))
                 {
                     fcnt++;
-                    ESP_LOGV(__FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding file %s", path, fcnt, dcnt, fpos, fi->d_name);
+                    ESP_LOGV(__PRETTY_FUNCTION__, "%s currently has %d files and %d folders subfolder len:%d. Adding file %s", path, fcnt, dcnt, fpos, fi->d_name);
                     if (sLen > (resLen - 100))
                     {
-                        ESP_LOGV(__FUNCTION__, "Buffer Overflow, flushing");
+                        ESP_LOGV(__PRETTY_FUNCTION__, "Buffer Overflow, flushing");
                         if ((ret = httpd_resp_send_chunk(req, res, sLen)) != ESP_OK)
                         {
-                            ESP_LOGE(__FUNCTION__, "Error sending chunk %s sLenL%d, actuallen:%d", esp_err_to_name(ret), sLen, strlen(res));
+                            ESP_LOGE(__PRETTY_FUNCTION__, "Error sending chunk %s sLenL%d, actuallen:%d", esp_err_to_name(ret), sLen, strlen(res));
                             break;
                         }
                         else
@@ -314,21 +315,21 @@ esp_err_t TheRest::findFiles(httpd_req_t *req, const char *path, const char *ext
             }
         }
         closedir(theFolder);
-        ESP_LOGV(__FUNCTION__, "%s has %d files and %d folders subfolder len:%d", path, fcnt, dcnt, fpos);
+        ESP_LOGV(__PRETTY_FUNCTION__, "%s has %d files and %d folders subfolder len:%d", path, fcnt, dcnt, fpos);
         uint32_t ctpos = 0;
         while (dcnt-- > 0)
         {
-            ESP_LOGV(__FUNCTION__, "%d-%s: Getting sub-folder(%d) %s", dcnt, path, ctpos, theFolders + ctpos);
+            ESP_LOGV(__PRETTY_FUNCTION__, "%d-%s: Getting sub-folder(%d) %s", dcnt, path, ctpos, theFolders + ctpos);
             if (findFiles(req, theFolders + ctpos, ext, recursive, res, resLen) != ESP_OK)
             {
-                ESP_LOGW(__FUNCTION__, "Error invoking getSdFiles for %s", kmlFileName);
+                ESP_LOGW(__PRETTY_FUNCTION__, "Error invoking getSdFiles for %s", kmlFileName);
             }
             ctpos += strlen(theFolders) + 1;
         }
     }
     else
     {
-        ESP_LOGW(__FUNCTION__, "Error opening %s:%s", path, esp_err_to_name(errno));
+        ESP_LOGW(__PRETTY_FUNCTION__, "Error opening %s:%s", path, esp_err_to_name(errno));
         ret = ESP_FAIL;
     }
 
@@ -349,7 +350,7 @@ esp_err_t TheRest::eventDescriptor_handler(httpd_req_t *req){
     char* eventId = indexOf(eventBase,"/");
     if (eventId) {
         *eventId++=0;
-        ESP_LOGV(__FUNCTION__,"base:%s id:%s",eventBase,eventId);
+        ESP_LOGV(__PRETTY_FUNCTION__,"base:%s id:%s",eventBase,eventId);
         EventDescriptor_t const* ed = nullptr;
         if (eventId[0] <= 9) {
             ed=EventHandlerDescriptor::GetEventDescriptor(eventBase,atoi(eventId));
@@ -393,7 +394,7 @@ void UpdateGpioProp(cfg_gpio_t *cfg, gpio_num_t val)
 {
     if (cfg->value != val)
     {
-        ESP_LOGV(__FUNCTION__, "Updating from %d to %d", cfg->value, val);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Updating from %d to %d", cfg->value, val);
         cfg->value = val;
         cfg->version++;
     }
@@ -416,7 +417,7 @@ esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
     int rlen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE);
     if (rlen == 0)
     {
-        ESP_LOGE(__FUNCTION__, "no body");
+        ESP_LOGE(__PRETTY_FUNCTION__, "no body");
         ret = httpd_resp_send_500(req);
     }
     else
@@ -429,31 +430,31 @@ esp_err_t TheRest::HandleStatusChange(httpd_req_t *req){
                 const char* name = appStat->GetStringProperty("name");
                 ManagedDevice* dev = ManagedDevice::GetByName(name);
                 if (dev) {
-                    ESP_LOGV(__FUNCTION__,"Posting state to %s",dev->eventBase);
+                    ESP_LOGV(__PRETTY_FUNCTION__,"Posting state to %s",dev->eventBase);
                     EventDescriptor_t const* ed = EventHandlerDescriptor::GetEventDescriptor(dev->eventBase,"STATUS");
                     if (ed){
                         EventInterpretor::RunMethod(nullptr,"Post",(void*)&stat,false);
-                        ESP_LOGV(__FUNCTION__,"Posted %s to %s",restInstance->postData, name);
+                        ESP_LOGV(__PRETTY_FUNCTION__,"Posted %s to %s",restInstance->postData, name);
                         char* nstat = cJSON_Print(dev->status);
                         ret=httpd_resp_send(req,nstat,strlen(nstat));
                         ldfree(nstat);
                     } else {
-                        ESP_LOGE(__FUNCTION__,"%s is not implemented",name);
+                        ESP_LOGE(__PRETTY_FUNCTION__,"%s is not implemented",name);
                         ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_501_METHOD_NOT_IMPLEMENTED,dev->GetName());
                     }
                 } else {
                     ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_404_NOT_FOUND,dev->GetName());
-                    ESP_LOGE(__FUNCTION__,"Cannot find device named %s",name);
+                    ESP_LOGE(__PRETTY_FUNCTION__,"Cannot find device named %s",name);
                 }
             } else {
                 ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"Missing name");
-                ESP_LOGE(__FUNCTION__,"Missing name in %s",restInstance->postData);
+                ESP_LOGE(__PRETTY_FUNCTION__,"Missing name in %s",restInstance->postData);
             }
             delete appStat;
             cJSON_Delete(stat);
         } else {
             ret=httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"Cannot parse JSON");
-            ESP_LOGE(__FUNCTION__,"Cannot parse(%s)",restInstance->postData);
+            ESP_LOGE(__PRETTY_FUNCTION__,"Cannot parse(%s)",restInstance->postData);
         }
     }
     return ret;
@@ -468,14 +469,14 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
     int rlen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE);
     if (rlen == 0)
     {
-        ESP_LOGE(__FUNCTION__, "no body");
+        ESP_LOGE(__PRETTY_FUNCTION__, "no body");
         ret = httpd_resp_send_500(req);
     }
     else
     {
         TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += rlen;
         *(restInstance->postData + rlen) = 0;
-        ESP_LOGV(__FUNCTION__, "Got %s", restInstance->postData);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Got %s", restInstance->postData);
         cJSON *jresponse = cJSON_ParseWithLength(restInstance->postData, rlen);
         if (jresponse != nullptr)
         {
@@ -489,7 +490,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
                     }
                 }
                 if (!processed) {
-                    ESP_LOGE(__FUNCTION__, "Cannot find class %s", jClass->valuestring);
+                    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot find class %s", jClass->valuestring);
                     ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_404_NOT_FOUND, jClass->valuestring);
                 } else {
                     ret = httpd_resp_send(req, RESP_OK, 2);
@@ -599,7 +600,7 @@ esp_err_t TheRest::HandleSystemCommand(httpd_req_t *req)
         }
         else
         {
-            ESP_LOGE(__FUNCTION__, "Error whilst parsing json");
+            ESP_LOGE(__PRETTY_FUNCTION__, "Error whilst parsing json");
             ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR, "Error whilst parsing json");
             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 25;
         }
@@ -621,22 +622,22 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
                 const char *clfn = getLogFName();
                 if (clfn && (strlen(clfn) > 0) && endsWith(clfn, path))
                 {
-                    ESP_LOGI(__FUNCTION__, "Not moving %s as is it active(%s)", path, clfn);
+                    ESP_LOGI(__PRETTY_FUNCTION__, "Not moving %s as is it active(%s)", path, clfn);
                     moveTheSucker = false;
                 }
                 else
                 {
-                    ESP_LOGI(__FUNCTION__, "Will move %s as it is not active log %s", path, clfn);
+                    ESP_LOGI(__PRETTY_FUNCTION__, "Will move %s as it is not active log %s", path, clfn);
                 }
             }
         }
     }
     else
     {
-        ESP_LOGV(__FUNCTION__, "No move in request");
+        ESP_LOGV(__PRETTY_FUNCTION__, "No move in request");
     }
 
-    ESP_LOGV(__FUNCTION__, "Sending %s willmove:%d", path, moveTheSucker);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Sending %s willmove:%d", path, moveTheSucker);
     //httpd_resp_set_hdr(req, "filename", path);
     FILE *theFile;
     uint32_t len = 0;
@@ -644,7 +645,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
     {
         if ((theFile = fopen(path, "r")) != nullptr)
         {
-            ESP_LOGV(__FUNCTION__, "%s opened", path);
+            ESP_LOGV(__PRETTY_FUNCTION__, "%s opened", path);
             uint8_t *buf = (uint8_t *)dmalloc(F_BUF_SIZE);
             uint32_t chunckLen = 0;
             while (!feof(theFile))
@@ -652,12 +653,12 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
                 if ((chunckLen = fread(buf, 1, F_BUF_SIZE, theFile)) > 0)
                 {
                     len += chunckLen;
-                    ESP_LOGV(__FUNCTION__, "%d read", chunckLen);
+                    ESP_LOGV(__PRETTY_FUNCTION__, "%d read", chunckLen);
                     httpd_resp_send_chunk(req, (char *)buf, chunckLen);
                 }
                 else
                 {
-                    ESP_LOGW(__FUNCTION__, "Failed in reading %s", path);
+                    ESP_LOGW(__PRETTY_FUNCTION__, "Failed in reading %s", path);
                     break;
                 }
             }
@@ -672,7 +673,7 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
                 sprintf(topath, "/sdcard/sent%s", path);
                 if (!moveFile(path, topath))
                 {
-                    ESP_LOGE(__FUNCTION__, "Cannot move %s to %s", path, topath);
+                    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot move %s to %s", path, topath);
                 }
                 ldfree(topath);
             }
@@ -684,45 +685,45 @@ esp_err_t TheRest::sendFile(httpd_req_t *req, const char *path)
             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 9;
         }
     }
-    ESP_LOGV(__FUNCTION__, "Sent %s(%d)", path, len);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Sent %s(%d)", path, len);
     startsWith(path, "/sdcard") ? deinitStorage(SDCARD_FLAG) : deinitStorage(SPIFF_FLAG);
     return ESP_OK;
 }
 
 esp_err_t add_type(httpd_req_t *req, const char* fileName) {
     if (endsWith(fileName,"html") || (strcmp(fileName,"/")==0)) {
-        ESP_LOGV(__FUNCTION__,"html type for :%s",fileName);
+        ESP_LOGV(__PRETTY_FUNCTION__,"html type for :%s",fileName);
         return httpd_resp_set_type(req,"text/html");
     }
     if (endsWith(fileName,"js")) {
-        ESP_LOGV(__FUNCTION__,"js type for :%s",fileName);
+        ESP_LOGV(__PRETTY_FUNCTION__,"js type for :%s",fileName);
         return httpd_resp_set_type(req,"text/javascript");
     }
     if (endsWith(fileName,"css")) {
-        ESP_LOGV(__FUNCTION__,"css type for :%s",fileName);
+        ESP_LOGV(__PRETTY_FUNCTION__,"css type for :%s",fileName);
         return httpd_resp_set_type(req,"text/css");
     }
     if (endsWith(fileName,"txt")) {
-        ESP_LOGV(__FUNCTION__,"txt type for :%s",fileName);
+        ESP_LOGV(__PRETTY_FUNCTION__,"txt type for :%s",fileName);
         return httpd_resp_set_type(req,"text/txt");
     }
     if (endsWith(fileName,"json")) {
-        ESP_LOGV(__FUNCTION__,"json type for :%s",fileName);
+        ESP_LOGV(__PRETTY_FUNCTION__,"json type for :%s",fileName);
         return httpd_resp_set_type(req,"text/json");
     }
     if (endsWith(fileName,"ico")) {
-        ESP_LOGV(__FUNCTION__,"ico type for :%s",fileName);
+        ESP_LOGV(__PRETTY_FUNCTION__,"ico type for :%s",fileName);
         return httpd_resp_set_type(req,"image/x-icon");
     }
     if (endsWith(fileName,"png")) {
-        ESP_LOGV(__FUNCTION__,"png type for :%s",fileName);
+        ESP_LOGV(__PRETTY_FUNCTION__,"png type for :%s",fileName);
         return httpd_resp_set_type(req,"image/png");
     }
     if (endsWith(fileName,"svg")) {
-        ESP_LOGV(__FUNCTION__,"png type for :%s",fileName);
+        ESP_LOGV(__PRETTY_FUNCTION__,"png type for :%s",fileName);
         return httpd_resp_set_type(req,"image/svg+xml");
     }
-    ESP_LOGV(__FUNCTION__,"No type for :%s",fileName);
+    ESP_LOGV(__PRETTY_FUNCTION__,"No type for :%s",fileName);
     httpd_resp_set_type(req, "application/octet-stream");
     return ESP_OK;
 }
@@ -737,7 +738,7 @@ esp_err_t TheRest::app_handler(httpd_req_t *req)
     }
 
     ESP_ERROR_CHECK(add_type(req,req->uri));
-    ESP_LOGV(__FUNCTION__,"File:%s",req->uri);
+    ESP_LOGV(__PRETTY_FUNCTION__,"File:%s",req->uri);
     if (strcmp(req->uri, "/favicon.ico")==0)
     {
         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += (favicon_ico_end - favicon_ico_start);
@@ -773,7 +774,7 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
     auto *fname = req->uri + 5;
     if (req->method == HTTP_POST)
     {
-        ESP_LOGV(__FUNCTION__, "Getting stats on %s", fname);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Getting stats on %s", fname);
         struct stat st;
         esp_err_t ret = ESP_FAIL;
         size_t tlen;
@@ -791,10 +792,10 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
             {
                 if (opeartion[0] == 'd')
                 {
-                    ESP_LOGI(__FUNCTION__, "Deleting %s", fname);
+                    ESP_LOGI(__PRETTY_FUNCTION__, "Deleting %s", fname);
                     if (fileType[0] == 'f')
                     {
-                        ESP_LOGV(__FUNCTION__, "%s is a file", fname);
+                        ESP_LOGV(__PRETTY_FUNCTION__, "%s is a file", fname);
                         if (deleteFile(fname))
                         {
                             ret = httpd_resp_send(req, RESP_OK, 2);
@@ -803,12 +804,12 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                         else
                         {
                             ret = httpd_resp_send_500(req);
-                            ESP_LOGE(__FUNCTION__, "Failed to rm -fr %s", fname);
+                            ESP_LOGE(__PRETTY_FUNCTION__, "Failed to rm -fr %s", fname);
                         }
                     }
                     else
                     {
-                        ESP_LOGV(__FUNCTION__, "%s is a folder", fname);
+                        ESP_LOGV(__PRETTY_FUNCTION__, "%s is a folder", fname);
                         if (rmDashFR(fname))
                         {
                             ret = httpd_resp_send(req, RESP_OK, 3);
@@ -817,13 +818,13 @@ esp_err_t TheRest::stat_handler(httpd_req_t *req)
                         else
                         {
                             ret = httpd_resp_send_500(req);
-                            ESP_LOGE(__FUNCTION__, "Failed in rm -fr on %s", fname);
+                            ESP_LOGE(__PRETTY_FUNCTION__, "Failed in rm -fr on %s", fname);
                         }
                     }
                 }
                 else
                 {
-                    ESP_LOGE(__FUNCTION__, "bad operation.");
+                    ESP_LOGE(__PRETTY_FUNCTION__, "bad operation.");
                     ret = httpd_resp_send_408(req);
                 }
             }
@@ -853,7 +854,7 @@ esp_err_t TheRest::config_template_handler(httpd_req_t *req)
     if (restInstance == nullptr) {
         restInstance = TheRest::GetServer();
     }
-    ESP_LOGV(__FUNCTION__, "Config template Handler:%s", req->uri);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Config template Handler:%s", req->uri);
     if (req->method == HTTP_POST)
     {
         if (indexOf(req->uri,"templates/config")) {
@@ -877,7 +878,7 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
     if (restInstance == nullptr) {
         restInstance = TheRest::GetServer();
     }
-    ESP_LOGV(__FUNCTION__, "Config Handler.");
+    ESP_LOGV(__PRETTY_FUNCTION__, "Config Handler.");
     esp_err_t ret = ESP_OK;
     AppConfig *appcfg = AppConfig::GetAppConfig();
     httpd_resp_set_type(req, "application/json");
@@ -888,13 +889,13 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
     {
         len += curLen;
     }
-    ESP_LOGV(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Post content len:%d method:%d", len, req->method);
     TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += len;
 
     if (!endsWith(req->uri, "config") && !endsWith(req->uri, "config/"))
     {
         //devId = atoi(indexOf(req->uri + 1, "/") + 1);
-        //ESP_LOGV(__FUNCTION__, "Remote devid:%d Post len:%d", devId, len);
+        //ESP_LOGV(__PRETTY_FUNCTION__, "Remote devid:%d Post len:%d", devId, len);
     }
 
     if (req->method == http_method::HTTP_PUT)
@@ -902,13 +903,13 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
         if (len)
         {
             restInstance->postData[len] = 0;
-            ESP_LOGV(__FUNCTION__, "postData(%d):%s", len, restInstance->postData);
+            ESP_LOGV(__PRETTY_FUNCTION__, "postData(%d):%s", len, restInstance->postData);
             cJSON *newCfg = cJSON_ParseWithLength(restInstance->postData, len);
             if (newCfg)
             {
                 if (true)
                 {
-                    ESP_LOGI(__FUNCTION__, "Updating local config");
+                    ESP_LOGI(__PRETTY_FUNCTION__, "Updating local config");
                     appcfg->SetAppConfig(newCfg);
                     ret = httpd_resp_send(req, restInstance->postData, strlen(restInstance->postData));
                 }
@@ -916,7 +917,7 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
                 {
                     // char *fname = (char *)dmalloc(255);
                     // sprintf(fname, "/lfs/config/%d.json", devId);
-                    // ESP_LOGI(__FUNCTION__, "Updating %s config", fname);
+                    // ESP_LOGI(__PRETTY_FUNCTION__, "Updating %s config", fname);
                     // FILE *cfg = fopen(fname, "w");
                     // if (cfg)
                     // {
@@ -935,13 +936,13 @@ esp_err_t TheRest::config_handler(httpd_req_t *req)
             }
             else
             {
-                ESP_LOGE(__FUNCTION__, "Cannot parse JSON");
+                ESP_LOGE(__PRETTY_FUNCTION__, "Cannot parse JSON");
                 ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot parse JSON");
             }
         }
         else
         {
-            ESP_LOGE(__FUNCTION__, "Nothing posted");
+            ESP_LOGE(__PRETTY_FUNCTION__, "Nothing posted");
             ret = httpd_resp_send_err(req, httpd_err_code_t::HTTPD_500_INTERNAL_SERVER_ERROR, "Empty request");
         }
     }
@@ -989,7 +990,7 @@ esp_err_t TheRest::list_files_handler(httpd_req_t *req)
     *jsonbuf = '[';
     if (findFiles(req, req->uri + 6, nullptr, false, jsonbuf, JSON_BUFFER_SIZE - 1) != ESP_OK)
     {
-        ESP_LOGE(__FUNCTION__, "Error wilst sending file list");
+        ESP_LOGE(__PRETTY_FUNCTION__, "Error wilst sending file list");
         ldfree(jsonbuf);
         return httpd_resp_send_500(req);
     }
@@ -1000,9 +1001,9 @@ esp_err_t TheRest::list_files_handler(httpd_req_t *req)
         sprintf(jsonbuf, "%s", "[]");
     }
     httpd_resp_set_type(req, "application/json");
-    ESP_LOGV(__FUNCTION__, "Getting %s url:%s(%d)", req->uri + 6, req->uri, strlen(jsonbuf));
+    ESP_LOGV(__PRETTY_FUNCTION__, "Getting %s url:%s(%d)", req->uri + 6, req->uri, strlen(jsonbuf));
     esp_err_t ret = httpd_resp_send_chunk(req, jsonbuf, strlen(jsonbuf));
-    ESP_LOGV(__FUNCTION__, "Sent final chunck of %d", strlen(jsonbuf));
+    ESP_LOGV(__PRETTY_FUNCTION__, "Sent final chunck of %d", strlen(jsonbuf));
     ret = httpd_resp_send_chunk(req, nullptr, 0);
     ldfree(jsonbuf);
     return ret;
@@ -1010,11 +1011,11 @@ esp_err_t TheRest::list_files_handler(httpd_req_t *req)
 
 esp_err_t TheRest::status_handler(httpd_req_t *req)
 {
-    ESP_LOGV(__FUNCTION__, "Status Handler");
+    ESP_LOGV(__PRETTY_FUNCTION__, "Status Handler");
     esp_err_t ret = ESP_FAIL;
 
     const char *path = req->uri + 8;
-    ESP_LOGV(__FUNCTION__, "uri:%s method: %s path:%s", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path);
+    ESP_LOGV(__PRETTY_FUNCTION__, "uri:%s method: %s path:%s", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path);
 
     if (req->method == http_method::HTTP_POST)
     {
@@ -1022,24 +1023,24 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         char *sjson = nullptr;
         if (strlen(path) == 0 || (strlen(path) == 1 && path[0] == '/'))
         {
-            ESP_LOGV(__FUNCTION__, "Getting root");
+            ESP_LOGV(__PRETTY_FUNCTION__, "Getting root");
             sjson = cJSON_PrintUnformatted(status_json());
         }
 #ifdef DEBUG_MALLOC
         else if (strcmp(path, "mallocs") == 0)
         {
-            ESP_LOGV(__FUNCTION__, "Getting mallocs");
+            ESP_LOGV(__PRETTY_FUNCTION__, "Getting mallocs");
             sjson = cJSON_PrintUnformatted(getMemoryStats());
         }
 #endif
         else if (strcmp(path, "tasks") == 0)
         {
-            ESP_LOGV(__FUNCTION__, "Getting tasks");
+            ESP_LOGV(__PRETTY_FUNCTION__, "Getting tasks");
             sjson = cJSON_PrintUnformatted(tasks_json());
         }
         else if (strcmp(path, "repeating_tasks") == 0)
         {
-            ESP_LOGV(__FUNCTION__, "Getting tasks");
+            ESP_LOGV(__PRETTY_FUNCTION__, "Getting tasks");
             cJSON const *status = ManagedThreads::GetRepeatingTaskStatus();
             if (status){
                 sjson = cJSON_PrintUnformatted(status);
@@ -1050,12 +1051,12 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         }
         else if (strcmp(path, "app") == 0)
         {
-            ESP_LOGV(__FUNCTION__, "Getting app");
+            ESP_LOGV(__PRETTY_FUNCTION__, "Getting app");
             sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(nullptr));
         }
         else if (AppConfig::GetAppStatus()->HasProperty(path))
         {
-            ESP_LOGV(__FUNCTION__, "Getting %s status", path);
+            ESP_LOGV(__PRETTY_FUNCTION__, "Getting %s status", path);
             sjson = cJSON_PrintUnformatted(AppConfig::GetAppStatus()->GetJSONConfig(path));
         }
         if (sjson != nullptr)
@@ -1066,7 +1067,7 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
         }
         else
         {
-            ESP_LOGE(__FUNCTION__, "Invalid uri:(%s) method: %s path:(%s) json:%s", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path, sjson ? sjson : "null");
+            ESP_LOGE(__PRETTY_FUNCTION__, "Invalid uri:(%s) method: %s path:(%s) json:%s", req->uri, req->method == HTTP_POST ? "POST" : "PUT", path, sjson ? sjson : "null");
             ret = httpd_resp_send_404(req);
         }
     }
@@ -1086,14 +1087,14 @@ esp_err_t TheRest::status_handler(httpd_req_t *req)
     {
         httpd_resp_send_500(req);
     }
-    ESP_LOGV(__FUNCTION__, "Done Getting");
+    ESP_LOGV(__PRETTY_FUNCTION__, "Done Getting");
 
     return ret;
 }
 
 esp_err_t TheRest::download_handler(httpd_req_t *req)
 {
-    ESP_LOGI(__FUNCTION__, "Downloading %s", req->uri);
+    ESP_LOGI(__PRETTY_FUNCTION__, "Downloading %s", req->uri);
     if (restInstance == nullptr) {
         restInstance = TheRest::GetServer();
     }
@@ -1111,14 +1112,14 @@ esp_err_t TheRest::download_handler(httpd_req_t *req)
     
     while ((curLen = httpd_req_recv(req, restInstance->postData, JSON_BUFFER_SIZE)) > 0)
     {
-        ESP_LOGV(__FUNCTION__, "Chunck len:%d, cur:%d method:%d", curLen, len, req->method);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Chunck len:%d, cur:%d method:%d", curLen, len, req->method);
         dest->Write((uint8_t *)restInstance->postData, curLen);
         len += curLen;
     }
     dest->Close();
     delete dest;
     
-    ESP_LOGI(__FUNCTION__, "Post content len:%d method:%d", len, req->method);
+    ESP_LOGI(__PRETTY_FUNCTION__, "Post content len:%d method:%d", len, req->method);
     TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += 2;
 
     return httpd_resp_send(req, RESP_OK, 2);
@@ -1130,7 +1131,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
     {
         char *buf;
         size_t buf_len;
-        ESP_LOGI(__FUNCTION__, "OTA REQUEST!!!!! RAM:%d.%s", esp_get_free_heap_size(), req->uri);
+        ESP_LOGI(__PRETTY_FUNCTION__, "OTA REQUEST!!!!! RAM:%d.%s", esp_get_free_heap_size(), req->uri);
         esp_err_t ret = ESP_OK;
 
         buf_len = httpd_req_get_url_query_len(req) + 1;
@@ -1143,21 +1144,21 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
             buf = (char *)dmalloc(buf_len);
             if (httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK)
             {
-                ESP_LOGI(__FUNCTION__, "Found URL query => %s", buf);
+                ESP_LOGI(__PRETTY_FUNCTION__, "Found URL query => %s", buf);
                 char param[30];
                 memset(param, 0, 30);
                 if ((httpd_query_key_value(buf, "md5", md5, 70) == ESP_OK) && (httpd_query_key_value(buf, "len", param, 30) == ESP_OK))
                 {
-                    ESP_LOGI(__FUNCTION__, "Found URL query parameter => md5=%s len=%s", md5, param);
+                    ESP_LOGI(__PRETTY_FUNCTION__, "Found URL query parameter => md5=%s len=%s", md5, param);
                     totLen = atoi(param);
                     if (totLen <= 0) {
-                        ESP_LOGE(__FUNCTION__, "Cannot get query len param:%d", totLen);
+                        ESP_LOGE(__PRETTY_FUNCTION__, "Cannot get query len param:%d", totLen);
                         ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad len param");
                     } else if (md5[0] == 0) {
-                        ESP_LOGE(__FUNCTION__, "Cannot get query md5 param:%s", md5);
+                        ESP_LOGE(__PRETTY_FUNCTION__, "Cannot get query md5 param:%s", md5);
                         ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad len param");
                     } else {
-                        ESP_LOGI(__FUNCTION__,"remote md5:%s len:%d", md5, totLen);
+                        ESP_LOGI(__PRETTY_FUNCTION__,"remote md5:%s len:%d", md5, totLen);
                         if (initStorage(SPIFF_FLAG))
                         {
                             struct stat st;
@@ -1173,11 +1174,11 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                 {
                                     if (hasmd5) {
                                         fclose(fw);
-                                        ESP_LOGI(__FUNCTION__, "Local MD5:%s remote md5:%s", ccmd5, md5);
+                                        ESP_LOGI(__PRETTY_FUNCTION__, "Local MD5:%s remote md5:%s", ccmd5, md5);
                                     }
                                     if (hasmd5 && (strcmp(ccmd5, md5) == 0))
                                     {
-                                        ESP_LOGI(__FUNCTION__, "Firmware is not updated RAM:%d", esp_get_free_heap_size());
+                                        ESP_LOGI(__PRETTY_FUNCTION__, "Firmware is not updated RAM:%d", esp_get_free_heap_size());
                                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += 7;
                                         deinitStorage(SPIFF_FLAG);
                                         ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Not new");
@@ -1186,7 +1187,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                     {
                                         auto *img = (uint8_t *)dmalloc(totLen); //heap_caps_malloc(totLen, MALLOC_CAP_SPIRAM);
                                         memset(img, 0, totLen);
-                                        ESP_LOGI(__FUNCTION__, "RAM:%d...len:%d md5:%s", esp_get_free_heap_size(), totLen, md5);
+                                        ESP_LOGI(__PRETTY_FUNCTION__, "RAM:%d...len:%d md5:%s", esp_get_free_heap_size(), totLen, md5);
 
                                         memset(ccmd5, 0, 70);
                                         mbedtls_md_context_t ctx;
@@ -1204,17 +1205,17 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                             TheRest::GetServer()->jBytesIn->valuedouble = TheRest::GetServer()->jBytesIn->valueint += len;
                                             if (len < 0)
                                             {
-                                                ESP_LOGE(__FUNCTION__, "Error occurred during receiving: errno %d", errno);
+                                                ESP_LOGE(__PRETTY_FUNCTION__, "Error occurred during receiving: errno %d", errno);
                                                 break;
                                             }
                                             else if (len == 0)
                                             {
-                                                ESP_LOGW(__FUNCTION__, "Connection closed...");
+                                                ESP_LOGW(__PRETTY_FUNCTION__, "Connection closed...");
                                                 break;
                                             }
                                             else if ((curLen + len) > totLen)
                                             {
-                                                ESP_LOGW(__FUNCTION__, "Bad len at (curLen(%d+%d) > totLen(%d)", curLen, len, totLen);
+                                                ESP_LOGW(__PRETTY_FUNCTION__, "Bad len at (curLen(%d+%d) > totLen(%d)", curLen, len, totLen);
                                                 break;
                                             }
                                             else
@@ -1227,7 +1228,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                         uint8_t shaResult[70];
                                         mbedtls_md_finish(&ctx, shaResult);
                                         mbedtls_md_free(&ctx);
-                                        ESP_LOGI(__FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
+                                        ESP_LOGI(__PRETTY_FUNCTION__, "Total: %d/%d %s", totLen, curLen, md5);
 
                                         for (uint8_t i = 0; i < 32; ++i)
                                         {
@@ -1237,23 +1238,23 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                         FILE *fw;
                                         if (strcmp((char *)ccmd5, md5) == 0)
                                         {
-                                            ESP_LOGI(__FUNCTION__, "Flashing md5:(%s)%dvs%d", ccmd5, totLen, curLen);
-                                            ESP_LOGV(__FUNCTION__, "RAM:%d", esp_get_free_heap_size());
+                                            ESP_LOGI(__PRETTY_FUNCTION__, "Flashing md5:(%s)%dvs%d", ccmd5, totLen, curLen);
+                                            ESP_LOGV(__PRETTY_FUNCTION__, "RAM:%d", esp_get_free_heap_size());
 
                                             struct stat st;
 
                                             if (stat("/lfs/firmware/current.bin", &st) == 0)
                                             {
-                                                ESP_LOGV(__FUNCTION__, "current bin exists %d bytes", (int)st.st_size);
+                                                ESP_LOGV(__PRETTY_FUNCTION__, "current bin exists %d bytes", (int)st.st_size);
                                                 if (!deleteFile("/lfs/firmware/current.bin"))
                                                 {
-                                                    ESP_LOGE(__FUNCTION__, "Cannot delete current bin");
+                                                    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot delete current bin");
                                                 }
                                             }
 
                                             if ((fw = fopenCd("/lfs/firmware/current.bin", "w", true)) != nullptr)
                                             {
-                                                ESP_LOGI(__FUNCTION__, "Writing /lfs/firmware/current.bin");
+                                                ESP_LOGI(__PRETTY_FUNCTION__, "Writing /lfs/firmware/current.bin");
                                                 if (fwrite((void *)img, 1, totLen, fw) == totLen)
                                                 {
                                                     fclose(fw);
@@ -1262,7 +1263,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                                     {
                                                         fwrite((void *)ccmd5, 1, sizeof(ccmd5), fw);
                                                         fclose(fw);
-                                                        ESP_LOGI(__FUNCTION__, "Firmware md5 written");
+                                                        ESP_LOGI(__PRETTY_FUNCTION__, "Firmware md5 written");
                                                         esp_partition_iterator_t pi;
                                                         const esp_partition_t *factory;
                                                         esp_err_t err;
@@ -1272,7 +1273,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                                                                 "factory");
                                                         if (pi == nullptr) // Check result
                                                         {
-                                                            ESP_LOGE(__FUNCTION__, "Failed to find factory partition");
+                                                            ESP_LOGE(__PRETTY_FUNCTION__, "Failed to find factory partition");
                                                             ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to find factory partition");
                                                         }
                                                         else
@@ -1282,7 +1283,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                                             err = esp_ota_set_boot_partition(factory); // Set partition for boot
                                                             if (err != ESP_OK)                         // Check error
                                                             {
-                                                                ESP_LOGE(__FUNCTION__, "Failed to set boot partition");
+                                                                ESP_LOGE(__PRETTY_FUNCTION__, "Failed to set boot partition");
                                                                 ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to set boot partition");
                                                             }
                                                             else
@@ -1300,20 +1301,20 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                                     }
                                                     else
                                                     {
-                                                        ESP_LOGE(__FUNCTION__, "Cannot open /lfs/firmware/tobe.bin.md5.");
+                                                        ESP_LOGE(__PRETTY_FUNCTION__, "Cannot open /lfs/firmware/tobe.bin.md5.");
                                                         ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot open /lfs/firmware/tobe.bin.md5");
                                                     }
                                                 }
                                                 else
                                                 {
-                                                    ESP_LOGE(__FUNCTION__, "Firmware not backedup");
+                                                    ESP_LOGE(__PRETTY_FUNCTION__, "Firmware not backedup");
                                                     fclose(fw);
                                                     ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Firmware not backedup");
                                                 }
                                             }
                                             else
                                             {
-                                                ESP_LOGE(__FUNCTION__, "Failed to open /lfs/firmware/current.bin");
+                                                ESP_LOGE(__PRETTY_FUNCTION__, "Failed to open /lfs/firmware/current.bin");
                                                 ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to open /lfs/firmware/current.bin");
                                             }
                                             ldfree(img);
@@ -1322,7 +1323,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                         {
                                             char* tmp = (char*)dmalloc(200);
                                             sprintf(tmp, "Bad Checksum:(%s)(%s) len:%d", ccmd5, md5, totLen);
-                                            ESP_LOGV(__FUNCTION__, "%s", tmp);
+                                            ESP_LOGV(__PRETTY_FUNCTION__, "%s", tmp);
                                             ret=httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, tmp);
                                             TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += strlen(tmp);
                                             ldfree(tmp);
@@ -1333,34 +1334,34 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                                 else
                                 {
                                     fclose(fw);
-                                    ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d.", len);
+                                    ESP_LOGE(__PRETTY_FUNCTION__, "Error with weird md5 len %d.", len);
                                     deinitStorage(SPIFF_FLAG);
                                     ret = httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Error with weird md5 len");
                                 }
                             }
                             else
                             {
-                                ESP_LOGE(__FUNCTION__, "Failed in opeing md5..");
+                                ESP_LOGE(__PRETTY_FUNCTION__, "Failed in opeing md5..");
                             }
                             deinitStorage(SPIFF_FLAG);
                         }
                         else
                         {
-                            ESP_LOGE(__FUNCTION__, "Cannot init the fucking spiff or the md5:%d", md5[0]);
+                            ESP_LOGE(__PRETTY_FUNCTION__, "Cannot init the fucking spiff or the md5:%d", md5[0]);
                         }
                     }
                 }
             }
             else
             {
-                ESP_LOGE(__FUNCTION__, "Cannot get query");
+                ESP_LOGE(__PRETTY_FUNCTION__, "Cannot get query");
                 ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Cannot get query");
             }
             ldfree(buf);
         }
         else
         {
-            ESP_LOGE(__FUNCTION__, "Cannot get query len:%d", buf_len);
+            ESP_LOGE(__PRETTY_FUNCTION__, "Cannot get query len:%d", buf_len);
             ret = httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Cannot get query len");
         }
 
@@ -1381,12 +1382,12 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                     esp_err_t ret;
                     if ((ret = httpd_resp_send(req, ccmd5, len)) != ESP_OK)
                     {
-                        ESP_LOGE(__FUNCTION__, "Error sending MD5:%s", esp_err_to_name(ret));
+                        ESP_LOGE(__PRETTY_FUNCTION__, "Error sending MD5:%s", esp_err_to_name(ret));
                     }
                     else
                     {
                         TheRest::GetServer()->jBytesOut->valuedouble = TheRest::GetServer()->jBytesOut->valueint += len;
-                        ESP_LOGI(__FUNCTION__, "Sent MD5:%s", ccmd5);
+                        ESP_LOGI(__PRETTY_FUNCTION__, "Sent MD5:%s", ccmd5);
                     }
                     fclose(fw);
                     deinitStorage(SPIFF_FLAG);
@@ -1394,18 +1395,18 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
                 }
                 else
                 {
-                    ESP_LOGE(__FUNCTION__, "Error with weird md5 len %d", len);
+                    ESP_LOGE(__PRETTY_FUNCTION__, "Error with weird md5 len %d", len);
                 }
                 fclose(fw);
             }
             else
             {
-                ESP_LOGE(__FUNCTION__, "Failed in opeing md5...");
+                ESP_LOGE(__PRETTY_FUNCTION__, "Failed in opeing md5...");
             }
         }
         else
         {
-            ESP_LOGE(__FUNCTION__, "Cannot init the fucking sd card");
+            ESP_LOGE(__PRETTY_FUNCTION__, "Cannot init the fucking sd card");
         }
     }
     
@@ -1415,7 +1416,7 @@ esp_err_t TheRest::ota_handler(httpd_req_t *req)
 }
 
 esp_err_t TheRest::stream_handler(httpd_req_t *req) {
-    ESP_LOGI(__FUNCTION__,"Stream request");
+    ESP_LOGI(__PRETTY_FUNCTION__,"Stream request");
     if (startsWith(req->uri, "/stream") && (req->method == HTTP_POST)) {
         ManagedDevice **dev = ManagedDevice::GetRunningInstances();
         for (uint32_t idx = 0; idx < ManagedDevice::GetNumRunningInstances(); idx++) {
@@ -1423,10 +1424,10 @@ esp_err_t TheRest::stream_handler(httpd_req_t *req) {
                 return ((Camera*) dev[idx])->streamVideo(req);
             }
         }
-        ESP_LOGI(__FUNCTION__,"Camera not found:%s",req->uri);
+        ESP_LOGI(__PRETTY_FUNCTION__,"Camera not found:%s",req->uri);
         return httpd_resp_send_404(req);
     } else {
-        ESP_LOGI(__FUNCTION__,"Invalid Camrea request:%s",req->uri);
+        ESP_LOGI(__PRETTY_FUNCTION__,"Invalid Camrea request:%s",req->uri);
         return httpd_resp_send_500(req);
     }
 }

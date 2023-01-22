@@ -1,6 +1,7 @@
 #ifndef __camera_h
 #define __camera_h
 
+#include <cstdint>
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -14,6 +15,14 @@
 #include "cJSON.h"
 #include "eventmgr.h"
 #include "esp_http_server.h"
+#include "../../rest/route.h"
+#include "freertos/semphr.h"
+
+class Camera;
+typedef struct {
+    Camera* camera;
+    WebsocketManager::ws_client_t* client;
+} camera_ws_stream_t;
 
 class Camera:ManagedDevice {
 public:
@@ -21,6 +30,9 @@ public:
     ~Camera();
     static cJSON* BuildConfigTemplate();
     esp_err_t streamVideo(httpd_req_t * req);
+    static void streamVideoToWs(void * wsStreanmer);
+    void sendFrame();
+    static void sentFrame(void* param);
     const char *GetName();
 
 protected:
@@ -58,6 +70,13 @@ protected:
     cJSON* powered;
     cJSON* initialized;
     cJSON* streaming;
+private:
+    WebsocketManager::ws_msg_t* clients[5];
+    void* inTransit[5];
+    int64_t frameTs[5];
+    SemaphoreHandle_t frameLock;
+
+    static void Janitor(void*);
 };
 
 #endif

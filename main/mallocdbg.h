@@ -21,8 +21,8 @@ static mallocdbg mallocs[256];
 void* dbgmalloc(const char* funcname, size_t size);
 void dbgfree(const char* funcname,void* ptr);
 
-#define dmalloc(size) dbgmalloc(__FUNCTION__, size)
-#define ldfree(ptr) dbgfree(__FUNCTION__,ptr)
+#define dmalloc(size) dbgmalloc(__PRETTY_FUNCTION__, size)
+#define ldfree(ptr) dbgfree(__PRETTY_FUNCTION__,ptr)
 #else
 #define dmalloc(sz) heap_caps_malloc(sz, MALLOC_CAP_SPIRAM)
 #define ldfree(ptr) free(ptr)

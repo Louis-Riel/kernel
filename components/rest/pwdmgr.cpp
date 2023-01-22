@@ -17,7 +17,7 @@ PasswordManager::~PasswordManager(){
 PasswordManager::PasswordManager(AppConfig* config, AppConfig* restState, AppConfig* purlState, httpd_uri_t* uri)
 {
     if (uri && uri->uri) {
-        ESP_LOGV(__FUNCTION__,"Initing:(%s) with %d*%d=%d",uri->uri,NUM_KEYS,sizeof(PasswordEntry),sizeof(PasswordEntry)*NUM_KEYS);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Initing:(%s) with %d*%d=%d",uri->uri,NUM_KEYS,sizeof(PasswordEntry),sizeof(PasswordEntry)*NUM_KEYS);
         if (numPasswordManagers==0) {
             memset(passwordManagers,0,sizeof(void*)*255);
         }
@@ -34,7 +34,7 @@ PasswordManager::PasswordManager(AppConfig* config, AppConfig* restState, AppCon
 
         if (!initialized) {
             if (!ResetKeys(config)) {
-                ESP_LOGE(__FUNCTION__,"Failed to reset keys");
+                ESP_LOGE(__PRETTY_FUNCTION__,"Failed to reset keys");
             }
             initialized = true;
         }
@@ -47,14 +47,14 @@ PasswordManager::PasswordManager(AppConfig* config, AppConfig* restState, AppCon
             new(passwords[idx]) PasswordEntry(config,restState,urlState,new AppConfig(url,AppConfig::GetAppStatus()), uri);
         }
     } else {
-        ESP_LOGE(__FUNCTION__,"No URI %d %d", uri==nullptr, uri->uri==nullptr);
+        ESP_LOGE(__PRETTY_FUNCTION__,"No URI %d %d", uri==nullptr, uri->uri==nullptr);
     }
 }
 
 bool PasswordManager::ResetKeys(AppConfig* config) {
     char query[255];
     sprintf(query,KEYS_URL_DELETE_PARAMS,AppConfig::GetAppConfig()->GetStringProperty("devName"));
-    ESP_LOGV(__FUNCTION__,"url(%s)",query);
+    ESP_LOGV(__PRETTY_FUNCTION__,"url(%s)",query);
     auto* serverCfg = new AppConfig(config->GetJSONConfig("KeyServer",config));
 
     esp_http_client_config_t cconfig = {
@@ -75,7 +75,7 @@ bool PasswordManager::ResetKeys(AppConfig* config) {
     bool ret = true;
     if (esp_http_client_perform(client) != ESP_OK)
     {
-        ESP_LOGE(__FUNCTION__,"Error deleting key for %s",cconfig.query);
+        ESP_LOGE(__PRETTY_FUNCTION__,"Error deleting key for %s",cconfig.query);
         ret = false;
     }
     esp_http_client_cleanup(client);
@@ -95,7 +95,7 @@ PasswordEntry* PasswordManager::GetPassword(const char* keyId){
            (strcmp(passwords[idx]->GetKey(),keyId)==0)) {
             return passwords[idx];
         } else {
-            ESP_LOGV(__FUNCTION__,"Expired:%d keyid:%s!=%s",passwords[idx]->IsExpired(curTime),passwords[idx]->GetKey(),keyId);
+            ESP_LOGV(__PRETTY_FUNCTION__,"Expired:%d keyid:%s!=%s",passwords[idx]->IsExpired(curTime),passwords[idx]->GetKey(),keyId);
         }
     }
     return nullptr;
@@ -103,7 +103,7 @@ PasswordEntry* PasswordManager::GetPassword(const char* keyId){
 
 uint32_t GetRandomTTL(uint32_t time) {
     uint32_t ret = time* (esp_random()/((double)UINT32_MAX));
-    ESP_LOGV(__FUNCTION__,"rnd:%d:%d",time,ret);
+    ESP_LOGV(__PRETTY_FUNCTION__,"rnd:%d:%d",time,ret);
     return ret;
 }
 
@@ -119,20 +119,20 @@ uint32_t PasswordManager::GetNextTTL(uint32_t ttl) const {
             }
         }
         if ((nextRefresh == 0) || ((thePlan - nextRefresh) > 60000000)) {
-            ESP_LOGV(__FUNCTION__,"%lli,%lli",(thePlan - curTime) / 1000000,thePlan - nextRefresh);
+            ESP_LOGV(__PRETTY_FUNCTION__,"%lli,%lli",(thePlan - curTime) / 1000000,thePlan - nextRefresh);
             return (thePlan - curTime) / 1000000;
         }
     }
 
     uint32_t ret = GetRandomTTL(ttl);
-    ESP_LOGV(__FUNCTION__,"Picking random TTL after 10 retries:%d",ret);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Picking random TTL after 10 retries:%d",ret);
     return ret;
 }
 
 void PasswordManager::RefreshKeys(void* instance) {    
     int64_t curTime = esp_timer_get_time();
     bool initialRun = nextRefreshTs==INT64_MAX;
-    ESP_LOGV(__FUNCTION__,"Cur:%lld",esp_timer_get_time());
+    ESP_LOGV(__PRETTY_FUNCTION__,"Cur:%lld",esp_timer_get_time());
     int64_t refreshTs = INT64_MAX;
     uint32_t numKeys = 0;
     for (uint8_t idx = 0; idx < NUM_KEYS; idx++) {
@@ -142,21 +142,21 @@ void PasswordManager::RefreshKeys(void* instance) {
                 if (that->passwords[idx]->IsExpired(curTime)) {
                     numKeys++;
                     if (that->passwords[idx]->RefreshKey(that->GetNextTTL(KEY_DEFAULT_TTL_SEC))) {
-                        ESP_LOGV(__FUNCTION__,"Id:%s(%s %s)(%lld)",that->passwords[idx]->GetKey(), that->passwords[idx]->GetMethod(), that->passwords[idx]->GetPath(), that->passwords[idx]->GetExpiresAt());
+                        ESP_LOGV(__PRETTY_FUNCTION__,"Id:%s(%s %s)(%lld)",that->passwords[idx]->GetKey(), that->passwords[idx]->GetMethod(), that->passwords[idx]->GetPath(), that->passwords[idx]->GetExpiresAt());
                     } else {
-                        ESP_LOGE(__FUNCTION__,"Refresh failed for %s %s",that->passwords[idx]->GetMethod(), that->passwords[idx]->GetPath());
+                        ESP_LOGE(__PRETTY_FUNCTION__,"Refresh failed for %s %s",that->passwords[idx]->GetMethod(), that->passwords[idx]->GetPath());
                     }
                 }
                 if (refreshTs > that->passwords[idx]->GetExpiresAt()) {
                     refreshTs = that->passwords[idx]->GetExpiresAt();
-                    ESP_LOGV(__FUNCTION__,"Next Key Refresh now at %lld", refreshTs);
-                    ESP_LOGV(__FUNCTION__,"Next Key Refresh s:%lld", (refreshTs-esp_timer_get_time())/1000000);
+                    ESP_LOGV(__PRETTY_FUNCTION__,"Next Key Refresh now at %lld", refreshTs);
+                    ESP_LOGV(__PRETTY_FUNCTION__,"Next Key Refresh s:%lld", (refreshTs-esp_timer_get_time())/1000000);
                 }
             }
         }
     }
     if (initialRun) {
-        ESP_LOGI(__FUNCTION__,"Baked %d keys", numKeys);
+        ESP_LOGI(__PRETTY_FUNCTION__,"Baked %d keys", numKeys);
     }
     nextRefreshTs=refreshTs;
     int32_t nextRefresh = (refreshTs-esp_timer_get_time())/1000;
@@ -166,7 +166,7 @@ void PasswordManager::RefreshKeys(void* instance) {
     if (nextRefresh > (KEY_DEFAULT_TTL_SEC * 1000)) {
         nextRefresh = KEY_DEFAULT_TTL_SEC * 1000;
     }
-    ESP_LOGV(__FUNCTION__,"Next Key Refresh in %dms", nextRefresh);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Next Key Refresh in %dms", nextRefresh);
     UpdateRepeatingTaskPeriod(refreshKeyTaskId, nextRefresh);
 }
 
@@ -175,29 +175,29 @@ esp_err_t PasswordManager::CheckTheSum(httpd_req_t *req) {
 #if CONFIG_ENABLE_VALIDATED_REQUESTS == 1
     auto* theHash = (char*)dmalloc(255);
     if (!theHash) {
-        ESP_LOGE(__FUNCTION__,"Can't allocate hash id");
+        ESP_LOGE(__PRETTY_FUNCTION__,"Can't allocate hash id");
         return ESP_FAIL;
     }
     if (httpd_req_get_hdr_value_str(req, "TheHashKey", theHash, 255) == ESP_OK) {
-        ESP_LOGV(__FUNCTION__,"Hash:%s(%s)",req->uri, theHash);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Hash:%s(%s)",req->uri, theHash);
         PasswordEntry* entry = GetPassword(theHash);
         if (entry) {
             ret=entry->CheckTheSum(req);
             if (ret == ESP_OK) {
-                ESP_LOGV(__FUNCTION__,"%s got matching hashid:%s",req->uri, theHash);
+                ESP_LOGV(__PRETTY_FUNCTION__,"%s got matching hashid:%s",req->uri, theHash);
                 cJSON_SetIntValue(jNumValid,jNumValid->valueint+1);
             } else {
-                ESP_LOGW(__FUNCTION__,"%s got invalid hashid:%s",req->uri, theHash);
+                ESP_LOGW(__PRETTY_FUNCTION__,"%s got invalid hashid:%s",req->uri, theHash);
                 cJSON_SetIntValue(jNumInvalid,jNumInvalid->valueint+1);
             }
         } else {
-            ESP_LOGE(__FUNCTION__,"%s got weird hash id",theHash);
+            ESP_LOGE(__PRETTY_FUNCTION__,"%s got weird hash id",theHash);
             cJSON_SetIntValue(jNumInvalid,jNumInvalid->valueint+1);
             httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
             ret=ESP_FAIL;
         }
     } else {
-        ESP_LOGE(__FUNCTION__,"%s got bad hash id",req->uri);
+        ESP_LOGE(__PRETTY_FUNCTION__,"%s got bad hash id",req->uri);
         cJSON_SetIntValue(jNumInvalid,jNumInvalid->valueint+1);
         httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
         ret=ESP_FAIL;

@@ -8,7 +8,7 @@ esp_err_t TheRest::checkTheSum(httpd_req_t *req) {
     if (req->user_ctx != nullptr) {
         ret = ((PasswordManager*)req->user_ctx)->CheckTheSum(req);
     } else {
-        ESP_LOGV(__FUNCTION__,"No handler defined");
+        ESP_LOGV(__PRETTY_FUNCTION__,"No handler defined");
     }
 #endif
     return ret;

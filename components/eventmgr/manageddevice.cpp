@@ -45,7 +45,7 @@ ManagedDevice::ManagedDevice(const char *type,const char *name, bool (*hcFnc)(vo
   GetConfigTemplates();
   if(!ValidateDevices())
   {
-      ESP_LOGE(__FUNCTION__,"Too many devices");
+      ESP_LOGE(__PRETTY_FUNCTION__,"Too many devices");
       return;
   }
   status=BuildStatus(this);
@@ -68,9 +68,9 @@ ManagedDevice::ManagedDevice(const char *type,const char *name, bool (*hcFnc)(vo
   }
 
   if (this->name == NULL) {
-    ESP_LOGE(__FUNCTION__,"Device name is null for %s", type);
+    ESP_LOGE(__PRETTY_FUNCTION__,"Device name is null for %s", type);
   } else {
-    ESP_LOGI(__FUNCTION__,"Created device %s/%s",type,this->name);
+    ESP_LOGI(__PRETTY_FUNCTION__,"Created device %s/%s",type,this->name);
   }
 }
 
@@ -93,7 +93,7 @@ const char* ManagedDevice::GetName() {
 ManagedDevice::~ManagedDevice() {
   for (uint8_t idx = 0 ; idx < numDevices; idx++ ) {
     if (runningInstances[idx] == this){
-      ESP_LOGV(__FUNCTION__,"Removing %s from idx %d",GetName(),idx);
+      ESP_LOGV(__PRETTY_FUNCTION__,"Removing %s from idx %d",GetName(),idx);
       runningInstances[idx]=NULL;
     }
   }
@@ -117,7 +117,7 @@ void ManagedDevice::ProcessEvent(postedEvent_t* postedEvent){
 }
 
 esp_err_t ManagedDevice::PostEvent(void* content, size_t len,int32_t event_id){
-  ESP_LOGV(__FUNCTION__,"Posting %s(%d) with a message %d bytes long",eventBase,event_id,len);
+  ESP_LOGV(__PRETTY_FUNCTION__,"Posting %s(%d) with a message %d bytes long",eventBase,event_id,len);
   return esp_event_post(eventBase,event_id,content,len,portMAX_DELAY);
 }
 
@@ -148,7 +148,7 @@ cJSON* ManagedDevice::BuildStatus(void* instance){
     }
     return md->status;
   }
-  ESP_LOGE(__FUNCTION__,"Missing instance");
+  ESP_LOGE(__PRETTY_FUNCTION__,"Missing instance");
   return NULL;
 }
 
@@ -158,14 +158,14 @@ bool ManagedDevice::ValidateDevices(){
     if (runningInstances[idx]) {
       size_t stacksz = heap_caps_get_free_size(MALLOC_CAP_32BIT);
       if (runningInstances[idx]->hcFnc && !runningInstances[idx]->hcFnc(runningInstances[idx])){
-        ESP_LOGW(__FUNCTION__,"HC Failed for %s",runningInstances[idx]->GetName());
+        ESP_LOGW(__PRETTY_FUNCTION__,"HC Failed for %s",runningInstances[idx]->GetName());
         hasIssues = true;
         numErrors++;
         lastErrorTs = esp_timer_get_time();
       }
       size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
       if (diff > 0) {
-          ESP_LOGW(__FUNCTION__,"hc:%s %d bytes memleak",runningInstances[idx]->name,diff);
+          ESP_LOGW(__PRETTY_FUNCTION__,"hc:%s %d bytes memleak",runningInstances[idx]->name,diff);
       }
     }
   }
@@ -174,7 +174,7 @@ bool ManagedDevice::ValidateDevices(){
 
 void ManagedDevice::RunHealthCheck(void* param) {
   if (!heap_caps_check_integrity_all(true)) {
-      ESP_LOGE(__FUNCTION__,"bcaps integrity error");
+      ESP_LOGE(__PRETTY_FUNCTION__,"bcaps integrity error");
       esp_restart();
   }
 
@@ -191,12 +191,12 @@ void ManagedDevice::RunHealthCheck(void* param) {
 
 bool ManagedDevice::HealthCheck(void* instance){
   if (instance == NULL) {
-    ESP_LOGE(__FUNCTION__,"Missing instance to validate");
+    ESP_LOGE(__PRETTY_FUNCTION__,"Missing instance to validate");
     return false;
   }
   ManagedDevice* dev = (ManagedDevice*)instance;
   if (cJSON_IsInvalid(dev->status)){
-    ESP_LOGE(__FUNCTION__,"Invalid status for %s",dev->name);
+    ESP_LOGE(__PRETTY_FUNCTION__,"Invalid status for %s",dev->name);
     return false;
   }
 

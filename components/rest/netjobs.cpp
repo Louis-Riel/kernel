@@ -20,10 +20,10 @@ esp_err_t event_handler(esp_http_client_event_t *evt)
     switch (evt->event_id)
     {
     case HTTP_EVENT_ERROR:
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_FINISH");
+        ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_ON_FINISH");
         jneighbor = cJSON_HasObjectItem(job->neighbours,job->sIpInfo) ? cJSON_GetObjectItem(job->neighbours,job->sIpInfo) : NULL;
         if (jneighbor) {
-            ESP_LOGI(__FUNCTION__, "%s error",job->sIpInfo);
+            ESP_LOGI(__PRETTY_FUNCTION__, "%s error",job->sIpInfo);
             if (cJSON_HasObjectItem(jneighbor,"reachable")) {
                 cJSON_SetBoolValue(cJSON_GetObjectItem(jneighbor,"reachable"),cJSON_False);
             } else {
@@ -32,20 +32,20 @@ esp_err_t event_handler(esp_http_client_event_t *evt)
         }
         break;
     case HTTP_EVENT_ON_CONNECTED:
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_CONNECTED");
+        ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_ON_CONNECTED");
         break;
     case HTTP_EVENT_HEADER_SENT:
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_HEADER_SENT");
+        ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_HEADER_SENT");
         break;
     case HTTP_EVENT_ON_HEADER:
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+        ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
         break;
     case HTTP_EVENT_ON_DATA:
         if ((job->len + evt->data_len) < job->bufLen ){
             memcpy(job->data+job->len,evt->data,evt->data_len);
             job->len+=evt->data_len;
         } else {
-            ESP_LOGE(__FUNCTION__,"Cannot fit %d in the ram. len: %d capacity:%d",evt->data_len,job->len,job->bufLen);
+            ESP_LOGE(__PRETTY_FUNCTION__,"Cannot fit %d in the ram. len: %d capacity:%d",evt->data_len,job->len,job->bufLen);
         }
         break;
     case HTTP_EVENT_ON_FINISH:
@@ -55,9 +55,9 @@ esp_err_t event_handler(esp_http_client_event_t *evt)
                 jneighbor = cJSON_HasObjectItem(job->neighbours,job->sIpInfo) ? cJSON_GetObjectItem(job->neighbours,job->sIpInfo) : cJSON_AddObjectToObject(job->neighbours,job->sIpInfo);
                 if (cJSON_HasObjectItem(jneighbor,"state")) {
                     cJSON_DeleteItemFromObject(jneighbor,"state");
-                    ESP_LOGI(__FUNCTION__, "%s was found",job->sIpInfo);
+                    ESP_LOGI(__PRETTY_FUNCTION__, "%s was found",job->sIpInfo);
                 } else {
-                    ESP_LOGI(__FUNCTION__, "%s is new",job->sIpInfo);
+                    ESP_LOGI(__PRETTY_FUNCTION__, "%s is new",job->sIpInfo);
                 }
                 cJSON_AddItemToObject(jneighbor,"state",jState);
                 if (cJSON_HasObjectItem(jneighbor,"reachable")) {
@@ -68,10 +68,10 @@ esp_err_t event_handler(esp_http_client_event_t *evt)
                 AppConfig::SignalStateChange(state_change_t::MAIN);
             }
         }
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_FINISH");
+        ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_ON_FINISH");
         break;
     case HTTP_EVENT_DISCONNECTED:
-        ESP_LOGV(__FUNCTION__, "HTTP_EVENT_DISCONNECTED\n");
+        ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_DISCONNECTED\n");
         break;
     }
     return ESP_OK;
@@ -86,19 +86,19 @@ void GetStatus(netJobSession* job){
     job->config->max_redirection_count=0;
     job->config->port=80;
     job->config->user_data=job;
-    ESP_LOGV(__FUNCTION__,"Scanning %s",job->config->url);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Scanning %s",job->config->url);
     esp_http_client_handle_t client = esp_http_client_init(job->config);
     esp_err_t err;
     if ((err = esp_http_client_perform(client)) != ESP_OK)
     {
-        ESP_LOGI(__FUNCTION__,"%s not there",job->config->url);
+        ESP_LOGI(__PRETTY_FUNCTION__,"%s not there",job->config->url);
     }
     //h(client);
 }
 
 void TheRest::ScanNetwork(void *instance){
     if (cJSON_IsFalse(GetServer()->jScanning)){
-        ESP_LOGI(__FUNCTION__,"Scanning Network");
+        ESP_LOGI(__PRETTY_FUNCTION__,"Scanning Network");
         cJSON_SetBoolValue(GetServer()->jScanning,cJSON_True);
         TheWifi *theWifi = TheWifi::GetInstance();
         cJSON* status = GetServer()->status;
@@ -160,11 +160,11 @@ void TheRest::ScanNetwork(void *instance){
                 GetStatus(&job);
             }
         }
-        ESP_LOGI(__FUNCTION__,"Done Scanning Network");
+        ESP_LOGI(__PRETTY_FUNCTION__,"Done Scanning Network");
         ldfree(data);
         ldfree(sIpInfo);
         ldfree(url);
     } else {
-        ESP_LOGW(__FUNCTION__,"Already Scanning");
+        ESP_LOGW(__PRETTY_FUNCTION__,"Already Scanning");
     }
 }

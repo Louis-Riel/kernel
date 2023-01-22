@@ -35,18 +35,18 @@ AppConfig::AppConfig(const char *filePath)
 {
   if ((configInstance == nullptr) && (filePath != nullptr))
   {
-    ESP_LOGV(__FUNCTION__, "Setting global config instance");
+    ESP_LOGV(__PRETTY_FUNCTION__, "Setting global config instance");
     configInstance = this;
     FILE *currentCfg = fopen(filePath, "r");
     if (currentCfg == nullptr)
     {
-      ESP_LOGV(__FUNCTION__, "Getting default config for %s", filePath);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Getting default config for %s", filePath);
       json = cJSON_ParseWithLength((const char *)defaultconfig_json_start, defaultconfig_json_end - defaultconfig_json_start);
       SaveAppConfig(true);
     }
     else
     {
-      ESP_LOGV(__FUNCTION__, "Reading config at %s", filePath);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Reading config at %s", filePath);
       struct stat fileStat;
       fstat(fileno(currentCfg), &fileStat);
       char *sjson = (char *)dmalloc(fileStat.st_size);
@@ -61,13 +61,13 @@ AppConfig::AppConfig(const char *filePath)
         }
         else if (sjson != nullptr)
         {
-          ESP_LOGE(__FUNCTION__, "Corrupted configuration, not applying:%s", sjson);
+          ESP_LOGE(__PRETTY_FUNCTION__, "Corrupted configuration, not applying:%s", sjson);
         }
         ldfree(sjson);
       }
       else
       {
-        ESP_LOGE(__FUNCTION__, "Empty configuration, not applying");
+        ESP_LOGE(__PRETTY_FUNCTION__, "Empty configuration, not applying");
       }
     }
   }
@@ -112,7 +112,7 @@ AppConfig *AppConfig::GetAppStatus()
   {
     statusInstance = new AppConfig(cJSON_CreateObject());
     statusInstance->eg = xEventGroupCreate();
-    ESP_LOGV(__FUNCTION__,"Initializing Status");
+    ESP_LOGV(__PRETTY_FUNCTION__,"Initializing Status");
   }
   return statusInstance;
 }
@@ -139,14 +139,14 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
   cJSON *newArrayItem = nullptr;
   bool foundIt = false;
   uint8_t newIdx = 0, curIdx = 0;
-  ESP_LOGV(__FUNCTION__, "Parsing src:%d dest:%d", curConfig == nullptr, newConfig == nullptr);
+  ESP_LOGV(__PRETTY_FUNCTION__, "Parsing src:%d dest:%d", curConfig == nullptr, newConfig == nullptr);
 
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   cJSON_ArrayForEach(curCfgItem, curConfig)
   {
     if (curCfgItem && curCfgItem->string)
     {
-      ESP_LOGV(__FUNCTION__, "Parsing %s item id:%s", cJSON_IsArray(curCfgItem) ? "Array" : cJSON_IsObject(curCfgItem) ? "Object"
+      ESP_LOGV(__PRETTY_FUNCTION__, "Parsing %s item id:%s", cJSON_IsArray(curCfgItem) ? "Array" : cJSON_IsObject(curCfgItem) ? "Object"
                                                                                                                       : "Value",
               curCfgItem->string ? curCfgItem->string : "?");
 
@@ -155,14 +155,14 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
       if ((curCfgVerItem = cJSON_GetObjectItem(curCfgItem, "version")) &&
           (curCfgValItem = cJSON_GetObjectItem(curCfgItem, "value")))
       {
-        ESP_LOGV(__FUNCTION__, "Parsing %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
+        ESP_LOGV(__PRETTY_FUNCTION__, "Parsing %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
         int curVer = cJSON_GetNumberValue(curCfgVerItem);
         int newVer = -1;
         if ((newCfgItem != nullptr) &&
             (newCfgVerItem = cJSON_GetObjectItem(newCfgItem, "version")) &&
             (newCfgValItem = cJSON_GetObjectItem(newCfgItem, "value")))
         {
-          ESP_LOGV(__FUNCTION__, "New %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
+          ESP_LOGV(__PRETTY_FUNCTION__, "New %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
           newVer = cJSON_GetNumberValue(newCfgVerItem);
           if (newVer > curVer)
           {
@@ -177,14 +177,14 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
         }
         else
         {
-          ESP_LOGV(__FUNCTION__, "Missing from new %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
+          ESP_LOGV(__PRETTY_FUNCTION__, "Missing from new %s item id:%s", "versioned field", curCfgItem->string ? curCfgItem->string : "?");
           cJSON_AddItemToObject(newCfgValItem, curCfgValItem->string, cJSON_Duplicate(curCfgValItem, true));
           cJSON_DeleteItemFromObject(curConfig, curCfgItem->string);
         }
       }
       else if (cJSON_IsArray(curCfgItem))
       {
-        ESP_LOGV(__FUNCTION__, "Parsing %s item id:%s", "Array field", curCfgItem->string ? curCfgItem->string : "?");
+        ESP_LOGV(__PRETTY_FUNCTION__, "Parsing %s item id:%s", "Array field", curCfgItem->string ? curCfgItem->string : "?");
         if (newCfgItem && cJSON_IsArray(newCfgItem))
         {
           curIdx = 0;
@@ -203,12 +203,12 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
             }
             if (foundIt)
             {
-              ESP_LOGV(__FUNCTION__, "****New %s item", "Array item");
+              ESP_LOGV(__PRETTY_FUNCTION__, "****New %s item", "Array item");
               MergeJSon(curArrayItem, newArrayItem);
             }
             else
             {
-              ESP_LOGV(__FUNCTION__, "Missing Array item from new %s item id:%d", "versioned field", curIdx);
+              ESP_LOGV(__PRETTY_FUNCTION__, "Missing Array item from new %s item id:%d", "versioned field", curIdx);
               cJSON_AddItemToArray(newCfgItem, cJSON_Duplicate(curArrayItem, true));
               cJSON_DeleteItemFromArray(curCfgItem, curIdx);
             }
@@ -217,7 +217,7 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
         }
         else
         {
-          ESP_LOGV(__FUNCTION__, "Missing Array field from new %s item id:%d", "versioned field", newIdx);
+          ESP_LOGV(__PRETTY_FUNCTION__, "Missing Array field from new %s item id:%d", "versioned field", newIdx);
           cJSON_AddItemToObject(newConfig, curCfgItem->string, cJSON_Duplicate(curCfgItem, true));
           cJSON_DeleteItemFromObject(curConfig, curCfgItem->string);
         }
@@ -226,19 +226,19 @@ void AppConfig::MergeJSon(cJSON *curConfig, cJSON *newConfig)
       {
         if (newCfgItem != nullptr)
         {
-          ESP_LOGV(__FUNCTION__, "******Parsing %s item id:%s", "object field", curCfgItem->string ? curCfgItem->string : "?");
+          ESP_LOGV(__PRETTY_FUNCTION__, "******Parsing %s item id:%s", "object field", curCfgItem->string ? curCfgItem->string : "?");
           MergeJSon(curCfgItem, newCfgItem);
         }
         else
         {
-          ESP_LOGV(__FUNCTION__, "Missing object field from new %s item id:%s", "versioned field", curCfgItem->string);
+          ESP_LOGV(__PRETTY_FUNCTION__, "Missing object field from new %s item id:%s", "versioned field", curCfgItem->string);
           cJSON_AddItemToObject(newConfig, curCfgItem->string, cJSON_Duplicate(curCfgItem, true));
           cJSON_DeleteItemFromObject(curConfig, curCfgItem->string);
         }
       }
       else
       {
-        ESP_LOGV(__FUNCTION__, "Parsing %s item id:%s", "value field", curCfgItem->string ? curCfgItem->string : "?");
+        ESP_LOGV(__PRETTY_FUNCTION__, "Parsing %s item id:%s", "value field", curCfgItem->string ? curCfgItem->string : "?");
         if (newCfgItem != nullptr)
         {
           cJSON_ReplaceItemInObject(curConfig, newCfgItem->string, cJSON_Duplicate(newCfgItem,true));
@@ -258,7 +258,7 @@ void AppConfig::SetAppConfig(cJSON *config)
 {
   if (config == nullptr)
   {
-    ESP_LOGE(__FUNCTION__, "Save with empty set");
+    ESP_LOGE(__PRETTY_FUNCTION__, "Save with empty set");
     return;
   }
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
@@ -272,7 +272,7 @@ void AppConfig::SetAppConfig(cJSON *config)
   }
   else
   {
-    ESP_LOGV(__FUNCTION__, "No changes to save");
+    ESP_LOGV(__PRETTY_FUNCTION__, "No changes to save");
   }
   ldfree(c1);
   ldfree(c2);
@@ -307,32 +307,32 @@ void AppConfig::SaveAppConfig(bool skipMount)
     return;
   }
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
-  ESP_LOGV(__FUNCTION__, "Saving config %s",config->filePath);
+  ESP_LOGV(__PRETTY_FUNCTION__, "Saving config %s",config->filePath);
   version++;
   uint8_t storage = skipMount ? 0 : initStorage(SPIFF_FLAG);
   FILE *currentCfg = fopen(config->filePath, "w");
   if (currentCfg != nullptr)
   {
     char *sjson = cJSON_PrintUnformatted(config->json);
-    ESP_LOGV(__FUNCTION__, "Config(%d):%s", strlen(sjson),sjson);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Config(%d):%s", strlen(sjson),sjson);
     size_t wlen = fwrite(sjson, 1, strlen(sjson), currentCfg);
     if (fclose(currentCfg) != 0)
     {
-      ESP_LOGE(__FUNCTION__, "Failed wo close config");
+      ESP_LOGE(__PRETTY_FUNCTION__, "Failed wo close config");
     } else {
       if (wlen != strlen(sjson)) {
-        ESP_LOGE(__FUNCTION__,"Cannot write %d bytes, wrote %d bytes",strlen(sjson),wlen);
+        ESP_LOGE(__PRETTY_FUNCTION__,"Cannot write %d bytes, wrote %d bytes",strlen(sjson),wlen);
         esp_littlefs_format("storage");
         esp_restart();
       } else {
-        ESP_LOGV(__FUNCTION__, "Wrote %d config bytes", wlen);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Wrote %d config bytes", wlen);
       }
     }
     ldfree(sjson);
   }
   else
   {
-    ESP_LOGE(__FUNCTION__, "Cannot save config at %s", config->filePath);
+    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot save config at %s", config->filePath);
   }
   if (storage)
   {
@@ -366,13 +366,13 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
   {
     return json;
   }
-  ESP_LOGV(__FUNCTION__, "Getting JSON at path %s cwm:%d", path, createWhenMissing);
+  ESP_LOGV(__PRETTY_FUNCTION__, "Getting JSON at path %s cwm:%d", path, createWhenMissing);
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
 
   if (path[0] == '/')
   {
     path++;
-    ESP_LOGV(__FUNCTION__, "Removed heading / from JSON, path:%s", path);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Removed heading / from JSON, path:%s", path);
   }
 
   char *slash = 0;
@@ -390,40 +390,40 @@ cJSON *AppConfig::GetJSONConfig(cJSON *json, const char *path, bool createWhenMi
       parJson = cJSON_GetObjectItem(json,parPath);
     }
     if (!parJson) {
-      ESP_LOGV(__FUNCTION__,"Cannot find parent:%s", parPath);
+      ESP_LOGV(__PRETTY_FUNCTION__,"Cannot find parent:%s", parPath);
       return nullptr;
     }
-    ESP_LOGV(__FUNCTION__, "Parented by:%s", parPath);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Parented by:%s", parPath);
   } else {
     parJson = json;
   }
   if (ctmp1) {
     if (parJson == nullptr) {
-      ESP_LOGE(__FUNCTION__,"Missing parent json");
+      ESP_LOGE(__PRETTY_FUNCTION__,"Missing parent json");
       //xSemaphoreGiveRecursive(sema);
       return nullptr;
     }
   } else {
     if (json == nullptr) {
-      ESP_LOGE(__FUNCTION__,"Missing parent json.");
+      ESP_LOGE(__PRETTY_FUNCTION__,"Missing parent json.");
       //xSemaphoreGiveRecursive(sema);
       return nullptr;
     }
   }
-  ESP_LOGV(__FUNCTION__, "Getting JSON at:%s from %s", ctmp1?ctmp1+1:parPath,parPath);
+  ESP_LOGV(__PRETTY_FUNCTION__, "Getting JSON at:%s from %s", ctmp1?ctmp1+1:parPath,parPath);
   cJSON* ret = nullptr;
   if (!cJSON_HasObjectItem(ctmp1?parJson:json, ctmp1?ctmp1+1:parPath))
   {
     if (createWhenMissing){
-      ESP_LOGV(__FUNCTION__, "%s was missing, creating as object", ctmp1?ctmp1+1:parPath);
+      ESP_LOGV(__PRETTY_FUNCTION__, "%s was missing, creating as object", ctmp1?ctmp1+1:parPath);
       ret = cJSON_AddObjectToObject(ctmp1?parJson:json, ctmp1?ctmp1+1:parPath);
     } else {
-      ESP_LOGV(__FUNCTION__, "%s was missing", ctmp1?ctmp1+1:parPath);
+      ESP_LOGV(__PRETTY_FUNCTION__, "%s was missing", ctmp1?ctmp1+1:parPath);
     }
   }
   else
   {
-    ESP_LOGV(__FUNCTION__, "Got JSON at:%s", path);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Got JSON at:%s", path);
     ret = cJSON_GetObjectItem(parJson, ctmp1?ctmp1+1:parPath);
   }
   //xSemaphoreGiveRecursive(sema);
@@ -452,16 +452,16 @@ cJSON *AppConfig::GetPropertyHolder(cJSON *prop)
   {
     if (cJSON_HasObjectItem(prop, "version"))
     {
-      ESP_LOGV(__FUNCTION__, "JSon is a versioned object");
+      ESP_LOGV(__PRETTY_FUNCTION__, "JSon is a versioned object");
       ret = cJSON_GetObjectItem(prop, "value");
     }
     else
     {
-      ESP_LOGV(__FUNCTION__, "JSon is an object but missing version");
+      ESP_LOGV(__PRETTY_FUNCTION__, "JSon is an object but missing version");
       ret = prop;
     }
   } else {
-    ESP_LOGV(__FUNCTION__, "JSon is not an object");
+    ESP_LOGV(__PRETTY_FUNCTION__, "JSon is not an object");
     ret = prop;
   }
   //xSemaphoreGiveRecursive(sema);
@@ -477,32 +477,32 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
 {
   if (!isValid())
   {
-    ESP_LOGE(__FUNCTION__, "Cannot Get property at path:%s from null config", path);
+    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot Get property at path:%s from null config", path);
     return nullptr;
   }
   if ((path == nullptr) || (strlen(path) == 0) || (strcmp(path, "/") == 0))
   {
-    ESP_LOGW(__FUNCTION__, "Invalid os Missing path:%s", path == nullptr ? "*null*" : path);
+    ESP_LOGW(__PRETTY_FUNCTION__, "Invalid os Missing path:%s", path == nullptr ? "*null*" : path);
     return nullptr;
   }
   if (json == nullptr)
   {
-    ESP_LOGE(__FUNCTION__, "Cannot Get property at path:%s from null json", path);
+    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot Get property at path:%s from null json", path);
     return nullptr;
   }
   if (path == nullptr)
   {
-    ESP_LOGE(__FUNCTION__, "Cannot Get property Missing path");
+    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot Get property Missing path");
     return nullptr;
   }
 
   if (path[0] == '/')
   {
     path++;
-    ESP_LOGV(__FUNCTION__, "Path adjusted to %s", path);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Path adjusted to %s", path);
   }
 
-  ESP_LOGV(__FUNCTION__, "Getting JSON at %s", path);
+  ESP_LOGV(__PRETTY_FUNCTION__, "Getting JSON at %s", path);
 
   //xSemaphoreTakeRecursive(sema,portMAX_DELAY);
   cJSON *prop = nullptr;
@@ -512,38 +512,38 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
     char propPath[255];
     memcpy(propPath, path, lastSlash - path);
     propPath[lastSlash - path] = 0;
-    ESP_LOGV(__FUNCTION__, "Pathed value prop at %s,%s,%s", path == nullptr ? "*null*" : path, lastSlash, propPath);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Pathed value prop at %s,%s,%s", path == nullptr ? "*null*" : path, lastSlash, propPath);
     cJSON *holder = GetJSONConfig(json, propPath, createWhenMissing);
     if (holder != nullptr)
     {
-      ESP_LOGV(__FUNCTION__,"%s found through recursion",path);
+      ESP_LOGV(__PRETTY_FUNCTION__,"%s found through recursion",path);
       prop = cJSON_GetObjectItem(holder, lastSlash + 1);
     }
     else
     {
-      ESP_LOGV(__FUNCTION__, "Cannot get property holder for %s", propPath);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Cannot get property holder for %s", propPath);
     }
   }
   else
   {
-    ESP_LOGV(__FUNCTION__, "Value prop at %s(%d)", path == nullptr ? "*null*" : path, createWhenMissing);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Value prop at %s(%d)", path == nullptr ? "*null*" : path, createWhenMissing);
     if ((path == nullptr) || (json == nullptr))
     {
-      ESP_LOGW(__FUNCTION__, "(path == nullptr)%d (json == null)%d", (path == nullptr), (json == nullptr));
+      ESP_LOGW(__PRETTY_FUNCTION__, "(path == nullptr)%d (json == null)%d", (path == nullptr), (json == nullptr));
     }
     prop = cJSON_GetObjectItem(json, path);
     if (createWhenMissing && (prop == nullptr))
     {
       if (filePath != nullptr)
       {
-        ESP_LOGV(__FUNCTION__, "Creating versioned prop at %s", path == nullptr ? "*null*" : path);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Creating versioned prop at %s", path == nullptr ? "*null*" : path);
         prop = cJSON_AddObjectToObject(json, path);
         cJSON_AddObjectToObject(prop, "value");
         cJSON_AddObjectToObject(prop, "version");
       }
       else
       {
-        ESP_LOGV(__FUNCTION__, "Creating prop at %s", path == nullptr ? "*null*" : path);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Creating prop at %s", path == nullptr ? "*null*" : path);
         prop = cJSON_CreateObject();
         cJSON_AddItemToObject(json, path, prop);
       }
@@ -551,10 +551,10 @@ cJSON *AppConfig::GetJSONProperty(cJSON *json, const char *path, bool createWhen
     else
     {
       if (prop == nullptr)
-        ESP_LOGV(__FUNCTION__, "Missing prop at %s", path == nullptr ? "*null*" : path);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Missing prop at %s", path == nullptr ? "*null*" : path);
       else
       {
-        ESP_LOGV(__FUNCTION__,"%s found",path);
+        ESP_LOGV(__PRETTY_FUNCTION__,"%s found",path);
       }
     }
   }
@@ -572,10 +572,10 @@ const char *AppConfig::GetStringProperty(const char *path)
 {
   if (!isValid())
   {
-    ESP_LOGW(__FUNCTION__,"%s is invalid",path);
+    ESP_LOGW(__PRETTY_FUNCTION__,"%s is invalid",path);
     return nullptr;
   }
-  ESP_LOGV(__FUNCTION__, "Getting string value at %s", path == nullptr ? "*null*" : path);
+  ESP_LOGV(__PRETTY_FUNCTION__, "Getting string value at %s", path == nullptr ? "*null*" : path);
   cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
   if ((prop != nullptr) && (prop->valuestring != nullptr))
   {
@@ -588,11 +588,11 @@ bool AppConfig::SetStringProperty(const char *path, const char *value)
 {
   if (!isValid())
   {
-    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s from null config", path);
+    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot set property at path:%s from null config", path);
     return false;
   }
   if (value == nullptr) {
-    ESP_LOGW(__FUNCTION__, "Cannot set property at path:%s from null value", path);
+    ESP_LOGW(__PRETTY_FUNCTION__, "Cannot set property at path:%s from null value", path);
     return false;
   }
 
@@ -611,12 +611,12 @@ bool AppConfig::SetStringProperty(const char *path, const char *value)
   {
     if (filePath) {
       holder = GetJSONConfig(parPath,true);
-      ESP_LOGV(__FUNCTION__, "Added versioned string for %s to %s", path, value);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Added versioned string for %s to %s", path, value);
       cJSON_AddStringToObject(holder, "value",value);
       cJSON_AddNumberToObject(holder, "version",0);
       hasChanges = true;
     } else {
-      ESP_LOGV(__FUNCTION__, "Added straight up string for %s to %s(%s) parPath:%s", path, value, ctmp1?ctmp1+1:path, parPath);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Added straight up string for %s to %s(%s) parPath:%s", path, value, ctmp1?ctmp1+1:path, parPath);
       hasChanges = true;
       cJSON_AddStringToObject(json,ctmp1?ctmp1+1:path,value);
     }
@@ -625,17 +625,17 @@ bool AppConfig::SetStringProperty(const char *path, const char *value)
     cJSON *val = cJSON_GetObjectItem(holder, "value");
     cJSON *version = cJSON_GetObjectItem(holder, "version");
     if (!val || !version) {
-      ESP_LOGW(__FUNCTION__,"Weirdness at versioned path %s",path);
+      ESP_LOGW(__PRETTY_FUNCTION__,"Weirdness at versioned path %s",path);
     } else {
-      ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == nullptr?"*nullptr*":filePath);
+      ESP_LOGV(__PRETTY_FUNCTION__, "holder exists for %s file:%s", path, filePath == nullptr?"*nullptr*":filePath);
       if (strcmp(val->valuestring, value) != 0)
       {
-        ESP_LOGV(__FUNCTION__, "Setting versioned %s to %s", path, value);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Setting versioned %s to %s", path, value);
         cJSON_SetValuestring(holder, value);
         cJSON_SetIntValue(version, version->valueint + 1);
         hasChanges = true;
       } else {
-        ESP_LOGV(__FUNCTION__, "No change for %s to %s", path, value);
+        ESP_LOGV(__PRETTY_FUNCTION__, "No change for %s to %s", path, value);
       }
     }
   }
@@ -643,9 +643,9 @@ bool AppConfig::SetStringProperty(const char *path, const char *value)
   {
     cJSON_SetValuestring(holder, value);
     hasChanges = true;
-    ESP_LOGV(__FUNCTION__, "Update straight up string for %s to %s", path, value);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Update straight up string for %s to %s", path, value);
   } else {
-    ESP_LOGV(__FUNCTION__, "No change for %s to %s", path, value);
+    ESP_LOGV(__PRETTY_FUNCTION__, "No change for %s to %s", path, value);
   }
   if (hasChanges){
     SaveAppConfig();
@@ -675,10 +675,10 @@ int32_t AppConfig::GetIntProperty(const char *path)
 {
   if (!isValid())
   {
-    ESP_LOGE(__FUNCTION__,"Cannot get %s as json is invalid",path);
+    ESP_LOGE(__PRETTY_FUNCTION__,"Cannot get %s as json is invalid",path);
     return -1;
   }
-  //ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == nullptr ? "*null*" : path);
+  //ESP_LOGV(__PRETTY_FUNCTION__, "Getting int value at %s", path == nullptr ? "*null*" : path);
   cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
   if (prop != nullptr)
   {
@@ -691,10 +691,10 @@ void AppConfig::SetIntProperty(const char *path, int value)
 {
   if (!isValid())
   {
-    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s from null(%d) or invalid(%d) config", path, json==nullptr,cJSON_IsInvalid(json));
+    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot set property at path:%s from null(%d) or invalid(%d) config", path, json==nullptr,cJSON_IsInvalid(json));
     return;
   }
-  ESP_LOGV(__FUNCTION__, "Setting int value at %s=%d", path == nullptr ? "*null*" : path,value);
+  ESP_LOGV(__PRETTY_FUNCTION__, "Setting int value at %s=%d", path == nullptr ? "*null*" : path,value);
 
   cJSON *holder = GetJSONConfig(json, path, false);
   char parPath[255];
@@ -709,11 +709,11 @@ void AppConfig::SetIntProperty(const char *path, int value)
   {
     if (filePath) {
       holder = GetJSONConfig(path,true);
-      ESP_LOGV(__FUNCTION__, "Added versioned int for %s to %d", path, value);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Added versioned int for %s to %d", path, value);
       cJSON_AddNumberToObject(holder, "value",value);
       cJSON_AddNumberToObject(holder, "version",0);
     } else {
-      ESP_LOGV(__FUNCTION__, "Added straight up int for %s to %d", path, value);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Added straight up int for %s to %d", path, value);
       // cJSON_DeleteItemFromObject(ctmp1?holder:json, ctmp1?ctmp1+1:path);
       // cJSON_AddNumberToObject(ctmp1?holder:json, ctmp1?ctmp1+1:path,value);
       cJSON_AddNumberToObject(json, ctmp1?ctmp1+1:path,value);
@@ -728,26 +728,26 @@ void AppConfig::SetIntProperty(const char *path, int value)
     cJSON *val = cJSON_GetObjectItem(holder, "value");
     cJSON *version = cJSON_GetObjectItem(holder, "version");
     if (!val || !version) {
-      ESP_LOGW(__FUNCTION__,"Weirdness at versioned path %s",path);
+      ESP_LOGW(__PRETTY_FUNCTION__,"Weirdness at versioned path %s",path);
       //xSemaphoreGiveRecursive(sema);
       return;
     }
-    ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == nullptr?"*nullptr*":filePath);
+    ESP_LOGV(__PRETTY_FUNCTION__, "holder exists for %s file:%s", path, filePath == nullptr?"*nullptr*":filePath);
     if (val->valueint != value)
     {
-      ESP_LOGV(__FUNCTION__, "Setting versioned %s to %d", path, value);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Setting versioned %s to %d", path, value);
       cJSON_SetIntValue(holder, value);
       cJSON_SetIntValue(version, version->valueint + 1);
     } else {
-      ESP_LOGV(__FUNCTION__, "No change for %s to %d", path, value);
+      ESP_LOGV(__PRETTY_FUNCTION__, "No change for %s to %d", path, value);
     }
   }
   else if (holder->valueint != value)
   {
     cJSON_SetIntValue(holder, value);
-    ESP_LOGV(__FUNCTION__, "Update straight up int for %s to %d", path, value);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Update straight up int for %s to %d", path, value);
   } else {
-    ESP_LOGV(__FUNCTION__, "No change for %s to %d", path, value);
+    ESP_LOGV(__PRETTY_FUNCTION__, "No change for %s to %d", path, value);
     //xSemaphoreGiveRecursive(sema);
     return;
   }
@@ -759,7 +759,7 @@ void AppConfig::SetLongProperty(const char *path, uint64_t value)
 {
   if (!isValid())
   {
-    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s from null config", path);
+    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot set property at path:%s from null config", path);
     return;
   }
   const char* cval = GetStringProperty(path);
@@ -770,7 +770,7 @@ void AppConfig::SetLongProperty(const char *path, uint64_t value)
     SetStringProperty(path,tval);
     SaveAppConfig();
   } else {
-    ESP_LOGV(__FUNCTION__,"No change for long %s",path);
+    ESP_LOGV(__PRETTY_FUNCTION__,"No change for long %s",path);
   }
 }
 
@@ -780,7 +780,7 @@ double AppConfig::GetDoubleProperty(const char *path)
   {
     return -1;
   }
-  //ESP_LOGV(__FUNCTION__, "Getting int value at %s", path == nullptr ? "*null*" : path);
+  //ESP_LOGV(__PRETTY_FUNCTION__, "Getting int value at %s", path == nullptr ? "*null*" : path);
   cJSON *prop = GetPropertyHolder(GetJSONProperty(path));
   if (prop != nullptr)
   {
@@ -793,10 +793,10 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
 {
   if (!isValid())
   {
-    ESP_LOGE(__FUNCTION__, "Cannot set property at path:%s from null(%d) or invalid(%d) config", path, json==nullptr,cJSON_IsInvalid(json));
+    ESP_LOGE(__PRETTY_FUNCTION__, "Cannot set property at path:%s from null(%d) or invalid(%d) config", path, json==nullptr,cJSON_IsInvalid(json));
     return;
   }
-  ESP_LOGV(__FUNCTION__, "Setting int value at %s=%f", path == nullptr ? "*null*" : path,value);
+  ESP_LOGV(__PRETTY_FUNCTION__, "Setting int value at %s=%f", path == nullptr ? "*null*" : path,value);
 
   cJSON *holder = GetJSONConfig(json, path, false);
   char parPath[255];
@@ -811,11 +811,11 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
   {
     if (filePath) {
       holder = GetJSONConfig(path,true);
-      ESP_LOGV(__FUNCTION__, "Added versioned int for %s to %f", path, value);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Added versioned int for %s to %f", path, value);
       cJSON_AddNumberToObject(holder, "value",value);
       cJSON_AddNumberToObject(holder, "version",0);
     } else {
-      ESP_LOGV(__FUNCTION__, "Added straight up int for %s to %f", path, value);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Added straight up int for %s to %f", path, value);
       cJSON_AddNumberToObject(json,ctmp1?ctmp1+1:path,value);
     }
     SaveAppConfig();
@@ -828,26 +828,26 @@ void AppConfig::SetDoubleProperty(const char *path, double value)
     cJSON *val = cJSON_GetObjectItem(holder, "value");
     cJSON *version = cJSON_GetObjectItem(holder, "version");
     if (!val || !version) {
-      ESP_LOGW(__FUNCTION__,"Weirdness at versioned path %s",path);
+      ESP_LOGW(__PRETTY_FUNCTION__,"Weirdness at versioned path %s",path);
       //xSemaphoreGiveRecursive(sema);
       return;
     }
-    ESP_LOGV(__FUNCTION__, "holder exists for %s file:%s", path, filePath == nullptr?"*nullptr*":filePath);
+    ESP_LOGV(__PRETTY_FUNCTION__, "holder exists for %s file:%s", path, filePath == nullptr?"*nullptr*":filePath);
     if (val->valueint != value)
     {
-      ESP_LOGV(__FUNCTION__, "Setting versioned %s to %f", path, value);
+      ESP_LOGV(__PRETTY_FUNCTION__, "Setting versioned %s to %f", path, value);
       cJSON_SetIntValue(holder, value);
       cJSON_SetIntValue(version, version->valueint + 1);
     } else {
-      ESP_LOGV(__FUNCTION__, "No change for %s to %f", path, value);
+      ESP_LOGV(__PRETTY_FUNCTION__, "No change for %s to %f", path, value);
     }
   }
   else if (holder->valueint != value)
   {
     cJSON_SetIntValue(holder, value);
-    ESP_LOGV(__FUNCTION__, "Update straight up int for %s to %f", path, value);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Update straight up int for %s to %f", path, value);
   } else {
-    ESP_LOGV(__FUNCTION__, "No change for %s to %f", path, value);
+    ESP_LOGV(__PRETTY_FUNCTION__, "No change for %s to %f", path, value);
     //xSemaphoreGiveRecursive(sema);
     return;
   }

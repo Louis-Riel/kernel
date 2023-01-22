@@ -3,6 +3,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const {fromVersionedToPlain} = require('./utils');
+const {updateUpstreams} = require('./configurator')
 nmap.nmapLocation = process.env.NMAP;
 const secureClientFileName = './cfg/configured-clients.json';
 
@@ -91,6 +92,7 @@ exports.Finder = class Finder {
                             if (client === undefined) {
                                 this.goodDevices.push({ config: config, ip: host.ip });
                                 console.log(`Found ${this.isSecure(host)?"secure":"insecure"} device at ${host.ip}`);
+                                updateUpstreams(host,this);
                             } else {
                                 client.config = config;
                             }

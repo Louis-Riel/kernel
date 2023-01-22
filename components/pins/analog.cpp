@@ -78,7 +78,7 @@ adc_bits_width_t AnalogPin::GetChannelWidth(uint8_t value) {
 }
 
 adc_atten_t AnalogPin::GetChannelAtten(double value) {
-    if ( value == 0.0)                     // Measurable input vol__FUNCTION__e range
+    if ( value == 0.0)                     // Measurable input vol__PRETTY_FUNCTION__e range
             return ADC_ATTEN_DB_0;  // 100 mV ~ 950 mV
     if ( value == 2.5)
             return ADC_ATTEN_DB_2_5; // 100 mV ~ 1250 mV
@@ -102,26 +102,26 @@ void AnalogPin::InitDevice(){
         ESP_LOGE(PIN_BASE, "Invalid channel atten");
         return;
     }
-    ESP_LOGI(__FUNCTION__,"Initializing analog %s pin %d status null:%d invalid: %d",this->name,this->pinNo, status == NULL, status == NULL ? -1 : cJSON_IsInvalid(status));
+    ESP_LOGI(__PRETTY_FUNCTION__,"Initializing analog %s pin %d status null:%d invalid: %d",this->name,this->pinNo, status == NULL, status == NULL ? -1 : cJSON_IsInvalid(status));
     ESP_ERROR_CHECK(adc1_config_width(this->channel_width));   
     ESP_ERROR_CHECK(adc1_config_channel_atten(this->channel, this->channel_atten));
     
     switch (esp_adc_cal_characterize(ADC_UNIT_1,this->channel_atten ,this->channel_width,DEFAULT_VREF,&chars))
     {
     case ESP_ADC_CAL_VAL_EFUSE_VREF:
-        ESP_LOGI(__FUNCTION__,"VRef Calibration used for pin %s:%d",GetName(),pinNo);
+        ESP_LOGI(__PRETTY_FUNCTION__,"VRef Calibration used for pin %s:%d",GetName(),pinNo);
         break;
     case ESP_ADC_CAL_VAL_EFUSE_TP:
-        ESP_LOGI(__FUNCTION__,"Two point calibration used for pin %s:%d",GetName(),pinNo);
+        ESP_LOGI(__PRETTY_FUNCTION__,"Two point calibration used for pin %s:%d",GetName(),pinNo);
         break;
     case ESP_ADC_CAL_VAL_EFUSE_TP_FIT:
-        ESP_LOGI(__FUNCTION__,"Two point fit calibration used for pin %s:%d",GetName(),pinNo);
+        ESP_LOGI(__PRETTY_FUNCTION__,"Two point fit calibration used for pin %s:%d",GetName(),pinNo);
         break;
     case ESP_ADC_CAL_VAL_NOT_SUPPORTED:
-        ESP_LOGI(__FUNCTION__,"Calibration not supported for pin %s:%d",GetName(),pinNo);
+        ESP_LOGI(__PRETTY_FUNCTION__,"Calibration not supported for pin %s:%d",GetName(),pinNo);
         break;
     default:
-        ESP_LOGW(__FUNCTION__,"Weird calibration, not supported for pin %s:%d",GetName(),pinNo);
+        ESP_LOGW(__PRETTY_FUNCTION__,"Weird calibration, not supported for pin %s:%d",GetName(),pinNo);
         break;
     };
 
@@ -138,15 +138,15 @@ void AnalogPin::InitDevice(){
     currentMinValue = appstate->GetPropertyHolder("minValue");
     currentMaxValue = appstate->GetPropertyHolder("maxValue");
     if (configuredMaxValue && configuredMinValue) {
-        ESP_LOGI(__FUNCTION__,"Pin %d has range of %f/%f",this->pinNo, cJSON_GetNumberValue(configuredMinValue), cJSON_GetNumberValue(configuredMaxValue));
+        ESP_LOGI(__PRETTY_FUNCTION__,"Pin %d has range of %f/%f",this->pinNo, cJSON_GetNumberValue(configuredMinValue), cJSON_GetNumberValue(configuredMaxValue));
         appstate->SetDoubleProperty("percentage",0.0);
         currentPercentage = appstate->GetPropertyHolder("percentage");
     } else {
-        ESP_LOGI(__FUNCTION__,"Pin %d has no range %s/%s",this->pinNo, configuredMinValue == NULL ? "" : "min", configuredMaxValue == NULL ? "" : "max");
+        ESP_LOGI(__PRETTY_FUNCTION__,"Pin %d has no range %s/%s",this->pinNo, configuredMinValue == NULL ? "" : "min", configuredMaxValue == NULL ? "" : "max");
         currentPercentage = NULL;
     }
 
-    ESP_LOGI(__FUNCTION__,"Analog pin %d initialised",this->pinNo);
+    ESP_LOGI(__PRETTY_FUNCTION__,"Analog pin %d initialised",this->pinNo);
 
     CreateRepeatingTask(PollPin,this->GetName(),this,this->waitTime);
     delete appstate;
@@ -155,7 +155,7 @@ void AnalogPin::InitDevice(){
 void AnalogPin::PollPin(void* instance) {
     AnalogPin* pin = (AnalogPin*)instance;
     pin->isRunning = true;
-    ESP_LOGD(__FUNCTION__,"Polling analog pin %d",pin->pinNo);
+    ESP_LOGD(__PRETTY_FUNCTION__,"Polling analog pin %d",pin->pinNo);
     pin->value->valueint = 0;
     for (int idx = 0; idx < 10; idx++) {
         pin->value->valueint += adc1_get_raw(pin->channel);

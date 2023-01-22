@@ -43,7 +43,7 @@ IRDecoder::rmt_timing_t IRDecoder::timing_groups[] = {
 IRDecoder::~IRDecoder(){
     ldfree((void*)name);
     EventManager::UnRegisterEventHandler(handlerDescriptors);
-    ESP_LOGI(__FUNCTION__,"Destructor");
+    ESP_LOGI(__PRETTY_FUNCTION__,"Destructor");
 }
 
 IRDecoder::IRDecoder(AppConfig* config)
@@ -58,11 +58,11 @@ IRDecoder::IRDecoder(AppConfig* config)
     AppConfig* apin = new AppConfig(status,AppConfig::GetAppStatus());
     if (!pinNo || (channelNo > RMT_CHANNEL_MAX)) {
         apin->SetStringProperty("error","Invalid IRDecoder Configuration Pin");
-        ESP_LOGW(__FUNCTION__,"Invalid IRDecoder Configuration Pin:%d Channel:%d",pinNo,channelNo);
+        ESP_LOGW(__PRETTY_FUNCTION__,"Invalid IRDecoder Configuration Pin:%d Channel:%d",pinNo,channelNo);
         return;
     }
     EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
-    ESP_LOGV(__FUNCTION__,"IRDecoder(%d):%s",pinNo,name);
+    ESP_LOGV(__PRETTY_FUNCTION__,"IRDecoder(%d):%s",pinNo,name);
     apin->SetPinNoProperty("pinNo",pinNo);
     apin->SetIntProperty("numCodes",0);
     apin->SetStringProperty("lastCode",emptySpaces);
@@ -79,7 +79,7 @@ bool IRDecoder::IsRunning(){
 }
 
 EventHandlerDescriptor* IRDecoder::BuildHandlerDescriptors(){
-  ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
+  ESP_LOGV(__PRETTY_FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
   EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
   handler->AddEventDescriptor(eventIds::CODE,"CODE",event_data_type_tp::JSON);
   return handler;
@@ -117,9 +117,9 @@ void IRDecoder::IRPoller(void *arg){
         vRingbufferDelete(ir->rb);
         rmt_driver_uninstall(ir->channelNo);
     } else {
-        ESP_LOGW(__FUNCTION__,"Weirdness s afoot.");
+        ESP_LOGW(__PRETTY_FUNCTION__,"Weirdness s afoot.");
     }
-    ESP_LOGI(__FUNCTION__, "IR Reader done");
+    ESP_LOGI(__PRETTY_FUNCTION__, "IR Reader done");
 }
 
 int8_t IRDecoder::available()
@@ -127,7 +127,7 @@ int8_t IRDecoder::available()
    if (!isRunning) return -1;
    UBaseType_t waiting;
    vRingbufferGetInfo(rb, NULL, NULL, NULL, NULL, &waiting);
-   ESP_LOGV(__FUNCTION__,"waiting %d", waiting);
+   ESP_LOGV(__PRETTY_FUNCTION__,"waiting %d", waiting);
    return waiting;
 } 
 
@@ -142,7 +142,7 @@ bool IRDecoder::rx_check_in_range(int duration_ticks, int target_us)
 
 bool IRDecoder::rx_header_if(rmt_item32_t* item, uint8_t timing)
 {
-    ESP_LOGV(__FUNCTION__,"%sif(rx_check_in_range(item->duration0 %d, timing_groups[timing].header_mark_us %d)%d\
+    ESP_LOGV(__PRETTY_FUNCTION__,"%sif(rx_check_in_range(item->duration0 %d, timing_groups[timing].header_mark_us %d)%d\
         && rx_check_in_range(item->duration1 %d, timing_groups[timing].header_space_us %d)%d)",
             timing_groups[timing].tag,
             item->duration0, timing_groups[timing].header_mark_us,
@@ -151,7 +151,7 @@ bool IRDecoder::rx_header_if(rmt_item32_t* item, uint8_t timing)
             rx_check_in_range(item->duration1, timing_groups[timing].header_space_us));
     if(rx_check_in_range(item->duration0, timing_groups[timing].header_mark_us)
         && rx_check_in_range(item->duration1, timing_groups[timing].header_space_us)) {
-            ESP_LOGV(__FUNCTION__,"The header exists for %s",timing_groups[timing].tag);
+            ESP_LOGV(__PRETTY_FUNCTION__,"The header exists for %s",timing_groups[timing].tag);
         return true;
     }
     return false;
@@ -159,7 +159,7 @@ bool IRDecoder::rx_header_if(rmt_item32_t* item, uint8_t timing)
 
 bool IRDecoder::rx_bit_one_if(rmt_item32_t* item, uint8_t timing)
 {
-    ESP_LOGV(__FUNCTION__,"%s if( rx_check_in_range(item->duration0 %d, timing_groups[timing].one_mark_us %d)%d \
+    ESP_LOGV(__PRETTY_FUNCTION__,"%s if( rx_check_in_range(item->duration0 %d, timing_groups[timing].one_mark_us %d)%d \
         && rx_check_in_range(item->duration1 %d, timing_groups[timing].one_space_us %d) %d)",
             timing_groups[timing].tag,
             item->duration0, timing_groups[timing].one_mark_us,
@@ -175,7 +175,7 @@ bool IRDecoder::rx_bit_one_if(rmt_item32_t* item, uint8_t timing)
 
 bool IRDecoder::rx_bit_zero_if(rmt_item32_t* item, uint8_t timing)
 {
-    ESP_LOGV(__FUNCTION__,"%s if( rx_check_in_range(item->duration0 %d, timing_groups[timing].zero_mark_us %d)%d \
+    ESP_LOGV(__PRETTY_FUNCTION__,"%s if( rx_check_in_range(item->duration0 %d, timing_groups[timing].zero_mark_us %d)%d \
         && rx_check_in_range(item->duration1 %d, timing_groups[timing].zero_space_us %d)%d)",
             timing_groups[timing].tag,
             item->duration0, timing_groups[timing].zero_mark_us,
@@ -196,10 +196,10 @@ uint32_t IRDecoder::rx_parse_items(rmt_item32_t* item, int item_num, uint8_t tim
         return 0;
     }
     if(!rx_header_if(item++, timing)) {
-        ESP_LOGV(__FUNCTION__,"No rx header");
+        ESP_LOGV(__PRETTY_FUNCTION__,"No rx header");
         return 0;
     }
-    ESP_LOGV(__FUNCTION__,"Found a %s header",timing_groups[timing].tag);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Found a %s header",timing_groups[timing].tag);
     uint32_t data = 0;
     for(uint8_t j = 0; j < timing_groups[timing].bit_length; j++) {
         if(rx_bit_one_if(item, timing)) {
@@ -208,7 +208,7 @@ uint32_t IRDecoder::rx_parse_items(rmt_item32_t* item, int item_num, uint8_t tim
         } else if(rx_bit_zero_if(item, timing)) {
             data <<= 1;
         } else {
-            ESP_LOGV(__FUNCTION__,"No rx_bit_zero_if at idx %d",j);
+            ESP_LOGV(__PRETTY_FUNCTION__,"No rx_bit_zero_if at idx %d",j);
             return 0;
         }
         item++;
@@ -219,7 +219,7 @@ uint32_t IRDecoder::rx_parse_items(rmt_item32_t* item, int item_num, uint8_t tim
 void dump_item(rmt_item32_t* item, size_t sz)
 {
   for (int x=0; x<sz; x++) {
-    ESP_LOGW(__FUNCTION__,"Count: %d  duration0: %d  duration1: %d\n", x,item[x].duration0,item[x].duration1);
+    ESP_LOGW(__PRETTY_FUNCTION__,"Count: %d  duration0: %d  duration1: %d\n", x,item[x].duration0,item[x].duration1);
     if(item[x].duration1==0 || item[x].duration0 == 0 || item[x].duration1 > 0x7f00 || item[x].duration0 > 0x7f00) break;
   }
 }
@@ -233,7 +233,7 @@ uint32_t IRDecoder::read(rmt_item32_t* item, size_t rx_size)
         rx_data = rx_parse_items(item, rx_size / 4, timing);
         if (rx_data) {
             found_timing = timing;
-            ESP_LOGV(__FUNCTION__,"Found timing from prefered %s",(char*) timing_groups[found_timing].tag);
+            ESP_LOGV(__PRETTY_FUNCTION__,"Found timing from prefered %s",(char*) timing_groups[found_timing].tag);
             break;
         }
     }
@@ -245,7 +245,7 @@ uint32_t IRDecoder::read(rmt_item32_t* item, size_t rx_size)
             }
             if (rx_data) {
                 found_timing = timing;
-                ESP_LOGV(__FUNCTION__,"Found timing %s",(char*) timing_groups[found_timing].tag);
+                ESP_LOGV(__PRETTY_FUNCTION__,"Found timing %s",(char*) timing_groups[found_timing].tag);
                 break;
             }
         }
@@ -257,7 +257,7 @@ uint32_t IRDecoder::read(rmt_item32_t* item, size_t rx_size)
         cJSON_SetIntValue(numCodes,numCodes->valueint+1);
 
     } else {
-        ESP_LOGV(__FUNCTION__,"No timing found");
+        ESP_LOGV(__PRETTY_FUNCTION__,"No timing found");
     }
     return rx_data;
 }    

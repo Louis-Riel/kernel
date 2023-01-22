@@ -35,7 +35,7 @@ services:
     env_file:
       - ./service/.env
     volumes:
-      - ./service/cfg/configured-clients.json:/usr/src/app/cfg/configured-clients.json
+      #- ./service/cfg/configured-clients.json:/usr/src/app/cfg/configured-clients.json
       - ./front-gate/upstreams:/usr/src/app/upstreams
     networks:
       - finder

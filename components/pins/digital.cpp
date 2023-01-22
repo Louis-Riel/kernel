@@ -21,7 +21,7 @@ Pin::~Pin(){
     if (numPins == 0) {
         EventManager::UnRegisterEventHandler(handlerDescriptors);
     }
-    ESP_LOGI(__FUNCTION__,"Destructor");
+    ESP_LOGI(__PRETTY_FUNCTION__,"Destructor");
 }
 
 Pin::Pin(AppConfig* config)
@@ -46,7 +46,7 @@ cJSON* Pin::BuildConfigTemplate() {
 }
 
 EventHandlerDescriptor* Pin::BuildHandlerDescriptors(){
-  ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
+  ESP_LOGV(__PRETTY_FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pinNo,name);
   EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
   handler->AddEventDescriptor(eventIds::OFF,"OFF",event_data_type_tp::JSON);
   handler->AddEventDescriptor(eventIds::ON,"ON",event_data_type_tp::JSON);
@@ -60,13 +60,13 @@ void Pin::InitDevice(){
         EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
         pins = (Pin**)dmalloc(sizeof(void*)*MAX_NUM_PINS);
         memset(pins,0,sizeof(void*)*MAX_NUM_PINS);
-        ESP_LOGV(__FUNCTION__,"Registering handler");
+        ESP_LOGV(__PRETTY_FUNCTION__,"Registering handler");
         PollPins();
     }
-    ESP_LOGV(__FUNCTION__,"Pin(%d):%s at idx:%d",pinNo,name,numPins);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Pin(%d):%s at idx:%d",pinNo,name,numPins);
     pins[numPins++]=this;
 
-    ESP_LOGI(__FUNCTION__,"Initializing pin %d as %s(%d)",pinNo,name,numPins);
+    ESP_LOGI(__PRETTY_FUNCTION__,"Initializing pin %d as %s(%d)",pinNo,name,numPins);
     gpio_config_t io_conf;
     io_conf.intr_type = GPIO_INTR_ANYEDGE;
     io_conf.pin_bit_mask = 1ULL << pinNo;
@@ -76,35 +76,35 @@ void Pin::InitDevice(){
     esp_err_t ret = gpio_config(&io_conf);
 
     if (ret != ESP_OK) {
-        ESP_LOGE(__FUNCTION__,"Error in pin(%d):%s init failed: %s", pinNo, name, esp_err_to_name(ret));
+        ESP_LOGE(__PRETTY_FUNCTION__,"Error in pin(%d):%s init failed: %s", pinNo, name, esp_err_to_name(ret));
     }
 
     if (flags&gpio_driver_t::driver_type_t::wakeonhigh || flags&gpio_driver_t::driver_type_t::wakeonlow) {
         ret = gpio_wakeup_enable(pinNo, flags&gpio_driver_t::driver_type_t::wakeonhigh ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
 
         if (ret != ESP_OK) {
-            ESP_LOGE(__FUNCTION__,"Error in pin(%d):%s wakeup failed: %s", pinNo, name, esp_err_to_name(ret));
+            ESP_LOGE(__PRETTY_FUNCTION__,"Error in pin(%d):%s wakeup failed: %s", pinNo, name, esp_err_to_name(ret));
         } else {
             ret = esp_sleep_enable_gpio_wakeup();
 
             if (ret != ESP_OK) {
-                ESP_LOGE(__FUNCTION__,"Error in pin(%d):%s gpio wakeup failed: %s", pinNo, name, esp_err_to_name(ret));
+                ESP_LOGE(__PRETTY_FUNCTION__,"Error in pin(%d):%s gpio wakeup failed: %s", pinNo, name, esp_err_to_name(ret));
             }
         }
     }
 
-    ESP_LOGV(__FUNCTION__,"Pin(%d):%s Direction:%s",pinNo,name,flags&gpio_driver_t::driver_type_t::digital_out ? "Out":"In");
+    ESP_LOGV(__PRETTY_FUNCTION__,"Pin(%d):%s Direction:%s",pinNo,name,flags&gpio_driver_t::driver_type_t::digital_out ? "Out":"In");
     if (flags&gpio_driver_t::driver_type_t::pullup) {
-        ESP_LOGV(__FUNCTION__,"Pin(%d):%s pullup enabled",pinNo,name);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Pin(%d):%s pullup enabled",pinNo,name);
     }
     if (flags&gpio_driver_t::driver_type_t::pulldown) {
-        ESP_LOGV(__FUNCTION__,"Pin(%d):%s pulldown enabled",pinNo,name);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Pin(%d):%s pulldown enabled",pinNo,name);
     }
     isRtcGpio = rtc_gpio_is_valid_gpio(pinNo);
-    ESP_LOGV(__FUNCTION__, "Pin %d: RTC:%d", pinNo, isRtcGpio);
-    ESP_LOGV(__FUNCTION__, "Pin %d: Level:%d", pinNo, gpio_get_level(pinNo));
-    ESP_LOGV(__FUNCTION__, "Pin %d: 0x%" PRIXPTR "", pinNo,(uintptr_t)this);
-    ESP_LOGV(__FUNCTION__, "Numpins %d", numPins);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Pin %d: RTC:%d", pinNo, isRtcGpio);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Pin %d: Level:%d", pinNo, gpio_get_level(pinNo));
+    ESP_LOGV(__PRETTY_FUNCTION__, "Pin %d: 0x%" PRIXPTR "", pinNo,(uintptr_t)this);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Numpins %d", numPins);
     if (isRtcGpio) {
         if (!isRtcGpioInitialized) {
             isRtcGpioInitialized = gpio_install_isr_service(0) == ESP_OK;
@@ -112,12 +112,12 @@ void Pin::InitDevice(){
         if (isRtcGpioInitialized) {
             ESP_ERROR_CHECK(gpio_isr_handler_add(pinNo, pinHandler, this));
         } else {
-            ESP_LOGE(__FUNCTION__,"Failed to setup isr for Pin(%d):%s",pinNo,name);
+            ESP_LOGE(__PRETTY_FUNCTION__,"Failed to setup isr for Pin(%d):%s",pinNo,name);
         }
     }
 
     if (status == nullptr) {
-        ESP_LOGE(__FUNCTION__,"No status object for %s",name);
+        ESP_LOGE(__PRETTY_FUNCTION__,"No status object for %s",name);
     }
     AppConfig* apin = new AppConfig(status,AppConfig::GetAppStatus());
     apin->SetPinNoProperty("pinNo",pinNo);
@@ -156,7 +156,7 @@ void Pin::RefrestState(){
     int curState = gpio_get_level(pinNo);
     if (curState != pinStatus->valueint) {
         cJSON_SetIntValue(pinStatus,curState);
-        ESP_LOGV(__FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, eventBase,pinStatus->valueint?"On":"Off");
+        ESP_LOGV(__PRETTY_FUNCTION__,"Pin(%d)%s RefreshState:%s",pinNo, eventBase,pinStatus->valueint?"On":"Off");
         postedEvent_t pevent;
         pevent.base=PIN_BASE;
         pevent.id=curState?eventIds::ON : eventIds::OFF;
@@ -173,7 +173,7 @@ void Pin::queuePoller(void *arg){
     while(!(xEventGroupGetBits(appEg) & app_bits_t::HIBERNATE) && xQueueReceive(eventQueue,&pin,portMAX_DELAY)){
         pin->RefrestState();
     }
-    ESP_LOGE(__FUNCTION__,"%s","Failed");
+    ESP_LOGE(__PRETTY_FUNCTION__,"%s","Failed");
 }
 
 void Pin::pinHandler(void *arg)
@@ -182,18 +182,18 @@ void Pin::pinHandler(void *arg)
 }
 
 void Pin::PollPins(){
-  ESP_LOGV(__FUNCTION__, "Configuring Pins.");
+  ESP_LOGV(__PRETTY_FUNCTION__, "Configuring Pins.");
   eventQueue = xQueueCreate(10, sizeof(uint32_t));
   CreateBackgroundTask(queuePoller, "pinsPoller", 4096, nullptr, tskIDLE_PRIORITY, nullptr);
-  ESP_LOGV(__FUNCTION__, "ISR Service Started");
+  ESP_LOGV(__PRETTY_FUNCTION__, "ISR Service Started");
 }
 
 void Pin::ProcessEvent(ManagedDevice* dev, postedEvent_t* postedEvent){
     if (dev && postedEvent) {
-        ESP_LOGV(__FUNCTION__,"posting to %s",dev ->GetName());
+        ESP_LOGV(__PRETTY_FUNCTION__,"posting to %s",dev ->GetName());
         ((Pin*) dev)->ProcessTheEvent(postedEvent);
     } else {
-        ESP_LOGW(__FUNCTION__,"Stuff's missing dev:%d event:%d", dev==nullptr, postedEvent==nullptr);
+        ESP_LOGW(__PRETTY_FUNCTION__,"Stuff's missing dev:%d event:%d", dev==nullptr, postedEvent==nullptr);
     }
 }
 
@@ -202,14 +202,14 @@ void Pin::ProcessTheEvent(postedEvent_t* postedEvent){
         int cPinNo = postedEvent->eventDataType == event_data_type_tp::Number ? *((int*)postedEvent->event_data) : -1;
         if (postedEvent->eventDataType == event_data_type_tp::Number) {
             cPinNo = *((int*)postedEvent->event_data);
-            ESP_LOGV(__FUNCTION__,"d: %d==%d",cPinNo, pinNo);
+            ESP_LOGV(__PRETTY_FUNCTION__,"d: %d==%d",cPinNo, pinNo);
         } else if (postedEvent->event_data) {
             cJSON* event = (cJSON*)postedEvent->event_data;
             cJSON* jpinNo = event ? cJSON_GetObjectItem(event, "pinNo") :nullptr;
             cPinNo = cJSON_GetNumberValue(jpinNo);
-            ESP_LOGV(__FUNCTION__,"j: %d==%d",cPinNo, pinNo);
+            ESP_LOGV(__PRETTY_FUNCTION__,"j: %d==%d",cPinNo, pinNo);
         }  else {
-            ESP_LOGW(__FUNCTION__,"Missing event data");
+            ESP_LOGW(__PRETTY_FUNCTION__,"Missing event data");
         }
         if (cPinNo == pinNo){
             uint8_t state = 2;
@@ -218,25 +218,25 @@ void Pin::ProcessTheEvent(postedEvent_t* postedEvent){
             case Pin::eventIds::TRIGGER:
             case Pin::eventIds::STATUS:
                 state = pinStatus->valueint ? 0 : 1;
-                ESP_LOGV(__FUNCTION__,"Turning(%d) %s %d",pinNo,name,state);
+                ESP_LOGV(__PRETTY_FUNCTION__,"Turning(%d) %s %d",pinNo,name,state);
                 break;
             case Pin::eventIds::ON:
-                ESP_LOGV(__FUNCTION__,"Turning %s ON",name);
+                ESP_LOGV(__PRETTY_FUNCTION__,"Turning %s ON",name);
                 state = 1;
                 break;
             case Pin::eventIds::OFF:
-                ESP_LOGV(__FUNCTION__,"Turning %s OFF",name);
+                ESP_LOGV(__PRETTY_FUNCTION__,"Turning %s OFF",name);
                 state = 0;
                 break;
             default:
-                ESP_LOGE(__FUNCTION__,"Invalid event id for %s",name);
+                ESP_LOGE(__PRETTY_FUNCTION__,"Invalid event id for %s",name);
                 break;
             }
             if ((state <= 1) && (state != pinStatus->valueint)) {
                 gpio_set_level(pinNo,state);
                 cJSON_SetIntValue(pinStatus,state);
                 EventManager::ProcessEvent(this, postedEvent);
-                ESP_LOGV(__FUNCTION__,"Pin %s from %d to %d",name,pinStatus->valueint,state);
+                ESP_LOGV(__PRETTY_FUNCTION__,"Pin %s from %d to %d",name,pinStatus->valueint,state);
             }
         }
     }
@@ -249,9 +249,9 @@ bool Pin::HealthCheck(void* instance){
         if (thePin->pinStatus && thePin->pinStatus->valueint == curState) {
             return true;
         }
-        ESP_LOGW(__FUNCTION__,"State discrepancy on pin %s, expected %d got %d",thePin->GetName(), thePin->pinStatus->valueint, curState);
+        ESP_LOGW(__PRETTY_FUNCTION__,"State discrepancy on pin %s, expected %d got %d",thePin->GetName(), thePin->pinStatus->valueint, curState);
         cJSON_SetIntValue(thePin->pinStatus,curState);
-        ESP_LOGW(__FUNCTION__,"State discrepancy fixed on pin %s, %d == %d",thePin->GetName(), thePin->pinStatus->valueint, curState);
+        ESP_LOGW(__PRETTY_FUNCTION__,"State discrepancy fixed on pin %s, %d == %d",thePin->GetName(), thePin->pinStatus->valueint, curState);
         thePin->PostEvent((void*)&thePin->pinNo,sizeof(thePin->pinNo),thePin->pinStatus->valueint ? eventIds::ON : eventIds::OFF);
     }
     return false;

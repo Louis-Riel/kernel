@@ -34,7 +34,8 @@
   },
   "scripts": {
     "start": "set \"PUBLIC_URL=https://192.168.1.138/\" && set \"GENERATE_SOURCEMAP=true\" && REACT_APP_API_URI=https://192.168.1.138/ HTTPS=true react-scripts start --host 0.0.0.0",
-    "build": "set \"PUBLIC_URL=https://192.168.1.138/\" && set \"REACT_APP_API_URI=https://192.168.1.138/\" && set \"GENERATE_SOURCEMAP=true\" && react-scripts build",
+    "buildwin": "set \"PUBLIC_URL=https://192.168.1.138/\" && set \"REACT_APP_API_URI=https://192.168.1.138/\" && set \"GENERATE_SOURCEMAP=true\" && react-scripts build",
+    "build": ". ../.env && react-scripts build",
     "buildsd": "set \"PUBLIC_URL=http://192.168.1.108/sdcard/admin\" && set \"GENERATE_SOURCEMAP=false\"  && set \"REACT_APP_API_URI=http://192.168.1.108\" && react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

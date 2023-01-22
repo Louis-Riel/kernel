@@ -108,7 +108,7 @@ Apa102::Apa102(AppConfig* config)
 
         delete appstate;
     } else {
-        ESP_LOGW(__FUNCTION__,"Invalid config. numLeds:%d spiBufferLen:%d clkPin:%d dataPin:%d pwrPin:%d",numLeds, spiBufferLen, clkPin, dataPin, pwrPin);
+        ESP_LOGW(__PRETTY_FUNCTION__,"Invalid config. numLeds:%d spiBufferLen:%d clkPin:%d dataPin:%d pwrPin:%d",numLeds, spiBufferLen, clkPin, dataPin, pwrPin);
     }
 }
 
@@ -129,7 +129,7 @@ cJSON* Apa102::BuildConfigTemplate() {
 }
 
 EventHandlerDescriptor* Apa102::BuildHandlerDescriptors(){
-  ESP_LOGV(__FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pwrPin,name);
+  ESP_LOGV(__PRETTY_FUNCTION__,"Pin(%d):%s BuildHandlerDescriptors",pwrPin,name);
   EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
   handler->AddEventDescriptor(1,"trigger",event_data_type_tp::JSON);
   handler->AddEventDescriptor(2,"brightness",event_data_type_tp::JSON);
@@ -172,12 +172,12 @@ void Apa102::InitDevice(){
             state=xEventGroupSetBits(eg,apa102_state_t::device_ready | apa102_state_t::spi_ready);
             CreateBackgroundTask(PaintIt,GetName(),4096,this,tskIDLE_PRIORITY,NULL);
 
-            ESP_LOGI(__FUNCTION__,"Initialized Apa102 led. pwr pin:%d, clk pin:%d, dataPin:%d, mode: %d refreshFreq:%d",pwrPin, clkPin, dataPin, devcfg.mode, devcfg.clock_speed_hz);
+            ESP_LOGI(__PRETTY_FUNCTION__,"Initialized Apa102 led. pwr pin:%d, clk pin:%d, dataPin:%d, mode: %d refreshFreq:%d",pwrPin, clkPin, dataPin, devcfg.mode, devcfg.clock_speed_hz);
         } else {
-            ESP_LOGW(__FUNCTION__,"Weridness, spi was already initialized");
+            ESP_LOGW(__PRETTY_FUNCTION__,"Weridness, spi was already initialized");
         }
     } else {
-        ESP_LOGI(__FUNCTION__,"Deiniting Apa102 led at pin %d",this->pwrPin);
+        ESP_LOGI(__PRETTY_FUNCTION__,"Deiniting Apa102 led at pin %d",this->pwrPin);
         //spi_device_release_bus(spi);
         xEventGroupSetBits(eg, apa102_state_t::brightness);
         state = xEventGroupWaitBits(eg,apa102_state_t::idle, pdFALSE,pdTRUE,portMAX_DELAY);
@@ -199,7 +199,7 @@ void Apa102::InitDevice(){
         io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
         io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
         ESP_ERROR_CHECK(gpio_config(&io_conf));
-        ESP_LOGI(__FUNCTION__,"Done Deiniting Apa102 led at pin %d",this->pwrPin);
+        ESP_LOGI(__PRETTY_FUNCTION__,"Done Deiniting Apa102 led at pin %d",this->pwrPin);
     }
     state = xEventGroupSetBits(eg,apa102_state_t::powered_on);
     cJSON_SetIntValue(jSpiReady, state & apa102_state_t::spi_ready ? 1 : 0);
@@ -211,14 +211,14 @@ void Apa102::InitDevice(){
 void Apa102::PaintIt(void* instance)
 {
     if (!instance) {
-        ESP_LOGE(__FUNCTION__,"Missing instance to run on");
+        ESP_LOGE(__PRETTY_FUNCTION__,"Missing instance to run on");
         return;
     }
     Apa102* leds = (Apa102*) instance;
     spi_transaction_t* txn;
     txn = (spi_transaction_t*)dmalloc(sizeof(*txn));
     esp_err_t ret = ESP_OK;
-    ESP_LOGI(__FUNCTION__,"Painting %s", leds->GetName());
+    ESP_LOGI(__PRETTY_FUNCTION__,"Painting %s", leds->GetName());
     xEventGroupSetBits(leds->eg,apa102_state_t::painting);
     xEventGroupClearBits(leds->eg,apa102_state_t::idle);
     cJSON_SetIntValue(leds->jIdle,0);
@@ -234,13 +234,13 @@ void Apa102::PaintIt(void* instance)
         xEventGroupClearBits(leds->eg,apa102_state_t::sending);
 
         if (ret == ESP_ERR_TIMEOUT) {
-            ESP_LOGE(__FUNCTION__,"%s timeout",leds->GetName());
+            ESP_LOGE(__PRETTY_FUNCTION__,"%s timeout",leds->GetName());
         } else if (ret == ESP_ERR_INVALID_ARG) {
-            ESP_LOGE(__FUNCTION__,"%s invalid args",leds->GetName());
+            ESP_LOGE(__PRETTY_FUNCTION__,"%s invalid args",leds->GetName());
         }
         xEventGroupWaitBits(leds->eg,apa102_state_t::brightness|apa102_state_t::color,pdTRUE,pdFALSE,portMAX_DELAY);
     }
-    ESP_LOGI(__FUNCTION__,"Done painting %s", leds->GetName());
+    ESP_LOGI(__PRETTY_FUNCTION__,"Done painting %s", leds->GetName());
     xEventGroupClearBits(leds->eg,apa102_state_t::painting);
     xEventGroupSetBits(leds->eg,apa102_state_t::idle);
     cJSON_SetIntValue(leds->jIdle,1);
@@ -265,26 +265,26 @@ bool Apa102::ProcessCommand(ManagedDevice* dev, cJSON * parms) {
             } else if (strcmp(param->valuestring,"OFF") == 0) {
                 cJSON_SetIntValue(leds->jPower,0);
             } else {
-                ESP_LOGW(__FUNCTION__,"Invalid param1 value");
+                ESP_LOGW(__PRETTY_FUNCTION__,"Invalid param1 value");
                 return false;
             }
             leds->InitDevice();
         } else if (strcmp("brightness", command) == 0) {
             uint32_t ledNo = cJSON_GetObjectItem(parms, "param1")->valueint;
             if (ledNo > leds->numLeds) {
-                ESP_LOGW(__FUNCTION__,"Invalid led no %d",ledNo);
+                ESP_LOGW(__PRETTY_FUNCTION__,"Invalid led no %d",ledNo);
                 return false;
             }
             ((uint8_t*)leds->spiTransObject.tx_buffer)[4+(ledNo*4)] = 0xe0+min(cJSON_GetObjectItem(parms, "param2")->valueint,31);
             xEventGroupSetBits(leds->eg,apa102_state_t::brightness);
-            ESP_LOGI(__FUNCTION__,"%d Brightness:%d",ledNo, ((uint8_t*)leds->spiTransObject.tx_buffer)[4+(ledNo*4)]);
+            ESP_LOGI(__PRETTY_FUNCTION__,"%d Brightness:%d",ledNo, ((uint8_t*)leds->spiTransObject.tx_buffer)[4+(ledNo*4)]);
         } else if (strcmp("color", command) == 0) {
             uint32_t ledNo = cJSON_GetObjectItem(parms, "param1")->valueint;
             uint32_t red = cJSON_GetObjectItem(parms, "param2")->valueint;
             uint32_t green = cJSON_GetObjectItem(parms, "param3")->valueint;
             uint32_t blue = cJSON_GetObjectItem(parms, "param4")->valueint;
             if (ledNo > leds->numLeds) {
-                ESP_LOGW(__FUNCTION__,"Invalid led no %d",ledNo);
+                ESP_LOGW(__PRETTY_FUNCTION__,"Invalid led no %d",ledNo);
                 return false;
             }
 
@@ -292,11 +292,11 @@ bool Apa102::ProcessCommand(ManagedDevice* dev, cJSON * parms) {
             ((uint8_t*)leds->spiTransObject.tx_buffer)[4+(ledNo*4)+2] = green;
             ((uint8_t*)leds->spiTransObject.tx_buffer)[4+(ledNo*4)+3] = blue;
             xEventGroupSetBits(leds->eg,apa102_state_t::color);
-            ESP_LOGV(__FUNCTION__,"%d red:%d",ledNo,red);
-            ESP_LOGV(__FUNCTION__,"%d green:%d",ledNo,green);
-            ESP_LOGV(__FUNCTION__,"%d blue:%d",ledNo,blue);
+            ESP_LOGV(__PRETTY_FUNCTION__,"%d red:%d",ledNo,red);
+            ESP_LOGV(__PRETTY_FUNCTION__,"%d green:%d",ledNo,green);
+            ESP_LOGV(__PRETTY_FUNCTION__,"%d blue:%d",ledNo,blue);
         } else {
-            ESP_LOGV(__FUNCTION__,"Invalid Command %s", command);
+            ESP_LOGV(__PRETTY_FUNCTION__,"Invalid Command %s", command);
             return false;
         }
         AppConfig::SignalStateChange(state_change_t::MAIN);

@@ -15,7 +15,7 @@ esp_event_handler_instance_t* MFile::handlerInstance=nullptr;
 const char* MFile::MFILE_BASE="MFile";
 
 MFile::~MFile(){
-    ESP_LOGV(__FUNCTION__,"Destructor %s",name);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Destructor %s",name);
     if (file && IsOpen()) {
         Close();
     }
@@ -25,7 +25,7 @@ MFile::MFile()
     :ManagedDevice(MFILE_BASE)
     ,file(nullptr)
 {
-    ESP_LOGV(__FUNCTION__,"Building MFile");
+    ESP_LOGV(__PRETTY_FUNCTION__,"Building MFile");
     status = BuildStatus(this);
     if (numOpenFiles == 0) {
         memset(openFiles,0,sizeof(void*)*MAX_OPEN_FILES);
@@ -50,7 +50,7 @@ MFile::MFile(const char* fileName)
             EventManager::RegisterEventHandler((handlerDescriptors=BuildHandlerDescriptors()));
         }
 
-        ESP_LOGV(__FUNCTION__,"Opening file %s",name);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Opening file %s",name);
         cJSON* jcfg;
         auto* apin = new AppConfig((jcfg=ManagedDevice::status),AppConfig::GetAppStatus());
         apin->SetIntProperty("status",mfile_state_t::MFILE_INIT);
@@ -71,7 +71,7 @@ MFile::MFile(const char* fileName)
 }
 
 EventHandlerDescriptor* MFile::BuildHandlerDescriptors(){
-  ESP_LOGV(__FUNCTION__,"MFile: BuildHandlerDescriptors");
+  ESP_LOGV(__PRETTY_FUNCTION__,"MFile: BuildHandlerDescriptors");
   EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
   handler->AddEventDescriptor(fileEventIds::WRITE_LINE,"WRITE_LINE");
   handler->AddEventDescriptor(fileEventIds::WRITE,"WRITE");
@@ -88,10 +88,10 @@ MFile* MFile::GetFile(const char* fileName){
     }
 
     if (numOpenFiles > MAX_OPEN_FILES) {
-        ESP_LOGW(__FUNCTION__,"Ran Out of files at %s",fileName);
+        ESP_LOGW(__PRETTY_FUNCTION__,"Ran Out of files at %s",fileName);
         for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
             if (openFiles[idx])
-                ESP_LOGI(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+                ESP_LOGI(__PRETTY_FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
         }
         return nullptr;
     }
@@ -99,17 +99,17 @@ MFile* MFile::GetFile(const char* fileName){
     for (uint idx=0; idx < numOpenFiles; idx++) {
         MFile* file = openFiles[idx];
         if (strcmp(fileName,file->GetFilename()) == 0) {
-            ESP_LOGV(__FUNCTION__,"Pulling %s from open files as %d, %d open files",file->GetFilename(),idx, numOpenFiles);
+            ESP_LOGV(__PRETTY_FUNCTION__,"Pulling %s from open files as %d, %d open files",file->GetFilename(),idx, numOpenFiles);
             return file;
         }
     }
-    ESP_LOGV(__FUNCTION__,"Opening %s into open files as %d",fileName,numOpenFiles);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Opening %s into open files as %d",fileName,numOpenFiles);
     return openFiles[numOpenFiles++]=new MFile(fileName);
 }
 
 void MFile::Open(const char* mode){
     if ((name == nullptr) || (strlen(name) == 0)) {
-        ESP_LOGE(__FUNCTION__,"Empty name error");
+        ESP_LOGE(__PRETTY_FUNCTION__,"Empty name error");
         fileStatus = mfile_state_t::MFILE_FAILED;
         return;
     }
@@ -123,11 +123,11 @@ void MFile::Open(const char* mode){
     file = fopenCd(name, mode,true);
     if (file == nullptr)
     {
-        ESP_LOGE(__FUNCTION__, "Failed to open %s for %s", name, mode);
+        ESP_LOGE(__PRETTY_FUNCTION__, "Failed to open %s for %s", name, mode);
         fileStatus = mfile_state_t::MFILE_FAILED;
         return;
     }
-    ESP_LOGV(__FUNCTION__, "Open %s for %s",name, mode);
+    ESP_LOGV(__PRETTY_FUNCTION__, "Open %s for %s",name, mode);
     struct stat st;
 
     int ret = 0;
@@ -149,7 +149,7 @@ void MFile::Open(const char* mode){
 void MFile::Close(){
     if (file != nullptr)
     {
-        ESP_LOGV(__FUNCTION__, "Closed %s",name);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Closed %s",name);
         fclose(file);
         file=nullptr;
         fileStatus = (mfile_state_t)(fileStatus|mfile_state_t::MFILE_CLOSED);
@@ -176,7 +176,7 @@ void MFile::Write(uint8_t* data, uint32_t len) {
     }
     if (file != nullptr)
     {
-        ESP_LOGV(__FUNCTION__,"Writing %d",len);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Writing %d",len);
         fwrite(data,sizeof(uint8_t),len,file);
         bytesWritten->valuedouble = bytesWritten->valueint = bytesWritten->valueint + len;
     }
@@ -186,13 +186,13 @@ void MFile::Write(uint8_t* data, uint32_t len) {
 }
 
 void MFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
-    ESP_LOGV(__FUNCTION__,"Event %s-%d",base,id);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Event %s-%d",base,id);
     MFile* efile;
     auto* params = new AppConfig(*(cJSON**)event_data);
     //char* name = EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("name"));
     if (LOG_LOCAL_LEVEL == ESP_LOG_VERBOSE){
         char* tmp = cJSON_PrintUnformatted(params->GetJSONConfig(nullptr));
-        ESP_LOGW(__FUNCTION__,"Params:%s...",tmp);
+        ESP_LOGW(__PRETTY_FUNCTION__,"Params:%s...",tmp);
         ldfree(tmp);
     }
 
@@ -204,7 +204,7 @@ void MFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, 
             if (efile)
                 efile->Open("c");
         } else {
-            ESP_LOGW(__FUNCTION__,"Missing params:%d",params!=nullptr);
+            ESP_LOGW(__PRETTY_FUNCTION__,"Missing params:%d",params!=nullptr);
         }
         break;
     case fileEventIds::OPEN_APPEND:
@@ -213,17 +213,17 @@ void MFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, 
             if (efile)
                 efile->Open("a");
         } else {
-            ESP_LOGW(__FUNCTION__,"Missing params:%d",params!=nullptr);
+            ESP_LOGW(__PRETTY_FUNCTION__,"Missing params:%d",params!=nullptr);
         }
         break;
     case fileEventIds::CLOSE:
         if ((params != nullptr) && params->HasProperty("name")){
-            ESP_LOGV(__FUNCTION__,"Closing");
+            ESP_LOGV(__PRETTY_FUNCTION__,"Closing");
             efile = GetFile(params->GetStringProperty("name"));
             if (efile)
                 efile->Close();
         } else {
-            ESP_LOGW(__FUNCTION__,"Missing params:%d",params!=nullptr);
+            ESP_LOGW(__PRETTY_FUNCTION__,"Missing params:%d",params!=nullptr);
         }
         break;
     case fileEventIds::FLUSH:
@@ -239,7 +239,7 @@ void MFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, 
                 efile->Write(buf,strlen((char*)buf));
             }
         } else {
-            ESP_LOGW(__FUNCTION__,"Missing params:%d",params!=nullptr);
+            ESP_LOGW(__PRETTY_FUNCTION__,"Missing params:%d",params!=nullptr);
         }
         break;
     default:
@@ -275,9 +275,9 @@ BufferedFile::BufferedFile(const char* fileName)
     ret = stat(fileName, &st);
     isNewOrEmpty = (ret != 0) || (st.st_size==0);
     if (ret == ESP_OK) {
-        ESP_LOGV(__FUNCTION__,"Opening file %s is new or empty:%d, size:%li",fileName, isNewOrEmpty, st.st_size);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Opening file %s is new or empty:%d, size:%li",fileName, isNewOrEmpty, st.st_size);
     } else {
-        ESP_LOGV(__FUNCTION__,"Creating file %s is new or empty:%d",fileName, isNewOrEmpty);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Creating file %s is new or empty:%d",fileName, isNewOrEmpty);
     }
     auto* apin = new AppConfig(((MFile*)this)->status,AppConfig::GetAppStatus());
     apin->SetIntProperty("bytesCached",0);
@@ -290,18 +290,18 @@ BufferedFile::BufferedFile(const char* fileName)
 
 void BufferedFile::Flush() {
     if (buf && pos) {
-        ESP_LOGV(__FUNCTION__,"Flushing %s",GetFilename());
+        ESP_LOGV(__PRETTY_FUNCTION__,"Flushing %s",GetFilename());
         MFile::Write(buf,pos);
         pos=0;
         cJSON_SetIntValue(bytesCached,pos);
         AppConfig::SignalStateChange(state_change_t::MAIN);
     } else {
-        ESP_LOGV(__FUNCTION__,"Not Flushing %s, pos:%d",GetFilename(),pos);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Not Flushing %s, pos:%d",GetFilename(),pos);
     }
 }
 
 void BufferedFile::FlushAll() {
-    ESP_LOGV(__FUNCTION__,"Flushing all");
+    ESP_LOGV(__PRETTY_FUNCTION__,"Flushing all");
     for (int idx=0; idx < MAX_OPEN_FILES; idx++) {
         if (openFiles[idx]){
             ((BufferedFile*)openFiles[idx])->Flush();
@@ -324,10 +324,10 @@ BufferedFile* BufferedFile::GetOpenedFile(const char* fileName){
     }
 
     if (numOpenFiles > MAX_OPEN_FILES) {
-        ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
+        ESP_LOGW(__PRETTY_FUNCTION__,"Ran out of files at %s",fileName);
         for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
             if (openFiles[idx])
-                ESP_LOGV(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+                ESP_LOGV(__PRETTY_FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
         }
         return nullptr;
     }
@@ -338,7 +338,7 @@ BufferedFile* BufferedFile::GetOpenedFile(const char* fileName){
             return file;
         }
     }
-    ESP_LOGV(__FUNCTION__,"No open file %s",fileName);
+    ESP_LOGV(__PRETTY_FUNCTION__,"No open file %s",fileName);
     return nullptr;
 }
 
@@ -354,16 +354,16 @@ BufferedFile* BufferedFile::GetFile(const char* fileName){
         }
     }
     if (numOpenFiles > MAX_OPEN_FILES) {
-        ESP_LOGW(__FUNCTION__,"Ran out of files at %s",fileName);
+        ESP_LOGW(__PRETTY_FUNCTION__,"Ran out of files at %s",fileName);
         for (uint8_t idx = 0; idx < numOpenFiles; idx++) {
             if (openFiles[idx])
-                ESP_LOGV(__FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
+                ESP_LOGV(__PRETTY_FUNCTION__,"%s-%d",openFiles[idx]->GetFilename(),openFiles[idx]->fileStatus);
         }
 
         return nullptr;
     }
 
-    ESP_LOGV(__FUNCTION__,"Creating file %s",fileName);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Creating file %s",fileName);
     return new BufferedFile(fileName);
 }
 
@@ -399,13 +399,13 @@ void BufferedFile::Write(uint8_t* data, uint32_t len) {
         uint32_t dataPos=0;
         while (remaining>0){
             if ((pos+remaining) >= maxBufSize) {
-                ESP_LOGV(__FUNCTION__,"Flushing for first chuck");
+                ESP_LOGV(__PRETTY_FUNCTION__,"Flushing for first chuck");
                 Flush();
             }
 
             if ((pos+len) > maxBufSize) {
                 if (pos > 0) {
-                    ESP_LOGV(__FUNCTION__,"Flushing for next chuck");
+                    ESP_LOGV(__PRETTY_FUNCTION__,"Flushing for next chuck");
                     Flush();
                 }
                 MFile::Write(data+dataPos,maxBufSize);
@@ -413,7 +413,7 @@ void BufferedFile::Write(uint8_t* data, uint32_t len) {
             } else {
                 memcpy(buf+pos,data,len);
                 pos+=len;
-                ESP_LOGV(__FUNCTION__,"Buffered %d",pos);
+                ESP_LOGV(__PRETTY_FUNCTION__,"Buffered %d",pos);
                 cJSON_SetIntValue(bytesCached,bytesCached->valueint+len);
             }
             remaining-=len;
@@ -423,21 +423,21 @@ void BufferedFile::Write(uint8_t* data, uint32_t len) {
 
 void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32_t id, void *event_data){
     if (strcmp(base,MFILE_BASE) == 0) {
-        ESP_LOGV(__FUNCTION__,"Event %s-%d",base,id);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Event %s-%d",base,id);
 
         if (event_data == nullptr) {
-            ESP_LOGE(__FUNCTION__,"Missing params, no go");
+            ESP_LOGE(__PRETTY_FUNCTION__,"Missing params, no go");
             return;
         }
 
         if (cJSON_IsInvalid(*(cJSON**)event_data)) {
-            ESP_LOGW(__FUNCTION__,"Invalid input json 0x%" PRIXPTR ", no go",(uintptr_t)*(cJSON**)event_data);
+            ESP_LOGW(__PRETTY_FUNCTION__,"Invalid input json 0x%" PRIXPTR ", no go",(uintptr_t)*(cJSON**)event_data);
             return;
         }
 
         if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE){
             char *tmp = cJSON_Print(*(cJSON**)event_data);
-            ESP_LOGW(__FUNCTION__, "Missing event id or base:%s", tmp == nullptr ? "null" : tmp);
+            ESP_LOGW(__PRETTY_FUNCTION__, "Missing event id or base:%s", tmp == nullptr ? "null" : tmp);
             if (tmp)
                 ldfree(tmp);
         }
@@ -447,11 +447,11 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
         uint8_t* headerLine = nullptr;
         char* name = EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("name"));
 
-        ESP_LOGV(__FUNCTION__,"NAME:%s...",name);
+        ESP_LOGV(__PRETTY_FUNCTION__,"NAME:%s...",name);
         auto* efile = GetFile(name);
         if (!efile) {
             delete params;
-            ESP_LOGE(__FUNCTION__,"No files available, no go");
+            ESP_LOGE(__PRETTY_FUNCTION__,"No files available, no go");
             return;
         }
         switch (id)
@@ -467,21 +467,21 @@ void BufferedFile::ProcessEvent(void *handler_args, esp_event_base_t base, int32
                 if (params->HasProperty("header") && !efile->hasContent->valueint) {
                     headerLine = (uint8_t*)EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("header"));
                     if (headerLine) {
-                        ESP_LOGV(__FUNCTION__,"header:%s",headerLine);
+                        ESP_LOGV(__PRETTY_FUNCTION__,"header:%s",headerLine);
                         id==fileEventIds::WRITE_LINE?efile->WriteLine(headerLine,strlen((char*)headerLine)):efile->Write(headerLine,strlen((char*)headerLine));
                         ldfree(headerLine);
                     } else {
-                        ESP_LOGW(__FUNCTION__,"Invalid of empty header line");
+                        ESP_LOGW(__PRETTY_FUNCTION__,"Invalid of empty header line");
                     }
                 }
                 strbuf = (uint8_t*)EventHandlerDescriptor::GetParsedValue(params->GetStringProperty("value"));
-                ESP_LOGV(__FUNCTION__,"value:%s",strbuf);
+                ESP_LOGV(__PRETTY_FUNCTION__,"value:%s",strbuf);
                 id==fileEventIds::WRITE_LINE?efile->WriteLine(strbuf,strlen((char*)strbuf)):efile->Write(strbuf,strlen((char*)strbuf));
                 ldfree(strbuf);
             } else {
-                ESP_LOGW(__FUNCTION__,"Missing params:%d or file:%d name:%d or missing param when both are true.",params==nullptr,efile==nullptr, name==nullptr);
+                ESP_LOGW(__PRETTY_FUNCTION__,"Missing params:%d or file:%d name:%d or missing param when both are true.",params==nullptr,efile==nullptr, name==nullptr);
                 if (name != nullptr) {
-                    ESP_LOGV(__FUNCTION__,"Name:%s",name);
+                    ESP_LOGV(__PRETTY_FUNCTION__,"Name:%s",name);
                 }
             }
             break;

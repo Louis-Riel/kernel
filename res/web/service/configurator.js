@@ -53,9 +53,9 @@ function registerSecureDevice(device) {
     });
 }
 
-function updateUpstreams(device,finder,events) {
+exports.updateUpstreams = function updateUpstreams(device,finder,events) {
     return new Promise((resolve,reject) => {
-        fs.readFile(process.env.REACT_APP_UPSTREAM_PATH,(err,upstreams)=>err?reject(err):registerDevice(upstreams).then(resolve).catch(reject));
+        fs.readFile(process.env.REACT_APP_UPSTREAM_PATH,(err,upstreams)=>registerDevice(upstreams || "").then(resolve).catch(reject));
     });
 
     function registerDevice(upstreams) {
@@ -71,7 +71,9 @@ function updateUpstreams(device,finder,events) {
         });
 
         function refreshSecures() {
-            events.emit("refreshSecureHosts","{}");
+            if (events) {
+                events.emit("refreshSecureHosts","{}");
+            }
             return device;
         }
     }

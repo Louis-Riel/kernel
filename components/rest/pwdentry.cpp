@@ -24,7 +24,7 @@ PasswordEntry::PasswordEntry(AppConfig* config, AppConfig* restState, AppConfig*
         hostName=AppConfig::GetAppConfig()->GetStringProperty("devName");
         keyServerPort=serverCfg->GetIntProperty("keyServerPort");
         delete serverCfg;
-        ESP_LOGV(__FUNCTION__,"Initial Config Completed server:%s path:%s hostname:%s port:%d cert:%s",keyServer,keyServerPath,hostName,keyServerPort,keyServerCert);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Initial Config Completed server:%s path:%s hostname:%s port:%d cert:%s",keyServer,keyServerPath,hostName,keyServerPort,keyServerCert);
         mbedtls_md_init(&ctx1);
         mbedtls_md_setup(&ctx1, this->md_info, 0);
         mbedtls_md_init(&ctx2);
@@ -79,7 +79,7 @@ PasswordEntry::~PasswordEntry()
     delete pwdState;
     mbedtls_md_free(&ctx1);
     mbedtls_md_free(&ctx2);
-    ESP_LOGV(__FUNCTION__,"Destructing");
+    ESP_LOGV(__PRETTY_FUNCTION__,"Destructing");
 }
 
 bool PasswordEntry::IsExpired(int64_t curTime) const {
@@ -103,10 +103,10 @@ esp_err_t PasswordEntry::HttpEventHandler(esp_http_client_event_t *evt) {
 
     switch(evt->event_id) {
         case HTTP_EVENT_ERROR:
-            ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ERROR");
+            ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_ERROR");
             break;
         case HTTP_EVENT_ON_CONNECTED:
-            ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_CONNECTED");
+            ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_ON_CONNECTED");
             cJSON_SetIntValue(pEntry->jBytesOut,pEntry->jBytesOut->valueint + strlen(keyServer) + strlen(keyServerPath) + 16 + strlen(pEntry->uri->uri));
             cJSON_SetIntValue(pEntry->jUriBytesOut,pEntry->jUriBytesOut->valueint + strlen(keyServer) + strlen(keyServerPath) + 16 + strlen(pEntry->uri->uri));
             cJSON_SetIntValue(pEntry->jNumRefreshes,pEntry->jNumRefreshes->valueint + 1);
@@ -114,23 +114,23 @@ esp_err_t PasswordEntry::HttpEventHandler(esp_http_client_event_t *evt) {
             pEntry->blen=0;
             break;
         case HTTP_EVENT_HEADER_SENT:
-            ESP_LOGV(__FUNCTION__, "HTTP_EVENT_HEADER_SENT");
+            ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_HEADER_SENT");
             break;
         case HTTP_EVENT_ON_HEADER:
-            ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+            ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
             break;
         case HTTP_EVENT_ON_DATA:
-            ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+            ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
             memcpy(buf + pEntry->blen, evt->data, evt->data_len);
             pEntry->blen+=evt->data_len;
             cJSON_SetIntValue(pEntry->jBytesIn,pEntry->jBytesIn->valueint+evt->data_len);
             cJSON_SetIntValue(pEntry->jUriBytesIn,pEntry->jUriBytesIn->valueint+evt->data_len);
             break;
         case HTTP_EVENT_ON_FINISH:
-            ESP_LOGV(__FUNCTION__, "HTTP_EVENT_ON_FINISH");
+            ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_ON_FINISH");
             if (pEntry->blen) {
                 *(buf+pEntry->blen)=0;
-                ESP_LOGV(__FUNCTION__,"Parsing(%s)",buf);
+                ESP_LOGV(__PRETTY_FUNCTION__,"Parsing(%s)",buf);
                 json = cJSON_ParseWithLength(buf,pEntry->blen);
                 if (json && 
                     (cJSON_HasObjectItem(json,"keyid") &&
@@ -142,34 +142,34 @@ esp_err_t PasswordEntry::HttpEventHandler(esp_http_client_event_t *evt) {
                     pEntry->expires_at=0;
 
                     strncpy(pEntry->keyid,cJSON_GetStringValue(cJSON_GetObjectItem(json,"keyid")),KEY_ID_LEN);
-                    ESP_LOGV(__FUNCTION__,"%s-%s KeyId:%s ",pEntry->GetPath(),pEntry->GetMethod(), pEntry->keyid);
+                    ESP_LOGV(__PRETTY_FUNCTION__,"%s-%s KeyId:%s ",pEntry->GetPath(),pEntry->GetMethod(), pEntry->keyid);
 
                     strncpy(pEntry->pwd,cJSON_GetStringValue(cJSON_GetObjectItem(json,"password")),PASSWORD_LEN);
-                    ESP_LOGV(__FUNCTION__,"Password:%s ",pEntry->pwd);
+                    ESP_LOGV(__PRETTY_FUNCTION__,"Password:%s ",pEntry->pwd);
 
                     pEntry->expires_at=(cJSON_GetNumberValue(cJSON_GetObjectItem(json,"ttl")) * 1000000) + esp_timer_get_time();
-                    ESP_LOGV(__FUNCTION__,"Ttl:%lld ",pEntry->GetExpiresAt());
+                    ESP_LOGV(__PRETTY_FUNCTION__,"Ttl:%lld ",pEntry->GetExpiresAt());
 
                     if (strlen(pEntry->keyid) > KEY_ID_LEN) {
-                        ESP_LOGE(__FUNCTION__,"Corrupted key id:(%s) pwd:(%s) ttl:%lld",pEntry->keyid,pEntry->pwd,pEntry->expires_at);
+                        ESP_LOGE(__PRETTY_FUNCTION__,"Corrupted key id:(%s) pwd:(%s) ttl:%lld",pEntry->keyid,pEntry->pwd,pEntry->expires_at);
                         pEntry->expires_at=0;
                         pEntry->keyid[0]=0;
                         pEntry->pwd[0]=0;
                     }
                 } else if (json) {
-                    ESP_LOGE(__FUNCTION__,"Invalid json from output:%s",buf);
+                    ESP_LOGE(__PRETTY_FUNCTION__,"Invalid json from output:%s",buf);
                 } else {
-                    ESP_LOGE(__FUNCTION__,"Cannot parse json from output:%s",buf);
+                    ESP_LOGE(__PRETTY_FUNCTION__,"Cannot parse json from output:%s",buf);
                 }
                 if (json) {
                     cJSON_Delete(json);
                 }
             } else {
-                ESP_LOGE(__FUNCTION__,"No output");
+                ESP_LOGE(__PRETTY_FUNCTION__,"No output");
             }
             break;
         case HTTP_EVENT_DISCONNECTED:
-            ESP_LOGV(__FUNCTION__, "HTTP_EVENT_DISCONNECTED");
+            ESP_LOGV(__PRETTY_FUNCTION__, "HTTP_EVENT_DISCONNECTED");
             break;
     }
     return ESP_OK;
@@ -198,7 +198,7 @@ const char* PasswordEntry::GetMethodName(httpd_method_t method) {
         break;
     
     default:
-        ESP_LOGV(__FUNCTION__,"Unknown method:%d",method);
+        ESP_LOGV(__PRETTY_FUNCTION__,"Unknown method:%d",method);
         break;
     }
     return mUNKNOWN;
@@ -206,7 +206,7 @@ const char* PasswordEntry::GetMethodName(httpd_method_t method) {
 
 bool PasswordEntry::RefreshKey(uint32_t ttl) {
     sprintf(keyServerUrl,KEYS_URL_QUERY_PARAMS,uri->uri,GetMethodName(uri->method),ttl,hostName);
-    ESP_LOGV(__FUNCTION__,"url(%s)",keyServerUrl);
+    ESP_LOGV(__PRETTY_FUNCTION__,"url(%s)",keyServerUrl);
     char* wc = indexOf(keyServerUrl," ");
     if (wc) {
         if (*(wc-1) == '*') {
@@ -218,12 +218,12 @@ bool PasswordEntry::RefreshKey(uint32_t ttl) {
             }
             *(wc-1)=0;
         }
-        ESP_LOGV(__FUNCTION__,"url adjusted to (%s) for (%s) on (%s/%s):%d %d",keyServerUrl,hostName,keyServer,keyServerPath,keyServerPort,keyServer==nullptr);
+        ESP_LOGV(__PRETTY_FUNCTION__,"url adjusted to (%s) for (%s) on (%s/%s):%d %d",keyServerUrl,hostName,keyServer,keyServerPath,keyServerPort,keyServer==nullptr);
     } else {
-        ESP_LOGW(__FUNCTION__,"Weird URL format, let's just see what happens");
+        ESP_LOGW(__PRETTY_FUNCTION__,"Weird URL format, let's just see what happens");
     }
 
-    ESP_LOGV(__FUNCTION__,"Cert(%s)",keyServerCert);
+    ESP_LOGV(__PRETTY_FUNCTION__,"Cert(%s)",keyServerCert);
 
     esp_http_client_config_t config = {
         .host = keyServer,
@@ -240,12 +240,12 @@ bool PasswordEntry::RefreshKey(uint32_t ttl) {
         .is_async = false,
         .skip_cert_common_name_check = true
     };
-    ESP_LOGV(__FUNCTION__,"getting key for %s %s from http://%s:%d%s?%s", GetMethodName(uri->method) ,uri->uri, config.host, config.port, config.path, config.query);
+    ESP_LOGV(__PRETTY_FUNCTION__,"getting key for %s %s from http://%s:%d%s?%s", GetMethodName(uri->method) ,uri->uri, config.host, config.port, config.path, config.query);
     esp_http_client_handle_t client = esp_http_client_init(&config);
     bool ret = true;
     if (esp_http_client_perform(client) != ESP_OK)
     {
-        ESP_LOGE(__FUNCTION__,"Error getting key for %s %s from http://%s:%d%s?%s", GetMethodName(uri->method) ,uri->uri, config.host, config.port, config.path, config.query);
+        ESP_LOGE(__PRETTY_FUNCTION__,"Error getting key for %s %s from http://%s:%d%s?%s", GetMethodName(uri->method) ,uri->uri, config.host, config.port, config.path, config.query);
         ret = false;
     } else {
         struct tm timeinfo;
@@ -272,11 +272,11 @@ esp_err_t PasswordEntry::CheckTheSum(httpd_req_t *req) {
     esp_err_t ret = ESP_OK;
 #if CONFIG_ENABLE_VALIDATED_REQUESTS == 1
     if (!pwd || !strlen(pwd)) {
-        ESP_LOGW(__FUNCTION__,"Missing password");
+        ESP_LOGW(__PRETTY_FUNCTION__,"Missing password");
         return ESP_FAIL;
     }
     if (!keyid || !strlen(keyid)) {
-        ESP_LOGW(__FUNCTION__,"Missing keyid on %s", req->uri);
+        ESP_LOGW(__PRETTY_FUNCTION__,"Missing keyid on %s", req->uri);
         return ESP_FAIL;
     }
     size_t hlen = httpd_req_get_hdr_value_len(req, "TheHash");
@@ -284,21 +284,21 @@ esp_err_t PasswordEntry::CheckTheSum(httpd_req_t *req) {
         auto* theHash = xPortGetCoreID() ? theHashes : theHashes + HASH_LEN;
         ctx = xPortGetCoreID() ? &ctx1 : &ctx2;
         if (!theHash) {
-            ESP_LOGE(__FUNCTION__,"Can't allocate hash");
+            ESP_LOGE(__PRETTY_FUNCTION__,"Can't allocate hash");
             return ESP_FAIL;
         }
         if (httpd_req_get_hdr_value_str(req, "TheHash", theHash, 65) == ESP_OK) {
-            ESP_LOGV(__FUNCTION__,"Hash:%s(%s)",req->uri, theHash);
+            ESP_LOGV(__PRETTY_FUNCTION__,"Hash:%s(%s)",req->uri, theHash);
             mbedtls_md_starts(ctx);
 
             const char* val = GetMethodName((httpd_method_t)req->method);
 
             mbedtls_md_update(ctx, (const unsigned char*)val, strlen(val));
-            ESP_LOGV(__FUNCTION__,"method(%s)",val);
+            ESP_LOGV(__PRETTY_FUNCTION__,"method(%s)",val);
             mbedtls_md_update(ctx, (const unsigned char*)"/", 1);
             mbedtls_md_update(ctx, (const unsigned char*)hostName, strlen(hostName));
             mbedtls_md_update(ctx, (const unsigned char*)req->uri, strlen(req->uri));
-            ESP_LOGV(__FUNCTION__,"path(/%s%s)",hostName,req->uri);
+            ESP_LOGV(__PRETTY_FUNCTION__,"path(/%s%s)",hostName,req->uri);
 
             auto* theHeader = xPortGetCoreID() ? theHeaders : theHeaders + HEADER_MAX_LEN;
             
@@ -306,14 +306,14 @@ esp_err_t PasswordEntry::CheckTheSum(httpd_req_t *req) {
                 hlen = httpd_req_get_hdr_value_len(req, headerName);
                 if (hlen && (hlen < 254) && (httpd_req_get_hdr_value_str(req, headerName, theHeader, HEADER_MAX_LEN) == ESP_OK)) {
                     mbedtls_md_update(ctx, (const unsigned char*)theHeader, strlen(theHeader));
-                    ESP_LOGV(__FUNCTION__,"%s(%s)",headerName,theHeader);
+                    ESP_LOGV(__PRETTY_FUNCTION__,"%s(%s)",headerName,theHeader);
                 } else {
-                    ESP_LOGE(__FUNCTION__,"Can't get header for %s",headerName);
+                    ESP_LOGE(__PRETTY_FUNCTION__,"Can't get header for %s",headerName);
                     ret=ESP_FAIL;
                 }
             }
             mbedtls_md_update(ctx, (const unsigned char*)GetPassword(), strlen(GetPassword()));
-            ESP_LOGV(__FUNCTION__,"password(%s)",GetPassword());
+            ESP_LOGV(__PRETTY_FUNCTION__,"password(%s)",GetPassword());
 
             uint8_t shaResult[32];
             mbedtls_md_finish(ctx, shaResult);
@@ -323,21 +323,21 @@ esp_err_t PasswordEntry::CheckTheSum(httpd_req_t *req) {
             }
 
             if (strcmp(theHeader,theHash) == 0) {
-                ESP_LOGV(__FUNCTION__,"The hash %s matches",theHash);
+                ESP_LOGV(__PRETTY_FUNCTION__,"The hash %s matches",theHash);
                 cJSON_SetIntValue(jNumValid,jNumValid->valueint+1);
             } else {
                 cJSON_SetIntValue(jNumInvalid,jNumInvalid->valueint+1);
-                ESP_LOGW(__FUNCTION__,"Mismatch hash %s!=%s",theHash,theHeader);
+                ESP_LOGW(__PRETTY_FUNCTION__,"Mismatch hash %s!=%s",theHash,theHeader);
                 ret=ESP_FAIL;
             }
         } else {
             ret=ESP_FAIL;
-            ESP_LOGE(__FUNCTION__,"%s got bad hash:%d",req->uri, hlen);
+            ESP_LOGE(__PRETTY_FUNCTION__,"%s got bad hash:%d",req->uri, hlen);
             httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
         }
     } else {
         ret=ESP_FAIL;
-        ESP_LOGW(__FUNCTION__,"%s got no hash",req->uri);
+        ESP_LOGW(__PRETTY_FUNCTION__,"%s got no hash",req->uri);
         httpd_resp_send_err(req,httpd_err_code_t::HTTPD_400_BAD_REQUEST,"You are not worthy with this sillyness");
     }
     

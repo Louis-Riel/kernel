@@ -137,7 +137,7 @@ public:
       stat->SetDoubleProperty("Longitude",0.0);
       jlat = stat->GetPropertyHolder("Lattitude");
       jlng = stat->GetPropertyHolder("Longitude");
-      ESP_LOGI(__FUNCTION__,"TinyGPSLocation initializing %d %d",jlat== NULL,jlng == NULL);
+      ESP_LOGI(__PRETTY_FUNCTION__,"TinyGPSLocation initializing %d %d",jlat== NULL,jlng == NULL);
       delete stat;
    }
 

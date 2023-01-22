@@ -34,7 +34,7 @@ static esp_ble_scan_params_t ble_scan_params = {
 Bt::Bt()
     :ManagedDevice(BT_BASE,BT_BASE,NULL,&ProcessCommand)
 {
-    ESP_LOGV(__FUNCTION__,"Bt start");
+    ESP_LOGV(__PRETTY_FUNCTION__,"Bt start");
     
     if (instance == NULL) {
         instance = this;
@@ -73,7 +73,7 @@ Bt::Bt()
 }
 
 EventHandlerDescriptor* Bt::BuildHandlerDescriptors(){
-  ESP_LOGV(__FUNCTION__,"Bt BuildHandlerDescriptors");
+  ESP_LOGV(__PRETTY_FUNCTION__,"Bt BuildHandlerDescriptors");
   EventHandlerDescriptor* handler = ManagedDevice::BuildHandlerDescriptors();
   handler->AddEventDescriptor(eventIds::OFF,"OFF",event_data_type_tp::JSON);
   handler->AddEventDescriptor(eventIds::ON,"ON",event_data_type_tp::JSON);
@@ -162,7 +162,7 @@ void Bt::update_device_info(esp_bt_gap_cb_param_t *param)
     bda2str(param->disc_res.bda, bda_str, 18);
     cJSON* dev = instance->GetDevice(bda_str);
     if (!dev) {
-        ESP_LOGD(__FUNCTION__, "Device found: %s", bda_str);
+        ESP_LOGD(__PRETTY_FUNCTION__, "Device found: %s", bda_str);
         dev=instance->AddDevice(bda_str);
         strftime(cJSON_GetObjectItem(dev,"firstSeen")->valuestring, 30, "%c", &timeinfo);
     }
@@ -173,17 +173,17 @@ void Bt::update_device_info(esp_bt_gap_cb_param_t *param)
         case ESP_BT_GAP_DEV_PROP_COD:
             cod = *(uint32_t *)(p->val);
             cJSON_SetNumberValue((cJSON_HasObjectItem(dev,"cod") ? cJSON_GetObjectItem(dev,"cod") : cJSON_AddNumberToObject(dev,"cod",cod)),cod);
-            ESP_LOGD(__FUNCTION__, "--Class of Device: 0x%x", cod);
+            ESP_LOGD(__PRETTY_FUNCTION__, "--Class of Device: 0x%x", cod);
             break;
         case ESP_BT_GAP_DEV_PROP_RSSI:
             rssi = *(int8_t *)(p->val);
             cJSON_SetNumberValue((cJSON_HasObjectItem(dev,"rssi") ? cJSON_GetObjectItem(dev,"rssi") : cJSON_AddNumberToObject(dev,"rssi",rssi)),rssi);
-            ESP_LOGD(__FUNCTION__, "--RSSI: %d", rssi);
+            ESP_LOGD(__PRETTY_FUNCTION__, "--RSSI: %d", rssi);
             break;
         case ESP_BT_GAP_DEV_PROP_BDNAME:
             len = (p->len > ESP_BT_GAP_MAX_BDNAME_LEN) ? ESP_BT_GAP_MAX_BDNAME_LEN : (uint8_t)p->len;
             if (len) {
-                ESP_LOGD(__FUNCTION__, "name: %s", (char *)(p->val));
+                ESP_LOGD(__PRETTY_FUNCTION__, "name: %s", (char *)(p->val));
                 cJSON_SetValuestring((cJSON_HasObjectItem(dev,"rssi") ? cJSON_GetObjectItem(dev,"rssi") : cJSON_AddNumberToObject(dev,"rssi",rssi)),(char *)p->val);
             }
         default:
@@ -236,9 +236,9 @@ void Bt::update_device_info(esp_bt_gap_cb_param_t *param)
     if (p_dev->eir && p_dev->bdname_len == 0) {
         if (get_name_from_eir(p_dev->eir, p_dev->bdname, &p_dev->bdname_len)) {
             cJSON_SetValuestring((cJSON_HasObjectItem(dev,"name") ? cJSON_GetObjectItem(dev,"name") :  cJSON_AddStringToObject(dev,"name",(char*)p_dev->bdname)),(char*)p_dev->bdname);
-            ESP_LOGD(__FUNCTION__, "Found a target device, address %s, name %s", bda_str, p_dev->bdname);
+            ESP_LOGD(__PRETTY_FUNCTION__, "Found a target device, address %s, name %s", bda_str, p_dev->bdname);
         } else {
-            ESP_LOGD(__FUNCTION__, "Found a target device, address %s, can't get name", bda_str);
+            ESP_LOGD(__PRETTY_FUNCTION__, "Found a target device, address %s, can't get name", bda_str);
         }
         p_dev->state = APP_GAP_STATE_DEVICE_DISCOVER_COMPLETE;
     }
@@ -260,20 +260,20 @@ void Bt::esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
         break;
     }
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT: {
-        ESP_LOGI(__FUNCTION__, "Scan parm set");
+        ESP_LOGI(__PRETTY_FUNCTION__, "Scan parm set");
         esp_ble_gap_start_scanning(0);
         break;
     }
     case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
         //scan start complete event to indicate scan start successfully or failed
         if (param->scan_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
-            ESP_LOGE(__FUNCTION__, "Scan start failed");
+            ESP_LOGE(__PRETTY_FUNCTION__, "Scan start failed");
         }
         break;
     case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
         //adv start complete event to indicate adv start successfully or failed
         if (param->adv_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
-            ESP_LOGE(__FUNCTION__, "Adv start failed");
+            ESP_LOGE(__PRETTY_FUNCTION__, "Adv start failed");
         }
         break;
     case ESP_GAP_BLE_SCAN_RESULT_EVT: {
@@ -292,7 +292,7 @@ void Bt::esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
                 localtime_r(&now, &timeinfo);
 
                 if (!dev) {
-                    ESP_LOGD(__FUNCTION__, "Device found: %s", bda_str);
+                    ESP_LOGD(__PRETTY_FUNCTION__, "Device found: %s", bda_str);
                     dev=instance->AddDevice(bda_str);
                     cJSON_AddNumberToObject(dev,"major",major);
                     cJSON_AddNumberToObject(dev,"minor",minor);
@@ -304,36 +304,36 @@ void Bt::esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
                 cJSON_SetNumberValue(cJSON_GetObjectItem(dev, "rssi"), scan_result->scan_rst.rssi);
                 strftime(cJSON_GetObjectItem(dev,"lastSeen")->valuestring, 30, "%c", &timeinfo);
 
-                //esp_log_buffer_hex(__FUNCTION__, scan_result->scan_rst.bda, 6);
-                ESP_LOGV(__FUNCTION__, "Searched Adv Data Len %d, Scan Response Len %d", scan_result->scan_rst.adv_data_len, scan_result->scan_rst.scan_rsp_len);
+                //esp_log_buffer_hex(__PRETTY_FUNCTION__, scan_result->scan_rst.bda, 6);
+                ESP_LOGV(__PRETTY_FUNCTION__, "Searched Adv Data Len %d, Scan Response Len %d", scan_result->scan_rst.adv_data_len, scan_result->scan_rst.scan_rsp_len);
                 adv_name = esp_ble_resolve_adv_data(scan_result->scan_rst.ble_adv, ESP_BLE_AD_TYPE_NAME_CMPL, &adv_name_len);
-                ESP_LOGV(__FUNCTION__, "Searched Device Name Len %d", adv_name_len);
-                //esp_log_buffer_char(__FUNCTION__, adv_name, adv_name_len);
-                ESP_LOGV(__FUNCTION__, "\n");
+                ESP_LOGV(__PRETTY_FUNCTION__, "Searched Device Name Len %d", adv_name_len);
+                //esp_log_buffer_char(__PRETTY_FUNCTION__, adv_name, adv_name_len);
+                ESP_LOGV(__PRETTY_FUNCTION__, "\n");
                 if (adv_name_len) {
                     cJSON_SetValuestring((cJSON_HasObjectItem(dev,"name") ? cJSON_GetObjectItem(dev,"name") :  cJSON_AddStringToObject(dev,"name",(char*)adv_name)),(char*)adv_name);
                 }
                 
                 adv_name = esp_ble_resolve_adv_data(scan_result->scan_rst.ble_adv, ESP_BLE_AD_TYPE_NAME_SHORT, &adv_name_len);
-                ESP_LOGV(__FUNCTION__, "Searched Device short Name Len %d", adv_name_len);
-                //esp_log_buffer_char(__FUNCTION__, adv_name, adv_name_len);
-                ESP_LOGV(__FUNCTION__, "\n");
+                ESP_LOGV(__PRETTY_FUNCTION__, "Searched Device short Name Len %d", adv_name_len);
+                //esp_log_buffer_char(__PRETTY_FUNCTION__, adv_name, adv_name_len);
+                ESP_LOGV(__PRETTY_FUNCTION__, "\n");
                 if (adv_name_len) {
                     cJSON_SetValuestring((cJSON_HasObjectItem(dev,"shortname") ? cJSON_GetObjectItem(dev,"shortname") :  cJSON_AddStringToObject(dev,"shortname",(char*)adv_name)),(char*)adv_name);
                 }
 
                 adv_name = esp_ble_resolve_adv_data(scan_result->scan_rst.ble_adv, ESP_BLE_AD_TYPE_DEV_CLASS, &adv_name_len);
-                ESP_LOGV(__FUNCTION__, "Searched class Len %d", adv_name_len);
-                //esp_log_buffer_char(__FUNCTION__, adv_name, adv_name_len);
-                ESP_LOGV(__FUNCTION__, "\n");
+                ESP_LOGV(__PRETTY_FUNCTION__, "Searched class Len %d", adv_name_len);
+                //esp_log_buffer_char(__PRETTY_FUNCTION__, adv_name, adv_name_len);
+                ESP_LOGV(__PRETTY_FUNCTION__, "\n");
                 if (adv_name_len) {
                     cJSON_SetValuestring((cJSON_HasObjectItem(dev,"class") ? cJSON_GetObjectItem(dev,"class") :  cJSON_AddStringToObject(dev,"class",(char*)adv_name)),(char*)adv_name);
                 }
 
                 adv_name = esp_ble_resolve_adv_data(scan_result->scan_rst.ble_adv, ESP_BLE_AD_TYPE_APPEARANCE, &adv_name_len);
-                ESP_LOGV(__FUNCTION__, "Searched Device apprearance Len %d", adv_name_len);
-                //esp_log_buffer_char(__FUNCTION__, adv_name, adv_name_len);
-                ESP_LOGV(__FUNCTION__, "\n");
+                ESP_LOGV(__PRETTY_FUNCTION__, "Searched Device apprearance Len %d", adv_name_len);
+                //esp_log_buffer_char(__PRETTY_FUNCTION__, adv_name, adv_name_len);
+                ESP_LOGV(__PRETTY_FUNCTION__, "\n");
                 if (adv_name_len) {
                     cJSON_SetValuestring((cJSON_HasObjectItem(dev,"apprearance") ? cJSON_GetObjectItem(dev,"apprearance") :  cJSON_AddStringToObject(dev,"apprearance",(char*)adv_name)),(char*)adv_name);
                 }
@@ -347,19 +347,19 @@ void Bt::esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 
     case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT:
         if (param->scan_stop_cmpl.status != ESP_BT_STATUS_SUCCESS){
-            ESP_LOGE(__FUNCTION__, "Scan stop failed");
+            ESP_LOGE(__PRETTY_FUNCTION__, "Scan stop failed");
         }
         else {
-            ESP_LOGI(__FUNCTION__, "Stop scan successfully");
+            ESP_LOGI(__PRETTY_FUNCTION__, "Stop scan successfully");
         }
         break;
 
     case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
         if (param->adv_stop_cmpl.status != ESP_BT_STATUS_SUCCESS){
-            ESP_LOGE(__FUNCTION__, "Adv stop failed");
+            ESP_LOGE(__PRETTY_FUNCTION__, "Adv stop failed");
         }
         else {
-            ESP_LOGI(__FUNCTION__, "Stop adv successfully");
+            ESP_LOGI(__PRETTY_FUNCTION__, "Stop adv successfully");
         }
         break;
 
@@ -383,18 +383,18 @@ void Bt::bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param
     }
     case ESP_BT_GAP_DISC_STATE_CHANGED_EVT: {
         if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
-            ESP_LOGD(__FUNCTION__, "Device discovery stopped.");
+            ESP_LOGD(__PRETTY_FUNCTION__, "Device discovery stopped.");
             cJSON_SetValuestring(instance->btStatus, "On");
             if ( (p_dev->state == APP_GAP_STATE_DEVICE_DISCOVER_COMPLETE ||
                     p_dev->state == APP_GAP_STATE_DEVICE_DISCOVERING)
                     && p_dev->dev_found) {
                 p_dev->state = APP_GAP_STATE_SERVICE_DISCOVERING;
-                ESP_LOGD(__FUNCTION__, "Discover services ...");
+                ESP_LOGD(__PRETTY_FUNCTION__, "Discover services ...");
                 esp_bt_gap_get_remote_services(p_dev->bda);
             }
         } else if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STARTED) {
             cJSON_SetValuestring(instance->btStatus, "Scanning");
-            ESP_LOGD(__FUNCTION__, "Discovery started.");
+            ESP_LOGD(__PRETTY_FUNCTION__, "Discovery started.");
         }
         AppConfig::SignalStateChange(state_change_t::MAIN);
         break;
@@ -404,26 +404,26 @@ void Bt::bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param
                 p_dev->state == APP_GAP_STATE_SERVICE_DISCOVERING) {
             p_dev->state = APP_GAP_STATE_SERVICE_DISCOVER_COMPLETE;
             if (param->rmt_srvcs.stat == ESP_BT_STATUS_SUCCESS) {
-                ESP_LOGD(__FUNCTION__, "Services for device %s found",  bda2str(p_dev->bda, bda_str, 18));
+                ESP_LOGD(__PRETTY_FUNCTION__, "Services for device %s found",  bda2str(p_dev->bda, bda_str, 18));
                 for (int i = 0; i < param->rmt_srvcs.num_uuids; i++) {
                     esp_bt_uuid_t *u = param->rmt_srvcs.uuid_list + i;
-                    ESP_LOGD(__FUNCTION__, "--%s", uuid2str(u, uuid_str, 37));
+                    ESP_LOGD(__PRETTY_FUNCTION__, "--%s", uuid2str(u, uuid_str, 37));
                     esp_bt_gap_get_remote_service_record(p_dev->bda, u);
                     dev=instance->GetService(bda_str,u);
                     if (!dev) {
                         dev=instance->AddService(bda_str,u);
                         AppConfig::SignalStateChange(state_change_t::MAIN);
                     }
-                    // ESP_LOGD(__FUNCTION__, "--%d", u->len);
+                    // ESP_LOGD(__PRETTY_FUNCTION__, "--%d", u->len);
                 }
             } else {
-                ESP_LOGD(__FUNCTION__, "Services for device %s not found",  bda2str(p_dev->bda, bda_str, 18));
+                ESP_LOGD(__PRETTY_FUNCTION__, "Services for device %s not found",  bda2str(p_dev->bda, bda_str, 18));
             }
         }
         break;
     }
     default: {
-        ESP_LOGD(__FUNCTION__, "event:%d", event);
+        ESP_LOGD(__PRETTY_FUNCTION__, "event:%d", event);
         break;
     }
     }
@@ -431,34 +431,34 @@ void Bt::bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param
 }
 
 void Bt::InitDevice(){
-    ESP_LOGI(__FUNCTION__,"Initializing bt");
+    ESP_LOGI(__PRETTY_FUNCTION__,"Initializing bt");
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     esp_err_t ret = ESP_OK;
 
     if (strcmp(btStatus->valuestring,"idle") == 0){
         if ((ret = esp_bt_controller_init(&bt_cfg)) != ESP_OK) {
-            ESP_LOGE(__FUNCTION__, "%s initialize controller failed: %s\n", __func__, esp_err_to_name(ret));
+            ESP_LOGE(__PRETTY_FUNCTION__, "%s initialize controller failed: %s\n", __func__, esp_err_to_name(ret));
             return;
         }
-        ESP_LOGD(__FUNCTION__,"bt controler init");
+        ESP_LOGD(__PRETTY_FUNCTION__,"bt controler init");
     }
 
     if ((ret = esp_bt_controller_enable(ESP_BT_MODE_BTDM)) != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "%s enable controller failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(__PRETTY_FUNCTION__, "%s enable controller failed: %s\n", __func__, esp_err_to_name(ret));
     }
-    ESP_LOGD(__FUNCTION__,"bt controler enabled");
+    ESP_LOGD(__PRETTY_FUNCTION__,"bt controler enabled");
 
     if ((ret = esp_bluedroid_init()) != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "%s initialize bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(__PRETTY_FUNCTION__, "%s initialize bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
     }
-    ESP_LOGD(__FUNCTION__,"Bt initted");
+    ESP_LOGD(__PRETTY_FUNCTION__,"Bt initted");
 
     if ((ret = esp_bluedroid_enable()) != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "%s enable bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(__PRETTY_FUNCTION__, "%s enable bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
         return;
     }
-    ESP_LOGD(__FUNCTION__,"Bt enabled");
+    ESP_LOGD(__PRETTY_FUNCTION__,"Bt enabled");
 
     cJSON_SetValuestring(btStatus, "On");
     AppConfig::SignalStateChange(state_change_t::MAIN);
@@ -469,7 +469,7 @@ void Bt::InitDevice(){
     /* register GAP callback function */
     esp_bt_gap_register_callback(bt_app_gap_cb);
     if ((ret = esp_ble_gap_register_callback(esp_gap_cb)) != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "gap register error, error code = %x", ret);
+        ESP_LOGE(__PRETTY_FUNCTION__, "gap register error, error code = %x", ret);
     }
     /* set discoverable and connectable mode, wait to be connected */
     esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
@@ -483,37 +483,37 @@ void Bt::InitDevice(){
 
     esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
     esp_ble_gap_set_scan_params(&ble_scan_params);
-    ESP_LOGD(__FUNCTION__,"Bt running");
+    ESP_LOGD(__PRETTY_FUNCTION__,"Bt running");
 }
 
 void Bt::DeInitDevice(){
-    ESP_LOGI(__FUNCTION__,"DeInitializing bt");
+    ESP_LOGI(__PRETTY_FUNCTION__,"DeInitializing bt");
     esp_err_t ret = ESP_OK;
 
     esp_bt_gap_cancel_discovery();
 
     if ((ret = esp_bluedroid_disable()) != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "%s disable bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(__PRETTY_FUNCTION__, "%s disable bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
     }
-    ESP_LOGD(__FUNCTION__,"Bt disabled");
+    ESP_LOGD(__PRETTY_FUNCTION__,"Bt disabled");
 
     if ((ret = esp_bluedroid_deinit()) != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "%s initialize bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(__PRETTY_FUNCTION__, "%s initialize bluedroid failed: %s\n", __func__, esp_err_to_name(ret));
     }
-    ESP_LOGD(__FUNCTION__,"Bt deinit");
+    ESP_LOGD(__PRETTY_FUNCTION__,"Bt deinit");
 
     if ((ret = esp_bt_controller_disable()) != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "%s disable controller failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(__PRETTY_FUNCTION__, "%s disable controller failed: %s\n", __func__, esp_err_to_name(ret));
     }
 
-    ESP_LOGD(__FUNCTION__,"Bt controler disable");
+    ESP_LOGD(__PRETTY_FUNCTION__,"Bt controler disable");
     if ((ret = esp_bt_controller_deinit()) != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "%s deinitialize controller failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(__PRETTY_FUNCTION__, "%s deinitialize controller failed: %s\n", __func__, esp_err_to_name(ret));
     }
-    ESP_LOGD(__FUNCTION__,"Bt controler deinit");
+    ESP_LOGD(__PRETTY_FUNCTION__,"Bt controler deinit");
 
     if ((ret = esp_bt_controller_mem_release(ESP_BT_MODE_BTDM)) != ESP_OK) {
-        ESP_LOGE(__FUNCTION__, "%s deinitialize controller failed: %s\n", __func__, esp_err_to_name(ret));
+        ESP_LOGE(__PRETTY_FUNCTION__, "%s deinitialize controller failed: %s\n", __func__, esp_err_to_name(ret));
     }
 
     cJSON_SetValuestring(btStatus, "Off");
@@ -531,13 +531,13 @@ bool Bt::ProcessCommand(ManagedDevice* dev, cJSON * parms) {
             } else if (strcmp(param->valuestring,"OFF") == 0) {
                 leds->DeInitDevice();
             } else {
-                ESP_LOGW(__FUNCTION__,"Invalid param1 value");
+                ESP_LOGW(__PRETTY_FUNCTION__,"Invalid param1 value");
                 return false;
             }
         } else if (strcmp("ScanForDevices", command) == 0) {
             esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
         } else {
-            ESP_LOGV(__FUNCTION__,"Invalid Command %s", command);
+            ESP_LOGV(__PRETTY_FUNCTION__,"Invalid Command %s", command);
             return false;
         }
         return true;
@@ -575,7 +575,7 @@ cJSON* Bt::GetService(const char* uuid, esp_bt_uuid_t* svc){
             cJSON_AddItemToObject(dev,"services", services);
         }
         char uuid_str[37];
-        ESP_LOGD(__FUNCTION__, "--%s", uuid2str(svc, uuid_str, 37));
+        ESP_LOGD(__PRETTY_FUNCTION__, "--%s", uuid2str(svc, uuid_str, 37));
         cJSON* service = NULL;
         cJSON_ArrayForEach(service,services) {
             if (cJSON_HasObjectItem(service,"uuid") && strcmp(cJSON_GetObjectItem(service,"uuid")->valuestring,uuid_str) == 0) {
@@ -595,7 +595,7 @@ cJSON* Bt::AddService(const char* uuid, esp_bt_uuid_t* svc){
             cJSON_AddItemToObject(dev,"services", services);
         }
         char uuid_str[37];
-        ESP_LOGD(__FUNCTION__, "--%s", uuid2str(svc, uuid_str, 37));
+        ESP_LOGD(__PRETTY_FUNCTION__, "--%s", uuid2str(svc, uuid_str, 37));
         cJSON* svc = cJSON_CreateObject();
         cJSON_AddStringToObject(svc,"uuid",uuid_str);
         cJSON_AddItemToArray(services,svc);

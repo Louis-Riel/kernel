@@ -106,7 +106,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
                 mThread_t *thread = threads[idx];
                 if (thread)
                 {
-                    ESP_LOGV(__FUNCTION__,"%d %s:isRunning:%d started:%d waitToSleep:%d",idx,thread->pcName,thread->isRunning, thread->started, thread->waitToSleep);
+                    ESP_LOGV(__PRETTY_FUNCTION__,"%d %s:isRunning:%d started:%d waitToSleep:%d",idx,thread->pcName,thread->isRunning, thread->started, thread->waitToSleep);
                 }
             }
         }
@@ -121,7 +121,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             mThread_t *thread = threads[idx];
             if (thread && thread->waitToSleep && thread->isRunning)
             {
-                ESP_LOGI(__FUNCTION__,"%s is sleep blocked running", thread->pcName);
+                ESP_LOGI(__PRETTY_FUNCTION__,"%s is sleep blocked running", thread->pcName);
                 bitsToWaitFor += (1 << idx);
             }
         }
@@ -137,7 +137,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             mThread_t *thread = threads[idx];
             if (thread && thread->waitToSleep && thread->isRunning && !startsWith(thread->pcName,name))
             {
-                ESP_LOGI(__FUNCTION__,"%s is sleep blocked running", thread->pcName);
+                ESP_LOGI(__PRETTY_FUNCTION__,"%s is sleep blocked running", thread->pcName);
                 bitsToWaitFor += (1 << idx);
             }
         }
@@ -149,13 +149,13 @@ uint8_t ManagedThreads::NumAllocatedThreads()
     {
         if (bitsToWaitFor)
         {
-            ESP_LOGI(__FUNCTION__, "Waiting for threads %d", bitsToWaitFor);
+            ESP_LOGI(__PRETTY_FUNCTION__, "Waiting for threads %d", bitsToWaitFor);
             xEventGroupWaitBits(managedThreadBits, bitsToWaitFor, false, true, portMAX_DELAY);
-            ESP_LOGI(__FUNCTION__, "Threads %d done", bitsToWaitFor);
+            ESP_LOGI(__PRETTY_FUNCTION__, "Threads %d done", bitsToWaitFor);
         }
         else
         {
-            ESP_LOGV(__FUNCTION__, "No threads to wait for");
+            ESP_LOGV(__PRETTY_FUNCTION__, "No threads to wait for");
         }
     }
 
@@ -172,15 +172,15 @@ uint8_t ManagedThreads::NumAllocatedThreads()
 
         if (!allowRelaunch && IsThreadRunning(pcName))
         {
-            ESP_LOGW(__FUNCTION__, "Cannot run %s as it is already running", pcName);
+            ESP_LOGW(__PRETTY_FUNCTION__, "Cannot run %s as it is already running", pcName);
             return UINT8_MAX;
         }
-        ESP_LOGI(__FUNCTION__, "Running %s", pcName);
+        ESP_LOGI(__PRETTY_FUNCTION__, "Running %s", pcName);
         xSemaphoreTake(threadSema,portMAX_DELAY);
         uint8_t bitNo = GetFreeBit(pcName);
         if (bitNo != UINT8_MAX)
         {
-            ESP_LOGV(__FUNCTION__, "Running %s(%d)", pcName,bitNo);
+            ESP_LOGV(__PRETTY_FUNCTION__, "Running %s(%d)", pcName,bitNo);
             mThread_t *thread = threads[bitNo];
             if (thread->pcName) {
                 ldfree(thread->pcName);
@@ -209,17 +209,17 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             {
                 if ((runningBits = GetRunningBits()))
                 {
-                    ESP_LOGW(__FUNCTION__, "Error in creating thread for %s(0x%" PRIXPTR "), retry %d, waiting on %d. %s", pcName, (uintptr_t)thread->pvTaskCode, retryCtn, runningBits, esp_err_to_name(ret));
+                    ESP_LOGW(__PRETTY_FUNCTION__, "Error in creating thread for %s(0x%" PRIXPTR "), retry %d, waiting on %d. %s", pcName, (uintptr_t)thread->pvTaskCode, retryCtn, runningBits, esp_err_to_name(ret));
                     xEventGroupWaitBits(managedThreadBits, runningBits, pdFALSE, pdFALSE, pdMS_TO_TICKS(1000));
                 }
                 else
                 {
-                    ESP_LOGW(__FUNCTION__, "Error in creating thread for %s(0x%" PRIXPTR "), retry %d. %s", pcName, (uintptr_t)thread->pvTaskCode, retryCtn, esp_err_to_name(ret));
+                    ESP_LOGW(__PRETTY_FUNCTION__, "Error in creating thread for %s(0x%" PRIXPTR "), retry %d. %s", pcName, (uintptr_t)thread->pvTaskCode, retryCtn, esp_err_to_name(ret));
                 }
             }
             if (ret != pdPASS)
             {
-                ESP_LOGE(__FUNCTION__, "Failed in creating thread for %s(0x%" PRIXPTR "). %s", pcName, (uintptr_t)thread->pvTaskCode, esp_err_to_name(ret));
+                ESP_LOGE(__PRETTY_FUNCTION__, "Failed in creating thread for %s(0x%" PRIXPTR "). %s", pcName, (uintptr_t)thread->pvTaskCode, esp_err_to_name(ret));
                 dumpTheLogs((void*)true);
                 esp_restart();
             }
@@ -233,11 +233,11 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         else
         {
             xSemaphoreGive(threadSema);
-            ESP_LOGE(__FUNCTION__, "No more bits for %s", pcName);
+            ESP_LOGE(__PRETTY_FUNCTION__, "No more bits for %s", pcName);
             for (uint8_t idx = 0; idx < 32; idx++)
             {
                 if ((threads[idx] != nullptr) && threads[idx]->isRunning) {
-                    ESP_LOGI(__FUNCTION__,"%d-%s",idx,threads[idx]->pcName);
+                    ESP_LOGI(__PRETTY_FUNCTION__,"%d-%s",idx,threads[idx]->pcName);
                 }
             }
         }
@@ -275,7 +275,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         uint8_t bitNo = GetFreeBit(pcName);
         if (bitNo != UINT8_MAX)
         {
-            ESP_LOGV(__FUNCTION__, "Running %s(%d)", pcName,bitNo);
+            ESP_LOGV(__PRETTY_FUNCTION__, "Running %s(%d)", pcName,bitNo);
             mThread_t *thread = threads[bitNo];
             if (thread->pcName) {
                 ldfree(thread->pcName);
@@ -292,17 +292,17 @@ uint8_t ManagedThreads::NumAllocatedThreads()
             BaseType_t ret = ESP_OK;
             if (onMainThread)
             {
-                ESP_LOGI(__FUNCTION__, "Starting the %s service", thread->pcName);
+                ESP_LOGI(__PRETTY_FUNCTION__, "Starting the %s service", thread->pcName);
                 thread->isRunning = true;
                 thread->pvTaskCode(thread->pvParameters);
                 thread->isRunning = false;
                 thread->started = false;
-                ESP_LOGV(__FUNCTION__, "Done initializing the %s service", thread->pcName);
+                ESP_LOGV(__PRETTY_FUNCTION__, "Done initializing the %s service", thread->pcName);
                 if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
                 {
                     cJSON* jtmp = thread->parent->GetStatus();
                     char *tmp = cJSON_Print(jtmp);
-                    ESP_LOGV(__FUNCTION__, "%s", tmp);
+                    ESP_LOGV(__PRETTY_FUNCTION__, "%s", tmp);
                     ldfree(tmp);
                 }
             }
@@ -315,16 +315,16 @@ uint8_t ManagedThreads::NumAllocatedThreads()
                                        tskIDLE_PRIORITY,
                                        &thread->pvCreatedTask)) == pdPASS)
                 {
-                    ESP_LOGV(__FUNCTION__, "Waiting for %s(0x%" PRIXPTR ") to finish", thread->pcName, (uintptr_t)thread->pvTaskCode);
+                    ESP_LOGV(__PRETTY_FUNCTION__, "Waiting for %s(0x%" PRIXPTR ") to finish", thread->pcName, (uintptr_t)thread->pvTaskCode);
                     xEventGroupWaitBits(managedThreadBits, 1 << bitNo, pdFALSE, pdTRUE, portMAX_DELAY);
-                    ESP_LOGV(__FUNCTION__, "Done running %s(0x%" PRIXPTR ")", thread->pcName, (uintptr_t)thread->pvTaskCode);
+                    ESP_LOGV(__PRETTY_FUNCTION__, "Done running %s(0x%" PRIXPTR ")", thread->pcName, (uintptr_t)thread->pvTaskCode);
                     thread->isRunning = false;
                     AppConfig::SignalStateChange(state_change_t::THREADS);
                     return ESP_OK;
                 }
                 else
                 {
-                    ESP_LOGE(__FUNCTION__, "Error running %s(0x%" PRIXPTR "): %s stack depth:%d", thread->pcName, (uintptr_t)thread->pvTaskCode, esp_err_to_name(ret), usStackDepth);
+                    ESP_LOGE(__PRETTY_FUNCTION__, "Error running %s(0x%" PRIXPTR "): %s stack depth:%d", thread->pcName, (uintptr_t)thread->pvTaskCode, esp_err_to_name(ret), usStackDepth);
                     dumpTheLogs((void*)true);
                     esp_restart();
                 }
@@ -338,7 +338,7 @@ uint8_t ManagedThreads::NumAllocatedThreads()
     void ManagedThreads::runThread(void *param)
     {
         mThread_t *thread = (mThread_t *)param;
-        ESP_LOGI(__FUNCTION__, "Running the %s thread", thread->pcName);
+        ESP_LOGI(__PRETTY_FUNCTION__, "Running the %s thread", thread->pcName);
         xEventGroupClearBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
         thread->isRunning = true;
 
@@ -346,17 +346,17 @@ uint8_t ManagedThreads::NumAllocatedThreads()
         thread->pvTaskCode(thread->pvParameters);
         //size_t diff = heap_caps_get_free_size(MALLOC_CAP_32BIT) - stacksz;
         //if (diff != 0) {
-        //    ESP_LOGV(__FUNCTION__,"%s %d bytes memleak",thread->pcName,diff);
+        //    ESP_LOGV(__PRETTY_FUNCTION__,"%s %d bytes memleak",thread->pcName,diff);
         //}
 
         thread->isRunning = false;
         thread->started = false;
-        ESP_LOGV(__FUNCTION__, "Done running the %s thread", thread->pcName);
+        ESP_LOGV(__PRETTY_FUNCTION__, "Done running the %s thread", thread->pcName);
         if (LOG_LOCAL_LEVEL >= ESP_LOG_VERBOSE)
         {
             cJSON* jtmp = thread->parent->GetStatus();
             char *tmp = cJSON_Print(jtmp);
-            ESP_LOGV(__FUNCTION__, "%s", tmp);
+            ESP_LOGV(__PRETTY_FUNCTION__, "%s", tmp);
         }
 
         xEventGroupSetBits(thread->parent->managedThreadBits, 1 << thread->bitNo);
@@ -420,21 +420,21 @@ uint8_t ManagedThreads::NumAllocatedThreads()
                 }
             }
         }
-        ESP_LOGV(__FUNCTION__,"freeThread(%d) unallocatedThread(%d) lastRunning(%d)",freeThread, unallocatedThread, lastRunning);
+        ESP_LOGV(__PRETTY_FUNCTION__,"freeThread(%d) unallocatedThread(%d) lastRunning(%d)",freeThread, unallocatedThread, lastRunning);
 
         if (name && (lastRunning != UINT8_MAX) && threads[lastRunning]->isRunning) {
-            ESP_LOGW(__FUNCTION__,"%s already running", name);
+            ESP_LOGW(__PRETTY_FUNCTION__,"%s already running", name);
         } else if (freeThread == UINT8_MAX) {
             if (unallocatedThread != UINT8_MAX){
-                ESP_LOGV(__FUNCTION__,"Allocating new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == nullptr);
+                ESP_LOGV(__PRETTY_FUNCTION__,"Allocating new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == nullptr);
                 threads[unallocatedThread] = (mThread_t*)dmalloc(sizeof(mThread_t));
                 memset(threads[unallocatedThread],0,sizeof(mThread_t));
                 threads[unallocatedThread]->parent = this;
                 threads[unallocatedThread]->allocated = true;
-                ESP_LOGV(__FUNCTION__,"Allocated new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == nullptr);
+                ESP_LOGV(__PRETTY_FUNCTION__,"Allocated new slot at %d for %s(%d)",unallocatedThread, name, threads[unallocatedThread] == nullptr);
                 ret = unallocatedThread;
             } else {
-                ESP_LOGE(__FUNCTION__,"No more free slots");
+                ESP_LOGE(__PRETTY_FUNCTION__,"No more free slots");
             }
         } else {
             ret = freeThread;
@@ -509,7 +509,7 @@ cJSON* ManagedThreads::GetRepeatingTaskStatus() {
 void TheRepeatingLoop(void* param) {
     TickType_t now = 0;
     TickType_t next_run = 0;
-    ESP_LOGI(__FUNCTION__, "Starting repeating task loop");
+    ESP_LOGI(__PRETTY_FUNCTION__, "Starting repeating task loop");
     repeatingTasks = cJSON_CreateArray();
     while (isRepeatingLooping) {
         now = xTaskGetTickCount();
@@ -550,9 +550,9 @@ void TheRepeatingLoop(void* param) {
             vTaskDelayUntil(&now, next_run - now);
         } else {
             if (next_run != 0) {
-                ESP_LOGW(__FUNCTION__,"Repeating task overrun");
+                ESP_LOGW(__PRETTY_FUNCTION__,"Repeating task overrun");
             } else {
-                ESP_LOGW(__FUNCTION__,"No repeating tasks found");
+                ESP_LOGW(__PRETTY_FUNCTION__,"No repeating tasks found");
                 isRepeatingLooping = false;
             }
         }
@@ -563,7 +563,7 @@ void TheRepeatingLoop(void* param) {
             ldfree((void*)task->pcName);
         }
     }
-    ESP_LOGI(__FUNCTION__, "Stopped repeating task loop");
+    ESP_LOGI(__PRETTY_FUNCTION__, "Stopped repeating task loop");
     cJSON_free(repeatingTasks);
     ldfree(repeating_tasks);
     repeating_tasks=nullptr;
@@ -598,7 +598,7 @@ uint8_t CreateRepeatingTask(
     uint8_t idx = GetRepeatingIndex();
 
     if (idx == UINT8_MAX) {
-        ESP_LOGE(__FUNCTION__,"No more repeating tasks");
+        ESP_LOGE(__PRETTY_FUNCTION__,"No more repeating tasks");
         return UINT8_MAX;
     }
 
