@@ -212,7 +212,7 @@ void Camera::sentFrame(void* param) {
     camera->inTransit[(uint64_t)pos] = nullptr;
     camera->frameTs[(uint64_t)pos] = 0;
     uint8_t activeClients = 0;
-    ESP_LOGV(__PRETTY_FUNCTION__,"frame returned by %d",(int)pos);
+    ESP_LOGV(__PRETTY_FUNCTION__,"frame returned by %d",(int)(int64_t)pos);
 
     for (uint8_t idx = 0; idx < 5; idx++) {
         if (camera->inTransit[idx]) {
@@ -223,10 +223,10 @@ void Camera::sentFrame(void* param) {
 
     if ((activeClients == 0) && fb) {
         if (params[2]) {
-            ESP_LOGV(__PRETTY_FUNCTION__,"client %d freed compressed jpg",(int)pos);
+            ESP_LOGV(__PRETTY_FUNCTION__,"client %d freed compressed jpg",(int)(int64_t)pos);
             free(fb);
         } else {
-            ESP_LOGV(__PRETTY_FUNCTION__,"client %d returned frame", (int)pos);
+            ESP_LOGV(__PRETTY_FUNCTION__,"client %d returned frame", (int)(int64_t)pos);
             esp_camera_fb_return((camera_fb_t*)fb);
         }
         camera->sendFrame();
