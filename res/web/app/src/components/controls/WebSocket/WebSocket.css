@@ -1,3 +1,44 @@
 div.wsctrl {
     z-index: 1;
 }
+
+.websocketbar {
+    display: flex;
+    column-gap: 10px;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    align-items: center;
+}
+
+div.streaming > img.viewer {
+    width: 50px;
+    cursor: pointer;
+    z-index: 10;
+    border: aquamarine 3px solid;
+    border-radius: 5px;
+}
+
+div.streaming > .trigger {
+    display: none;
+}
+
+div.off > .trigger {
+    display: initial;
+}
+
+div.streaming > img.viewer {
+    display: initial;
+}
+
+div.off > img.viewer {
+    display: none;
+}
+
+img.viewer.zoomed {
+    position: absolute;
+    right: 0;
+    bottom: 0%;
+    width: max-content !important;
+    height: 80%;
+}

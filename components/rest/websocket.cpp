@@ -283,7 +283,8 @@ void WebsocketManager::StatePoller(void* instance){
     }
   }
   ldfree(stateBuffer);
-  ESP_LOGI(__PRETTY_FUNCTION__,"State poller done");
+  ESP_LOGI(__PRETTY_FUNCTION__,"State poller done, waiting 10 seconds to die");
+  vTaskDelay(10000/portTICK_RATE_MS);
   delete stateHandler;
 }
 

@@ -47,6 +47,8 @@ Camera::Camera(AppConfig* config)
     frame_size(config->GetIntProperty("FRAME_SIZE")),
     fb_count(config->GetIntProperty("FB_COUNT")),
     jpeg_quality(config->GetIntProperty("JPEG_QUALITY")),
+    jpeg_scaledown_quality(config->GetIntProperty("JPEG_SCALEDOWN_QUALITY")),
+    xclk_freq_hz(config->GetIntProperty("XCLK_FREQ_HZ")),
     cameraType(config->GetStringProperty("type")),
     frameLock(xSemaphoreCreateBinary())
 {
@@ -94,6 +96,8 @@ cJSON* Camera::BuildConfigTemplate() {
     cJSON_AddNumberToObject(commandTemplate,"CAM_PIN_VSYNC",-1);
     cJSON_AddNumberToObject(commandTemplate,"CAM_PIN_HREF",-1);
     cJSON_AddNumberToObject(commandTemplate,"CAM_PIN_PCLK",-1);
+    cJSON_AddNumberToObject(commandTemplate,"JPEG_SCALEDOWN_QUALITY",100);
+    cJSON_AddNumberToObject(commandTemplate,"XCLK_FREQ_HZ",20000000);
 
     return commandTemplate;
 }
@@ -127,7 +131,7 @@ bool Camera::InitDevice(){
             .pin_href = this->pin_href,
             .pin_pclk = this->pin_pclk,
 
-            .xclk_freq_hz = 10000000,//EXPERIMENTAL: Set to 16MHz on ESP32-S2 or ESP32-S3 to enable EDMA mode
+            .xclk_freq_hz = this->xclk_freq_hz,//EXPERIMENTAL: Set to 16MHz on ESP32-S2 or ESP32-S3 to enable EDMA mode
             .ledc_timer = (ledc_timer_t)this->ledc_timer,
             .ledc_channel = (ledc_channel_t)this->ledc_channel,
 
@@ -170,7 +174,7 @@ bool Camera::InitDevice(){
         ESP_LOGI(__PRETTY_FUNCTION__,"fb_location=%d",camera_config.fb_location);
         ESP_LOGI(__PRETTY_FUNCTION__,"grab_mode=%d",camera_config.grab_mode);
         ESP_LOGI(__PRETTY_FUNCTION__,"sccb_i2c_port=%d",camera_config.sccb_i2c_port);
-
+        ESP_LOGI(__PRETTY_FUNCTION__,"jpeg_scaledown_quality=%d",this->jpeg_scaledown_quality);
 
         //power up the camera if PWDN pin is defined
         if(this->pin_pwdn != -1){
@@ -250,7 +254,7 @@ void Camera::sendFrame() {
 
         if(fb && fb->format != PIXFORMAT_JPEG){
             ESP_LOGV(__PRETTY_FUNCTION__,"uncompressed image %zu",fb->len);
-            if(!frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len)){
+            if(!frame2jpg(fb, this->jpeg_scaledown_quality, &_jpg_buf, &_jpg_buf_len)){
                 xSemaphoreGive(frameLock);
                 esp_camera_fb_return(fb);
                 ESP_LOGE(__PRETTY_FUNCTION__, "JPEG compression failed");
@@ -274,6 +278,7 @@ void Camera::sendFrame() {
             if (wsMsg) {
                 if (!wsMsg->client->jIsLive->valueint) {
                     clients[idx] = nullptr;
+                    inTransit[idx] = nullptr;
                     ESP_LOGW(__PRETTY_FUNCTION__,"Client %d had disconnected",idx);
                     ldfree((wsMsg->postHookParam));
                     ldfree(wsMsg);
@@ -325,7 +330,8 @@ void Camera::sendFrame() {
             }
             esp_camera_deinit();
             cJSON_SetIntValue(initialized,0);
-            cJSON_SetBoolValue(streaming,cJSON_False);
+            cJSON_SetIntValue(streaming,0);
+            AppConfig::SignalStateChange(state_change_t::MAIN);
         }
     }
 }
@@ -388,10 +394,9 @@ void Camera::streamVideoToWs(void * params){
         ESP_LOGE(__PRETTY_FUNCTION__,"Cannot register client");
         return;
     }
-    cJSON_SetBoolValue(request->camera->streaming,cJSON_True);
-    ESP_LOGI(__PRETTY_FUNCTION__,"Sending frame");
+    cJSON_SetIntValue(request->camera->streaming,1);
+    AppConfig::SignalStateChange(state_change_t::MAIN);
     request->camera->sendFrame();
-    ESP_LOGI(__PRETTY_FUNCTION__,"Sent frame");
 }
 
 esp_err_t Camera::streamVideo(httpd_req_t * req) {
@@ -417,7 +422,7 @@ esp_err_t Camera::streamVideo(httpd_req_t * req) {
         ESP_LOGE(__PRETTY_FUNCTION__,"Cannot set resp type");
     } else {
         ESP_LOGI(__PRETTY_FUNCTION__,"Straming %s", GetName());
-        cJSON_SetBoolValue(streaming,cJSON_True);
+        cJSON_SetIntValue(streaming,1);
         while(res == ESP_OK){
             fb = esp_camera_fb_get();
             if (!fb) {

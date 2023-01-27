@@ -91,6 +91,10 @@ export default class StatusPage extends Component {
         if (prevProps?.selectedDevice !== this.props.selectedDevice) {
             this.updateAppStatus();
         }
+
+        if (prevState.status !== this.state.status) {
+            this.props.selectedDevice.state = this.state.status;
+        }
     }
 
     updateAppStatus() {

@@ -1,11 +1,14 @@
 import { createRef, Component} from 'react';
 import { getInSpot, getAnims, fromVersionedToPlain, isStandalone } from '../../../utils/utils';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import './WebSocket.css';
+import { faCamera } from '@fortawesome/free-solid-svg-icons';
 
 export default class WebSocketManager extends Component {
     constructor(props) {
         super(props);
         this.widget = createRef();
+        this.camera = createRef();
         this.state = {
             httpPrefix:this.props.selectedDevice?.ip ? `${process.env.REACT_APP_API_URI}/${this.props.selectedDevice.config.devName}` : "",
             enabled:props.enabled
@@ -31,6 +34,13 @@ export default class WebSocketManager extends Component {
         if ((prevState.enabled !== this.state.enabled ) || 
             (this.ws !== this.state.enabled)) {
                 this.state.enabled ? this.startWs() : this.stopWs();
+        }
+
+        if (this.state?.streaming && (prevState.connected !== this.state.connected)) {
+            if (!this.state.connected) {
+                this.setState({streaming:this.state.connected});
+                this.setState({stream_zoomed:this.state.connected});
+            }
         }
     }
 
@@ -181,6 +191,7 @@ export default class WebSocketManager extends Component {
         }
         this.setState({connecting:true,running:false});
         let ws = this.ws = new WebSocket(`ws${isStandalone()? '' : 's'}://` + (this.state.httpPrefix === "" ? `${window.location.hostname}:${window.location.port}`.replaceAll(/\/+$/g,"").replaceAll(/\/\//g,"/") : this.state.httpPrefix.substring(8)) + "/ws");
+        ws.binaryType = 'arraybuffer';
         let stopItWithThatShit = setTimeout(() => { console.log("Main timeout"); ws.close(); this.setState({connecting: false}); }, 3600);
         
         ws.onmessage = (event) => {
@@ -287,6 +298,70 @@ export default class WebSocketManager extends Component {
         }
         this.props?.eventCBFns?.forEach(eventCBFn=>eventCBFn.fn(event));
     }
+
+    // Converts an ArrayBuffer directly to base64, without any intermediate 'convert to string then
+// use window.btoa' step. According to my tests, this appears to be a faster approach:
+// http://jsperf.com/encoding-xhr-image-data/5
+
+/*
+MIT LICENSE
+Copyright 2011 Jon Leighton
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+ base64ArrayBuffer(arrayBuffer) {
+    var base64    = ''
+    var encodings = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+  
+    var bytes         = new Uint8Array(arrayBuffer)
+    var byteLength    = bytes.byteLength
+    var byteRemainder = byteLength % 3
+    var mainLength    = byteLength - byteRemainder
+  
+    var a, b, c, d
+    var chunk
+  
+    // Main loop deals with bytes in chunks of 3
+    for (var i = 0; i < mainLength; i = i + 3) {
+      // Combine the three bytes into a single integer
+      chunk = (bytes[i] << 16) | (bytes[i + 1] << 8) | bytes[i + 2]
+  
+      // Use bitmasks to extract 6-bit segments from the triplet
+      a = (chunk & 16515072) >> 18 // 16515072 = (2^6 - 1) << 18
+      b = (chunk & 258048)   >> 12 // 258048   = (2^6 - 1) << 12
+      c = (chunk & 4032)     >>  6 // 4032     = (2^6 - 1) << 6
+      d = chunk & 63               // 63       = 2^6 - 1
+  
+      // Convert the raw binary segments to the appropriate ASCII encoding
+      base64 += encodings[a] + encodings[b] + encodings[c] + encodings[d]
+    }
+  
+    // Deal with the remaining bytes and padding
+    if (byteRemainder === 1) {
+      chunk = bytes[mainLength]
+  
+      a = (chunk & 252) >> 2 // 252 = (2^6 - 1) << 2
+  
+      // Set the 4 least significant bits to zero
+      b = (chunk & 3)   << 4 // 3   = 2^2 - 1
+  
+      base64 += encodings[a] + encodings[b] + '=='
+    } else if (byteRemainder === 2) {
+      chunk = (bytes[mainLength] << 8) | bytes[mainLength + 1]
+  
+      a = (chunk & 64512) >> 10 // 64512 = (2^6 - 1) << 10
+      b = (chunk & 1008)  >>  4 // 1008  = (2^6 - 1) << 4
+  
+      // Set the 2 least significant bits to zero
+      c = (chunk & 15)    <<  2 // 15    = 2^4 - 1
+  
+      base64 += encodings[a] + encodings[b] + encodings[c] + '='
+    }
+    
+    return base64
+  }
     
     processMessage(stopItWithThatShit, event, ws) {
         clearTimeout(stopItWithThatShit);
@@ -299,7 +374,9 @@ export default class WebSocketManager extends Component {
         }
     
         if (event && event.data) {
-          if (event.data[0] === "{") {
+          if (event.data instanceof ArrayBuffer) {
+            this.camera.current.src = 'data:image/jpg;base64,'+ this.base64ArrayBuffer(event.data)
+          } else if (event.data[0] === "{") {
             try {
               if (event.data.startsWith('{"eventBase"')) {
                 this.ProcessEvent(fromVersionedToPlain(JSON.parse(event.data)));
@@ -333,8 +410,30 @@ export default class WebSocketManager extends Component {
     }
 
     render() {
-        return (
-            <div className="wsctrl"  width="100" height="40" onClick={evt=>this.setState({enabled:!this.state.enabled})}><canvas className="wsctrl" width="100" height="40" ref={this.widget}></canvas></div>
-        )
+        if (this.hasCamera()) {
+            return <div className='websocketbar'>{this.getCameraControl()}{this.getWsControl()}</div>
+        } else {
+            return this.getWsControl()
+        }
+    }
+
+    hasCamera() {
+        return this.props.selectedDevice?.config?.Cameras?.length > 0;
+    }
+
+    streamCamera() {
+        this.ws.send("STREAM:" + this.props.selectedDevice.config.Cameras[0].type);
+        this.setState({streaming:true});
+    }
+
+    getCameraControl() {
+        return <div className={this.state?.streaming ? "streaming" : "off"}>
+                    <img className={this.state.stream_zoomed ? "viewer zoomed" : "viewer"} ref={this.camera} alt="Camera" onClick={_evt => this.setState({stream_zoomed:!this.state.stream_zoomed})}></img>
+                    <FontAwesomeIcon className='trigger' icon={faCamera} onClick={_evt => this.streamCamera()}></FontAwesomeIcon>
+                </div>
+    }
+
+    getWsControl() {
+        return <div className="wsctrl" width="100" height="40" onClick={evt => this.setState({ enabled: !this.state.enabled })}><canvas className="wsctrl" width="100" height="40" ref={this.widget}></canvas></div>;
     }
 }

@@ -60,6 +60,8 @@ protected:
     uint8_t frame_size;
     uint8_t fb_count;
     int jpeg_quality;
+    uint8_t jpeg_scaledown_quality;
+    int xclk_freq_hz;
     const char* cameraType;
 
     bool InitDevice();

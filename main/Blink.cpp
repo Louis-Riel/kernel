@@ -884,7 +884,7 @@ void app_main(void)
     ESP_LOGI(__PRETTY_FUNCTION__,"Starting service loop");
     CreateBackgroundTask(serviceLoop, "ServiceLoop", 8192, NULL, tskIDLE_PRIORITY, NULL);
 
-    deinitStorage(SPIFF_FLAG + (hasSdCard ? SDCARD_FLAG : 0));
+    //deinitStorage(SPIFF_FLAG + (hasSdCard ? SDCARD_FLAG : 0));
   }
   if (!heap_caps_check_integrity_all(true))
   {

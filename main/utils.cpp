@@ -184,8 +184,10 @@ bool initSDMMCSDCard(AppConfig *cfg,AppConfig *sdcState)
                       "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
           }
       } else {
+        EventGroupHandle_t app_eg = getAppEG();
         sdmmc_card_print_info(stdout, card);
         sdcState->SetStateProperty("state", item_state_t::ACTIVE);
+        xEventGroupSetBits(app_eg, SDCARD_MOUNTED);
       }
       ESP_LOGI(__PRETTY_FUNCTION__, "Filesystem mounted");
       // Card has been initialized, print its properties
@@ -206,20 +208,18 @@ bool deinitSDMMCSDCard(AppConfig *sdcState)
   {
     esp_err_t ret = ESP_OK;
     EventGroupHandle_t app_eg = getAppEG();
-    if (xEventGroupGetBits(app_eg) & SPIFF_MOUNTED)
+    if (xEventGroupGetBits(app_eg) & SDCARD_MOUNTED)
     {
       ret = esp_vfs_littlefs_unregister("storage");
       if (ret != ESP_OK)
       {
-        ESP_LOGE(__PRETTY_FUNCTION__, "Failed in registering littlefs %s", esp_err_to_name(ret));
+        ESP_LOGE(__PRETTY_FUNCTION__, "Failed in unregistering sdcard %s", esp_err_to_name(ret));
       } else {
-        ESP_LOGI(__PRETTY_FUNCTION__, "lfs unmounted");
+        ESP_LOGI(__PRETTY_FUNCTION__, "sdcard unmounted");
       }
       sdcState->SetStateProperty("state", item_state_t::INACTIVE);
-      xEventGroupClearBits(app_eg, SPIFF_MOUNTED);
-    }
-    if (xEventGroupGetBits(app_eg) & SDCARD_MOUNTED)
-    {
+      xEventGroupClearBits(app_eg, SDCARD_MOUNTED);
+
       ESP_LOGV(__PRETTY_FUNCTION__, "Using SPI peripheral");
       if (esp_vfs_fat_sdmmc_unmount() == ESP_OK)
       {
